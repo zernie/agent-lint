@@ -15,50 +15,44 @@
 
 ## RESUME HERE
 
-**Branch `claude/skill-eval-cost-benefit-q4ivfp`** (name misleading — the work is a
-PUBLIC-DOCS REVAMP, not cost analysis) → **PR #67 OPEN, merging-when-green.** The user flagged the
-docs as over-claiming maturity + hard to scan; this session overhauled the README + docs.
+**Branch `claude/rules-compiler-python-3xqhtd`** — expand the **audit rule-compile tier**
+(`src/rule-inventory.ts` + `src/rule-routing.ts` + `src/segment.ts`, backed by `compiler/`) from
+ESLint-only toward **multi-language (Ruff + Pylint)** + a robust **segmentation** model (what text in
+a freeform CLAUDE.md is even a "rule"). This is the AUDIT feature that suggests which prose rules can
+be codified as lint rules — NOT the linter cross-ref engine (`core/linters.ts`), which already does
+Python. **No PR opened yet.** Full vitest not re-run this session; targeted suites green + tsc clean.
 
-**MERGE STATE (resume here first):** PR #67 open, **merging-when-green**; **subscribed to its
-activity**; a `send_later` check-in (trigger `trig_01LX727g2VMn1qpe7k31eJ1o`, ~21:18Z) re-checks CI
-and **squash-merges into main with a CLEAN message (NO session link / model-id) when all 6 jobs
-green**, else re-arms. If resuming: `get_check_runs` for #67 → merge if green, then **unsubscribe**.
-Latest SHA `f1d0a2d`. CI jobs: validate/describe/check/test/e2e/harness (`test` ~5-7 min, last).
-Lone allowed failure: env-only `dialect-drift` (CI pins CC → passes in CI).
+**Design-of-record: `research/rule-compiler-multilang-design.md`** — READ FIRST. Grounded in 2 Fable
+design passes + a real 20-repo OSS corpus; has the whole plan, the ConfigProbe/Intent-Realization
+model, and the build order.
 
-**Shipped (branch — all `docs:`):**
+**Shipped this session (4 commits, pushed):**
 
-- **Version honesty** — STABILITY.md + README FAQ claimed "0.x"; real npm version is **12.7.0**
-  (semantic-release cuts a major per breaking change). Fixed to v12 + honest framing. Root cause: the
-  `package.json` `0.0.0-semantically-released` placeholder misread as "0.x". Added `vigiles/linting`
-  to the stable entry-points list.
-- **README scannability** — `More` link-farm → 3 Diátaxis buckets + index pointer; collapsed the dense
-  audit/lint/test/eval reconciliation paragraph; trimmed Proof 2/3. Eval heading → "the only way to put
-  a real number on cost."
-- **docs/README.md** reorganized (Guides / Reference / Explanation) + 6 docs added that were missing
-  from the index (harnesses, adapter-api, authoring-an-adapter, railway-subagents, faq, what-vigiles-catches).
-- **Merges** — `related-tools`→`comparison`; `inline-mode`→`markdown-mode` (one no-spec on-ramp doc;
-  NB inline mode is LIVE — only FRONTMATTER mode is disabled); `agent-setup`+`agent-workflows`→one guide.
-- **`eval-architecture.md` (54KB design-of-record ADR) relocated `docs/`→`research/`** per doc-tiers:
-  5 public links repointed (testing-api / measuring-skills), research/src relative paths fixed, added to
-  research index + `status:`/`topic:` frontmatter, both `CLAUDE.md` + `research/CLAUDE.md` recompiled.
-- **Codex-bot review** caught 1 real bug (the compiler surface is `vigiles/linting`, not `vigiles/spec`) — fixed.
-- Kept standalone by JUDGMENT (merging would bloat, not help): `testing-matrix`, `migrating-from-promptfoo`.
+- `docs:` the design doc (indexed in `research/CLAUDE.md`).
+- `fix(segment):` corpus-grounded precision — `RULE_HEADING` `do`-substring bug word-bounded,
+  `INDEX-SMELL` veto (`` `path` — desc `` bullets), anti-context headings, decoration-strip
+  (`**Never**`/`✅`), ordered/emoji bullets, copulas out of the verb lexicon. +regression tests.
+- `feat(rule-routing):` new `meta` category (agent-instructions ≠ code rules) + `unrouted` reframed
+  as the explicit **"hard to codify"** bucket end-to-end incl. the report UI (`RuleInventory.tsx`).
+- `feat(rule-inventory):` +curly / consistent-type-imports / no-only-tests intents (real docs name them).
 
-Deleted: docs/{related-tools,inline-mode,agent-workflows,eval-architecture}.md (last one moved to research/).
+**GROUNDED REALITY** (ran the real router on 8 LIVE CLAUDE.md/AGENTS.md): deterministic reuse is
+**~2%** (2/118 segmented; was 0 before this session). WHY low — all honest, not bugs: (1) clean
+AGENTS.md deliberately OMIT generic lint rules (2026 best-practice) → most content is
+project/process/semantic → correctly "hard"; (2) when a doc DOES name a rule, the map often lacks it
+(fixed 2); (3) rule-naming bullets lacking a lexicon VERB score "medium" → cut by the high-only
+default (no-explicit-any/no-floating-promises named but dropped); (4) vigiles's OWN structured
+CLAUDE.md → 0 segmented (the S0/S1 marker tier isn't built).
 
-**REPO ABOUT (USER ACTION — no tool/API access to set it):** paste into Settings→About —
-desc "Like Lighthouse for your agent harness — verify your CLAUDE.md/AGENTS.md, skills & hooks are real,
-then test and measure they actually work. Claude Code + Codex.", website https://zernie.github.io/vigiles/,
-topics: claude-code codex agentic-coding ai-agents llm claude anthropic developer-tools cli linter testing
-evals typescript mcp skills.
+**NEXT LEVERS (ranked, user asked which of #1/#2 first — decide + go):** (1) a **RULE-NAME cue** in
+`segment.ts` — a bullet naming an off-the-shelf rule → HIGH confidence (recovers named-but-medium
+bullets, cheapest win); (2) the **S0/S1 structured tier** — compile vigiles-style docs w/
+`**Enforced by**` markers (0 today, ~100% precision possible, the loop-closer); (3) the **`Intent →
+Realization` regroup** + per-linter `ConfigProbe` (ruff/pylint) + Python intents (§6 of the design doc).
 
-**NEXT (not blocking):** none required. Candidate follow-up: a deterministic `no-internal-links-in-public-docs`
-lint rule (P1 roadmap) — currently hand-enforced (this session verified it by grep).
-
-**TEST STATUS:** touched-gate dogfoods pass locally (research-index, self-command-refs, doc-command-coverage,
-orphans, inline) + build / integrity / orphan-docs / fmt / no-internal-links green. Full vitest not re-run
-(docs-only change); env-only `dialect-drift` still fails locally (CI pins CC).
+**Repro tools in `scratchpad/`:** `assess.mjs`/`probe.mjs`/`mini.mjs` run `routeRules` over
+`realdocs/` (8 fetched real instruction files) + `configs/`+`eslint-configs/` (real linter configs
+from the OSS sweep). Rebuild dist (`npx tsc`) before re-running after a src edit.
 
 ## Don't re-read unless the task needs it
 
@@ -92,7 +86,9 @@ orphans, inline) + build / integrity / orphan-docs / fmt / no-internal-links gre
 - **Strategy KB MOVED (2026-07-13)** out of this repo → private `zernie/mine` repo, `vigiles/`
   (plain text). No more git-crypt / `startup/` vault here; there is nothing to unlock.
 - **SCOPED-SESSION GITHUB ACCESS** — WebFetch blocked by net policy; WebSearch works. Cross-GitHub
-  discovery via WebSearch or sourcegraph + `raw.githubusercontent`.
+  discovery via WebSearch or sourcegraph + `raw.githubusercontent`. `add_repo` is **same-owner only**
+  (v1) — can't add `astral-sh/ruff` etc. into a `zernie`-scoped session; fetch external files with
+  `curl https://raw.githubusercontent.com/OWNER/REPO/BRANCH/PATH` (works through the proxy, disk-free).
 - Commits/PR: NO session links / NO raw model-id strings. Conventional-Commit titles.
 
 ## Decisions of record (don't relitigate)
@@ -122,3 +118,15 @@ orphans, inline) + build / integrity / orphan-docs / fmt / no-internal-links gre
   shipped plugin** — vigiles verifies harnesses, it does NOT lint code (`dont-reimplement-linters`),
   so shipping one to users would muddy positioning. (User's call this session.)
 - Vault filenames MUST be opaque IDs; commit messages for vault changes MUST be generic.
+- **Rule-compile tier design (this session, full record in `research/rule-compiler-multilang-design.md`):**
+  the deterministic default is **PRECISION-first, low-recall by design** — compile a NARROW curated
+  set VERY well, flag everything else CLEARLY as "hard to codify" (never silent-drop or overclaim);
+  gradual expansion from what REAL docs actually name. Data model = **`Intent → Realization[]`** (one
+  norm, N per-language realizations; match ungated, REPORT gated). Config-state = a **per-linter
+  `ConfigProbe`** (ruff `select` REPLACES the default set; pylint is DENY-list/on-by-default) — parsing
+  TOML/INI is DATA not exec, so it's safe + more complete than the ESLint grep (RCE path = only
+  executable JS config). **Both-keys scoping** (language present AND that linter's config present) makes
+  a wrong cross-language nudge structurally impossible. **ruff-absorbs-pylint is NOT a contradiction**
+  (union of enabled across both tools). `compiler/catalog/rule-map.json` stays ESLint-shaped (model-tier
+  superset); the deterministic Python seed lives in typed TS. **AGENTS.md is the #1 code-norm carrier;
+  CLAUDE.md is a redirect stub; `.cursor/rules` absent in OSS.** Ruff+Pylint only (no mypy/flake8/bandit).
