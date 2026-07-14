@@ -63,12 +63,16 @@ The three-column scope, marked honestly (this section supersedes the INTENT_MAP-
 
 **🟡 DOABLE CHEAPLY (spike-proven, not wired)**
 
-- Parse ALL instruction sources — nested `CLAUDE.md` (`globSync('**/CLAUDE.md')` already exists in
-  `cli.ts`) + `.claude/`. **PER-FILE ROUTING is now in place** (`gatherInstructionFiles` returns a
-  `{path,text}[]`, each routed separately + folded by `mergeRoutings`, so every rule keeps its OWN file +
-  line numbers — this also FIXED a latent provenance bug where concatenating root `CLAUDE.md` + `AGENTS.md`
-  offset the second file's line numbers). Remaining = adding nested sources to the list (a list-append) +
-  a FIXTURE-NOISE policy (skip `test/dogfood/`, `.tmp-*` — this repo has 9 `CLAUDE.md`, most are fixtures).
+- **NESTED-SOURCE discovery is LIVE.** `gatherInstructionFiles` now globs `**/CLAUDE.md` + `**/AGENTS.md`
+  and reads a repo's real subdirectory memory (`src/CLAUDE.md`, `research/CLAUDE.md`, …), each routed
+  SEPARATELY + folded by `mergeRoutings` so every rule keeps its OWN file + line numbers (this also FIXED
+  a latent provenance bug: concatenating root `CLAUDE.md` + `AGENTS.md` offset the second file's lines).
+  The FIXTURE-NOISE policy is `isFixturePath` (`src/instruction-sources.ts`, pure + 100%-tested): skip a
+  path with a build/deps/test dir segment OR a `demo*`/`example*`/`sample*`/`fixture*`/`bench*`/`mock*`/
+  `scratch*`/`tmp*` prefix — precision-first (over-skip a legit `sample-service` before flooding with
+  fixture rules). On THIS repo: 4 real memory files KEPT, 5 fixtures SKIPPED. Remaining = `.claude/` rule
+  sources (a distinct source shape) + a possible sub-project refinement (a nested file next to its own
+  `package.json`/`.claude-plugin/` is a sub-project, not this repo's memory).
 
 **🔴 HARD (model-tier / later)**
 

@@ -135,6 +135,7 @@ import {
   type RuleInventoryItem,
 } from "./rule-inventory.js";
 import { routeRules, mergeRoutings, type RuleRouting } from "./rule-routing.js";
+import { isFixturePath } from "./instruction-sources.js";
 import { enumerateEslintCatalog } from "./core/rule-catalog.js";
 import {
   runAdoptabilityTier,
@@ -2119,22 +2120,39 @@ function computeRuleInventory(
 /** Gather EVERY agent instruction file present (not just the harness-native one) —
  * rules are often documented in AGENTS.md even under a claude-code harness — as a
  * list of {path, text} so each is routed SEPARATELY and keeps its OWN provenance
- * (concatenating first would corrupt per-file line numbers). */
-// SCOPE (2026-07-14): gathers the ROOT instruction files ONLY. Nested `CLAUDE.md`
-// (subdirectory memory) and `.claude/` rule sources are IN SCOPE but NOT YET
-// gathered — this repo alone has 9 `CLAUDE.md` files and we read 1. Adding them is
-// now a list-append (per-file routing is in place); the open question is the
-// fixture-noise policy (skip test/dogfood/.tmp dirs). research/rule-compiler-
-// multilang-design.md §0. `globSync('**/CLAUDE.md')` already exists in this file.
+ * (concatenating first would corrupt per-file line numbers). Reads the ROOT
+ * instruction files PLUS nested subdirectory-memory (`src/CLAUDE.md`,
+ * `research/CLAUDE.md`, …), skipping fixture/demo/build/test dirs (`isFixturePath`)
+ * so a repo's real memory is read without the test-fixture noise. `.claude/` rule
+ * sources remain a future source. research/rule-compiler-multilang-design.md §0. */
 function gatherInstructionFiles(
   root: string,
   instructionFile: string,
 ): { path: string; text: string }[] {
   const files: { path: string; text: string }[] = [];
-  for (const name of new Set([instructionFile, "CLAUDE.md", "AGENTS.md"])) {
-    const p = resolve(root, name);
-    if (existsSync(p))
-      files.push({ path: name, text: readFileSync(p, "utf-8") });
+  const seen = new Set<string>();
+  const add = (rel: string): void => {
+    if (seen.has(rel)) return;
+    const p = resolve(root, rel);
+    if (existsSync(p)) {
+      files.push({ path: rel, text: readFileSync(p, "utf-8") });
+      seen.add(rel);
+    }
+  };
+  // Root instruction files first (stable, deterministic order).
+  for (const name of new Set([instructionFile, "CLAUDE.md", "AGENTS.md"]))
+    add(name);
+  // Nested subdirectory memory, minus fixture/demo/build/test noise.
+  try {
+    const nested = globSync(["**/CLAUDE.md", "**/AGENTS.md"], {
+      cwd: root,
+      ignore: [...IGNORE_NODE_MODULES, "dist/**", ".git/**"],
+    })
+      .filter((rel) => !isFixturePath(rel))
+      .sort();
+    for (const rel of nested) add(rel);
+  } catch {
+    // best-effort — a glob failure just means root-only, never breaks the audit
   }
   return files;
 }
