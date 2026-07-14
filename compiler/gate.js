@@ -112,6 +112,31 @@ if (require.main === module) {
   console.log("  Stage 2 caught " + abstainGold + " checker(s) that passed their OWN test but leaked on independent gold.");
   console.log("  Shipped = only rules that survived BOTH gates. The rest are downgraded to advisory/declare, not silently trusted.\n");
   fs.writeFileSync(path.join(__dirname, "results.json"), JSON.stringify(results, null, 2));
+
+  // CI GATE: assert the known-correct verdicts so a regression in the synthesis
+  // or the two-stage gate FAILS the build instead of passing silently. The two
+  // leaky checkers (R5 name-based secret, R10 text-scan eslint-disable) MUST
+  // abstain; the sound ones MUST be kept. If a leaky checker flips to "kept"
+  // that is exactly the false-confidence failure this gate exists to catch.
+  // See research/dogfood-corpus.md (this is CI-enforced via .github/workflows/ci.yml).
+  const EXPECTED = {
+    R1: "kept", R2: "kept-ungraded", R3: "kept-ungraded", R4: "kept-ungraded",
+    R5: "abstain-selftest", R6: "declare", R7: "declare",
+    R8: "kept", R9: "kept", R10: "abstain-gold",
+  };
+  const drift = results
+    .filter((r) => EXPECTED[r.id] && EXPECTED[r.id] !== r.status)
+    .map((r) => "    " + r.id + " " + r.slug + ": expected " + EXPECTED[r.id] + ", got " + r.status);
+  const missing = Object.keys(EXPECTED)
+    .filter((id) => !results.some((r) => r.id === id))
+    .map((id) => "    missing expected rule: " + id);
+  if (drift.length || missing.length) {
+    console.error("\n  ✗ TRUST-GATE DRIFT — the soundness verdicts changed:");
+    for (const line of [...drift, ...missing]) console.error(line);
+    console.error("  A leaky checker that should ABSTAIN may now be 'kept' (false confidence). Investigate before shipping.\n");
+    process.exit(1);
+  }
+  console.log("  ✓ trust-gate verdicts match the committed expectation (CI gate green).\n");
 }
 
 module.exports = { runGate };

@@ -178,6 +178,25 @@ jobs:
       - name: API reference generates (smoke, no publish)
         run: npx typedoc
 
+      # Dogfood-corpus guards (deterministic, no model, no key). The benchmark
+      # corpus's own correctness-oracle self-checks: a check that stopped
+      # discriminating good-from-bad would silently void every downstream
+      # benchmark/optimizer claim. See research/dogfood-corpus.md.
+      - name: Dogfood corpus guards (bench self-checks)
+        run: |
+          node bench/corpus/verify.mjs
+          node bench/corpus/verify-headroom.mjs
+
+      # The @vigiles/compiler trust gate — prove the two-stage soundness gate
+      # still ABSTAINS the leaky synthesized checkers (its whole reason to
+      # exist). gate.js asserts the known-correct kept/abstain verdicts and
+      # exits non-zero on drift. Its own package + lockfile, so install in place.
+      # Deterministic, no model. See research/dogfood-corpus.md.
+      - name: Compiler trust gate (soundness dogfood)
+        run: |
+          npm ci --prefix compiler
+          node compiler/gate.js
+
   harness:
     # Dogfood the harness-testing pillar on the in-repo build: the deterministic
     # tier runs the real claude CLI against a scripted mock model, so it needs

@@ -48,6 +48,7 @@ export default claude({
 
     // ── benchmark ──
     "research/benchmark-methodology.md": `[active] Defines the A/B-over-real-task method behind vigiles's "what actually works" measurement claims`,
+    "research/dogfood-corpus.md": `[active] The dogfood-corpus index + vendoring policy (SHA-pin/MIT-only/provenance/CI-enforced): maps every dogfood artifact → is-it-CI-enforced → by-what`,
     "research/benchmarks-runtime-gates.md": `[rejected] Empirical finding that runtime enforcement gates don't improve capable-agent behavior; redirected focus to verification`,
 
     // ── compiler ──

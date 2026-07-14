@@ -1,0 +1,21 @@
+Vendored snapshot — DO NOT EDIT BY HAND.
+
+Upstream:  https://github.com/davila7/claude-code-templates
+Path:      cli-tool/components/hooks/performance/performance-budget-guard.json
+Commit:    869640b
+License:   MIT (see ./LICENSE) — © 2025 Daniel (San) Ávila
+
+Why this is here:
+  A CALIBRATION FP-GUARD for the hook-block-ineffective detector (the
+  don't-cry-wolf lock). Its description says it "blocks deployments" but it
+  is a PostToolUse hook that `exit 2`s — which on PostToolUse FEEDS stderr
+  back to the model (a legitimate channel), NOT a failed block. Because
+  block-vs-feedback intent isn't deterministically separable, the detector
+  must NOT flag it (else it cries wolf on every nudge/lint hook, incl.
+  vigiles's own refs-nudge.sh). src/scan-vendor.test.ts asserts it stays
+  CLEAN on the five high-precision detectors.
+
+Included — the minimal SLICE only: the hook config vendored as
+.claude/settings.json. Nothing else from the upstream repo is vendored.
+
+Refresh: tools/refresh-vendor.sh (human-run; bumps the pinned commit).
