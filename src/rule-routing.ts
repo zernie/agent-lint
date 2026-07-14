@@ -155,6 +155,15 @@ const META_CUES: readonly RegExp[] = [
   /\byour (job|task|role) is\b/i,
   /\b(do not|don'?t|never) (tell|mention|reveal|say)\b/i,
   /\bin (chat|your (reply|response|answer))\b/i,
+  // H5 agent-ATTENTION norms (Fable's hook-lane taxonomy): re-read / re-run /
+  // re-fetch "without code changes". NOTHING reliably gates these — blocking a
+  // re-read breaks post-compaction recovery (false safety worse than an
+  // under-blocking guard) — so they are agent-guidance (meta), never a gate. The
+  // right instrument is MEASUREMENT (the flight recorder), not enforcement.
+  /\bre-?read(?:ing)?\b/i,
+  /\bre-?run(?:ning)?\b[^\n]{0,30}\b(?:test|command|suite)\b/i,
+  /\bre-?fetch(?:ing)?\b/i,
+  /\bwithout code changes\b/i,
 ];
 
 interface Classification {

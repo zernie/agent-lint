@@ -59,6 +59,27 @@ const ANTI_HEADING =
 const INDEX_SMELL = /^`[^`]+`\s*[:—–-]\s/;
 
 /**
+ * Broader index/reference-entry shapes the backtick INDEX_SMELL misses — from
+ * real-corpus leakage: a path MAPPING (`next-dev.ts → next-dev-server.ts`), a
+ * bullet LED by a file path + em-dash (`packages/x/ — Session replay`), or a
+ * `Label: <path>` pointer (`Skill file: .agents/skills/…`). Paths in these are
+ * backtick-wrapped, so we test a backtick-stripped shadow. The path DISCRIMINATOR
+ * — a file extension (`.ts`) or a trailing slash — is what keeps a rule id
+ * (`@scope/no-explicit-any`, no extension) from being mistaken for a path, so a
+ * rule-naming bullet is never rejected as an index entry.
+ */
+const INDEX_ARROW = /[\w./@-]*\.[a-z]{1,6}\b\s*(?:→|->|=>)/;
+const INDEX_LABEL_PATH =
+  /^[A-Za-z][\w ]{0,24}:\s+\.?[\w@-]*\/[\w@./-]*(?:\.[a-z0-9]{1,6}\b|\/)/;
+const INDEX_PATH_LED = /^[\w@.-]+\/[\w@./-]*(?:\.[a-z0-9]{1,6}\b|\/)/;
+function looksLikeIndexEntry(t: string): boolean {
+  if (INDEX_SMELL.test(t)) return true;
+  const bare = t.replace(/`/g, " ").trim();
+  if (INDEX_ARROW.test(bare) || INDEX_LABEL_PATH.test(bare)) return true;
+  return INDEX_PATH_LED.test(bare) && /\s[—–]\s/.test(bare);
+}
+
+/**
  * RULE-NAME cue: a backticked token that is SHAPED like an off-the-shelf lint
  * rule — a scoped/plugin rule (`@typescript-eslint/consistent-type-imports`,
  * `import/no-cycle`) or a ≥3-segment kebab id (`no-floating-promises`). Requiring
@@ -297,9 +318,10 @@ function gate(
 ): Confidence | null {
   const t = text.trim();
 
-  // Reject an index/command entry outright (`` `path` — description ``) — the
-  // corpus's dominant false positive. No cue count can rescue it.
-  if (INDEX_SMELL.test(t)) return null;
+  // Reject an index/command/reference entry outright (`` `path` — description ``,
+  // `a.ts → b.ts`, `dir/x — …`, `Label: path`) — the corpus's dominant false
+  // positive. No cue count can rescue it.
+  if (looksLikeIndexEntry(t)) return null;
 
   const context = isBullet || underRuleHeading;
 

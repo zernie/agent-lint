@@ -58,6 +58,16 @@ describe("routeRules", () => {
     expect(r.rules.some((x) => x.category === "unrouted")).toBe(false);
   });
 
+  it("routes an agent-attention norm (never re-read a file) to meta, not unrouted", () => {
+    // Fable's H5: nothing reliably gates "don't re-read/re-run" — it's agent
+    // guidance (meta), never a compilable rule.
+    const r = routeRules(
+      "## Rules\n\n- Never re-read the same section of a file without code changes in between.",
+    );
+    expect(r.rules.some((x) => x.category === "meta")).toBe(true);
+    expect(r.rules.some((x) => x.category === "unrouted")).toBe(false);
+  });
+
   it("carries provenance (line span + verbatim quote) from the segmenter", () => {
     const md = "# Style\n\n- Use `eqeqeq` everywhere.\n";
     const r = routeRules(md, "CLAUDE.md");

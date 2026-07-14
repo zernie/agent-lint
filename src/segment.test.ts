@@ -250,6 +250,30 @@ describe("segmentInstructions — corpus-grounded precision fixes", () => {
   });
 });
 
+describe("segmentInstructions — index/reference entries (extended)", () => {
+  it("rejects path→path maps, Label:path pointers, and path-led listings", () => {
+    const md = [
+      "## Rules",
+      "",
+      "- Dev server: `src/cli/next-dev.ts` → `src/server/dev/next-dev-server.ts`",
+      "- Skill file: `.agents/skills/pr-status-triage/SKILL.md`",
+      "- `packages/replay-internal/`, `packages/replay-canvas/` — Session replay",
+    ].join("\n");
+    const t = texts(segmentInstructions(md));
+    expect(t.some((x) => x.includes("next-dev"))).toBe(false);
+    expect(t.some((x) => x.includes("Skill file"))).toBe(false);
+    expect(t.some((x) => x.includes("replay-internal"))).toBe(false);
+  });
+
+  it("PRECISION: a normal rule-naming bullet (prose + (`rule`)) is kept", () => {
+    // starts with prose, not a path — the path discriminator (ext/slash) never
+    // trips, so this stays a candidate.
+    const md =
+      "## Rules\n\n- Use `import type` for type-only imports (`@typescript-eslint/consistent-type-imports`)";
+    expect(find(segmentInstructions(md), "import type")).toBeTruthy();
+  });
+});
+
 describe("segmentInstructions — RULE-NAME cue", () => {
   it("promotes a rule-naming bullet with NO imperative verb to high", () => {
     // The corpus shape: names the rule in backticks, describes intent, no lexicon
