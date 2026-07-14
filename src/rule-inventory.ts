@@ -218,6 +218,39 @@ export const INTENT_MAP: readonly IntentMapping[] = [
     configFix:
       '"no-warning-comments": ["error", {"terms": ["todo", "fixme"], "location": "anywhere"}]',
   },
+  // Grounded in the OSS-corpus sweep — rules real AGENTS.md files actually NAME
+  // (cloudflare/workers-sdk names all three inline). Keyword set is rule-name /
+  // code-shaped only, so it fires when the doc names the rule, never on prose.
+  {
+    intent: "require curly braces for control flow",
+    linter: "eslint",
+    keywords: ["curly", "curly braces"],
+    rule: "curly",
+    configFix: '"curly": ["error", "all"]',
+  },
+  {
+    intent: "use import type for type-only imports",
+    linter: "eslint",
+    keywords: [
+      "consistent-type-imports",
+      "@typescript-eslint/consistent-type-imports",
+    ],
+    rule: "@typescript-eslint/consistent-type-imports",
+    configFix: '"@typescript-eslint/consistent-type-imports": "error"',
+  },
+  {
+    intent: "no focused / .only tests committed",
+    linter: "eslint",
+    keywords: [
+      "no-only-tests",
+      "no-focused-tests",
+      "describe.only",
+      "it.only",
+      "test.only",
+    ],
+    rule: "no-only-tests/no-only-tests",
+    configFix: '"no-only-tests/no-only-tests": "error"',
+  },
 ];
 
 /**
