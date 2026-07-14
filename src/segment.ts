@@ -30,9 +30,45 @@ export interface SegmentedRule {
 const FORM_HEAD =
   /^(?:use|avoid|prefer|never|always|don'?t|do not|no\s+\S|must|should|keep|run|write|add|remove|only)\b/i;
 
-/** Rule-ish heading gate for prose-under-heading candidacy. */
+/**
+ * Rule-ish heading gate for prose-under-heading candidacy. Word-bounded so the
+ * `do` alternate can't match inside `Documentation`/`Adoption`/`Download` (the
+ * measured bug). Accept-heading vocabulary grounded in the OSS-corpus survey
+ * (`## Coding Standards`/`## Code Style`/`## Naming`/`## Good practices`/
+ * `## Error Handling` are the real code-norm sections).
+ */
 const RULE_HEADING =
-  /rules?|conventions?|style|guidelines?|standards?|do(?:n'?ts?)?s?|never|always|must|require/i;
+  /\b(?:rules?|conventions?|code[ -]?style|style|guidelines?|standards?|naming|good practices?|error handling|do'?s?\s*(?:and|&|\/)\s*don'?ts?|don'?ts?|never|always|must|require)\b/i;
+
+/**
+ * Anti-context heading: a section whose content is overwhelmingly index /
+ * command / setup / narrative, not enforceable norms (the corpus's #1
+ * false-positive source). Content under one of these is rejected outright —
+ * UNLESS the heading is also rule-ish (`## Testing conventions` keeps its
+ * bullets), so the accept signal wins a tie.
+ */
+const ANTI_HEADING =
+  /\b(?:commands?|setup|install(?:ation)?|usage|getting started|quick ?start|examples?|key files|(?:code)?base structure|project structure|repository structure|architecture|overview|directory|layout|environment|commits?|pull requests?|testing|scripts?|dependencies|roadmap|changelog|table of contents|where to look)\b/i;
+
+/**
+ * INDEX-SMELL veto: a bullet whose content is a code span followed by a
+ * separator + description (`` `src/x.ts` — Type system ``, `` `npm test` — run ``)
+ * is a keyFiles/command INDEX entry, never a rule. The single highest-value
+ * rejection signal (the corpus's dominant false positive).
+ */
+const INDEX_SMELL = /^`[^`]+`\s*[:—–-]\s/;
+
+/**
+ * Leading markdown decoration a rule may be wrapped in — emphasis (`**bold**`),
+ * blockquote, checkbox, or a status emoji. Stripped on a SHADOW string before
+ * the imperative-head test so `- **Never** …` / `✅ Use const` still read as
+ * imperative. Provenance (exactQuote/offsets) is unaffected — only the form cue
+ * sees the stripped text.
+ */
+const LEAD_DECORATION = /^(?:\s+|>+|\*+|_+|~+|\[[ xX]\]\s*|[✅❌☑✔✖✗⚠ℹ])+/u;
+function stripLeadDecoration(s: string): string {
+  return s.replace(LEAD_DECORATION, "").trimStart();
+}
 
 /** Declarative subjects — these signal a statement, not an instruction. */
 const DECLARATION = /^(?:this|these|those|it|we|our|there)\b/i;
@@ -122,14 +158,9 @@ const VERBS = new Set<string>([
   "filters",
   "merge",
   "merges",
-  "be",
-  "is",
-  "are",
-  "have",
-  "has",
-  "may",
-  "should",
-  "must",
+  // Copulas/modals (be/is/are/have/has/may/should/must) are deliberately NOT
+  // here: as "shape" verbs they made the cue near-vacuous (almost any English
+  // sentence passed). Deontic modals still live in FORM_HEAD (the form cue).
   "pin",
   "pins",
   "lint",
@@ -253,14 +284,21 @@ function gate(
 ): Confidence | null {
   const t = text.trim();
 
-  const form = FORM_HEAD.test(t);
+  // Reject an index/command entry outright (`` `path` — description ``) — the
+  // corpus's dominant false positive. No cue count can rescue it.
+  if (INDEX_SMELL.test(t)) return null;
+
+  // The form/declaration cues see the text with leading decoration stripped, so
+  // `- **Never** …` reads as imperative and `**We** …` still reads declarative.
+  const head = stripLeadDecoration(t);
+  const form = FORM_HEAD.test(head);
   const context = isBullet || underRuleHeading;
   const shape =
     t.length >= 15 &&
     t.length <= 300 &&
     hasVerbish(t) &&
     !isLinkOnly(t) &&
-    !DECLARATION.test(t);
+    !DECLARATION.test(head);
 
   const cues = (form ? 1 : 0) + (context ? 1 : 0) + (shape ? 1 : 0);
   if (cues >= 3) return "high";
@@ -361,7 +399,9 @@ function emitFromSpan(
 
 // --- Scanner ---------------------------------------------------------------
 
-const LIST_ITEM = /^(\s*)([-*+])(\s+)(.*)$/;
+// Ordered (`1.`/`1)`) and emoji (`✅`/`❌`) bullets count as list items too —
+// the native `-*+` class missed them, so shouted/numbered rules were invisible.
+const LIST_ITEM = /^(\s*)([-*+]|\d+[.)]|[✅❌☑✔✖✗])(\s+)(.*)$/u;
 const HEADING = /^(#{1,6})\s+(.*)$/;
 const FENCE = /^\s*(```|~~~)/;
 const TABLE_LINE = /^\s*\|/;
@@ -383,6 +423,7 @@ export function segmentInstructions(
 
   let inFence = false;
   let currentHeadingIsRuleish = false;
+  let currentHeadingIsAntiContext = false;
   let i = 0;
 
   const lineSpan = (a: number, b: number): Span => ({
@@ -408,6 +449,10 @@ export function segmentInstructions(
     const h = HEADING.exec(line);
     if (h) {
       currentHeadingIsRuleish = RULE_HEADING.test(h[2]);
+      // Anti-context only when it is NOT also rule-ish, so an accept word wins a
+      // tie (`## Testing conventions` keeps its bullets; `## Testing` drops them).
+      currentHeadingIsAntiContext =
+        ANTI_HEADING.test(h[2]) && !currentHeadingIsRuleish;
       i++;
       continue;
     }
@@ -449,7 +494,9 @@ export function segmentInstructions(
       const wholeText = normalize(markdown.slice(contentStart, contentEnd));
       const conf = gate(wholeText, true, currentHeadingIsRuleish);
 
-      if (conf !== null) {
+      // Reject bullets under an anti-context heading (Commands/Setup/Key Files/
+      // Architecture/…) — the corpus's dominant false-positive locus.
+      if (conf !== null && !currentHeadingIsAntiContext) {
         // Only attempt splitting for single-line items (keeps offsets exact).
         const spans = multiLine
           ? [trimSpan(markdown, contentSpan)]

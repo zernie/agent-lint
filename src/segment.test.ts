@@ -187,6 +187,69 @@ describe("segmentInstructions — atomicity, fences, tables", () => {
 
 // ---------------------------------------------------------------------------
 
+// Corpus-grounded precision fixes (design: research/rule-compiler-multilang-design.md §2a).
+const FIXTURE_CORPUS = `# Agent rules
+
+## Key Files
+
+- \`src/core/linters.ts\` — the cross-referencing engine
+- \`npm test\` — build and run all tests
+
+## Commands
+
+- Run \`npm install\` before anything else
+
+## Coding Standards
+
+- **Never** commit secrets
+- Always use \`===\` over \`==\`
+- ✅ Use \`const\` over \`let\`
+- Naming is consistent across modules
+
+## Documentation
+
+Always write docstrings for public functions.
+`;
+
+describe("segmentInstructions — corpus-grounded precision fixes", () => {
+  const rules = segmentInstructions(FIXTURE_CORPUS, "AGENTS.md");
+  const t = texts(rules);
+
+  it("INDEX-SMELL: rejects `path` — description index bullets", () => {
+    expect(t.some((x) => x.includes("cross-referencing engine"))).toBe(false);
+    expect(t.some((x) => x.includes("build and run all tests"))).toBe(false);
+  });
+
+  it("ANTI-CONTEXT: rejects imperative bullets under a Commands/Key Files heading", () => {
+    // "Run `npm install` …" is imperative + a bullet, but under `## Commands`.
+    expect(find(rules, "npm install")).toBeUndefined();
+  });
+
+  it("DECORATION: catches shouted / numbered / emoji-bulleted rules", () => {
+    expect(find(rules, "Never** commit secrets")?.confidence).toBe("high");
+    expect(find(rules, "Always use")?.confidence).toBe("high");
+    expect(find(rules, "Use `const` over `let`")?.confidence).toBe("high");
+  });
+
+  it("RULE_HEADING word-bound: `## Documentation` is not a rules section", () => {
+    // Regression: the old regex matched the substring `do` in "Documentation",
+    // so its prose leaked in. Prose under it must NOT be a candidate now.
+    expect(
+      find(rules, "write docstrings for public functions"),
+    ).toBeUndefined();
+  });
+
+  it("VERB LEXICON: a copula-only declarative is rejected (no vacuous shape)", () => {
+    // "Naming is consistent across modules" — no action verb once copulas left
+    // the lexicon, so it fails the shape cue and is dropped.
+    expect(find(rules, "Naming is consistent")).toBeUndefined();
+  });
+
+  it("verbatim provenance across ordered/emoji/decorated bullets", () => {
+    assertProvenanceExact(FIXTURE_CORPUS, rules);
+  });
+});
+
 describe("segmentInstructions — aggregate precision/recall on fixtures", () => {
   it("reports precision hard (=1.0) and recall softly", () => {
     const all = [
