@@ -816,6 +816,15 @@ assertRates`) is the recommended path for testing one skill, but
   unconfined; `sandbox-exec`/docker for non-Linux. [feature-ideas §13](feature-ideas.md) · **LOW**
 - **Deterministic subagent / command wiring** — register + drive without a model.
   [coverage-matrix](harness-testing-coverage-matrix.md) · **LOW**
+- **Dogfood: a no-model floor for the 9 skill evals** — `examples/harness/dogfood/*.eval.mjs`
+  are CI'd only for SYNTAX; their staleness gate (the eval LOCK / `eval --check`) is a
+  green no-op because no locks are committed. Either commit eval-locks so `--check`
+  actually gates, and/or add a deterministic "each eval's plugin/skillsDir LOADS + its
+  skill target RESOLVES" check (no model). See `research/dogfood-corpus.md`. · **LOW**
+- **Dogfood: Codex corpus parity** — the vendored `test/dogfood/` corpus is CC-only;
+  Codex is covered only by artificial tmp fixtures (`scan-cli.test.ts`). Vendor a real
+  Codex plugin slice (SHA-pinned, MIT, provenance) so the corpus is symmetric across
+  adapters like the port-conformance already is. See `research/dogfood-corpus.md`. · **LOW**
 - **Promote `EvalDriver` to a core port on the `HarnessAdapter` bundle** — today
   the eval-driver seam (`EvalDriver`/`ModelOutputParser`/`AgentRunner`) + the
   shared trace vocabulary (`ToolCall`/`HookFire`/`SubagentTrace`/`EvalUsage`) live

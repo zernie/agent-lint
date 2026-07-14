@@ -34,10 +34,10 @@ bench/leaderboard/RESULTS.md
 /src/core/CLAUDE.md
 /research/CLAUDE.md
 
-# Captured audit/dogfood output (a rendered HTML report + its JSON + terminal
-# .txt captures) — machine-generated artifacts kept as a reference record, exact
+# Captured audit output (a rendered HTML report + its JSON + terminal .txt
+# captures) — machine-generated artifacts kept as a reference record, exact
 # bytes, not formatter-owned (same class as the bench/ result snapshots above).
-research/dogfood/
+research/audit-captures/
 
 # The @vigiles/compiler sub-package is a self-contained package boundary with its
 # own toolchain (its own eslint/typescript deps, CommonJS) — formatted

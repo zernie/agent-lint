@@ -38,7 +38,7 @@
   all agree.
 
   SPINE = proof/demo-led. Real, screenshotable catches on shipped plugins, THEN
-  mechanism. Every proof traces to a real dogfood run (research/dogfood/) — NEVER
+  mechanism. Every proof traces to a real dogfood run (research/audit-captures/) — NEVER
   fabricate one. Order = most-RELATABLE first (broken tool ref → skill collision →
   rules-not-enforced → secrets-exfil gotcha LAST as the bite). The intro triplet
   maps to the three "vibes break silently" proofs (1, 2, 4); Proof 3 (your rules →
@@ -54,7 +54,7 @@
   init/compile/eject manage the spec layer (personas noticed the verb-count gap).
 
   DON'T SHAME OSS: catches are ANONYMIZED (no obra/superpowers, madappgang,
-  claude-flow by name) — real names live only in research/dogfood/.
+  claude-flow by name) — real names live only in research/audit-captures/.
   Guard/compiled-hooks + the 2/7→7/7 battery are PARKED FOR LAUNCH — not the hero.
 
   RULES: lead with the reader's CONCRETE PAIN; ≤ ~3-line paragraphs; ONE bold per

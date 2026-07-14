@@ -12,6 +12,19 @@ topic: benchmark
 > `dogfood-vendoring-policy` points at; it is the thing a new session reads to learn
 > every dogfood rule at once, instead of re-deriving them by audit.
 
+## Four things get called "dogfood" — only ONE is this corpus
+
+The word is overloaded across four DIFFERENT kinds of thing, each correctly next to
+its consumer. Do NOT try to consolidate them — they are not one pile. Only the first
+is "the dogfood corpus" this doc governs:
+
+| Location                    | What it actually is                                             | Governed by this doc?                                        |
+| --------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------ |
+| `test/dogfood/`             | **THE dogfood corpus** — vendored real plugins as test fixtures | ✅ yes                                                       |
+| `examples/harness/dogfood/` | **examples** that eval vigiles's OWN skills (trigger/quality)   | no — examples                                                |
+| `compiler/gold/`            | the `@vigiles/compiler` package's OWN internal gold sets        | no — package-internal                                        |
+| `research/audit-captures/`  | captured audit OUTPUT (`.txt`/`.html`/`.json`) — NOT tests      | no — output, renamed from the misleading `research/dogfood/` |
+
 ## The policy (the rules every dogfood artifact follows)
 
 1. **SHA-pin.** A vendored upstream lives in a dir suffixed with the short commit
@@ -46,16 +59,42 @@ topic: benchmark
 | `bench/ecosystem/**`, `bench/leaderboard/**`, `bench/{refs,tasks,tdd}/`                | Real-model A/B benchmark + fixtures                     | ⚠️ MANUAL    | real-model, costs money — run by hand (`node bench/ecosystem/benchmark.mjs`). The FREE self-checks (row above) are the CI floor.                                  |
 | `examples/harness/dogfood/*.eval.mjs`                                                  | Model-invocable skill trigger/quality evals             | ⚠️ MANUAL    | need `claude` + model auth — `npm run test:eval`, never in a workflow (write-don't-run policy). Syntax-gated by `src/examples-syntax.test.ts` (job: test).        |
 
-## Gaps still open (tracked, not silently accepted)
+## Per-adapter coverage — the CC-vs-Codex asymmetry (honest, not hidden)
 
-- **`no-orphan-docs` scope.** `src/core/orphans.ts` sweeps `docs/**` + `research/**`;
-  `compiler/**/*.md` and `bench/**/*.md` are NOT swept, so their READMEs can rot
-  undetected. This index links the key ones (below) so they have an inbound
-  reference; widening the sweep is a follow-up (it flags every unreferenced `.md`
-  in those trees, so it needs a pass to cross-link or exclude each first).
-- **`compiler/` lint/format.** `compiler/` is prettier-ignored + outside `eslint src/`
-  wholesale — so vigiles's OWN authored code there (gate.js, classify.js) escapes
-  root lint/format. Intentional (separate toolchain) but worth revisiting.
+vigiles is multi-harness, so the natural question is "does the dogfood test BOTH
+adapters, the way specs do?" Two separate layers, two answers:
+
+- **The ADAPTERS themselves ARE per-adapter enforced.** `src/adapter-contract.test.ts`
+  runs the conformance kit over the WHOLE registry in a loop (`for (const adapter of
+ADAPTERS)`), so registering an adapter auto-subjects it to every port contract. That
+  is the structural "test both harnesses" guarantee — symmetric across CC + Codex.
+- **The VENDORED corpus is NOT symmetric.** `test/dogfood/` holds real **Claude Code**
+  plugins only; there is **no vendored real Codex repo**. Codex is covered by
+  **artificial tmp fixtures** (`src/scan-cli.test.ts` builds an `AGENTS.md` +
+  `.codex/config.toml` repo in a tmpdir). So **ports are symmetric; the corpus is
+  CC-vendored, Codex-synthetic**. Reason (documented, not an oversight): real Codex
+  plugins are rare in the wild. Closing it (vendor a real Codex plugin slice) is a roadmap item.
+
+## Gaps still open (tracked, with the honest disposition of each)
+
+- **The 9 model evals (`examples/harness/dogfood/*.eval.mjs`) have no CI floor beyond
+  SYNTAX.** The right staleness mechanism — the eval LOCK (`vigiles eval --check`, wired
+  as a CI step) — is a **green no-op** because no locks are committed (committing one
+  needs a real `--update` model run). TODO (roadmap): either commit eval-locks so
+  `--check` actually gates, and/or add a no-model "each eval's plugin/skillsDir LOADS +
+  its skill target RESOLVES" structural floor. Until then a broken eval is caught only
+  when someone spends model quota.
+- **Codex corpus parity** (see above) — roadmap.
+- **`no-orphan-docs` scope — WON'T widen (decided).** Sweeping `compiler/**`/`bench/**`
+  is a NET-NEGATIVE: `compiler/` has 130+ `.md` (mostly `node_modules`) and `bench/` has
+  fixture `SKILL.md`/`CLAUDE.md` that aren't docs, so the glob would flag noise. The
+  anti-rot mechanism is instead this index's cross-links (below) — the key READMEs get an
+  inbound reference here, so they're not orphaned. Not a gap; a deliberate scoping.
+- **`compiler/` lint/format — accepted (separate package).** `compiler/` is prettier-
+  ignored + outside `eslint src/` because it is a SEPARATE CJS package + a reproducible
+  paper artifact with machine-generated code under `generated/`/`selftest/`. The root
+  `eslint src/` correctly scopes to the shipped library. If it ever needs linting it gets
+  its OWN `compiler/package.json` script, not inclusion in the root sweep.
 
 ## Key corpus READMEs (linked so they're not orphaned)
 
