@@ -79,6 +79,7 @@ export default defineConfig({
         "src/egress.ts",
         "src/services.ts",
         "src/services-docker.ts",
+        "src/core/rule-catalog.ts",
       ],
       // 100% lines/functions/statements. Branches floor at 90: the remainder
       // are defensive fallbacks that can't be hit deterministically — `?? ""` on
