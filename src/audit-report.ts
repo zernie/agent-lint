@@ -132,7 +132,7 @@ export interface AuditReport {
   readonly rulesInventory?: readonly RuleInventoryItem[];
   /**
    * The deterministic State-B routing PREVIEW — the instruction file segmented
-   * into atomic rules, each routed (reuse / hook / semantic / unrouted) to how
+   * into atomic rules, each routed (reuse / hook / meta / semantic / unrouted) to how
    * it would be enforced, with per-category counts. No model, fs-only. Grounds
    * the report's "compile" upsell in real numbers instead of generic copy.
    * Present only when at least one atomic rule was segmented. Additive/optional.

@@ -8,18 +8,25 @@
  * enforcement path would take — WITHOUT running a model:
  *
  *   reuse    → the rule text names an off-the-shelf lint rule ({@link INTENT_MAP})
- *              → mechanism: flip one config line.
+ *              → mechanism: flip one config line. The "narrow list we compile
+ *              very well" — everything else is honestly labelled, not force-fit.
  *   hook     → an ACTION rule a linter can't see (git push, rm -rf, "before you
  *              commit") → mechanism: a pre-commit / PreToolUse hook.
+ *   meta     → an agent-instruction, not a code rule ("read X first", "tell the
+ *              user", "you are …") → mechanism: stays prose. Split out of
+ *              `unrouted` so it never reads as "compilable but hard" (it isn't).
  *   semantic → a judgment call ("readable", "single responsibility") no checker
  *              can honestly decide → mechanism: stays prose.
- *   unrouted → none of the above fired deterministically → mechanism: the opt-in
- *              `compile` tier routes it (reuse / synthesize / hook / prose).
+ *   unrouted → looks like a code rule but matched no off-the-shelf rule: HARD to
+ *              codify → mechanism: the opt-in `compile` tier MIGHT synthesize a
+ *              checker, but it is NOT guaranteed (the gate may abstain). This is
+ *              the bucket audit must present clearly as "hard", never as done.
  *
  * HONESTY BY CONSTRUCTION: the deterministic tier NEVER claims a rule is
  * "synthesizable" — deciding that a custom rule can be written (and gating it)
- * is exactly the work the opt-in model tier does. Everything this file can't
- * pin to a concrete cue is `unrouted` ("compile to find out"), not a promise.
+ * is exactly the work the opt-in model tier does. `unrouted` means "hard —
+ * compile to find out", never a promise; `meta`/`semantic` mean "not an
+ * enforceable code rule at all" (a different, honest kind of no).
  *
  * Pure, deterministic, dependency-free. Reuses `rule-inventory`'s hardened
  * whole-token matcher + `INTENT_MAP`, and `segment`'s Tier-A segmenter.
@@ -32,13 +39,14 @@ import {
 } from "./rule-inventory.js";
 
 /** How a routed rule would be enforced (a MECHANISM ladder, not a 1-10 score). */
-export type RuleCategory = "reuse" | "hook" | "semantic" | "unrouted";
+export type RuleCategory = "reuse" | "hook" | "meta" | "semantic" | "unrouted";
 export type RuleMechanism = "config-line" | "hook" | "prose" | "compile";
 
 /** The mechanism each category maps to — a fixed, honest ladder. */
 const MECHANISM: Record<RuleCategory, RuleMechanism> = {
   reuse: "config-line",
   hook: "hook",
+  meta: "prose",
   semantic: "prose",
   unrouted: "compile",
 };
@@ -129,6 +137,26 @@ const SEMANTIC_CUES: readonly RegExp[] = [
   /\bclean code\b/i,
 ];
 
+/**
+ * META cues — an instruction to the AGENT, not a norm about the CODE ("read X
+ * first", "tell the user", "you are …", "when in doubt ask"). It is not a lint
+ * rule and never will be, so it must NOT land in `unrouted` (which reads as
+ * "compilable, just hard"). High-precision by design — specific phrasings a real
+ * code rule would not use.
+ */
+const META_CUES: readonly RegExp[] = [
+  // allow `.` in the gap — the referenced thing is often a filename (CLAUDE.md)
+  /\bread\b[^\n]{0,30}\bfirst\b/i,
+  /\bwhen in doubt\b/i,
+  /\bif (you'?re |you are )?unsure\b/i,
+  /\bask (the user|first|before)\b/i,
+  /\btell (the user|me)\b/i,
+  /\byou are\b[^.\n]{0,40}\b(assistant|agent|engineer|claude|model)\b/i,
+  /\byour (job|task|role) is\b/i,
+  /\b(do not|don'?t|never) (tell|mention|reveal|say)\b/i,
+  /\bin (chat|your (reply|response|answer))\b/i,
+];
+
 interface Classification {
   readonly category: RuleCategory;
   readonly rule?: string;
@@ -137,11 +165,13 @@ interface Classification {
 
 /**
  * Route one atomic rule. Order matters: an ACTION cue (git push) wins over a
- * rule-name mention ("never commit console.log" is a hook, not a lint rule);
- * reuse (a concrete off-the-shelf rule) wins over a soft semantic cue.
+ * rule-name mention ("never commit console.log" is a hook, not a lint rule); a
+ * META agent-instruction is pulled out before reuse so it isn't mismatched to a
+ * rule; reuse (a concrete off-the-shelf rule) wins over a soft semantic cue.
  */
 function classify(text: string): Classification {
   if (HOOK_CUES.some((re) => re.test(text))) return { category: "hook" };
+  if (META_CUES.some((re) => re.test(text))) return { category: "meta" };
   for (const m of INTENT_MAP) {
     if (m.keywords.some((kw) => matchesWholeToken(text, kw))) {
       return { category: "reuse", rule: m.rule, linter: m.linter };
@@ -184,6 +214,7 @@ export function routeRules(
   const counts: Record<RuleCategory, number> = {
     reuse: 0,
     hook: 0,
+    meta: 0,
     semantic: 0,
     unrouted: 0,
   };

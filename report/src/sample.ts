@@ -113,7 +113,7 @@ export const SAMPLE: AuditReport = {
   },
   ruleRouting: {
     segmented: 8,
-    counts: { reuse: 3, hook: 2, semantic: 1, unrouted: 2 },
+    counts: { reuse: 3, hook: 2, meta: 0, semantic: 1, unrouted: 2 },
     rules: [
       {
         text: "Never use `console.log` in shipped code.",

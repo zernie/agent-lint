@@ -47,6 +47,17 @@ describe("routeRules", () => {
     expect(r.rules.every((x) => RUNGS.has(x.mechanism))).toBe(true);
   });
 
+  it("routes an agent-instruction to meta (not a code rule), never unrouted", () => {
+    // "read X first" is guidance to the agent, not an enforceable code norm — it
+    // must NOT read as "compilable but hard".
+    const r = routeRules("## Rules\n\n- Always read the root CLAUDE.md first.");
+    const meta = r.rules.filter((x) => x.category === "meta");
+    expect(meta.length).toBeGreaterThanOrEqual(1);
+    expect(meta[0].mechanism).toBe("prose");
+    // and it did not leak into the "hard to compile" bucket
+    expect(r.rules.some((x) => x.category === "unrouted")).toBe(false);
+  });
+
   it("carries provenance (line span + verbatim quote) from the segmenter", () => {
     const md = "# Style\n\n- Use `eqeqeq` everywhere.\n";
     const r = routeRules(md, "CLAUDE.md");
@@ -70,7 +81,11 @@ describe("routeRules", () => {
     ].join("\n");
     const r = routeRules(md);
     const sum =
-      r.counts.reuse + r.counts.hook + r.counts.semantic + r.counts.unrouted;
+      r.counts.reuse +
+      r.counts.hook +
+      r.counts.meta +
+      r.counts.semantic +
+      r.counts.unrouted;
     expect(sum).toBe(r.segmented);
     expect(r.segmented).toBeGreaterThanOrEqual(4);
   });

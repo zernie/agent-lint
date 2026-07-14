@@ -129,7 +129,7 @@ export interface RuleInventoryItem {
   configFix: string;
 }
 
-export type RuleCategory = "reuse" | "hook" | "semantic" | "unrouted";
+export type RuleCategory = "reuse" | "hook" | "meta" | "semantic" | "unrouted";
 export type RuleMechanism = "config-line" | "hook" | "prose" | "compile";
 
 /** One segmented, deterministically-routed rule (mirror of the CLI's RoutedRule). */

@@ -135,35 +135,50 @@ function FoldedGroup({
  *      off-the-shelf lint rule, grouped by state so the actionable ones lead.
  *   2. A compile CTA describing the opt-in tier — never fabricated result rows.
  */
-/** The four routing rungs, in ladder order (config-line → hook → prose →
- * compile), with the glyph + one-line meaning the compile CTA lists. */
+/** The five routing categories, in ladder order (enforceable-now → hook →
+ * agent-note → prose → hard-to-codify), with the glyph + one-line meaning the
+ * compile CTA lists. The HARD bucket is labelled so difficulty reads clearly. */
 const ROUTE_META: Record<
   RuleCategory,
   { glyph: string; label: string; blurb: string }
 > = {
   reuse: {
-    glyph: "↺",
-    label: "reuse",
-    blurb: "an off-the-shelf rule already exists → enable it",
+    glyph: "✓",
+    label: "enforceable now",
+    blurb: "an off-the-shelf rule already exists → one config line",
   },
   hook: {
     glyph: "⛓",
     label: "hook",
-    blurb: "action rules a linter can't see (git push, rm -rf)",
+    blurb:
+      "an action rule a linter can't see (git push, rm -rf) → a hook gates it",
+  },
+  meta: {
+    glyph: "☰",
+    label: "agent note",
+    blurb: "an instruction to the agent, not a code rule → stays prose",
   },
   semantic: {
     glyph: "✎",
     label: "prose",
-    blurb: "judgment calls, honestly left un-enforced",
+    blurb: "a judgment call no checker can decide → stays prose",
   },
   unrouted: {
-    glyph: "✨",
-    label: "unrouted",
+    glyph: "⚙",
+    label: "hard to codify",
     blurb:
-      "no deterministic route — compile decides (reuse / synthesize / prose)",
+      "looks like a code rule but matches none — the compiler may synthesize one, not guaranteed",
   },
 };
-const ROUTE_ORDER: RuleCategory[] = ["reuse", "hook", "semantic", "unrouted"];
+// Ladder order: actionable first, the honest "not a code rule" middle, the
+// HARD bucket last so difficulty reads clearly rather than as a neutral tail.
+const ROUTE_ORDER: RuleCategory[] = [
+  "reuse",
+  "hook",
+  "meta",
+  "semantic",
+  "unrouted",
+];
 
 /**
  * The opt-in compile tier, grounded in the DETERMINISTIC routing preview when we
@@ -217,9 +232,11 @@ function CompileCTA({ routing }: { routing?: RuleRouting }) {
           </ul>
           <p className="mt-2.5 text-xs text-muted-foreground">
             <span className="font-mono text-foreground">compile</span> turns the
-            reuse + hook rows into config and hooks, and takes one model pass at
-            the <span className="font-mono text-foreground">unrouted</span>{" "}
-            rest. CI afterwards is plain lint + hooks — $0 and deterministic.
+            enforceable-now + hook rows into config and hooks, and takes one
+            model pass at the{" "}
+            <span className="font-mono text-foreground">hard-to-codify</span>{" "}
+            rest (which it may or may not be able to make sound). CI afterwards
+            is plain lint + hooks — $0 and deterministic.
             <code className="ml-2 rounded bg-border px-1.5 py-0.5 font-mono text-foreground">
               npx vigiles compile
             </code>

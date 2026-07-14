@@ -2123,7 +2123,7 @@ function readInstructionText(root: string, instructionFile: string): string {
 }
 
 /** The deterministic State-B routing preview for `audit`: segment the instruction
- * file(s) into atomic rules and route each (reuse / hook / semantic / unrouted) —
+ * file(s) into atomic rules and route each (reuse / hook / meta / semantic / unrouted) —
  * NO model, fs-only. `undefined` when there's nothing to segment (kept off the
  * report). Best-effort; a routing failure never breaks the audit. */
 function computeRuleRouting(
