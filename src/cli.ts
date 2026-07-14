@@ -135,6 +135,7 @@ import {
   type RuleInventoryItem,
 } from "./rule-inventory.js";
 import { routeRules, type RuleRouting } from "./rule-routing.js";
+import { enumerateEslintCatalog } from "./core/rule-catalog.js";
 import {
   runAdoptabilityTier,
   formatAdoptability,
@@ -2130,15 +2131,32 @@ function readInstructionText(root: string, instructionFile: string): string {
 /** The deterministic State-B routing preview for `audit`: segment the instruction
  * file(s) into atomic rules and route each (reuse / hook / meta / semantic / unrouted) —
  * NO model, fs-only. `undefined` when there's nothing to segment (kept off the
- * report). Best-effort; a routing failure never breaks the audit. */
+ * report). Best-effort; a routing failure never breaks the audit.
+ *
+ * The DYNAMIC catalog (every rule the repo's ESLint actually has + its enabled
+ * state) sharpens matching — but enumerating it EXECUTES the linter, so it is an
+ * OWN-REPO / CONSENTED capability (audit-side-effect-free): gated on the same
+ * sticky `audit.measure` consent as the other executing checks AND on own-repo
+ * (never a stranger's toolchain). The textual routing is the foreign-safe default;
+ * the catalog only ADDS enabled-state nudges and matches named-but-`/`-broken rules. */
 function computeRuleRouting(
   root: string,
   instructionFile: string,
+  harness: string,
 ): RuleRouting | undefined {
   try {
     const instructionText = readInstructionText(root, instructionFile);
     if (!instructionText.trim()) return undefined;
-    const routing = routeRules(instructionText, instructionFile);
+    // Own-repo + consented + ESLint (claude-code) → enumerate the live catalog.
+    const ownRepo = resolve(root) === resolve(process.cwd());
+    const consented = loadConfig().audit?.measure === true;
+    const availableRules =
+      harness === "claude-code" && ownRepo && consented
+        ? (enumerateEslintCatalog(root) ?? undefined)
+        : undefined;
+    const routing = routeRules(instructionText, instructionFile, {
+      availableRules,
+    });
     return routing.segmented > 0 ? routing : undefined;
   } catch {
     return undefined;
@@ -6688,7 +6706,11 @@ async function main(): Promise<void> {
             root,
             adapter.layout.instructionFile,
           ),
-          ruleRouting: computeRuleRouting(root, adapter.layout.instructionFile),
+          ruleRouting: computeRuleRouting(
+            root,
+            adapter.layout.instructionFile,
+            adapter.name,
+          ),
         });
         const sc = auditReport.score;
         const plan = optimize(report);
