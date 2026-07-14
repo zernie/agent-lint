@@ -129,13 +129,27 @@ const HOOK_CUES: readonly RegExp[] = [
   /\b(never|do not|don'?t)\s+run\b[^.\n]{0,30}\b(directly|instead)\b/i,
   /\b(never|do not|don'?t)\s+run\b[^.\n]{0,20}`?(eslint|prettier|npm|npx|cargo|yarn|pnpm|pip|black|ruff)\b/i,
   /\buse\b\s+`?[\w:.-]+`?\s+(instead of|not|over|rather than)\s+`?(npm|npx|cargo|yarn|pnpm|eslint|prettier)\b/i,
+  // — regenerate-on-change guard (vigiles's own guard() path→cmd shape: "run X
+  //   after/when Y changes") — the single biggest missed-hook pattern in the OSS
+  //   dogfood. Both clause orders; the trigger MUST be a change-verb so a benign
+  //   "run it when ready" doesn't match.
+  /\b(re-?run|regenerate|re-?generate|rebuild|regen|run|update)\b[^.\n]{0,48}\b(after|when|whenever|once|if)\b[^.\n]{0,24}\b(chang|add(?:ing|ed)?|modif|updat|edit|new\b)/i,
+  /\b(after|when|whenever|once)\b[^.\n]{0,24}\b(chang|add(?:ing|ed)?|modif|updat|edit)[^.\n]{0,48}\b(re-?run|regenerate|rebuild|regen|run|update)\b/i,
   // — commit content / history (vcs) —
   /\b(amend|squash|rebase)\b[^.\n]{0,40}\b(pushed|review|remote|shared)\b/i,
   /--no-verify/i,
-  /\bnever\s+commit\b/i,
+  /\b(never|do not|don'?t)\s+commit\b/i,
   /\bsigned-off-by\b/i,
-  /\bco[- ]?authored[- ]?by\b/i,
-  /\b(generated with|co-author)\b[^.\n]{0,24}\b(claude|footer|commit|pr)\b/i,
+  /\bco-?author(?:s|ed|ing|ed-by)?\b/i,
+  // commit/PR METADATA hygiene phrased without a push verb (attribution, PR
+  // title, commit message, semantic/conventional commits) — a VCS-surface gate.
+  /\b(generated with|attribution)\b[^.\n]{0,24}\b(claude|ai|footer|commit|pr)\b/i,
+  /\b(ai|claude|assistant)\b[^.\n]{0,16}\battribution\b/i,
+  /\b(semantic|conventional)\s+(commit|pr|pull request)/i,
+  // NB: deliberately NO broad `(commit|pr) (title|message)` cue — it mislabels
+  // style sentences ("use sentence case for PR titles", "keep commit messages
+  // concise") as gates. The enforceable format/attribution rules are caught by
+  // the semantic/conventional + attribution cues above; the rest stay prose.
   // — dependency / config guard —
   /\b(never|do not|don'?t)\b[^.\n]{0,20}\bupdate\b[^.\n]{0,20}\b(depend|package\.json|lock)/i,
   // — destructive / shell —

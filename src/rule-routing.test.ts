@@ -25,6 +25,34 @@ describe("routeRules", () => {
     expect(r.rules[0]?.category).toBe("hook");
   });
 
+  it("routes a regenerate-on-change guard to hook (both clause orders)", () => {
+    const a = routeRules(
+      "- Run `pnpm update-references` after adding a dependency.",
+    );
+    expect(a.rules[0]?.category).toBe("hook");
+    const b = routeRules(
+      "- Always regenerate the snapshots when the schema changes.",
+    );
+    expect(b.rules[0]?.category).toBe("hook");
+    // A benign "when ready" (no change-verb) must NOT match.
+    const c = routeRules("- Run the app when you are ready to demo.");
+    expect(c.rules[0]?.category).not.toBe("hook");
+  });
+
+  it("routes commit/PR hygiene (no push verb) to hook", () => {
+    for (const t of [
+      "- DO NOT COMMIT unless the user asks.",
+      "- Never add yourself or an AI tool as a co-author.",
+      '- Do NOT add "Generated with Claude Code" footers to commits.',
+      "- Use semantic PR titles for pull requests.",
+    ]) {
+      expect(routeRules(t).rules[0]?.category).toBe("hook");
+    }
+    // A style sentence merely NAMING PR titles is NOT a gate (stays non-hook).
+    const style = routeRules("- Use sentence case for headings and PR titles.");
+    expect(style.rules[0]?.category).not.toBe("hook");
+  });
+
   it("routes a judgment call to semantic (stays prose)", () => {
     const r = routeRules(
       "## Rules\n\n- Keep names readable and code idiomatic.",
