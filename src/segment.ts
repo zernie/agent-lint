@@ -26,9 +26,11 @@ export interface SegmentedRule {
 
 // --- Heuristic vocabulary --------------------------------------------------
 
-/** Imperative/prohibitive head the candidate must START with (form cue). */
+/** Imperative/prohibitive head the candidate must START with (form cue). The
+ * deontic verbs (require/disallow/forbid/ban/enforce) are common rule leads —
+ * "Require `curly` braces", "Disallow `var`" — so they belong here. */
 const FORM_HEAD =
-  /^(?:use|avoid|prefer|never|always|don'?t|do not|no\s+\S|must|should|keep|run|write|add|remove|only)\b/i;
+  /^(?:use|avoid|prefer|never|always|don'?t|do not|no\s+\S|must|should|keep|run|write|add|remove|only|require|requires?|disallow|forbid|ban|enforce)\b/i;
 
 /**
  * Rule-ish heading gate for prose-under-heading candidacy. Word-bounded so the
