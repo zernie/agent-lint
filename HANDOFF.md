@@ -64,7 +64,21 @@ finish pass attacked noise + misroute (precision-first). vigiles's OWN doc now r
 Measured slice: a doc that NAMES lint rules → **100% precision / 100% recall** on reuse (added require/
 disallow/forbid/ban/enforce to FORM_HEAD to close curly-style "Require `x`" misses).
 
-**CLARITY PASS (latest ~5 commits — founder pushback: "you're confused af, improve audit docs first"):** the
+**REUSE-LANE BROADENING (latest — ESLint constructs + PYLINT basics, dogfood-driven):** (1) ESLint
+construct-prohibitions → the built-in `no-restricted-syntax` (classes/default-exports/enums/namespaces/for-in),
+precision-gated, FOREIGN-SAFE — "never use classes" LOOKS custom but is reuse (betterauth real hit). (2)
+**PYLINT basics**: 12 curated `INTENT_MAP` entries (symbols verified via `pylint --help-msg`) + docstring-
+PRESENCE via a linter-aware `PATTERN_RULE_MAP`. ROUTE-ONLY (buildRuleInventory gated to eslint — pylint is
+ON-BY-DEFAULT, its config-state needs the §3 inverted-polarity ConfigProbe, deferred). Keywords Python-
+UNAMBIGUOUS (bare snake_case/`import *`/"unused imports" excluded → no cross-lang FP). (3) **DOGFOOD IS NOW
+COMMITTED** (`src/rule-routing-dogfood.test.ts`) — golden routing net + keyword-disjointness invariant; CI
+catches regressions (was scratchpad-only before). It CAUGHT a real bug: bare "docstring" over-fired on
+content/style rules (langchain/pandas) → fixed to presence-context. 2 shared-matcher bugs fixed en route
+(FORM_HEAD `no\s+\S`→`no`; matchesWholeToken sentence-end `.`). Live: 4 reuse hits over the 21-doc corpus, 0 FP.
+Fable steered the architecture (INTENT_MAP+gate over a separate map). **`compiler/` gate is the real synthesis
+engine (6/10 kept, 2 abstain on its corpus); shipping it as the `pr-to-lint-rule` skill is the next big step.**
+
+**CLARITY PASS (founder pushback: "you're confused af, improve audit docs first"):** the
 word "compile" was overloaded across THREE things → un-overloaded. (1) `vigiles compile` = the spec→markdown
 verb ONLY. (2) the audit routing preview = **"the rule map"** (read-only, deterministic). (3) `@vigiles/
 compiler` = **"synthesize"**. Renamed `mechanism:"compile"`→`"synthesize"` (cascades src/rule-routing.ts +
