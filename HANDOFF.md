@@ -49,7 +49,7 @@ build+fmt clean + API surface gate green; env-only `dialect-drift` still fails l
   `compiler/gold/`=package-internal, `research/dogfood/`→renamed **`research/audit-captures/`** (it's
   audit OUTPUT, not tests). PER-ADAPTER documented: adapters symmetric (adapter-contract registry loop)
   but the vendored corpus is CC-only + Codex-synthetic (roadmapped). All in `research/dogfood-corpus.md`
-  + the `dogfood-vendoring-policy` rule.
+  - the `dogfood-vendoring-policy` rule.
 - **DECISIONS (don't relitigate):** subpackages `compiler/` (paper artifact "Prose Isn't Policy" + the
   `pr-to-lint-rule` engine) + `report/` (React/Vite frontend, keeps its toolchain out of the CLI deps)
   both KEEP (not fold, not `packages/` — no workspaces). `docs/`+`research/` stay (NOT `docs/internal`).
