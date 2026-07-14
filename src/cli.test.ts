@@ -2192,7 +2192,7 @@ describe("plugin hook: eval-lock-nudge.sh", () => {
 // ---------------------------------------------------------------------------
 
 describe("E2E: fixture project adoption", () => {
-  const FIXTURE = resolve(__dirname, "..", "fixtures", "example-project");
+  const FIXTURE = resolve(__dirname, "..", "test", "fixtures", "example-project");
   let workDir: string;
 
   before(() => {

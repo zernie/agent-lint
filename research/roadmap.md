@@ -816,6 +816,21 @@ assertRates`) is the recommended path for testing one skill, but
   unconfined; `sandbox-exec`/docker for non-Linux. [feature-ideas §13](feature-ideas.md) · **LOW**
 - **Deterministic subagent / command wiring** — register + drive without a model.
   [coverage-matrix](harness-testing-coverage-matrix.md) · **LOW**
+- **Promote `EvalDriver` to a core port on the `HarnessAdapter` bundle** — today
+  the eval-driver seam (`EvalDriver`/`ModelOutputParser`/`AgentRunner`) + the
+  shared trace vocabulary (`ToolCall`/`HookFire`/`SubagentTrace`/`EvalUsage`) live
+  in the library layer (`eval.ts`/`harness-test.ts`), and the default
+  `claudeEvalDriver` is wired at the composition root (documented in `eval.ts`,
+  commit `ca49fed`). That is DEFENSIBLE — the eval tier is a library subsystem,
+  not the reference-verification core — so this is a nice-to-have symmetry, NOT a
+  boundary fix. If done: hoist the trace/eval type vocabulary into a new `core/`
+  module (so `core/adapter.ts` can carry `evalDriver?: EvalDriver` like the other
+  five ports + `harnessTestDriver`), set it on both adapters, rewire
+  `eval.ts`+`harness-test.ts`+`integration.ts`+`check.ts` to import types from
+  core, keep BOTH 100% coverage gates green, and regen `etc/*.api.md`. ~day-sized,
+  do in isolation. The trap to avoid: dragging eval/trace types into core muddies
+  the reference-verification domain — only do it if the symmetry is judged worth
+  that. · **LOW**
 
 ## Backlog — lower priority / niche
 
