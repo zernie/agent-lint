@@ -126,6 +126,10 @@ export const SAMPLE: AuditReport = {
         mechanism: "config-line",
         rule: "no-console",
         linter: "eslint",
+        // Named in the docs but turned OFF in the config — the sharp catalog
+        // finding surfaced by the "documented but OFF" callout.
+        enabled: false,
+        source: "marker",
       },
       {
         text: "Never push directly to `main` — open a PR.",

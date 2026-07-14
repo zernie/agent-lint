@@ -144,6 +144,12 @@ export interface RoutedRule {
   mechanism: RuleMechanism;
   rule?: string;
   linter?: string;
+  /** reuse via the dynamic catalog: whether the rule is currently ENABLED in the
+   * repo's config. `false` = "documented but OFF" (the sharp finding). */
+  enabled?: boolean;
+  /** "marker" = an explicit `**Enforced by:**`/`**Guard:**`/`**Guidance only**`
+   * marker (definitive); "heuristic" = the Tier-A segmenter. */
+  source?: "marker" | "heuristic";
 }
 
 /** The deterministic State-B routing preview (mirror of the CLI's RuleRouting). */

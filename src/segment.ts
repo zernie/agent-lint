@@ -496,6 +496,7 @@ const TABLE_LINE = /^\s*\|/;
 export function segmentInstructions(
   markdown: string,
   file?: string,
+  skipLines?: ReadonlySet<number>,
 ): SegmentedRule[] {
   const lines = markdown.split("\n");
   const lineOffsets = computeLineOffsets(lines);
@@ -539,6 +540,14 @@ export function segmentInstructions(
 
     // Tables: excluded from candidacy.
     if (TABLE_LINE.test(line)) {
+      i++;
+      continue;
+    }
+
+    // A line already CONSUMED by the structured-marker pre-pass (a marked
+    // section's body) is not re-segmented — this is the span-consumption that
+    // stops a marked rule being double-counted by the heuristic. (1-based.)
+    if (skipLines?.has(i + 1)) {
       i++;
       continue;
     }

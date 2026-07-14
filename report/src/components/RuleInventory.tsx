@@ -192,6 +192,13 @@ function CompileCTA({ routing }: { routing?: RuleRouting }) {
   const exampleFor = (cat: RuleCategory): string | undefined =>
     routing?.rules.find((r) => r.category === cat)?.text;
 
+  // The sharp catalog finding: a rule your docs NAME as reuse that your linter
+  // actually has turned OFF ("documented but OFF"). Only present when the audit
+  // enumerated the live catalog (own-repo, consented) — enabled === false.
+  const off = (routing?.rules ?? []).filter(
+    (r) => r.category === "reuse" && r.enabled === false,
+  );
+
   return (
     <div className="rounded-lg border border-dashed border-border p-4">
       <div className="flex items-center gap-2 text-sm font-semibold">
@@ -221,6 +228,11 @@ function CompileCTA({ routing }: { routing?: RuleRouting }) {
                     {ROUTE_META[cat].label}
                   </span>{" "}
                   — {ROUTE_META[cat].blurb}
+                  {cat === "reuse" && off.length > 0 && (
+                    <span className={cn("ml-1 font-semibold", TEXT.bad)}>
+                      ({off.length} documented but OFF)
+                    </span>
+                  )}
                   {ex && (
                     <span className="mt-0.5 block truncate pl-4 italic opacity-80">
                       e.g. “{ex}”
@@ -230,6 +242,37 @@ function CompileCTA({ routing }: { routing?: RuleRouting }) {
               );
             })}
           </ul>
+          {/* The wow: your instructions NAME these rules, but your linter has
+              them turned off — read straight off the live catalog, no model. */}
+          {off.length > 0 && (
+            <div className={cn("mt-2.5 rounded-md border p-2.5", "border-l-4")}>
+              <p className={cn("text-xs font-semibold", TEXT.bad)}>
+                ⛔ {off.length} documented but OFF
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Your instructions name{" "}
+                {off.length === 1 ? "this rule" : "these rules"} as enforced,
+                but your linter config has {off.length === 1 ? "it" : "them"}{" "}
+                disabled:
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {off.slice(0, 6).map((r) => (
+                  <li
+                    key={r.rule}
+                    className="font-mono text-xs text-muted-foreground"
+                  >
+                    <code className={TEXT.bad}>{r.rule}</code>{" "}
+                    <span className="opacity-70">— {r.text}</span>
+                  </li>
+                ))}
+                {off.length > 6 && (
+                  <li className="text-xs text-muted-foreground">
+                    +{off.length - 6} more
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
           <p className="mt-2.5 text-xs text-muted-foreground">
             <span className="font-mono text-foreground">compile</span> turns the
             enforceable-now + hook rows into config and hooks, and takes one

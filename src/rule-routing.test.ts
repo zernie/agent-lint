@@ -231,6 +231,82 @@ describe("routeRules", () => {
     });
   });
 
+  it("S0/S1: routes explicit markers definitively (Enforced by / Guard / Guidance)", () => {
+    const md = [
+      "### No Floating Promises",
+      "",
+      "**Enforced by:** `@typescript-eslint/no-floating-promises`",
+      "**Why:** Unhandled rejections crash the process.",
+      "",
+      "### Recompile On Spec Change",
+      "",
+      "**Guard:** `*.spec.ts` → `npx vigiles compile`",
+      "**Why:** Recompile when a spec changes.",
+      "",
+      "### Format Before Commit",
+      "",
+      "**Guidance only** — Run the formatter before you commit.",
+    ].join("\n");
+    const r = routeRules(md, "CLAUDE.md");
+    const enf = r.rules.find((x) => x.rule?.includes("no-floating-promises"));
+    expect(enf?.category).toBe("reuse");
+    expect(enf?.source).toBe("marker");
+    expect(
+      r.rules.find((x) => x.text === "Recompile On Spec Change")?.category,
+    ).toBe("hook");
+    // promote-prose: a guidance body that's really an action → would-be hook
+    expect(
+      r.rules.find((x) => x.text === "Format Before Commit")?.category,
+    ).toBe("hook");
+  });
+
+  it("S0/S1: a marked section is CONSUMED — no double-count by the heuristic", () => {
+    // The heading "Never Skip Tests" is rule-ish and its guidance body would be
+    // sentence-split by the heuristic — the marker pre-pass must consume it.
+    const md = [
+      "### Never Skip Tests",
+      "",
+      "**Guidance only** — All tests must pass. Never skip a failing test.",
+    ].join("\n");
+    const r = routeRules(md, "CLAUDE.md");
+    // Exactly ONE rule (the marker), not the marker plus split body sentences.
+    expect(r.rules).toHaveLength(1);
+    expect(r.rules[0].source).toBe("marker");
+  });
+
+  it("S0/S1: a hand-written **Enforced by:** that is NOT a rule id is not claimed", () => {
+    const md = ["### Tested In CI", "", "**Enforced by:** CI pipeline"].join(
+      "\n",
+    );
+    const r = routeRules(md, "CLAUDE.md");
+    // "CI pipeline" is a prose claim, not a rule id → not emitted as reuse.
+    expect(r.rules.some((x) => x.category === "reuse")).toBe(false);
+  });
+
+  it("S0/S1: a marked reuse rule carries catalog enabled-state", () => {
+    const availableRules = {
+      linter: "eslint" as const,
+      available: 1,
+      enabled: 0,
+      rules: [
+        {
+          id: "@typescript-eslint/no-explicit-any",
+          plugin: "@typescript-eslint",
+          enabled: false,
+        },
+      ],
+    };
+    const md = [
+      "### No Any",
+      "",
+      "**Enforced by:** `@typescript-eslint/no-explicit-any`",
+    ].join("\n");
+    const r = routeRules(md, "CLAUDE.md", { availableRules });
+    const rule = r.rules.find((x) => x.source === "marker");
+    expect(rule?.category).toBe("reuse");
+    expect(rule?.enabled).toBe(false); // documented but OFF
+  });
+
   it("returns an empty routing for prose with no rules", () => {
     const r = routeRules("This project is a knowledge base. It has notes.");
     expect(r.segmented).toBe(0);

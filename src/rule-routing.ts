@@ -72,6 +72,10 @@ export interface RoutedRule {
   /** reuse via the DYNAMIC catalog only: whether the rule is currently enabled in
    * the repo's config (a disabled match is the "documented but OFF" nudge). */
   readonly enabled?: boolean;
+  /** How this rule was found: `"marker"` = an explicit `**Enforced by:**` /
+   * `**Guard:**` / `**Guidance only**` marker (definitive, zero-heuristic — a
+   * compiled/marked doc); `"heuristic"` = the Tier-A segmenter. Absent ⇒ heuristic. */
+  readonly source?: "marker" | "heuristic";
 }
 
 export interface RuleRouting {
@@ -267,6 +271,104 @@ function classify(
   return { category: "unrouted" };
 }
 
+// --- Structured-marker pre-pass (S0/S1) ------------------------------------
+
+const ENFORCED_RE = /^\*\*Enforced by:\*\*\s*`([^`]+)`/;
+const GUARD_RE = /^\*\*Guard:\*\*/;
+const GUIDANCE_RE = /^\*\*Guidance only\*\*/;
+const MARK_HEADING = /^(#{2,6})\s+(.*)$/;
+const RULE_ID_SHAPE = /^@?[a-z][a-z0-9._/-]*$/;
+
+/** Does this `**Enforced by:**` value parse as a lint-rule id (vs a prose claim
+ * like "CI" or "the linter")? A hand-written marker is a CLAIM — only a rule-id
+ * shape is treated as a real reuse rule. */
+function looksLikeRuleId(s: string): boolean {
+  return s.length >= 3 && RULE_ID_SHAPE.test(s.trim());
+}
+
+/**
+ * Extract rules from EXPLICIT structured markers (`**Enforced by:** \`rule\``,
+ * `**Guard:**`, `**Guidance only**`) — the S0/S1 tier. A compiled/marked doc
+ * declares its own routing, so these are definitive (zero-heuristic) and are
+ * CONSUMED before the heuristic segmenter runs (the returned `skip` line set) so
+ * a marked rule is never double-counted. Each marker → ONE atom named by its
+ * `##`/`###` heading; a `**Guidance only**` body is still routed through
+ * `classify` (the promote-prose signal: a guidance whose body says "before
+ * commit" surfaces as a would-be hook). Foreign hand-written `**Enforced by:**`
+ * is a CLAIM — only a rule-id-shaped value becomes a reuse rule (gated + verified
+ * against the catalog when present; never an inferred contradiction).
+ */
+function extractMarkedRules(
+  text: string,
+  file: string | undefined,
+  catalog: ReadonlyMap<string, boolean> | undefined,
+): { rules: RoutedRule[]; skip: Set<number> } {
+  const lines = text.split("\n");
+  const rules: RoutedRule[] = [];
+  const skip = new Set<number>();
+  for (let i = 0; i < lines.length; i++) {
+    const h = MARK_HEADING.exec(lines[i]);
+    if (!h) continue;
+    let j = i + 1;
+    while (j < lines.length && !MARK_HEADING.test(lines[j])) j++;
+    const section = lines.slice(i, j); // [heading … next-heading)
+    const heading = h[2].trim();
+
+    let marked: Classification | null = null;
+    for (const raw of section.slice(1)) {
+      const bl = raw.trim();
+      const em = ENFORCED_RE.exec(bl);
+      if (em) {
+        if (!looksLikeRuleId(em[1])) break; // a prose claim, not a rule id
+        const enabled = catalog?.get(em[1].trim());
+        marked = {
+          category: "reuse",
+          rule: em[1].trim(),
+          ...(enabled !== undefined ? { enabled } : {}),
+        };
+        break;
+      }
+      if (GUARD_RE.test(bl)) {
+        marked = { category: "hook" };
+        break;
+      }
+      if (GUIDANCE_RE.test(bl)) {
+        // Route the guidance BODY through classify (promote-prose): a guidance
+        // whose text is really an action shows up as a would-be hook.
+        const body = section.slice(1).join(" ");
+        const c = classify(body, catalog);
+        // A guidance body that names a catalog rule is still "documented as
+        // guidance" — keep it prose unless it's a genuine action/agent cue.
+        marked =
+          c.category === "hook" || c.category === "meta"
+            ? c
+            : { category: "semantic" };
+        break;
+      }
+    }
+    if (!marked) continue;
+
+    // Consume the section BODY lines (heading stays a non-candidate) so the
+    // heuristic segmenter never re-emits this marked rule. (1-based.)
+    for (let k = i + 1; k < j; k++) skip.add(k + 1);
+
+    rules.push({
+      text: heading,
+      quote: lines[i],
+      file,
+      lineStart: i + 1,
+      lineEnd: j,
+      confidence: "high",
+      category: marked.category,
+      mechanism: MECHANISM[marked.category],
+      source: "marker",
+      ...(marked.rule ? { rule: marked.rule } : {}),
+      ...(marked.enabled !== undefined ? { enabled: marked.enabled } : {}),
+    });
+  }
+  return { rules, skip };
+}
+
 /**
  * Segment the instruction file and route every atomic rule deterministically.
  * Pure: the caller passes the concatenated instruction text (and an optional
@@ -291,13 +393,20 @@ export function routeRules(
   const namesCatalogRule = (text: string): boolean =>
     catalog !== undefined &&
     namedRuleTokens(text).some((tok) => catalog.has(tok));
-  const segments = segmentInstructions(instructionText, file).filter(
+  // S0/S1 pre-pass: explicit markers are definitive and are CONSUMED (their body
+  // lines are skipped) so the heuristic segmenter can't double-count them.
+  const marked = extractMarkedRules(instructionText, file, catalog);
+  const segments = segmentInstructions(
+    instructionText,
+    file,
+    marked.skip,
+  ).filter(
     (s) =>
       minConfidence === "medium" ||
       s.confidence === "high" ||
       namesCatalogRule(s.text),
   );
-  const rules: RoutedRule[] = segments.map((s) => {
+  const heuristicRules: RoutedRule[] = segments.map((s) => {
     const c = classify(s.text, catalog);
     return {
       text: s.text,
@@ -308,11 +417,14 @@ export function routeRules(
       confidence: s.confidence,
       category: c.category,
       mechanism: MECHANISM[c.category],
+      source: "heuristic" as const,
       ...(c.rule ? { rule: c.rule } : {}),
       ...(c.linter ? { linter: c.linter } : {}),
       ...(c.enabled !== undefined ? { enabled: c.enabled } : {}),
     };
   });
+  // Marker rules first (definitive), then the heuristic residue.
+  const rules: RoutedRule[] = [...marked.rules, ...heuristicRules];
   const counts: Record<RuleCategory, number> = {
     reuse: 0,
     hook: 0,
@@ -321,7 +433,7 @@ export function routeRules(
     unrouted: 0,
   };
   for (const r of rules) counts[r.category]++;
-  return { segmented: segments.length, counts, rules };
+  return { segmented: rules.length, counts, rules };
 }
 
 /**
