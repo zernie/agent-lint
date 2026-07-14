@@ -470,6 +470,14 @@ export function routeRules(
   // patterns are their own precision gate (prohibition + construct proximity).
   const matchesRestrictedSyntax = (text: string): boolean =>
     RESTRICTED_SYNTAX_MAP.some((r) => r.pattern.test(text));
+  // A MEDIUM segment that matches an INTENT_MAP keyword (code-shaped, high-
+  // precision) is a real reuse rule — rescue it, same as catalog/restricted-
+  // syntax. Fixes construct-prohibitions with no verb ("No bare except clauses")
+  // that score medium and would otherwise drop before classify() reuses them.
+  const matchesIntentMap = (text: string): boolean =>
+    INTENT_MAP.some((m) =>
+      m.keywords.some((kw) => matchesWholeToken(text, kw)),
+    );
   // S0/S1 pre-pass: explicit markers are definitive and are CONSUMED (their body
   // lines are skipped) so the heuristic segmenter can't double-count them.
   const marked = extractMarkedRules(instructionText, file, catalog);
@@ -482,7 +490,8 @@ export function routeRules(
       minConfidence === "medium" ||
       s.confidence === "high" ||
       namesCatalogRule(s.text) ||
-      matchesRestrictedSyntax(s.text),
+      matchesRestrictedSyntax(s.text) ||
+      matchesIntentMap(s.text),
   );
   const heuristicRules: RoutedRule[] = segments.map((s) => {
     const c = classify(s.text, catalog);

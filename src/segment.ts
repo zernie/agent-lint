@@ -28,9 +28,15 @@ export interface SegmentedRule {
 
 /** Imperative/prohibitive head the candidate must START with (form cue). The
  * deontic verbs (require/disallow/forbid/ban/enforce) are common rule leads —
- * "Require `curly` braces", "Disallow `var`" — so they belong here. */
+ * "Require `curly` braces", "Disallow `var`" — so they belong here. NB "no" is
+ * `no\s` (the prohibition word + whitespace) NOT the old `no\s+\S`, which — via
+ * the shared trailing `\b` — only matched when the word after "No " began at a
+ * boundary, so "No bare except" / "No default exports" silently failed the form
+ * cue. Bare `no` + the shared `\b` (checked right after "no", a boundary before
+ * a space OR a backtick) matches "No bare" AND "No `any`", while "Note"/"Nowhere"
+ * (no boundary after "no") are still rejected. */
 const FORM_HEAD =
-  /^(?:use|avoid|prefer|never|always|don'?t|do not|no\s+\S|must|should|keep|run|write|add|remove|only|require|requires?|disallow|forbid|ban|enforce)\b/i;
+  /^(?:use|avoid|prefer|never|always|don'?t|do not|no|must|should|keep|run|write|add|remove|only|require|requires?|disallow|forbid|ban|enforce)\b/i;
 
 /**
  * Rule-ish heading gate for prose-under-heading candidacy. Word-bounded so the
