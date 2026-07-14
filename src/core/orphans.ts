@@ -35,10 +35,10 @@ export interface FindOrphansOptions {
   /** Repository root. Defaults to `process.cwd()`. */
   readonly basePath?: string;
   /**
-   * Glob patterns of `.md` files to scan. Defaults to
-   * `["docs/**\/*.md", "research/**\/*.md"]` — vigiles-repo convention.
-   * Set to `[]` to disable scanning entirely. Set to your project's
-   * doc directory globs (e.g. `["wiki/**\/*.md"]`) to override.
+   * Glob patterns of `.md` files to scan. Defaults to `["docs/**\/*.md"]`
+   * (`docs/` is the near-universal convention; a vigiles-specific dir like
+   * `research/` is opted into explicitly). Set to `[]` to disable scanning,
+   * or to your project's doc globs (e.g. `["wiki/**\/*.md"]`) to override.
    */
   readonly include?: readonly string[];
   /** Glob patterns to exclude within the include scope. */
@@ -49,7 +49,7 @@ export interface FindOrphansOptions {
 // Internals
 // ---------------------------------------------------------------------------
 
-const DEFAULT_INCLUDE = ["docs/**/*.md", "research/**/*.md"] as const;
+const DEFAULT_INCLUDE = ["docs/**/*.md"] as const;
 
 const DEFAULT_IGNORE = [
   "node_modules/**",
@@ -160,8 +160,9 @@ function refTargets(sourcePath: string, ref: string): string[] {
  * links to itself is still an orphan.
  *
  * `include` and `exclude` are tsconfig-style glob arrays. Default include
- * is the vigiles-repo convention `["docs/**\/*.md", "research/**\/*.md"]`;
- * override per-project via `.vigilesrc.json` → `orphans.include`.
+ * is `["docs/**\/*.md"]` (the common convention); override per-project via
+ * `.vigilesrc.json` → `orphans.include` (whose presence also opts the repo
+ * into the scan — see the CLI gate in `vigiles lint`).
  */
 export function findOrphanDocs(options: FindOrphansOptions = {}): OrphanReport {
   const basePath = options.basePath ?? process.cwd();
