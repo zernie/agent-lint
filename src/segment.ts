@@ -69,14 +69,42 @@ const INDEX_SMELL = /^`[^`]+`\s*[:—–-]\s/;
  * rule-naming bullet is never rejected as an index entry.
  */
 const INDEX_ARROW = /[\w./@-]*\.[a-z]{1,6}\b\s*(?:→|->|=>)/;
+// A multi-segment slash PATH before an arrow is a path-mapping/index row
+// (`node_modules/@astrojs/react/… → packages/…`) — ≥2 slashes keeps it path-
+// specific so a prose "A → B" isn't caught.
+const INDEX_ARROW_PATH = /[\w@.-]+(?:\/[\w@.*-]+){2,}\s*(?:→|->|=>)/;
 const INDEX_LABEL_PATH =
   /^[A-Za-z][\w ]{0,24}:\s+\.?[\w@-]*\/[\w@./-]*(?:\.[a-z0-9]{1,6}\b|\/)/;
 const INDEX_PATH_LED = /^[\w@.-]+\/[\w@./-]*(?:\.[a-z0-9]{1,6}\b|\/)/;
 function looksLikeIndexEntry(t: string): boolean {
   if (INDEX_SMELL.test(t)) return true;
   const bare = t.replace(/`/g, " ").trim();
-  if (INDEX_ARROW.test(bare) || INDEX_LABEL_PATH.test(bare)) return true;
+  if (INDEX_ARROW.test(bare) || INDEX_ARROW_PATH.test(bare)) return true;
+  if (INDEX_LABEL_PATH.test(bare)) return true;
   return INDEX_PATH_LED.test(bare) && /\s[—–]\s/.test(bare);
+}
+
+/**
+ * DESCRIPTION-LED reject: a segment that DESCRIBES a code entity rather than
+ * instructing about it. It leads with a backticked identifier/path, then a
+ * copula / code-KIND noun / descriptive verb ("`Foo` class in `x` executes …",
+ * "`bar` is the loader", "`apps/x` handles …"). A real rule leads with a VERB
+ * ("Use `Foo`", "Never `bar`") — never the code span itself — so a code-span
+ * lead-in followed by a descriptive word is an architecture/index sentence, the
+ * dogfood's #1 segmenter false positive (39% of the "hard" bucket was this
+ * kind of noise). High-precision: only when the descriptive word IMMEDIATELY
+ * follows the leading code span.
+ */
+const DESCRIPTION_LED =
+  /^`[^`]+`\s+(?:is|are|was|were|lives?|live|contains?|holds?|handles?|executes?|provides?|represents?|maps?|points?|implements?|exports?|defines?|wraps?|stores?|returns?|the|a|an|class|function|module|component|file|package|hook|utility|helper|type|interface|enum|constant|method|directory|folder|dir)\b/i;
+// A deontic predicate makes a code-span-led sentence a RULE, not a description
+// ("`const` is preferred over `let`", "`AbstractBase` class must be extended") —
+// so the description reject must NOT fire. Guards the copula/kind-noun ambiguity.
+const RULE_PREDICATE =
+  /\b(?:must|should|shall|never|always|require|avoid|prefer|banned|forbidden|prohibited|allowed|disallowed|deprecated|discouraged|mandatory|do not|don'?t|only|instead)\b/i;
+function looksLikeDescription(t: string): boolean {
+  const s = t.trim();
+  return DESCRIPTION_LED.test(s) && !RULE_PREDICATE.test(s);
 }
 
 /**
@@ -329,6 +357,9 @@ function gate(
   // `a.ts → b.ts`, `dir/x — …`, `Label: path`) — the corpus's dominant false
   // positive. No cue count can rescue it.
   if (looksLikeIndexEntry(t)) return null;
+  // Reject a DESCRIPTION-led sentence (`` `Foo` class in `x` executes … ``) — an
+  // architecture/index sentence, not a rule (the dogfood's #1 false positive).
+  if (looksLikeDescription(t)) return null;
 
   const context = isBullet || underRuleHeading;
 

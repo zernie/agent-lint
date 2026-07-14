@@ -116,6 +116,29 @@ describe("segmentInstructions — bulleted rules", () => {
   it("has exact, verbatim provenance for every atom", () => {
     assertProvenanceExact(FIXTURE_BULLETS, rules);
   });
+
+  it("PRECISION: rejects a DESCRIPTION-led architecture sentence, keeps a rule that names code", () => {
+    // A code-span-led sentence that DESCRIBES an entity is noise, not a rule
+    // (the dogfood's #1 segmenter false positive).
+    const drop = segmentInstructions(
+      [
+        "- `QueryInterpreter` class in `packages/x/query.ts` executes query plans.",
+        "- `bar` is the loader module.",
+        "- `apps/dotcom/client` handles the frontend behavior.",
+      ].join("\n"),
+    );
+    expect(drop).toHaveLength(0);
+    // But a normal imperative rule that MENTIONS code still segments, and a
+    // code-led rule with a deontic predicate is NOT mistaken for a description.
+    expect(segmentInstructions("- Use `const` instead of `let`.")).toHaveLength(
+      1,
+    );
+    expect(
+      segmentInstructions(
+        "- Always regenerate the client after changing the schema.",
+      ),
+    ).toHaveLength(1);
+  });
 });
 
 describe("segmentInstructions — prose under a rule-ish heading", () => {
