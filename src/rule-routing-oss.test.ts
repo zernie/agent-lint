@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { routeRules, type RuleRouting } from "./rule-routing.js";
 
 /**
@@ -15,7 +16,7 @@ import { routeRules, type RuleRouting } from "./rule-routing.js";
  */
 function route(file: string): RuleRouting {
   const text = readFileSync(
-    new URL(`../test/dogfood/instruction-files/${file}`, import.meta.url),
+    resolve(process.cwd(), "test/dogfood/instruction-files", file),
     "utf-8",
   );
   return routeRules(text, file);

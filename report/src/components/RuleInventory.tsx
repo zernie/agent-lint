@@ -161,18 +161,24 @@ const ROUTE_META: Record<
   },
   semantic: {
     glyph: "✎",
-    label: "prose",
-    blurb: "a judgment call no checker can decide → stays prose",
+    label: "judgment call",
+    blurb:
+      "no checker can decide it (“readable”, “idiomatic”) → honestly stays prose",
   },
+  // The synthesize lane is DOABLE, not a dead end: no off-the-shelf rule matches,
+  // but a CUSTOM rule can enforce it ("wrap API calls in retry", "validate the
+  // input schema"). Kept distinct from `semantic` so it never reads as generic
+  // "hard prose" — it's the opt-in synthesis skill's target.
   unrouted: {
     glyph: "⚙",
-    label: "hard to codify",
+    label: "custom rule",
     blurb:
-      "looks like a code rule but matches none — the compiler may synthesize one, not guaranteed",
+      "no off-the-shelf rule fits, but a custom one CAN — the opt-in synthesis skill writes + gates it (abstains if it can't prove it sound)",
   },
 };
-// Ladder order: actionable first, the honest "not a code rule" middle, the
-// HARD bucket last so difficulty reads clearly rather than as a neutral tail.
+// Ladder order: enforceable-now → hook → the two "stays prose" lanes → the
+// SYNTHESIZE lane last (doable-but-opt-in), so a reader sees reuse first and the
+// custom-rule candidates as a distinct, actionable tail — not generic "hard".
 const ROUTE_ORDER: RuleCategory[] = [
   "reuse",
   "hook",
@@ -295,15 +301,13 @@ function RuleMap({ routing }: { routing?: RuleRouting }) {
               rules a linter can't see (git push, rm -rf)
             </li>
             <li>
-              <span className="font-mono text-foreground">✎ prose</span> —
-              judgment calls, honestly left un-enforced
+              <span className="font-mono text-foreground">⚙ custom rule</span> —
+              no off-the-shelf rule fits, but a custom one CAN (“wrap API calls
+              in retry”) → the opt-in synthesis skill, gated
             </li>
             <li>
-              <span className="font-mono text-foreground">
-                ⚙ hard to codify
-              </span>{" "}
-              — no off-the-shelf rule; stays prose (custom-rule synthesis is a
-              planned skill, never auto-run)
+              <span className="font-mono text-foreground">✎ judgment call</span>{" "}
+              — genuinely undecidable (“readable”), honestly left as prose
             </li>
           </ul>
           <RuleMapNextSteps />
@@ -338,11 +342,17 @@ function RuleMapNextSteps() {
         wires it into your settings.
       </p>
       <p>
-        <span className="font-medium text-foreground">
-          Prose / hard to codify
-        </span>{" "}
-        — no off-the-shelf rule; these stay prose. A custom-rule synthesis skill
-        is planned; nothing is generated for you automatically.
+        <span className="font-medium text-foreground">Custom rule (⚙)</span> —
+        no off-the-shelf rule fits, but a custom one CAN enforce it (e.g. “wrap
+        API calls in a retry”). Doable, not a dead end — the opt-in synthesis
+        skill writes and gates it (with a bit of codebase context); it abstains
+        rather than ship a checker it can’t prove sound. Nothing is generated
+        for you automatically.
+      </p>
+      <p>
+        <span className="font-medium text-foreground">Judgment call (✎)</span> —
+        genuinely undecidable (“keep it readable”); no checker can decide it, so
+        it honestly stays prose.
       </p>
     </div>
   );
