@@ -333,7 +333,7 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
     "src/core/hash.ts":
       "Shared SHA256Hash branded type and assertNever exhaustive check helper",
     "src/core/orphans.ts":
-      "Orphan-docs detector: finds .md files under docs/ and research/ that no other .md references",
+      "Orphan-docs detector (OPT-IN via the .vigilesrc.json `orphans` block, off unless declared): finds .md files in a configured dir (default `docs/`; `research/` etc. declared explicitly) that no other .md references. Deliberately opt-in — an OSS sweep found 'unreferenced' is ~100% false positives on a nav-managed doc site (Docusaurus/MkDocs, where the page graph lives in config), and only signals rot for a hand-cross-linked corpus. The CLI GATE lives in cli.ts step 7 (policy at the call site; the detector stays a pure scanner); default dir dropped research/ (vigiles-specific, 0/10 sampled OSS repos had it). See docs/rules/orphan-docs.md",
     "src/core/orphans.test.ts": "Orphan-docs detector test suite (node:test)",
     "src/core/compose.ts":
       "Sync-tool compatibility detector: detectSyncTools/composeCollisions — pure filesystem check that vigiles stays composable with Ruler (.ruler/, ruler.toml) and rulesync (.rulesync/) instead of fighting them for CLAUDE.md/AGENTS.md. Reports the file-ownership collision (a vigiles compile target the tool also regenerates → stales the integrity hash) with the source-slot redirect that fixes it (Topology A: compile upstream, let the tool distribute). Same deterministic-detector shape as orphans.ts/test-coverage.ts; the operational half of research/sync-tool-compatibility.md",
@@ -869,7 +869,7 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
 
     "no-orphan-docs": enforce(
       "vigiles/orphan-docs",
-      "Every `.md` under `docs/` and `research/` must be referenced from at least one other markdown file — README, a compiled spec's Key Files, or another doc. Orphan docs rot silently because nothing tells the agent they're still load-bearing. Inverse of stale-reference detection: stale-ref catches specs pointing at missing files, orphan detection catches existing files that no spec points at. Mechanical check in `src/core/orphans.ts`, surfaced by `vigiles lint`.",
+      "Every `.md` in an opted-in directory (vigiles scans `docs/` + `research/`, declared via the `.vigilesrc.json` `orphans` block) must be referenced from at least one other markdown file — README, a compiled spec's Key Files, or another doc. Orphan docs rot silently because nothing tells the agent they're still load-bearing. The rule is OPT-IN (off unless the `orphans` block is declared; `include` defaults to `docs/`) because 'unreferenced' only signals rot in a hand-cross-linked corpus, not a nav-managed doc site (Docusaurus/MkDocs) where the page graph lives in config — an OSS sweep confirmed ~100% false positives there. Inverse of stale-reference detection: stale-ref catches specs pointing at missing files, orphan detection catches existing files that no spec points at. Mechanical check in `src/core/orphans.ts`, surfaced by `vigiles lint`.",
     ),
 
     "recompile-on-spec-change": guard(
