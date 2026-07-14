@@ -92,6 +92,7 @@ import {
   type ProbeHarness,
 } from "./scan-behavioral.js";
 import {
+  ADAPTERS,
   detectAdapterResult,
   resolveAdapter,
   resolveHarnessSelection,
@@ -1504,6 +1505,10 @@ async function runLint(
       basePath: process.cwd(),
       include: orphansCfg.include,
       exclude: orphansCfg.exclude,
+      // Exempt every registered harness's surface files (instruction file,
+      // SKILL.md, subagents, commands) as orphan candidates — layout-driven so
+      // core carries no harness literal (see src/core/orphans.ts).
+      layouts: ADAPTERS.map((a) => a.layout),
     });
     if (!silent) {
       for (const line of formatOrphanReport(orphanReport).split("\n")) {
