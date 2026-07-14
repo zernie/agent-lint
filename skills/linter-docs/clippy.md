@@ -1,6 +1,6 @@
 # Clippy — Reference
 
-Shared linter reference for vigiles skills. Used by `strengthen` (find existing rules) and `pr-to-lint-rule` (write custom lints).
+Shared linter reference for vigiles skills. Used by `strengthen` (find existing rules) and the planned rule-synthesis skill (write custom lints, not yet shipped).
 
 ## Check Existing Lints First
 

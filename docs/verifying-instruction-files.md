@@ -118,12 +118,12 @@ There's a small family of inline **marks** that `lint` checks, each binding a re
 
 `vigiles audit` reads the prose rules in your instruction file and **maps** each one to how it could be enforced. This is a **read-only, deterministic** step — no model runs, nothing executes, and it's identical on every machine. It just sorts your rules into four lanes:
 
-| Lane                  | Meaning                                                                                                                                           | The honest next step (opt-in)                                                                                                                     |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ✓ **Enforceable now** | matches an off-the-shelf linter rule (ESLint/Ruff/…) — and the map shows whether it's already on, one line away, or **documented but turned off** | enable it in your lint config (one line), or ask your agent to run the **`strengthen`** skill                                                     |
-| ⛓ **Hook**            | an action a linter can't see (`git push`, "run tests before commit")                                                                              | author a [compiled hook](compiled-hooks.md), then `vigiles compile` wires it into your settings                                                   |
-| ✎ **Prose**           | a judgment call no checker can decide ("keep it readable")                                                                                        | honestly stays prose                                                                                                                              |
-| ⚙ **Hard to codify**  | looks like a code rule but no off-the-shelf rule matches                                                                                          | stays prose for now — a custom-rule **synthesis** skill (writes a rule + a soundness gate) is planned; nothing is generated for you automatically |
+| Lane                  | Meaning                                                                                                                                           | The honest next step (opt-in)                                                                                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ✓ **Enforceable now** | matches an off-the-shelf linter rule (ESLint/Ruff/…) — and the map shows whether it's already on, one line away, or **documented but turned off** | enable it in your lint config (one line), or ask your agent to run the **`strengthen`** skill                                                                          |
+| ⛓ **Hook**            | an action a linter can't see (`git push`, "run tests before commit")                                                                              | author a [compiled hook](compiled-hooks.md), then `vigiles compile` wires it into your settings                                                                        |
+| ✎ **Prose**           | a judgment call no checker can decide ("keep it readable")                                                                                        | honestly stays prose                                                                                                                                                   |
+| ⚙ **Hard to codify**  | looks like a code rule but no off-the-shelf rule matches                                                                                          | stays prose — custom-rule **synthesis** (writes a rule + a soundness gate) is experimental and not yet generally available; nothing is generated for you automatically |
 
 **What runs a model is always a skill _you_ invoke** — on your own subscription, behind consent. `audit` maps and reports; it never rewrites your config, compiles a rule, or calls a model on its own. Installing vigiles does **not** start compiling anything.
 
@@ -267,17 +267,17 @@ The flow, from save:
 
 ### Claude Code
 
-|                                     | Without vigiles              | With vigiles                                                  |
-| ----------------------------------- | ---------------------------- | ------------------------------------------------------------- |
-| **Instructions**                    | Hand-written CLAUDE.md       | Compiled from `.spec.ts` (build artifact)                     |
-| **Linter rule references**          | Trust-based (nobody checks)  | Verified at compile time against real config                  |
-| **File paths**                      | Rot silently when renamed    | `file()` references checked against filesystem                |
-| **Commands**                        | Stale scripts go unnoticed   | `cmd()` references checked against package.json               |
-| **Direct edits to CLAUDE.md**       | Anyone can, nobody knows     | PreToolUse hook blocks edits, redirects to spec               |
-| **Spec / config changes**           | CLAUDE.md drifts out of sync | PostToolUse hooks auto-compile and regenerate types           |
-| **guidance → enforce upgrades**     | Manual guesswork             | `/strengthen` reads per-linter docs, suggests upgrades        |
-| **New lint rules from PR feedback** | Copy-paste from review       | `/pr-to-lint-rule` generates rule + tests + spec entry        |
-| **CI**                              | Nothing to verify            | `vigiles lint` catches hand-edits, disabled rules, stale refs |
+|                                  | Without vigiles              | With vigiles                                                                                    |
+| -------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------- |
+| **Instructions**                 | Hand-written CLAUDE.md       | Compiled from `.spec.ts` (build artifact)                                                       |
+| **Linter rule references**       | Trust-based (nobody checks)  | Verified at compile time against real config                                                    |
+| **File paths**                   | Rot silently when renamed    | `file()` references checked against filesystem                                                  |
+| **Commands**                     | Stale scripts go unnoticed   | `cmd()` references checked against package.json                                                 |
+| **Direct edits to CLAUDE.md**    | Anyone can, nobody knows     | PreToolUse hook blocks edits, redirects to spec                                                 |
+| **Spec / config changes**        | CLAUDE.md drifts out of sync | PostToolUse hooks auto-compile and regenerate types                                             |
+| **guidance → enforce upgrades**  | Manual guesswork             | `/strengthen` reads per-linter docs, suggests upgrades                                          |
+| **Custom lint rules from prose** | Copy-paste from review       | Experimental — a synthesis skill drafts a rule + a soundness gate (not yet generally available) |
+| **CI**                           | Nothing to verify            | `vigiles lint` catches hand-edits, disabled rules, stale refs                                   |
 
 **Codex / AGENTS.md** gets the same compile-time checks and the same `vigiles lint` CI pipeline — just no hooks (no plugin system), so you run `vigiles compile` manually or in CI.
 

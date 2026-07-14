@@ -12,7 +12,7 @@
 | **Linter config changes**              | CLAUDE.md drifts out of sync | PostToolUse hook auto-regenerates types                                                  |
 | **Spec edits**                         | N/A                          | PostToolUse hook auto-compiles to markdown                                               |
 | **guidance → enforce upgrades**        | Manual guesswork             | `/strengthen` reads per-linter docs, suggests upgrades                                   |
-| **New lint rules from PR feedback**    | Copy-paste from review       | `/pr-to-lint-rule` generates rule + tests + spec entry                                   |
+| **New lint rules from PR feedback**    | Copy-paste from review       | _(planned)_ a rule-synthesis skill generates rule + tests + spec entry                   |
 | **Does a skill/plugin actually help?** | Unknown — stars + vibes      | A/B measured on real tasks: bill + correctness ([measuring-skills](measuring-skills.md)) |
 | **CI**                                 | Nothing to verify            | `vigiles lint` catches hash drift, disabled rules, stale refs                            |
 
@@ -44,7 +44,7 @@ Codex has no hook or plugin system. The compile-time verification and CI enforce
 | Duplicate rule detection         | ✅ Yes         | Normalized Compression Distance (NCD) with fixed threshold                           |
 | Orphan docs detection            | ✅ Yes         | Scan configured doc directories for `.md` files no other markdown references         |
 | guidance → enforce suggestion    | ❌ No          | Agent reads linter docs, reasons about intent — `/strengthen` skill                  |
-| PR comment → lint rule           | ❌ No          | Agent generates custom rule code — `/pr-to-lint-rule` skill                          |
+| PR comment → lint rule           | ❌ No          | _(planned)_ agent generates custom rule code via a rule-synthesis skill              |
 | Spec content authoring           | ❌ No          | Agent or human writes the spec — vigiles verifies it                                 |
 
 ## What vigiles Does and Doesn't Validate in Markdown
@@ -89,8 +89,8 @@ Specs compile to `CLAUDE.md` by default; set `target: "AGENTS.md"` or
   .spec.ts ──────┤  vigiles compile         │          │  /strengthen             │
        │         │    ✓ linter rules exist   │          │    guidance → enforce    │
        │         │    ✓ rules enabled        │          │                          │
-       │         │    ✓ file paths valid     │          │  /pr-to-lint-rule        │
-       │         │    ✓ commands valid       │          │    PR comment → rule     │
+       │         │    ✓ file paths valid     │          │  (planned)               │
+       │         │    ✓ commands valid       │          │    rule synthesis skill  │
        │         │    → CLAUDE.md + hash     │          │                          │
        │         └─────────────────────────┘          │  /edit-spec              │
        │                                               │    agent edits .spec.ts  │
