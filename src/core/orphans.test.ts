@@ -7,13 +7,16 @@ import { findOrphanDocs, formatOrphanReport } from "./orphans.js";
 import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
 
 describe("findOrphanDocs()", () => {
-  it("flags docs not referenced anywhere", () => {
+  it("flags docs not referenced anywhere (default scope = docs/ only)", () => {
     const dir = makeTmpDir("orphans");
     try {
       mkdirSync(join(dir, "docs"), { recursive: true });
       mkdirSync(join(dir, "research"), { recursive: true });
       writeFileSync(join(dir, "docs/referenced.md"), "# ref");
       writeFileSync(join(dir, "docs/orphan.md"), "# orphan");
+      // research/ is NOT in the default scope — `docs/` is the common
+      // convention; a vigiles-specific dir is opted into explicitly (via
+      // `orphans.include`), so research/stale.md is not scanned here.
       writeFileSync(join(dir, "research/stale.md"), "# stale");
       writeFileSync(
         join(dir, "README.md"),
@@ -21,12 +24,9 @@ describe("findOrphanDocs()", () => {
       );
 
       const report = findOrphanDocs({ basePath: dir });
-      assert.deepEqual([...report.orphans].sort(), [
-        "docs/orphan.md",
-        "research/stale.md",
-      ]);
+      assert.deepEqual([...report.orphans], ["docs/orphan.md"]);
       assert.deepEqual([...report.referencedDocs], ["docs/referenced.md"]);
-      assert.equal(report.totalDocs, 3);
+      assert.equal(report.totalDocs, 2);
     } finally {
       cleanupTmpDir(dir);
     }

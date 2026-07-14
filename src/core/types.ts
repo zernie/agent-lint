@@ -66,13 +66,19 @@ export interface CoverageThresholds {
   scripts?: number;
 }
 
-/** Options for the orphan-docs check. */
+/**
+ * Options for the orphan-docs check. The PRESENCE of this block in
+ * `.vigilesrc.json` OPTS THE REPO IN — the scan is off unless declared,
+ * because "unreferenced" only means "rot" for a hand-cross-linked corpus,
+ * not for a nav-managed doc site (Docusaurus/MkDocs) where the page graph
+ * lives in config. `include` is the optional dir override.
+ */
 export interface OrphansConfig {
   /**
    * Glob patterns of `.md` files to scan for orphans. A doc is "orphaned"
-   * when no other markdown file references it. Defaults to vigiles-repo
-   * convention: `["docs/**\/*.md", "research/**\/*.md"]`. Set to `[]` to
-   * disable orphan detection entirely.
+   * when no other markdown file references it. Omitted → `["docs/**\/*.md"]`
+   * (the common convention); add your own dirs (e.g. a `research/` notes
+   * tree) explicitly. Set to `[]` to opt in but scan nothing.
    */
   include?: readonly string[];
   /**
