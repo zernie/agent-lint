@@ -16,8 +16,8 @@
 ## RESUME HERE
 
 **Branch `claude/rules-compiler-python-3xqhtd`** — the audit rule-compile tier + a big
-REPO-STRUCTURE tightening pass. **No PR opened yet.** HEAD `ca49fed`. Targeted suites green,
-build+fmt clean; env-only `dialect-drift` still fails locally (CI pins CC).
+REPO-STRUCTURE tightening pass. **No PR opened yet.** HEAD `45ea17b`. Targeted suites green,
+build+fmt clean + API surface gate green; env-only `dialect-drift` still fails locally (CI pins CC).
 
 **LATEST SESSION (2026-07-14, structure + dogfood pass — all pushed):**
 
@@ -41,6 +41,23 @@ build+fmt clean; env-only `dialect-drift` still fails locally (CI pins CC).
   human-run scripts (demo/fp-sweep/make-demo-gif) → `tools/`. Deleted orphan `vigiles-demo.gif`.
   Hexagonal relocate of `claudeEvalDriver` DELIBERATELY NOT done (composition-root default, moving it
   = circular import) — documented in place instead. **Verdict: 8/10 hexagonal, CI-enforced.**
+- **MORE STRUCTURE (2nd half of session)** — `fixtures/`→`test/fixtures/`; `etc/`→**`api-surface/`**
+  (the API-contract dir, legibly renamed — update `scripts/api-extractor.mjs` reportFolder + `.prettierignore`
+  if ever touched; it's a lockfile-class CONTRACT, NOT docs). Root `CLAUDE.md` gained a **`## Layout`
+  section = a desc per EVERY committed root dir** (verified complete). DOGFOOD disambiguated: the word
+  covered FOUR things — only `test/dogfood/` is the corpus; `examples/harness/dogfood/`=skill examples,
+  `compiler/gold/`=package-internal, `research/dogfood/`→renamed **`research/audit-captures/`** (it's
+  audit OUTPUT, not tests). PER-ADAPTER documented: adapters symmetric (adapter-contract registry loop)
+  but the vendored corpus is CC-only + Codex-synthetic (roadmapped). All in `research/dogfood-corpus.md`
+  + the `dogfood-vendoring-policy` rule.
+- **DECISIONS (don't relitigate):** subpackages `compiler/` (paper artifact "Prose Isn't Policy" + the
+  `pr-to-lint-rule` engine) + `report/` (React/Vite frontend, keeps its toolchain out of the CLI deps)
+  both KEEP (not fold, not `packages/` — no workspaces). `docs/`+`research/` stay (NOT `docs/internal`).
+  Shipped `skills/`+`hooks/` at root = plugin convention (correct). no-orphan-docs NOT widened to
+  compiler//bench/ (noisy). compiler/ unlinted = accepted (separate CJS package).
+- **ROADMAP added (all LOW):** EvalDriver→core-port promotion; no-model floor for the 9 skill evals
+  (eval-lock is wired but a green no-op — no committed locks); Codex corpus parity. Also flagged the
+  one genuine MISSING RULE: `no-internal-links-in-public-docs` is guidance-only (P1 = make it a lint rule).
 
 **Earlier this branch — the audit rule-compile tier** (`src/rule-inventory.ts` + `src/rule-routing.ts` +
 `src/segment.ts`, backed by `compiler/`): ESLint + Pylint-basics routing. This is the AUDIT feature that
