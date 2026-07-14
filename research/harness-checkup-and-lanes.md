@@ -126,7 +126,7 @@ not a sibling `doctor`/`checkup` command.
    free with full output. No "upgrade to see the rest."
 2. **Don't cry wolf** — the structural group stays FP-safe (a clean plugin stays
    green). One false positive on a famous plugin and casual users dismiss the
-   score forever. (Ties directly to the launch FP-sweep: `scripts/fp-sweep.sh`.)
+   score forever. (Ties directly to the launch FP-sweep: `tools/fp-sweep.sh`.)
 3. **Keep power concepts off the casual path** — `scan` output must not mention
    `vigiles/hook`, typed specs, or `.harness.mjs` until the user has engaged Layer 2. The score + fix list is the interface; the typed machinery is the impl.
 4. **Invest in actionability** — "blocks 2/7 of the disaster battery, `git push -f`

@@ -90,6 +90,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@jackchuka/mdschema": "^0.12.8",
     "@microsoft/api-extractor": "^7.58.9",
     "@types/js-yaml": "^4.0.9",
     "@types/minimatch": "^5.1.2",
@@ -127,7 +128,6 @@
     "@ast-grep/lang-rust": "^0.0.7",
     "@ast-grep/napi": "^0.43.0",
     "@iarna/toml": "^2.2.5",
-    "@jackchuka/mdschema": "^0.12.8",
     "ci-info": "^4.4.0",
     "cosmiconfig": "^9.0.1",
     "glob": "^13.0.6",

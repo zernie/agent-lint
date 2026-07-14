@@ -5,7 +5,7 @@
  * safely: the deterministic tier has nothing to fire, so the loader must
  * MATERIALIZE the surfaces and WARN — never silently pass an empty machine.
  *
- * Reliability + safety: a VENDORED SNAPSHOT under ./vendor (pinned, offline);
+ * Reliability + safety: a VENDORED SNAPSHOT under ../../test/dogfood/ (pinned, offline);
  * `loadPlugin` only parses. See ../../test/dogfood/<plugin>/SOURCE and the sibling
  * real-superpowers.harness.mjs header for the full rationale.
  *
