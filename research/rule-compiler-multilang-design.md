@@ -96,13 +96,32 @@ design review: mirror double-count (a symlinked/byte-identical `CLAUDE.md`⇄`AG
   sources (a distinct source shape) + a possible sub-project refinement (a nested file next to its own
   `package.json`/`.claude-plugin/` is a sub-project, not this repo's memory).
 
+**✅ ESLint construct-prohibitions + PYLINT BASICS are LIVE (2026-07-14).**
+
+- ESLint construct-prohibitions → the built-in `no-restricted-syntax` (classes / default-exports / enums /
+  namespaces / for-in), precision-gated (prohibition+construct proximity, negative lookbehind), foreign-safe.
+  A rule that LOOKS custom ("never use classes") is reuse. Grounded: betterauth's "NEVER use classes" routes.
+- **PYLINT basics** — 12 curated entries in the shared `INTENT_MAP` (bare-except, broad-exception-caught,
+  dangerous-default-value, invalid-name, too-many-arguments/statements, wildcard-import, global-statement,
+  line-too-long, unused-import, consider-using-f-string; symbols verified via `pylint --help-msg`) +
+  docstring-PRESENCE via the linter-aware `PATTERN_RULE_MAP` (a bare "docstring" keyword over-fires on
+  content/style rules — the dogfood caught it on langchain/pandas). ROUTE-ONLY: `buildRuleInventory` is gated
+  to eslint because pylint is ON-BY-DEFAULT (the eslint-shaped config-state check would mislabel its inverted
+  polarity — enabled-state waits on the §3 ConfigProbe). Keywords are Python-UNAMBIGUOUS (bare `snake_case` /
+  `import *` / "unused imports" excluded to avoid cross-language FP). THE DOGFOOD IS COMMITTED
+  (`src/rule-routing-dogfood.test.ts`) — a golden routing net + a keyword-disjointness invariant, so CI catches
+  routing regressions. Two shared-matcher bugs fixed en route: `FORM_HEAD`'s `no\s+\S` (broke "No bare except")
+  → bare `no`; `matchesWholeToken` missed a keyword at sentence-end ("No wildcard imports.") → a `.`-tolerant
+  trailing lookahead. Live on real Python docs: 4 reuse hits across the 21-doc corpus, 0 FP.
+
 **🔴 HARD (model-tier / later)**
 
 - Fuzzy SEMANTIC prose→catalog mapping ("keep functions small" → `max-lines-per-function`) — needs
   the model tier (the deterministic tier only catches prose that NAMES a rule/token).
-- Custom-rule synthesis for the residue (`compiler/` has it, gated).
-- Cross-language Ruff/Pylint via the ConfigProbe / Intent→Realization model (§3) — still valid, but
-  SECONDARY to the dynamic-catalog reframe.
+- Custom-rule synthesis for the residue (`compiler/` has it, gated; ship as the `pr-to-lint-rule` skill).
+- PYLINT enabled-state ("documented but OFF") via the §3 inverted-polarity ConfigProbe — the deferred half
+  of the pylint work (routing is done; the State-A inventory config-state is not).
+- RUFF (foreign-safe catalog — static to the binary, TOML config is data, no consent gate) + Clippy/RuboCop.
 
 **`INTENT_MAP` is DEMOTED** to a small high-precision alias enrichment for the top common rules
 (`console.log`↔`no-console`), NOT the strategy. Stop expanding it as if it were.
