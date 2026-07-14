@@ -15,12 +15,37 @@
 
 ## RESUME HERE
 
-**Branch `claude/rules-compiler-python-3xqhtd`** — expand the **audit rule-compile tier**
-(`src/rule-inventory.ts` + `src/rule-routing.ts` + `src/segment.ts`, backed by `compiler/`) from
-ESLint-only toward **multi-language (Ruff + Pylint)** + a robust **segmentation** model (what text in
-a freeform CLAUDE.md is even a "rule"). This is the AUDIT feature that suggests which prose rules can
-be codified as lint rules — NOT the linter cross-ref engine (`core/linters.ts`), which already does
-Python. **No PR opened yet.** Full vitest not re-run this session; targeted suites green + tsc clean.
+**Branch `claude/rules-compiler-python-3xqhtd`** — the audit rule-compile tier + a big
+REPO-STRUCTURE tightening pass. **No PR opened yet.** HEAD `ca49fed`. Targeted suites green,
+build+fmt clean; env-only `dialect-drift` still fails locally (CI pins CC).
+
+**LATEST SESSION (2026-07-14, structure + dogfood pass — all pushed):**
+
+- **"b then a" DONE** — (b) sharpened the audit rule map's 4th lane to **custom rule (⚙)** ("doable,
+  opt-in") vs **judgment call (✎)** ("undecidable"); (a) rewrote the `pr-to-lint-rule` skill into the
+  GATED synthesis skill (REUSE-first → intent+codebase → synth rule + independent intent-test → TRUST
+  GATE P=R=1.0 else ABSTAIN), wrapping `compiler/gate.js`.
+- **Rule-map docs made crystal-clear** — `research/rule-compiler-multilang-design.md` **§0.0** is the
+  authoritative snapshot: TWO linters only (ESLint full, Pylint routing-only, Ruff NOT yet), the 4
+  reuse mechanisms, enabled-state=ESLint-only, ranked next steps. Public note in
+  `docs/verifying-instruction-files.md`.
+- **DOGFOOD now CI-ENFORCED + indexed** — `research/dogfood-corpus.md` is the map (every artifact →
+  is-it-CI-enforced → by-what) + the policy; CLAUDE rule **`dogfood-vendoring-policy`** points at it
+  (so a new session learns it automatically). `compiler/gate.js` now ASSERTS its kept/abstain verdicts
+  (was print-only exit 0) + two new `check`-job CI steps run it and `bench/corpus/verify*.mjs`.
+  Backfilled LICENSE+SOURCE for the 2 slices that lacked them.
+- **STRUCTURE cleanup** — `dev/` plugin GONE: its 6 contributor skills moved to `.claude/skills/`
+  (auto-load in-repo, still unshipped); `generate-logo` eval now uses `skillsDir`. `schemas/` →
+  `src/schemas/` + `DEPRECATED.md` (require-structure never built); `@jackchuka/mdschema` moved
+  `dependencies`→`devDependencies` (stops shipping ~11MB unused). `scripts/` = build pipeline only;
+  human-run scripts (demo/fp-sweep/make-demo-gif) → `tools/`. Deleted orphan `vigiles-demo.gif`.
+  Hexagonal relocate of `claudeEvalDriver` DELIBERATELY NOT done (composition-root default, moving it
+  = circular import) — documented in place instead. **Verdict: 8/10 hexagonal, CI-enforced.**
+
+**Earlier this branch — the audit rule-compile tier** (`src/rule-inventory.ts` + `src/rule-routing.ts` +
+`src/segment.ts`, backed by `compiler/`): ESLint + Pylint-basics routing. This is the AUDIT feature that
+suggests which prose rules can be codified as lint rules — NOT the linter cross-ref engine
+(`core/linters.ts`), which already does Python.
 
 **Design-of-record: `research/rule-compiler-multilang-design.md`** — READ FIRST. Grounded in 2 Fable
 design passes + a real 20-repo OSS corpus; has the whole plan, the ConfigProbe/Intent-Realization
@@ -187,9 +212,10 @@ from the OSS sweep). Rebuild dist (`npx tsc`) before re-running after a src edit
   (recommend `ephemeralEnv`); safe-default deferred because an over-aggressive scrub breaks claude auth.
 - **Don't build a promptfoo config auto-converter** — a half-parser mis-maps unsupported assertions
   = false confidence. A mapping guide + worked example instead (shipped).
-- **A code-quality / general-coding skill goes in `dev/` (the `vigiles-dev` plugin), NOT the
-  shipped plugin** — vigiles verifies harnesses, it does NOT lint code (`dont-reimplement-linters`),
-  so shipping one to users would muddy positioning. (User's call this session.)
+- **Contributor-only skills go in `.claude/skills/` (this repo's own harness), NOT the shipped
+  plugin** — vigiles verifies harnesses, it does NOT lint code (`dont-reimplement-linters`), so
+  shipping e.g. a code-quality skill to users would muddy positioning. (The old `dev/`/`vigiles-dev`
+  second plugin was folded into `.claude/skills/` on 2026-07-14 — no separate contributor plugin now.)
 - Vault filenames MUST be opaque IDs; commit messages for vault changes MUST be generic.
 - **Rule-compile tier design (this session, full record in `research/rule-compiler-multilang-design.md`):**
   the deterministic default is **PRECISION-first, low-recall by design** — compile a NARROW curated
