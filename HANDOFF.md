@@ -34,27 +34,30 @@ enforceable (`boundaries/dependencies` in the catalog → "dir X may import dir 
 semantic). `INTENT_MAP` is DEMOTED to a small alias fast-path. `research/rule-compiler-multilang-design.md`
 **§0** = the honest DONE / DOABLE-cheaply / HARD scope (read it).
 
-**Shipped this session (8 commits, pushed):** the design doc + §0 reframe/scope; `fix(segment)`
+**Shipped this session (10 commits):** the design doc + §0 reframe/scope; `fix(segment)`
 precision (INDEX-SMELL veto, anti-context, decoration/emoji/ordered, RULE_HEADING bug); `feat(rule-routing)`
 `meta` category + explicit "hard to codify" bucket (incl. report UI); +curly/consistent-type-imports/
-no-only-tests intents; **HANDOFF refresh**; **code+doc SCOPE MARKERS** (readInstructionText root-only,
-INTENT_MAP fast-path); **`feat(segment)` RULE-NAME cue** (a bullet NAMING a rule → high, recovers the
-named-but-medium bullets — reuse 2→4 on the corpus, tightened so segmented 162→147); **`feat(core)`
-`src/core/rule-catalog.ts`** — the dynamic catalog primitive (`enumerateEslintCatalog`, own-repo/executes,
-tested, 100% cov) — BUILT, NOT WIRED.
+no-only-tests intents; code+doc SCOPE MARKERS; **`feat(segment)` RULE-NAME cue** (a bullet NAMING a rule
+→ high; reuse 2→4 on the corpus); **`feat(core)` `src/core/rule-catalog.ts`** (`enumerateEslintCatalog`,
+own-repo/executes, tested, 100% cov); `feat(rule-routing)` catalog→matching (`RouteOptions.availableRules`
+plus enabled-state on `RoutedRule`); **`feat(audit)` catalog now LIVE in `vigiles audit`** —
+`computeRuleRouting` enumerates the 702-rule catalog under the sticky `audit.measure` consent (own-repo,
+claude-code only) so `boundaries/dependencies` routes to `reuse (ON)` in a real run. tsc clean; rule-routing/
+segment/rule-catalog/rule-inventory/scan-cli/audit-report/cli suites all green. **No PR opened yet.**
 
-**GROUNDED REALITY** (real router on 8 LIVE docs): deterministic reuse ~2-3% — honest, not a bug. Clean
-AGENTS.md deliberately OMIT generic lint rules (2026 best-practice) → most content is project/process/
-semantic → correctly "hard". On docs that DO name rules (workers-sdk) we now catch ~all of them.
-vigiles's OWN structured CLAUDE.md → 0 (S0/S1 marker tier unbuilt).
+**GROUNDED REALITY** (real router on 8 LIVE docs): deterministic reuse ~2-3% textual — honest, not a bug.
+Clean AGENTS.md deliberately OMIT generic lint rules (2026 best-practice) → most content is project/process/
+semantic → correctly "hard". With the LIVE catalog + consent, a repo that NAMES rules (or names an
+architecture rule like `boundaries/dependencies`) now routes them to `reuse` with an ON/OFF nudge.
+vigiles's OWN structured CLAUDE.md → 0 (uses `**Enforced by:**` lines, not rule-naming bullets — S0/S1
+marker tier unbuilt).
 
-**NEXT (the reframe's payoff, in order):** (1) **WIRE the catalog into matching** — own-repo tier: match
-a prose rule-name token against the LIVE `enumerateEslintCatalog` (702), not the static 23; surface
-available-but-off rules; route boundaries/import intents to `reuse`. Keep it OWN-REPO/consented (it
-executes the linter); the foreign-safe default stays the textual INTENT_MAP + RULE-NAME cue. (2) **Parse
-ALL instruction sources** — nested `CLAUDE.md` (marked in `readInstructionText`; needs per-file routing
-for provenance + a fixture-noise policy — NOT a 5-liner). (3) **S0/S1 structured tier** (compile
-`**Enforced by**`-marked docs, 0 today). (4) Cross-language Ruff/Pylint (§3) — secondary to the catalog.
+**NEXT (in order):** (1) **Route architecture/import intents to `reuse` even WITHOUT a rule-name cue** —
+declarative-subject bullets ("The core layer must not import X") segment at MEDIUM and get dropped by the
+high-confidence filter (a SEGMENTATION gap, not a catalog gap). (2) **Parse ALL instruction sources** —
+nested `CLAUDE.md` (marked in `readInstructionText`; needs per-file routing for provenance + a fixture-noise
+policy — NOT a 5-liner). (3) **S0/S1 structured tier** (compile `**Enforced by**`-marked docs, 0 today).
+(4) Cross-language Ruff/Pylint (§3) — secondary to the catalog.
 
 **Repro tools in `scratchpad/`:** `assess.mjs`/`probe.mjs`/`mini.mjs` run `routeRules` over
 `realdocs/` (8 fetched real instruction files) + `configs/`+`eslint-configs/` (real linter configs

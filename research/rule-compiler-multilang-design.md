@@ -47,13 +47,18 @@ The three-column scope, marked honestly (this section supersedes the INTENT_MAP-
   `resolveEslintPluginRules`) — just not wired into the compile tier.
 - Custom-rule SYNTHESIS + adversarial gate (`compiler/`) — the model-tier engine for the residue.
 - `boundaries/dependencies` dogfooded (architecture rules are real + enforced).
+- **DYNAMIC available-rule catalog is LIVE (`src/core/rule-catalog.ts` + wired into `vigiles audit`).**
+  `enumerateEslintCatalog` runs ESLint once (702 rules, 141 enabled here) and `routeRules({availableRules})`
+  matches prose that NAMES a rule against the LIVE catalog — so `boundaries/dependencies` routes to `reuse`
+  and carries its enabled-state nudge (ON / documented-but-OFF), a rule the static map never captured.
+  Because enumeration EXECUTES the linter, it is gated as an OWN-REPO + `audit.measure`-CONSENTED,
+  claude-code-only capability; a null/failure falls back to the foreign-safe textual routing.
 
 **🟡 DOABLE CHEAPLY (spike-proven, not wired)**
 
-- Use the DYNAMIC available-rule catalog as the match target (1 API call, 702 rules) — deterministic
-  match of prose that NAMES a rule against the LIVE catalog, replacing the hand-list AS THE STRATEGY.
-- Surface available-but-OFF rules ("you have this rule installed, it's off").
-- Route architecture / import intents to `reuse` (boundaries / import), not `semantic`.
+- Route architecture / import intents to `reuse` even WITHOUT a rule-name cue (declarative-subject
+  bullets like "The core layer must not import X" segment at MEDIUM and are dropped by the high-confidence
+  filter — a segmentation gap, not a catalog gap).
 - Parse ALL instruction sources — nested `CLAUDE.md` (`globSync('**/CLAUDE.md')` already exists in
   `cli.ts`) + `.claude/`. Today `readInstructionText` reads ROOT ONLY (misses 8 of 9 in this repo).
 
