@@ -353,10 +353,11 @@ export const RULE_META: Record<RuleName, RuleMeta> = {
   // --- Docs hygiene ---------------------------------------------------------
   "orphan-docs": {
     id: "orphan-docs",
-    bucket: "external-decidable",
+    bucket: "heuristic-behavioral",
     surface: ["docs"],
     defaultSeverity: "warn",
-    summary: "Every docs/ + research/ .md is referenced by another .md.",
+    summary:
+      "Opt-in: a doc in a configured dir (default docs/) that no other .md references.",
     detector: "findOrphanDocs",
   },
 };

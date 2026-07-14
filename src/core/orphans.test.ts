@@ -5,15 +5,27 @@ import { join } from "node:path";
 
 import { findOrphanDocs, formatOrphanReport } from "./orphans.js";
 import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
+import { claudeCodeLayout } from "../adapters/claude-code/layout.js";
+
+// Harness surfaces are injected (core stays harness-agnostic). Real usage passes
+// every registered adapter's layout; here we pass Claude Code plus a Codex-shaped
+// layout (AGENTS.md) to exercise the multi-harness instruction-file exemption.
+const HARNESS_LAYOUTS = [
+  claudeCodeLayout,
+  { ...claudeCodeLayout, name: "codex", instructionFile: "AGENTS.md" },
+];
 
 describe("findOrphanDocs()", () => {
-  it("flags docs not referenced anywhere", () => {
+  it("flags docs not referenced anywhere (default scope = docs/ only)", () => {
     const dir = makeTmpDir("orphans");
     try {
       mkdirSync(join(dir, "docs"), { recursive: true });
       mkdirSync(join(dir, "research"), { recursive: true });
       writeFileSync(join(dir, "docs/referenced.md"), "# ref");
       writeFileSync(join(dir, "docs/orphan.md"), "# orphan");
+      // research/ is NOT in the default scope — `docs/` is the common
+      // convention; a vigiles-specific dir is opted into explicitly (via
+      // `orphans.include`), so research/stale.md is not scanned here.
       writeFileSync(join(dir, "research/stale.md"), "# stale");
       writeFileSync(
         join(dir, "README.md"),
@@ -21,12 +33,9 @@ describe("findOrphanDocs()", () => {
       );
 
       const report = findOrphanDocs({ basePath: dir });
-      assert.deepEqual([...report.orphans].sort(), [
-        "docs/orphan.md",
-        "research/stale.md",
-      ]);
+      assert.deepEqual([...report.orphans], ["docs/orphan.md"]);
       assert.deepEqual([...report.referencedDocs], ["docs/referenced.md"]);
-      assert.equal(report.totalDocs, 3);
+      assert.equal(report.totalDocs, 2);
     } finally {
       cleanupTmpDir(dir);
     }
@@ -48,8 +57,41 @@ describe("findOrphanDocs()", () => {
       writeFileSync(join(dir, "rot.md"), "# nobody links me");
 
       // Broaden include to the whole repo — instruction files must stay exempt.
-      const report = findOrphanDocs({ basePath: dir, include: ["**/*.md"] });
+      const report = findOrphanDocs({
+        basePath: dir,
+        include: ["**/*.md"],
+        layouts: HARNESS_LAYOUTS,
+      });
       assert.deepEqual([...report.orphans], ["rot.md"]);
+    } finally {
+      cleanupTmpDir(dir);
+    }
+  });
+
+  it("only exempts a harness surface at a real root, not a docs subdir sharing the name", () => {
+    const dir = makeTmpDir("orphans-surface-root");
+    try {
+      mkdirSync(join(dir, "docs/prompts"), { recursive: true });
+      mkdirSync(join(dir, "prompts"), { recursive: true });
+      // Codex's command surface is `prompts`. At the REPO ROOT it's a real
+      // surface (never an orphan); under `docs/` it's just documentation and
+      // must still be flagged — the exemption anchors to the surface root, not
+      // any nested dir that shares the name.
+      writeFileSync(join(dir, "prompts/run.md"), "# a real command surface");
+      writeFileSync(join(dir, "docs/prompts/guide.md"), "# unreferenced doc");
+      const codexLayout = {
+        ...claudeCodeLayout,
+        name: "codex",
+        instructionFile: "AGENTS.md",
+        agentDir: "",
+        commandDir: "prompts",
+      };
+      const report = findOrphanDocs({
+        basePath: dir,
+        include: ["**/*.md"],
+        layouts: [codexLayout],
+      });
+      assert.deepEqual([...report.orphans], ["docs/prompts/guide.md"]);
     } finally {
       cleanupTmpDir(dir);
     }
@@ -64,7 +106,11 @@ describe("findOrphanDocs()", () => {
       // counts as a REFERENCER, so docs/guide.md is not an orphan.
       writeFileSync(join(dir, "CLAUDE.md"), "See [guide](docs/guide.md).");
 
-      const report = findOrphanDocs({ basePath: dir, include: ["**/*.md"] });
+      const report = findOrphanDocs({
+        basePath: dir,
+        include: ["**/*.md"],
+        layouts: HARNESS_LAYOUTS,
+      });
       assert.deepEqual([...report.orphans], []);
       assert.deepEqual([...report.referencedDocs], ["docs/guide.md"]);
     } finally {
