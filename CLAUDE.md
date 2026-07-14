@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:2ca7f5f8bd2a42d0 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:bed2a0694d723602 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -65,6 +65,48 @@ Harness-adapter layout (hexagonal — see `research/code-adapter-architecture.md
 - `src/` root — the application/composition layer AND the harness-testing LIBRARY: cli, scan, the harness-agnostic `plugin-loader` (layout-injected; the CC wrapper + every other adapter delegate to it, so no adapter imports a sibling), the deterministic runners (`harness-test`/`run-hook`/`eval` + `mock-model`/`sandbox`/`egress`/`judge`) that default to Claude Code via an injected `{ adapter }`, and the `testing`/`unit`/`integration`/`e2e` barrels that route through the runners and NEVER import an adapter directly. See `research/adapter-api-design.md`.
 
 Two boundary rules are enforced by `eslint-plugin-boundaries` (rule `boundaries/dependencies`, error-mode, classified by directory) and dogfooded via `enforce("boundaries/dependencies")`: core ⊄ adapter (the domain stays harness-agnostic), and the `agnostic-surface` (`src/{testing,unit,integration,e2e}.ts`) ⊄ any adapter (the public agnostic entries route through the composition-root runners, so "agnostic" is enforced, not just named) — the architecture invariant is a verified reference, not a convention. Consumers select a harness by import (`vigiles/claude-code` beside the agnostic `vigiles/testing`), not a runtime config key; the CLI selects per repo — auto-detect, a `--harness=` override, or a `harness` key in `.vigilesrc.json` written by `init` (the project-level declaration, distinct from the library's import-time selection; an array for a repo targeting several harnesses also drives a byte-identical `CLAUDE.md`⇄`AGENTS.md` mirror when no sync tool fans it out). See `research/multi-harness-compile.md`.
+
+## Layout
+
+What each ROOT directory is (the per-file map is Key Files below; this is the per-dir index). This repo is FIVE things at once — a TS library, a shipped Claude Code plugin, two auxiliary packages, a benchmark suite, and its own dogfood harness — so the root has a dir per concern, grouped here by concern.
+
+THE LIBRARY (the one compiled thing):
+
+- `src/` — all TypeScript source, compiled to `dist/`. The ONLY thing `eslint src/` lints, vitest sweeps (`src/**/*.test.ts`), and the 100% coverage gate covers. Hexagonal: `src/core/` (domain) · `src/adapters/<harness>/` (ports) · `src/*.ts` (composition root + library). Also `src/schemas/` = DEPRECATED mdschema presets, parked (see `src/schemas/DEPRECATED.md`).
+- `dist/` — compiled JS output (gitignored; the published artifact + the audit-report template).
+
+THE SHIPPED PLUGIN (root-level by Claude Code plugin convention — these MUST sit at the repo root beside the manifest; they are markdown/shell consumed verbatim by the harness, never compiled):
+
+- `.claude-plugin/` — the plugin manifest (`plugin.json`) + `marketplace.json`. The repo root IS the plugin root.
+- `skills/` — the SHIPPED consumer skills (published; `plugin.json` points here).
+- `hooks/` — the SHIPPED plugin's hook scripts (pre-edit/post-edit/refs-nudge/eval-lock-nudge/session-start; published, referenced by `plugin.json`).
+
+THIS REPO'S OWN HARNESS (how Claude Code behaves when a CONTRIBUTOR works in-repo — NOT shipped; `.claude/` is not published):
+
+- `.claude/` — `settings.json` + `hooks/` + `skills/`. `.claude/skills/` holds the CONTRIBUTOR-only dev skills (generate-logo, pr-to-lint-rule, enforce-rules-format, audit-feedback-loop, audience-check, code-quality) + vendored deep-research/review-docs. (The old `dev/` second plugin was folded here 2026-07-14.)
+
+AUXILIARY PACKAGES (separate npm packages with their OWN `package.json`, NOT part of `src/`):
+
+- `compiler/` — `@vigiles/compiler`, the opt-in rule-SYNTHESIS engine + its two-stage blind-gold TRUST GATE (`gate.js`). Folded in from a former standalone repo; CI runs its gate (dogfood). The `pr-to-lint-rule` skill's engine.
+- `report/` — `@vigiles/report`, the Vite + React + shadcn audit-report UI, built to one self-contained HTML template the CLI fills. Kept out of the CLI's runtime deps.
+
+DOCS (two tiers — see the doc-tiers rule):
+
+- `docs/` — PUBLIC user docs (what a user needs to act). Never links into `research/`.
+- `research/` — INTERNAL contributor record (design rationale, landscape, decisions). Indexed by `research/CLAUDE.md.spec.ts`; `status:`/`topic:` frontmatter; orphan-docs sweeps it.
+
+TESTS + FIXTURES + BENCHMARKS:
+
+- `test/` — test DATA + tier config, NOT the unit tests (those are `src/**/*.test.ts`). Holds `test/dogfood/` (SHA-pinned vendored real plugins — see the dogfood-vendoring-policy rule + `research/dogfood-corpus.md`), `test/fixtures/` (the E2E example-project), `test/{e2e,runners,types}/`.
+- `examples/` — user-facing copy-paste `*.harness.mjs`/`*.eval.mjs` demos + compiled example specs; the CLI-fallback on-ramp.
+- `bench/` — the real-model A/B benchmark corpus, deliberately OUTSIDE the vitest sweep (run by node, on your sub). Its free `corpus/verify*.mjs` self-checks are CI-gated.
+
+BUILD + TOOLING + GENERATED:
+
+- `scripts/` — the BUILD pipeline only (`api-extractor.mjs`, `build-report.mjs`), invoked by `npm run build`/CI.
+- `tools/` — HUMAN-run maintenance scripts, never in CI (`dogfood-sweep.sh`, `refresh-vendor.sh`, `demo.sh`, `fp-sweep.sh`, `make-demo-gif.py`).
+- `etc/` — the committed public-API surface snapshots (`*.api.md`). NB the name is Microsoft API Extractor's DEFAULT output dir, not a vigiles choice; CI diffs the live `.d.ts` surface against these (the API surface gate).
+- `.github/` — CI workflows (`ci.yml` is the gate). `.vigiles/` — vigiles's own runtime output (gitignored: hook observations, eval locks, the runs ledger).
 
 ## Key Files
 
