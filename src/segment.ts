@@ -59,6 +59,19 @@ const ANTI_HEADING =
 const INDEX_SMELL = /^`[^`]+`\s*[:—–-]\s/;
 
 /**
+ * RULE-NAME cue: a backticked token that is SHAPED like an off-the-shelf lint
+ * rule — a scoped/plugin rule (`@typescript-eslint/consistent-type-imports`,
+ * `import/no-cycle`) or a ≥3-segment kebab id (`no-floating-promises`). Requiring
+ * the backticks kills prose false positives (`up-to-date`, `state-of-the-art`,
+ * a file path). Naming a rule is a STRONG signal a bullet is an enforceable rule
+ * even when it has no imperative verb — the corpus's rule-naming bullets
+ * ("No floating promises (`@ts.../no-floating-promises`)") otherwise score
+ * "medium" and get dropped by the high-only default.
+ */
+const RULE_NAME_IN_CODE =
+  /`[^`]*(?:@[a-z][\w-]*\/[a-z][\w-]*|[a-z][\w-]*\/[a-z][\w-]*-[\w-]+|(?:no|prefer|require|consistent|max|min|func|id|sort|valid|padding|dot|array|object)-[a-z][a-z0-9-]+)[^`]*`/i;
+
+/**
  * Leading markdown decoration a rule may be wrapped in — emphasis (`**bold**`),
  * blockquote, checkbox, or a status emoji. Stripped on a SHADOW string before
  * the imperative-head test so `- **Never** …` / `✅ Use const` still read as
@@ -288,11 +301,18 @@ function gate(
   // corpus's dominant false positive. No cue count can rescue it.
   if (INDEX_SMELL.test(t)) return null;
 
+  const context = isBullet || underRuleHeading;
+
+  // RULE-NAME cue: a bullet/section line that NAMES an off-the-shelf rule is a
+  // strong signal it's enforceable, even without an imperative verb — promote it
+  // to high so the high-only default doesn't drop it (recovers rule-naming
+  // bullets like "No floating promises (`@ts.../no-floating-promises`)").
+  if (context && RULE_NAME_IN_CODE.test(t)) return "high";
+
   // The form/declaration cues see the text with leading decoration stripped, so
   // `- **Never** …` reads as imperative and `**We** …` still reads declarative.
   const head = stripLeadDecoration(t);
   const form = FORM_HEAD.test(head);
-  const context = isBullet || underRuleHeading;
   const shape =
     t.length >= 15 &&
     t.length <= 300 &&

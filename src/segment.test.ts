@@ -250,6 +250,24 @@ describe("segmentInstructions — corpus-grounded precision fixes", () => {
   });
 });
 
+describe("segmentInstructions — RULE-NAME cue", () => {
+  it("promotes a rule-naming bullet with NO imperative verb to high", () => {
+    // The corpus shape: names the rule in backticks, describes intent, no lexicon
+    // verb → would score 'medium' and be dropped without the cue.
+    const md =
+      "## Code Style\n\n- No floating promises (`@typescript-eslint/no-floating-promises`)";
+    const hit = find(segmentInstructions(md), "floating promises");
+    expect(hit?.confidence).toBe("high");
+  });
+
+  it("PRECISION: a non-rule package kebab in backticks is NOT promoted", () => {
+    // `next-test-utils` is a package, not a rule (no rule-ish prefix) — the cue
+    // must not fire, so a verb-less declarative bullet stays rejected.
+    const md = "## Guidelines\n\n- Coverage comes from `next-test-utils` here";
+    expect(find(segmentInstructions(md), "next-test-utils")).toBeUndefined();
+  });
+});
+
 describe("segmentInstructions — aggregate precision/recall on fixtures", () => {
   it("reports precision hard (=1.0) and recall softly", () => {
     const all = [
