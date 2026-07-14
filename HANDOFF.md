@@ -34,30 +34,32 @@ enforceable (`boundaries/dependencies` in the catalog → "dir X may import dir 
 semantic). `INTENT_MAP` is DEMOTED to a small alias fast-path. `research/rule-compiler-multilang-design.md`
 **§0** = the honest DONE / DOABLE-cheaply / HARD scope (read it).
 
-**Shipped this session (10 commits):** the design doc + §0 reframe/scope; `fix(segment)`
-precision (INDEX-SMELL veto, anti-context, decoration/emoji/ordered, RULE_HEADING bug); `feat(rule-routing)`
-`meta` category + explicit "hard to codify" bucket (incl. report UI); +curly/consistent-type-imports/
-no-only-tests intents; code+doc SCOPE MARKERS; **`feat(segment)` RULE-NAME cue** (a bullet NAMING a rule
-→ high; reuse 2→4 on the corpus); **`feat(core)` `src/core/rule-catalog.ts`** (`enumerateEslintCatalog`,
-own-repo/executes, tested, 100% cov); `feat(rule-routing)` catalog→matching (`RouteOptions.availableRules`
-plus enabled-state on `RoutedRule`); **`feat(audit)` catalog now LIVE in `vigiles audit`** —
-`computeRuleRouting` enumerates the 702-rule catalog under the sticky `audit.measure` consent (own-repo,
-claude-code only) so `boundaries/dependencies` routes to `reuse (ON)` in a real run. tsc clean; rule-routing/
-segment/rule-catalog/rule-inventory/scan-cli/audit-report/cli suites all green. **No PR opened yet.**
+**Shipped this session (~14 commits):** design doc + §0 reframe/scope; `fix(segment)` precision (INDEX-SMELL
+veto, anti-context, decoration/emoji/ordered, RULE_HEADING bug); `feat(rule-routing)` `meta` category +
+"hard to codify" bucket (incl. report UI); intents (+curly/consistent-type-imports/no-only-tests); SCOPE
+markers; `feat(segment)` RULE-NAME cue; **`feat(core)` `src/core/rule-catalog.ts`** (`enumerateEslintCatalog`,
+702 rules, own-repo/executes, 100% cov). **THE CATALOG IS NOW LIVE END-TO-END in `vigiles audit`:**
+(a) `feat(audit)` `computeRuleRouting` enumerates the catalog under the sticky `audit.measure` consent
+(own-repo, claude-code only) so `boundaries/dependencies` → `reuse (ON)`; (b) `feat(routing)` MEDIUM-rescue
+— a declarative bullet ("The core layer must not import X (`boundaries/dependencies`)") that NAMES a real
+catalog rule is rescued from the high-only drop (grounded in the catalog, not a widened regex); (c)
+`feat(audit)` PER-FILE routing (`gatherInstructionFiles`→`{path,text}[]` + pure `mergeRoutings`) — FIXED a
+latent provenance bug (concatenating root CLAUDE.md+AGENTS.md offset the 2nd file's lines); (d) `feat(audit)`
+NESTED discovery — globs `**/CLAUDE.md`+`**/AGENTS.md`, reads real subdir memory, skips fixtures via pure
+`isFixturePath` (`src/instruction-sources.ts`, 100% cov; 4 kept / 5 skipped on this repo). tsc clean; all
+targeted suites green; only failure is the documented env-only `dialect-drift` (CI-pinned). **No PR yet.**
 
-**GROUNDED REALITY** (real router on 8 LIVE docs): deterministic reuse ~2-3% textual — honest, not a bug.
-Clean AGENTS.md deliberately OMIT generic lint rules (2026 best-practice) → most content is project/process/
-semantic → correctly "hard". With the LIVE catalog + consent, a repo that NAMES rules (or names an
-architecture rule like `boundaries/dependencies`) now routes them to `reuse` with an ON/OFF nudge.
-vigiles's OWN structured CLAUDE.md → 0 (uses `**Enforced by:**` lines, not rule-naming bullets — S0/S1
-marker tier unbuilt).
+**GROUNDED REALITY:** deterministic TEXTUAL reuse ~2-3% (clean AGENTS.md omit generic lint rules by 2026
+best-practice → most content is project/process/semantic → correctly "hard"). WITH the live catalog +
+consent, a repo that NAMES rules (or an architecture rule like `boundaries/dependencies`) routes them to
+`reuse` with an ON/OFF nudge — incl. declarative bullets via the medium-rescue. vigiles's OWN structured
+CLAUDE.md still → 0 (uses `**Enforced by:**` lines, not rule-naming bullets — S0/S1 marker tier unbuilt).
 
-**NEXT (in order):** (1) **Route architecture/import intents to `reuse` even WITHOUT a rule-name cue** —
-declarative-subject bullets ("The core layer must not import X") segment at MEDIUM and get dropped by the
-high-confidence filter (a SEGMENTATION gap, not a catalog gap). (2) **Parse ALL instruction sources** —
-nested `CLAUDE.md` (marked in `readInstructionText`; needs per-file routing for provenance + a fixture-noise
-policy — NOT a 5-liner). (3) **S0/S1 structured tier** (compile `**Enforced by**`-marked docs, 0 today).
-(4) Cross-language Ruff/Pylint (§3) — secondary to the catalog.
+**NEXT (in order):** (1) **`.claude/` rule sources** + a SUB-PROJECT refinement to `isFixturePath` (skip a
+nested file next to its own `package.json`/`.claude-plugin/` — it's a sub-project, not this repo's memory;
+data in the design-doc §0). (2) **S0/S1 structured tier** — route `**Enforced by**`-marked compiled docs
+(vigiles's own CLAUDE.md is 0 today). (3) Cross-language Ruff/Pylint (§3) — secondary to the catalog.
+(4) Consider surfacing enabled-state ("documented but OFF") more prominently in the report UI.
 
 **Repro tools in `scratchpad/`:** `assess.mjs`/`probe.mjs`/`mini.mjs` run `routeRules` over
 `realdocs/` (8 fetched real instruction files) + `configs/`+`eslint-configs/` (real linter configs
