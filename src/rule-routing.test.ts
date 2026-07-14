@@ -62,16 +62,17 @@ describe("routeRules", () => {
     expect(semantic[0].mechanism).toBe("prose");
   });
 
-  it("routes an un-cued mechanizable rule to unrouted (compile to find out), never 'synthesize'", () => {
+  it("routes an un-cued mechanizable rule to unrouted (mechanism 'synthesize', never the spec 'compile' verb)", () => {
     // A real imperative with no off-the-shelf rule, no action cue, no judgment cue.
     const r = routeRules("- Always wrap fetch calls in a retry with backoff.");
     const unrouted = r.rules.filter((x) => x.category === "unrouted");
     expect(unrouted.length).toBeGreaterThanOrEqual(1);
-    expect(unrouted[0].mechanism).toBe("compile");
-    // The deterministic tier must not promise synthesis — every mechanism is one
-    // of the four honest rungs (compile is as far as it commits), never a
-    // "custom-rule will be written" claim.
-    const RUNGS = new Set(["config-line", "hook", "prose", "compile"]);
+    // The hard bucket's mechanism is `synthesize` (an opt-in skill MAY write a
+    // gated custom rule) — deliberately NOT "compile" (that's the unrelated
+    // spec→markdown verb; conflating them was the bug).
+    expect(unrouted[0].mechanism).toBe("synthesize");
+    // Every mechanism is one of the four honest rungs.
+    const RUNGS = new Set(["config-line", "hook", "prose", "synthesize"]);
     expect(r.rules.every((x) => RUNGS.has(x.mechanism))).toBe(true);
   });
 

@@ -181,12 +181,13 @@ const ROUTE_ORDER: RuleCategory[] = [
 ];
 
 /**
- * The opt-in compile tier, grounded in the DETERMINISTIC routing preview when we
- * have one: real per-category counts + a couple of example rules, so the upsell
- * shows the reader THEIR rules routed — not a generic pitch. Falls back to the
- * static description when no routing ran.
+ * "Your rules, mapped" — the DETERMINISTIC routing preview (no model, nothing
+ * executes): real per-category counts + an example per lane, so the reader sees
+ * THEIR rules routed. Each lane's next step is honest and OPT-IN — enable a
+ * config line / run the strengthen skill / author a compiled hook / stays prose.
+ * NB this is NOT `vigiles compile` (that's the unrelated spec→markdown verb).
  */
-function CompileCTA({ routing }: { routing?: RuleRouting }) {
+function RuleMap({ routing }: { routing?: RuleRouting }) {
   // One representative example rule per non-reuse category (reuse is already the
   // detailed hero above), quote trimmed for the line.
   const exampleFor = (cat: RuleCategory): string | undefined =>
@@ -203,9 +204,9 @@ function CompileCTA({ routing }: { routing?: RuleRouting }) {
     <div className="rounded-lg border border-dashed border-border p-4">
       <div className="flex items-center gap-2 text-sm font-semibold">
         <Sparkles size={15} className="text-muted-foreground" />
-        Compile — the full picture
+        Your rules, mapped
         <span className="text-xs font-normal text-muted-foreground">
-          opt-in · runs a model once
+          deterministic · no model
         </span>
       </div>
       {routing && routing.segmented > 0 ? (
@@ -273,33 +274,20 @@ function CompileCTA({ routing }: { routing?: RuleRouting }) {
               </ul>
             </div>
           )}
-          <p className="mt-2.5 text-xs text-muted-foreground">
-            <span className="font-mono text-foreground">compile</span> turns the
-            enforceable-now + hook rows into config and hooks, and takes one
-            model pass at the{" "}
-            <span className="font-mono text-foreground">hard-to-codify</span>{" "}
-            rest (which it may or may not be able to make sound). CI afterwards
-            is plain lint + hooks — $0 and deterministic.
-            <code className="ml-2 rounded bg-border px-1.5 py-0.5 font-mono text-foreground">
-              npx vigiles compile
-            </code>
-          </p>
+          <RuleMapNextSteps />
         </>
       ) : (
         <>
           <p className="mt-1.5 text-xs text-muted-foreground">
-            Segments your instruction file into atomic rules and routes each
-            one:
+            Segments your instruction file into atomic rules and routes each one
+            — deterministically, no model:
           </p>
           <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
             <li>
-              <span className="font-mono text-foreground">↺ reuse</span> — an
-              off-the-shelf rule already exists → enable it
-            </li>
-            <li>
-              <span className="font-mono text-foreground">⚙ synthesize</span> —
-              a custom rule, checked against held-out examples before it's
-              trusted
+              <span className="font-mono text-foreground">
+                ✓ enforceable now
+              </span>{" "}
+              — an off-the-shelf rule already exists → enable it
             </li>
             <li>
               <span className="font-mono text-foreground">⛓ hook</span> — action
@@ -309,16 +297,52 @@ function CompileCTA({ routing }: { routing?: RuleRouting }) {
               <span className="font-mono text-foreground">✎ prose</span> —
               judgment calls, honestly left un-enforced
             </li>
+            <li>
+              <span className="font-mono text-foreground">
+                ⚙ hard to codify
+              </span>{" "}
+              — no off-the-shelf rule; stays prose (custom-rule synthesis is a
+              planned skill, never auto-run)
+            </li>
           </ul>
-          <p className="mt-2.5 text-xs text-muted-foreground">
-            One model pass now; CI afterwards is plain lint + hooks — $0 and
-            deterministic.
-            <code className="ml-2 rounded bg-border px-1.5 py-0.5 font-mono text-foreground">
-              npx vigiles compile
-            </code>
-          </p>
+          <RuleMapNextSteps />
         </>
       )}
+    </div>
+  );
+}
+
+/** The honest, opt-in next step per lane — no fabricated command. `vigiles
+ * compile` appears ONLY for hooks (it genuinely compiles a hook to settings);
+ * reuse is a config line / the strengthen skill; synthesis is a planned skill. */
+function RuleMapNextSteps() {
+  return (
+    <div className="mt-2.5 space-y-1 text-xs text-muted-foreground">
+      <p>
+        <span className="font-medium text-foreground">Enforceable now</span> —
+        enable each in your lint config (one line), or ask your agent to run the{" "}
+        <code className="rounded bg-border px-1 font-mono">strengthen</code>{" "}
+        skill.
+      </p>
+      <p>
+        <span className="font-medium text-foreground">Hooks</span> — author a
+        compiled hook in{" "}
+        <code className="rounded bg-border px-1 font-mono">
+          .vigiles/hooks/
+        </code>
+        , then{" "}
+        <code className="rounded bg-border px-1 font-mono">
+          npx vigiles compile
+        </code>{" "}
+        wires it into your settings.
+      </p>
+      <p>
+        <span className="font-medium text-foreground">
+          Prose / hard to codify
+        </span>{" "}
+        — no off-the-shelf rule; these stay prose. A custom-rule synthesis skill
+        is planned; nothing is generated for you automatically.
+      </p>
     </div>
   );
 }
@@ -447,9 +471,9 @@ export function RuleInventory({
         </FoldedGroup>
       )}
 
-      {/* Zone 2 — the opt-in compile tier, grounded in the deterministic routing
-          preview (real counts + examples) when present; static pitch otherwise. */}
-      <CompileCTA routing={routing} />
+      {/* Zone 2 — "your rules, mapped": the deterministic routing preview (real
+          counts + examples) with an honest, opt-in next step per lane. */}
+      <RuleMap routing={routing} />
     </div>
   );
 }

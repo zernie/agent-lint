@@ -169,7 +169,7 @@ export const SAMPLE: AuditReport = {
         lineEnd: 22,
         confidence: "high",
         category: "unrouted",
-        mechanism: "compile",
+        mechanism: "synthesize",
       },
     ],
   },

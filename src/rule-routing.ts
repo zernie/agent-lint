@@ -18,14 +18,18 @@
  *   semantic → a judgment call ("readable", "single responsibility") no checker
  *              can honestly decide → mechanism: stays prose.
  *   unrouted → looks like a code rule but matched no off-the-shelf rule: HARD to
- *              codify → mechanism: the opt-in `compile` tier MIGHT synthesize a
- *              checker, but it is NOT guaranteed (the gate may abstain). This is
- *              the bucket audit must present clearly as "hard", never as done.
+ *              codify → mechanism `synthesize`: the opt-in SYNTHESIS tier (a
+ *              skill on your subscription) MIGHT write a custom checker, gated —
+ *              but it is NOT guaranteed (the gate may abstain). This is the
+ *              bucket audit must present clearly as "hard", never as done.
+ *
+ * NB "compile" is NOT used here — `vigiles compile` is the unrelated spec→markdown
+ * verb. Synthesis is its own opt-in tier; the mechanism value is `synthesize`.
  *
  * HONESTY BY CONSTRUCTION: the deterministic tier NEVER claims a rule is
  * "synthesizable" — deciding that a custom rule can be written (and gating it)
- * is exactly the work the opt-in model tier does. `unrouted` means "hard —
- * compile to find out", never a promise; `meta`/`semantic` mean "not an
+ * is exactly the work the opt-in model tier does. `unrouted` means "hard — a
+ * synthesis skill may try", never a promise; `meta`/`semantic` mean "not an
  * enforceable code rule at all" (a different, honest kind of no).
  *
  * Pure, deterministic, dependency-free. Reuses `rule-inventory`'s hardened
@@ -41,7 +45,7 @@ import type { RuleCatalog } from "./core/rule-catalog.js";
 
 /** How a routed rule would be enforced (a MECHANISM ladder, not a 1-10 score). */
 export type RuleCategory = "reuse" | "hook" | "meta" | "semantic" | "unrouted";
-export type RuleMechanism = "config-line" | "hook" | "prose" | "compile";
+export type RuleMechanism = "config-line" | "hook" | "prose" | "synthesize";
 
 /** The mechanism each category maps to — a fixed, honest ladder. */
 const MECHANISM: Record<RuleCategory, RuleMechanism> = {
@@ -49,7 +53,7 @@ const MECHANISM: Record<RuleCategory, RuleMechanism> = {
   hook: "hook",
   meta: "prose",
   semantic: "prose",
-  unrouted: "compile",
+  unrouted: "synthesize",
 };
 
 /** One segmented, deterministically-routed rule with provenance. */
