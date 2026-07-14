@@ -53,6 +53,38 @@ describe("routeRules", () => {
     expect(style.rules[0]?.category).not.toBe("hook");
   });
 
+  it("routes a construct-prohibition to reuse via no-restricted-syntax (looks custom, isn't)", () => {
+    // A whole class of "no <construct>" rules are enforceable by the built-in
+    // no-restricted-syntax — deterministic reuse, no synthesis.
+    for (const t of [
+      "- Never use classes.",
+      "- No default exports; prefer named.",
+      "- Avoid TypeScript enums.",
+      "- Do not use enums in new code.",
+      "- Never use namespaces.",
+    ]) {
+      const rule = routeRules(t).rules[0];
+      expect(rule?.category).toBe("reuse");
+      expect(rule?.rule).toBe("no-restricted-syntax");
+    }
+  });
+
+  it("construct-prohibition is precision-first — no FP on benign construct words", () => {
+    // A prohibition head must sit next to the construct; CSS/utility/first-class
+    // usages and non-prohibition sentences must NOT route to reuse.
+    for (const t of [
+      "## Rules\n\n- Use utility classes for styling.",
+      "## Rules\n\n- Support first-class functions.",
+      "## Rules\n\n- Add a CSS class to the button.",
+      "## Rules\n\n- Enumerate the config files before parsing.",
+    ]) {
+      const rule = routeRules(t).rules.find(
+        (r) => r.rule === "no-restricted-syntax",
+      );
+      expect(rule).toBeUndefined();
+    }
+  });
+
   it("routes a judgment call to semantic (stays prose)", () => {
     const r = routeRules(
       "## Rules\n\n- Keep names readable and code idiomatic.",

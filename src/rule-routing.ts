@@ -218,6 +218,67 @@ const META_CUES: readonly RegExp[] = [
   /\bwithout code changes\b/i,
 ];
 
+/**
+ * CONSTRUCT-PROHIBITION → a parameterized BUILT-IN rule. A whole class of
+ * "no <language construct>" rules that LOOK custom ("never use classes", "no
+ * default exports", "avoid enums") are actually enforceable by ESLint's built-in
+ * `no-restricted-syntax` with the right AST selector — no synthesis needed. Each
+ * pattern requires a PROHIBITION head next to the construct (precision-first: a
+ * negative lookbehind rejects "avoid CSS classes"/"utility classes", the gap cap
+ * rejects "first-class functions"/"a class of bugs"). Grounded in real OSS rules
+ * (betterauth "NEVER use classes", "prefer named over default exports"). These
+ * feed `reuse` — moving rules out of the "hard to codify" lane deterministically.
+ */
+interface RestrictedSyntaxRule {
+  readonly construct: string;
+  readonly rule: string;
+  readonly pattern: RegExp;
+  /** The one-line ESLint config that enforces it (a parameterized selector). */
+  readonly configFix: string;
+}
+const RESTRICTED_SYNTAX_MAP: readonly RestrictedSyntaxRule[] = [
+  {
+    construct: "default exports",
+    rule: "no-restricted-syntax",
+    pattern:
+      /\b(?:no|never|avoid|don'?t\s+use|do\s+not\s+use|disallow|ban|forbid|prefer\s+named\s+(?:exports?\s+)?over)\b[^.\n]{0,24}\bdefault\s+exports?\b/i,
+    configFix:
+      '"no-restricted-syntax": ["error", { "selector": "ExportDefaultDeclaration", "message": "Use named exports." }]',
+  },
+  {
+    construct: "enums",
+    rule: "no-restricted-syntax",
+    pattern:
+      /\b(?:no|never|avoid|don'?t\s+use|do\s+not\s+use|disallow|ban|forbid)\b[^.\n]{0,24}\benums?\b/i,
+    configFix:
+      '"no-restricted-syntax": ["error", { "selector": "TSEnumDeclaration", "message": "Use a union or const object instead of an enum." }]',
+  },
+  {
+    construct: "for...in",
+    rule: "no-restricted-syntax",
+    pattern:
+      /\b(?:no|never|avoid|don'?t\s+use|do\s+not\s+use|disallow|ban|forbid)\b[^.\n]{0,16}\bfor[\s.]{0,3}in\b/i,
+    configFix:
+      '"no-restricted-syntax": ["error", { "selector": "ForInStatement", "message": "Use for...of or Object.keys()." }]',
+  },
+  {
+    construct: "namespaces",
+    rule: "no-restricted-syntax",
+    pattern:
+      /\b(?:no|never|avoid|don'?t\s+use|do\s+not\s+use|disallow|ban|forbid)\b[^.\n]{0,24}\bnamespaces?\b/i,
+    configFix:
+      '"no-restricted-syntax": ["error", { "selector": "TSModuleDeclaration", "message": "Use ES modules instead of namespaces." }]',
+  },
+  {
+    construct: "classes",
+    rule: "no-restricted-syntax",
+    pattern:
+      /\b(?:no|never|avoid|don'?t\s+use|do\s+not\s+use|disallow|ban|forbid)\b[^.\n]{0,12}\b(?<!css |style |styling |utility |tailwind |dom |react |component )(?:es6?\s+|javascript\s+)?class(?:es)?\b(?![\s-]*(?:name|attribute|selector|list))/i,
+    configFix:
+      '"no-restricted-syntax": ["error", { "selector": ":matches(ClassDeclaration, ClassExpression)", "message": "Prefer functions and closures over classes." }]',
+  },
+];
+
 interface Classification {
   readonly category: RuleCategory;
   readonly rule?: string;
@@ -269,6 +330,12 @@ function classify(
     if (m.keywords.some((kw) => matchesWholeToken(text, kw))) {
       return { category: "reuse", rule: m.rule, linter: m.linter };
     }
+  }
+  // Construct-prohibition → a built-in parameterized rule (no-restricted-syntax).
+  // "never use classes" / "no default exports" LOOK custom but are reuse.
+  for (const r of RESTRICTED_SYNTAX_MAP) {
+    if (r.pattern.test(text))
+      return { category: "reuse", rule: r.rule, linter: "eslint" };
   }
   if (SEMANTIC_CUES.some((re) => re.test(text)))
     return { category: "semantic" };
@@ -397,6 +464,12 @@ export function routeRules(
   const namesCatalogRule = (text: string): boolean =>
     catalog !== undefined &&
     namedRuleTokens(text).some((tok) => catalog.has(tok));
+  // A MEDIUM segment matching a construct-prohibition ("No default exports")
+  // scores medium ("No" is a prohibition head, not a verb) but is a real reuse
+  // rule (no-restricted-syntax) — rescue it, same as the catalog rescue. The
+  // patterns are their own precision gate (prohibition + construct proximity).
+  const matchesRestrictedSyntax = (text: string): boolean =>
+    RESTRICTED_SYNTAX_MAP.some((r) => r.pattern.test(text));
   // S0/S1 pre-pass: explicit markers are definitive and are CONSUMED (their body
   // lines are skipped) so the heuristic segmenter can't double-count them.
   const marked = extractMarkedRules(instructionText, file, catalog);
@@ -408,7 +481,8 @@ export function routeRules(
     (s) =>
       minConfidence === "medium" ||
       s.confidence === "high" ||
-      namesCatalogRule(s.text),
+      namesCatalogRule(s.text) ||
+      matchesRestrictedSyntax(s.text),
   );
   const heuristicRules: RoutedRule[] = segments.map((s) => {
     const c = classify(s.text, catalog);
