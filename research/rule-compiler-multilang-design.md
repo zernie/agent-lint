@@ -53,12 +53,16 @@ The three-column scope, marked honestly (this section supersedes the INTENT_MAP-
   and carries its enabled-state nudge (ON / documented-but-OFF), a rule the static map never captured.
   Because enumeration EXECUTES the linter, it is gated as an OWN-REPO + `audit.measure`-CONSENTED,
   claude-code-only capability; a null/failure falls back to the foreign-safe textual routing.
+- **MEDIUM-confidence catalog rescue is LIVE (`routeRules`).** A declarative-subject bullet ("The core
+  layer must not import X (`boundaries/dependencies`)") segments at MEDIUM (context+shape, no imperative
+  head) and is dropped by the high-only default — but when it NAMES a rule the catalog actually has, it's
+  rescued to `reuse`. Grounded in the catalog (ground truth), NOT a widened regex, so the foreign-safe
+  textual path stays conservative. Closes the "route architecture/import intents even without a rule-name
+  cue" gap for the OWN-REPO case; the foreign-safe declarative case (no catalog) stays a deliberate
+  precision floor.
 
 **🟡 DOABLE CHEAPLY (spike-proven, not wired)**
 
-- Route architecture / import intents to `reuse` even WITHOUT a rule-name cue (declarative-subject
-  bullets like "The core layer must not import X" segment at MEDIUM and are dropped by the high-confidence
-  filter — a segmentation gap, not a catalog gap).
 - Parse ALL instruction sources — nested `CLAUDE.md` (`globSync('**/CLAUDE.md')` already exists in
   `cli.ts`) + `.claude/`. Today `readInstructionText` reads ROOT ONLY (misses 8 of 9 in this repo).
 

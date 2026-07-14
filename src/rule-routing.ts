@@ -267,8 +267,21 @@ export function routeRules(
   const catalog = options.availableRules
     ? new Map(options.availableRules.rules.map((r) => [r.id, r.enabled]))
     : undefined;
+  // A MEDIUM segment that NAMES a rule the repo's catalog actually has is
+  // enforceable — the catalog is ground truth, so it's higher-precision than the
+  // segmenter's imperative-head cue. This rescues declarative-subject bullets
+  // ("The core layer must not import X (`boundaries/dependencies`)") that score
+  // medium (context+shape, no imperative head) and are otherwise dropped by the
+  // high-only default. Own-repo only (catalog present ⇒ enumerated with consent);
+  // the foreign-safe textual path stays conservative by design.
+  const namesCatalogRule = (text: string): boolean =>
+    catalog !== undefined &&
+    namedRuleTokens(text).some((tok) => catalog.has(tok));
   const segments = segmentInstructions(instructionText, file).filter(
-    (s) => minConfidence === "medium" || s.confidence === "high",
+    (s) =>
+      minConfidence === "medium" ||
+      s.confidence === "high" ||
+      namesCatalogRule(s.text),
   );
   const rules: RoutedRule[] = segments.map((s) => {
     const c = classify(s.text, catalog);

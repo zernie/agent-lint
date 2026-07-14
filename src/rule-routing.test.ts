@@ -106,6 +106,35 @@ describe("routeRules", () => {
     expect(arch?.enabled).toBe(true);
   });
 
+  it("dynamic catalog rescues a MEDIUM declarative bullet that names a real repo rule", () => {
+    const availableRules = {
+      linter: "eslint" as const,
+      available: 1,
+      enabled: 1,
+      rules: [
+        { id: "boundaries/dependencies", plugin: "boundaries", enabled: true },
+      ],
+    };
+    // Declarative subject ("The core layer must not …"), no imperative head — the
+    // segmenter scores this MEDIUM, so the high-only default drops it.
+    const md = [
+      "## Rules",
+      "",
+      "- The core layer must not import an adapter (`boundaries/dependencies`).",
+    ].join("\n");
+
+    // WITHOUT the catalog it's dropped entirely (medium < high).
+    const bare = routeRules(md);
+    expect(bare.segmented).toBe(0);
+
+    // WITH the catalog the medium bullet is rescued (it names a real rule) and
+    // routes to reuse, ON.
+    const r = routeRules(md, undefined, { availableRules });
+    const arch = r.rules.find((x) => x.rule === "boundaries/dependencies");
+    expect(arch?.category).toBe("reuse");
+    expect(arch?.enabled).toBe(true);
+  });
+
   it("carries provenance (line span + verbatim quote) from the segmenter", () => {
     const md = "# Style\n\n- Use `eqeqeq` everywhere.\n";
     const r = routeRules(md, "CLAUDE.md");
