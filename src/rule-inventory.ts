@@ -293,13 +293,12 @@ export const INTENT_MAP: readonly IntentMapping[] = [
   {
     intent: "require docstrings (Python)",
     linter: "pylint",
-    keywords: [
-      "docstring",
-      "docstrings",
-      "missing-docstring",
-      "missing-function-docstring",
-      "C0116",
-    ],
+    // Bare "docstring"/"docstrings" removed — it over-fires on docstring
+    // CONTENT/STYLE rules (the dogfood caught langchain's "docstring warnings" /
+    // "backticks in docstrings"). Presence ("add docstrings", "docstrings for
+    // each") is handled by the PATTERN_RULE_MAP docstring-presence pattern in
+    // rule-routing.ts; only the rule SYMBOL matches here.
+    keywords: ["missing-docstring", "missing-function-docstring", "C0116"],
     rule: "missing-function-docstring",
     configFix:
       "pylint enables missing-function-docstring (C0116) by default; keep it out of the disable list",

@@ -97,6 +97,22 @@ describe("routing dogfood — Pylint basics (Python instruction file)", () => {
     expect(routed.counts.reuse).toBe(8);
   });
 
+  it("precision: docstring CONTENT/STYLE rules do not misroute to missing-function-docstring", () => {
+    // Real langchain/pandas FPs the dogfood caught: only docstring PRESENCE maps
+    // to missing-function-docstring; content/style is pydocstyle/ruff-D territory.
+    expectReuse(
+      "Use Google-style docstrings on all public functions.",
+      "missing-function-docstring",
+      "pylint",
+    ); // presence → routes
+    expectNotReuse("Mark experimental features with docstring warnings.");
+    expectNotReuse("Do not repeat the default value in the docstring.");
+    expectNotReuse("Use single backticks for inline code in docstrings.");
+    expectNotReuse(
+      "Preserve triple double-quotes, no blank line before the docstring.",
+    );
+  });
+
   it("precision: cross-language / bare construct words never route to pylint", () => {
     // snake_case is Rust/Ruby too; `import *` is JS `import * as`; "unused
     // imports" collides with eslint — all deliberately excluded.

@@ -229,17 +229,19 @@ const META_CUES: readonly RegExp[] = [
  * (betterauth "NEVER use classes", "prefer named over default exports"). These
  * feed `reuse` — moving rules out of the "hard to codify" lane deterministically.
  */
-interface RestrictedSyntaxRule {
+interface PatternRule {
   readonly construct: string;
   readonly rule: string;
+  readonly linter: LinterName;
   readonly pattern: RegExp;
-  /** The one-line ESLint config that enforces it (a parameterized selector). */
+  /** The one-line config that enforces it (a parameterized selector / message). */
   readonly configFix: string;
 }
-const RESTRICTED_SYNTAX_MAP: readonly RestrictedSyntaxRule[] = [
+const PATTERN_RULE_MAP: readonly PatternRule[] = [
   {
     construct: "default exports",
     rule: "no-restricted-syntax",
+    linter: "eslint",
     pattern:
       /\b(?:no|never|avoid|don'?t\s+use|do\s+not\s+use|disallow|ban|forbid|prefer\s+named\s+(?:exports?\s+)?over)\b[^.\n]{0,24}\bdefault\s+exports?\b/i,
     configFix:
@@ -248,6 +250,7 @@ const RESTRICTED_SYNTAX_MAP: readonly RestrictedSyntaxRule[] = [
   {
     construct: "enums",
     rule: "no-restricted-syntax",
+    linter: "eslint",
     pattern:
       /\b(?:no|never|avoid|don'?t\s+use|do\s+not\s+use|disallow|ban|forbid)\b[^.\n]{0,24}\benums?\b/i,
     configFix:
@@ -256,6 +259,7 @@ const RESTRICTED_SYNTAX_MAP: readonly RestrictedSyntaxRule[] = [
   {
     construct: "for...in",
     rule: "no-restricted-syntax",
+    linter: "eslint",
     pattern:
       /\b(?:no|never|avoid|don'?t\s+use|do\s+not\s+use|disallow|ban|forbid)\b[^.\n]{0,16}\bfor[\s.]{0,3}in\b/i,
     configFix:
@@ -264,6 +268,7 @@ const RESTRICTED_SYNTAX_MAP: readonly RestrictedSyntaxRule[] = [
   {
     construct: "namespaces",
     rule: "no-restricted-syntax",
+    linter: "eslint",
     pattern:
       /\b(?:no|never|avoid|don'?t\s+use|do\s+not\s+use|disallow|ban|forbid)\b[^.\n]{0,24}\bnamespaces?\b/i,
     configFix:
@@ -272,10 +277,26 @@ const RESTRICTED_SYNTAX_MAP: readonly RestrictedSyntaxRule[] = [
   {
     construct: "classes",
     rule: "no-restricted-syntax",
+    linter: "eslint",
     pattern:
       /\b(?:no|never|avoid|don'?t\s+use|do\s+not\s+use|disallow|ban|forbid)\b[^.\n]{0,12}\b(?<!css |style |styling |utility |tailwind |dom |react |component )(?:es6?\s+|javascript\s+)?class(?:es)?\b(?![\s-]*(?:name|attribute|selector|list))/i,
     configFix:
       '"no-restricted-syntax": ["error", { "selector": ":matches(ClassDeclaration, ClassExpression)", "message": "Prefer functions and closures over classes." }]',
+  },
+  // Pylint: REQUIRE docstrings → missing-function-docstring. A PRESENCE context is
+  // required (a presence verb near "docstring", or "docstrings required/for each")
+  // so a bare "docstring" mention does NOT over-fire: the dogfood caught langchain
+  // routing docstring-CONTENT/STYLE rules ("docstring warnings", "backticks in
+  // docstrings", "don't repeat the default in the docstring") to this presence
+  // check — those are pydocstyle/ruff-D territory, not missing-docstring.
+  {
+    construct: "docstrings (presence)",
+    rule: "missing-function-docstring",
+    linter: "pylint",
+    pattern:
+      /\b(?:add|require|requires?|write|writing|include|need|needs?|use|using|provide|document|must\s+have)\b[^.\n]{0,24}\bdocstrings?\b|\bdocstrings?\b[^.\n]{0,24}\b(?:required|mandatory|for\s+(?:all|every|each|every|public)|on\s+(?:all|every|each))\b/i,
+    configFix:
+      "pylint enables missing-function-docstring (C0116) by default; keep it out of the disable list",
   },
 ];
 
@@ -331,11 +352,12 @@ function classify(
       return { category: "reuse", rule: m.rule, linter: m.linter };
     }
   }
-  // Construct-prohibition → a built-in parameterized rule (no-restricted-syntax).
-  // "never use classes" / "no default exports" LOOK custom but are reuse.
-  for (const r of RESTRICTED_SYNTAX_MAP) {
+  // Pattern → a built-in parameterized rule (eslint no-restricted-syntax
+  // construct-prohibitions; pylint docstring-presence). These LOOK custom but
+  // are reuse; each carries its own linter.
+  for (const r of PATTERN_RULE_MAP) {
     if (r.pattern.test(text))
-      return { category: "reuse", rule: r.rule, linter: "eslint" };
+      return { category: "reuse", rule: r.rule, linter: r.linter };
   }
   if (SEMANTIC_CUES.some((re) => re.test(text)))
     return { category: "semantic" };
@@ -468,8 +490,8 @@ export function routeRules(
   // scores medium ("No" is a prohibition head, not a verb) but is a real reuse
   // rule (no-restricted-syntax) — rescue it, same as the catalog rescue. The
   // patterns are their own precision gate (prohibition + construct proximity).
-  const matchesRestrictedSyntax = (text: string): boolean =>
-    RESTRICTED_SYNTAX_MAP.some((r) => r.pattern.test(text));
+  const matchesPatternRule = (text: string): boolean =>
+    PATTERN_RULE_MAP.some((r) => r.pattern.test(text));
   // A MEDIUM segment that matches an INTENT_MAP keyword (code-shaped, high-
   // precision) is a real reuse rule — rescue it, same as catalog/restricted-
   // syntax. Fixes construct-prohibitions with no verb ("No bare except clauses")
@@ -490,7 +512,7 @@ export function routeRules(
       minConfidence === "medium" ||
       s.confidence === "high" ||
       namesCatalogRule(s.text) ||
-      matchesRestrictedSyntax(s.text) ||
+      matchesPatternRule(s.text) ||
       matchesIntentMap(s.text),
   );
   const heuristicRules: RoutedRule[] = segments.map((s) => {
