@@ -11,7 +11,7 @@ coverage/
 test/dogfood/
 
 # API Extractor reports (tool-generated, exact format)
-etc/
+api-surface/
 
 # Ecosystem-benchmark run artifacts (machine-written JSON) + vendored upstream
 # SKILL.md snapshots (pinned by SHA, formatted by their upstreams, not us).

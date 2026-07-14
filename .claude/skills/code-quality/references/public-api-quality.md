@@ -2,7 +2,7 @@
 
 **Principle.** A public export is a **contract**: it should be small, precisely typed, stable in shape, and free of leaked internals. Every symbol you export is something you must not break later — so export the fewest, most-precise things that let a caller do the job, and nothing else.
 
-In this repo the surface is tracked by **API Extractor** (`etc/*.api.md`, checked in CI), so a widened surface shows up as a report diff — treat that diff as the review of your contract.
+In this repo the surface is tracked by **API Extractor** (`api-surface/*.api.md`, checked in CI), so a widened surface shows up as a report diff — treat that diff as the review of your contract.
 
 ## The smells
 

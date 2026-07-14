@@ -276,7 +276,7 @@ their own CC licence; vigiles ships nothing of theirs.
   the file (vendoring) OR letting **api-extractor inline** their referenced type into our
   rolled-up `vigiles.d.ts` both put a COPY of their declarations in what we ship =
   redistribution of an all-rights-reserved work. (Import ≠ distribution by itself — but a
-  TS lib's dts-bundling inlines by default, which crosses into it; watch `etc/*.api.md`.)
+  TS lib's dts-bundling inlines by default, which crosses into it; watch `api-surface/*.api.md`.)
 - ✅ **Hand-write our own types matching the FACTS** (tool/event/field names — `command`,
   `file_path`). Names + short identifiers aren't copyrightable (37 CFR §202.1), merger /
   scènes à faire cover interop-dictated fields, and this is the universal **DefinitelyTyped**

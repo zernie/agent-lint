@@ -67,7 +67,7 @@ topic: roadmap
 >   than the library); (2) draw a hard **public vs internal line** — un-export or
 >   loudly label the experimental/parked surface (`guards.ts`, `hook-spec.ts`
 >   effect-region, the opencode prototype, the deep typed-spec exports) so a later
->   breaking change burns nobody (audit via the `api-extractor` `etc/*.api.md`
+>   breaking change burns nobody (audit via the `api-extractor` `api-surface/*.api.md`
 >   surface); (3) ship a one-paragraph **0.x stability statement** ("CLI stable;
 >   library API 0.x, evolving") — honest beats a fake 1.0.
 > - **PROMOTED — first-run hardening + don't-cry-wolf:** a clean `npx vigiles@latest`
@@ -836,7 +836,7 @@ assertRates`) is the recommended path for testing one skill, but
   module (so `core/adapter.ts` can carry `evalDriver?: EvalDriver` like the other
   five ports + `harnessTestDriver`), set it on both adapters, rewire
   `eval.ts`+`harness-test.ts`+`integration.ts`+`check.ts` to import types from
-  core, keep BOTH 100% coverage gates green, and regen `etc/*.api.md`. ~day-sized,
+  core, keep BOTH 100% coverage gates green, and regen `api-surface/*.api.md`. ~day-sized,
   do in isolation. The trap to avoid: dragging eval/trace types into core muddies
   the reference-verification domain — only do it if the symmetry is judged worth
   that. · **LOW**

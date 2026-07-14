@@ -120,7 +120,7 @@ inert behavior (`src/cli.test.ts`, the "frontmatter mode is DISABLED" describe).
 The fix isn't "freeze everything" — it's **shrink the public surface to the stable
 core and launch on the CLI**, which is a narrower, stabler contract than the library.
 
-1. **Audit with `api-extractor`** (`etc/*.api.md` already tracks the surface). Sort every
+1. **Audit with `api-extractor`** (`api-surface/*.api.md` already tracks the surface). Sort every
    export into PUBLIC vs INTERNAL.
 2. **PUBLIC (frozen):** the 8 CLI verbs + flags + exit codes; `vigiles/spec` (core
    builders), `vigiles/testing`, `vigiles/unit`, `vigiles/claude-code`, `vigiles/codex`,
