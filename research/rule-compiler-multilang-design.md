@@ -25,6 +25,87 @@ topic: compiler
   (own-repo, on the user's sub, behind the existing `decideExecute` consent). This doc is
   mostly about the deterministic tier; it names precisely where the model tier takes over.
 
+## 0.0 Current state at a glance (2026-07-14) — the authoritative snapshot
+
+> The narrative below (§0) is the chronological build log; THIS block is the crystal-clear "what ships
+> today" reference. When they disagree, this block wins — keep it updated as the feature moves.
+
+**What the rule map is.** `vigiles audit` reads the prose rules in a repo's `CLAUDE.md`/`AGENTS.md`,
+segments them, and routes each into one of four lanes. It is **read-only + deterministic** — no model,
+nothing executes (the ONE exception: the ESLint catalog enumeration in mechanism #1, gated below). It is
+NOT the `enforce()` cross-ref engine (`core/linters.ts`, which already resolves 7 catalogs incl. Python);
+the rule map is the AUDIT feature that SUGGESTS which prose could become a lint rule.
+
+**Linters the rule map supports today: exactly TWO — ESLint (full) and Pylint (routing-only). Ruff is NOT
+yet routed.** (The "ESLint/Ruff/…" phrasing in public docs describes the separate `enforce()` engine, not
+this map — a real discrepancy, see "What's next".)
+
+**The four lanes** (`RuleCategory` in `src/rule-routing.ts`):
+
+| Lane          | category value | Meaning                                              | Report label      |
+| ------------- | -------------- | ---------------------------------------------------- | ----------------- |
+| Enforceable   | `reuse`        | maps to an off-the-shelf lint rule                   | ✓ Enforceable now |
+| Hook          | `hook`         | an action a linter can't see (`git push`, run tests) | ⛓ Hook            |
+| Custom rule   | `unrouted`     | no off-the-shelf rule fits, but a custom one could   | ⚙ Custom rule     |
+| Judgment call | `semantic`     | genuinely undecidable ("keep it readable")           | ✎ Judgment call   |
+
+(`meta` is a fifth internal category for repo-management prose — not one of the four user-facing lanes.)
+
+**The reuse-match mechanisms** (how a prose rule becomes `reuse`), in `classify()` precedence order:
+
+| #   | Mechanism          | Where                                      | Linters                   | Foreign-safe?            | What it does                                                                                   |
+| --- | ------------------ | ------------------------------------------ | ------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------- |
+| S   | S0/S1 markers      | `extractMarkedRules` (rule-routing.ts)     | any                       | yes                      | `**Enforced by:**`→reuse · `**Guard:**`→hook · `**Guidance only**`→classify body               |
+| 1   | Dynamic catalog    | `enumerateEslintCatalog` (rule-catalog.ts) | **ESLint only**           | **NO** — executes ESLint | ~702 real rules (292 core + 410 plugin); matches prose that NAMES a rule; powers enabled-state |
+| 2   | `INTENT_MAP`       | rule-inventory.ts                          | **22 ESLint + 12 Pylint** | yes                      | curated intent→rule aliases (e.g. "no console" → `no-console`)                                 |
+| 3   | `PATTERN_RULE_MAP` | rule-routing.ts                            | **5 ESLint + 1 Pylint**   | yes                      | constructs → `no-restricted-syntax`; docstring-presence → `missing-function-docstring`         |
+
+Mechanism #1 EXECUTES the linter (loads the repo's real ESLint config), so it is gated: **own-repo + the
+sticky `audit.measure` consent + claude-code only**; on a stranger's repo / no consent / failure it falls
+back to the foreign-safe textual path (#S, #2, #3). Mechanisms #2 and #3 are pure text → route, no execution.
+
+**Enabled-state ("documented but OFF")** — the "you wrote this rule but your config silently disables it"
+payoff: **ESLint only.** `buildRuleInventory` is gated to eslint because Pylint is ON-BY-DEFAULT (a deny-list
+/ inverted polarity) — the eslint-shaped "is it enabled?" check would mislabel it. So Pylint is **route-only**
+(it says "this maps to `pylint/X`" but not on/off); the inverted-polarity `ConfigProbe` for Pylint is deferred (§3, §5b).
+
+**Per-linter support quality:**
+
+- **ESLint — FULL.** dynamic catalog (own-repo, ~702 rules) + 22 intents + 5 construct patterns + enabled-state
+  (ON / one-line-away / documented-but-OFF). Architecture rules count (`boundaries/dependencies` → reuse).
+- **Pylint — BASICS, route-only.** 12 intents (bare-except, broad-exception-caught, dangerous-default-value,
+  invalid-name, too-many-arguments/statements, wildcard-import, global-statement, line-too-long, unused-import,
+  consider-using-f-string; each symbol verified via `pylint --help-msg`) + 1 docstring-presence pattern
+  (`missing-function-docstring`). NO catalog enumeration, NO enabled-state. Keywords are Python-UNAMBIGUOUS
+  (bare `snake_case` / `import *` / "unused imports" deliberately excluded) → 0 cross-language false positives.
+- **Ruff — NONE (in the map).** 0 intents, not routed. Highest-value next linter for modern Python.
+
+**Grounded reality (17-doc OSS fan-out).** Foreign TEXTUAL reuse ≈ **0%** — real third-party docs almost never
+NAME a lint rule, so reuse pays off mainly on the OWN repo (via #1 the catalog + #S markers): vigiles's own
+`CLAUDE.md` routes **47** rules. The honest value is: own-repo catalog + intents + construct patterns, PLUS
+truthful `hook`/`custom-rule`/`judgment-call` labeling of everything that isn't reuse.
+
+**CI enforcement.** Two committed golden dogfoods, both in the vitest `unit` project (→ run under `npm run
+coverage`, no linter binary needed — pure text→route): `src/rule-routing-dogfood.test.ts` (synthetic
+ESLint-construct + Pylint golden net + a keyword-disjointness invariant + a docstring content-vs-presence
+precision guard) and `src/rule-routing-oss.test.ts` (real vendored MIT-licensed Python `AGENTS.md` from
+langchain + browser-use, asserting stable invariants: docstring→pylint, no cross-language FP, hard lane
+populated). A routing regression fails CI. The engine files (`rule-routing.ts`/`rule-inventory.ts`/`segment.ts`)
+are NOT yet in the 100% coverage `include` list (behavior is gated; line-coverage of the engine is not).
+
+**What's next (ranked).**
+
+1. **Ruff routing** — foreign-safe (the rule set is static to the binary, `pyproject.toml`/`ruff.toml` is
+   data not code, `select` replaces the default → no consent gate). Arguably higher-value than Pylint for
+   modern Python. Closes the public "ESLint/Ruff/…" discrepancy.
+2. **Pylint enabled-state** — the §3 inverted-polarity `ConfigProbe` (routing is done; the config-state half
+   isn't), so a Python repo also gets "documented but OFF".
+3. **More catalog linters** — the dynamic-catalog approach (#1) generalizes beyond ESLint; today it's ESLint-only.
+4. **Graduate synthesis** — the gated `pr-to-lint-rule` skill is DEV-ONLY today (the ⚙ custom-rule lane's
+   hand-off); ship it to users once the trust gate is proven in the wild.
+5. **Fuzzy semantic mapping** ("keep functions small" → `max-lines-per-function`) — genuinely needs the model
+   tier; the deterministic map only catches prose that NAMES a rule/token/construct.
+
 ## 0. Spike + honest scope (2026-07-14) — DYNAMIC catalog, not a static map
 
 A founder correction reframed the whole approach, and a spike (`scratchpad/spike.mjs`, run on THIS

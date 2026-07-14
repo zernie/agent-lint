@@ -13,6 +13,8 @@ project:
 - `skills/enforce-rules-format` — validate vigiles's own spec rules carry a
   proper enforce/check/guidance classification.
 - `skills/audit-feedback-loop` — score this repo's feedback-loop maturity.
+- `skills/audience-check` — check public prose against the doc-tier / audience rules.
+- `skills/code-quality` — review a change against vigiles's own code-quality bar.
 
 ## Using them as a contributor
 
