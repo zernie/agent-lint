@@ -61,12 +61,13 @@ The three-column scope, marked honestly (this section supersedes the INTENT_MAP-
   cue" gap for the OWN-REPO case; the foreign-safe declarative case (no catalog) stays a deliberate
   precision floor.
 - **S0/S1 STRUCTURED-MARKER pre-pass is LIVE (`extractMarkedRules` in `routeRules`).** A compiled/marked
-  doc declares its own routing via `**Enforced by:** \`rule\``(→reuse, rule-id verified vs catalog),`**Guard:**`(→hook),`**Guidance only**`(→body routed through`classify`, so a guidance that's really
-an action surfaces as a would-be hook — the promote-prose signal). Extracted BEFORE the heuristic pass and
-its body lines CONSUMED (a new `skipLines`arg to`segmentInstructions`) so nothing double-counts; each
-rule carries `source:'marker'|'heuristic'`. **vigiles's OWN CLAUDE.md went 0 → 47 routed** (5 reuse/6 hook/
-5 meta/31 semantic) — the embarrassing dogfood-zero is closed. Hand-written non-rule-id `Enforced by:`
-  values are a CLAIM, not emitted (Fable's gate).
+  doc declares its own routing via explicit markers: an "Enforced by" marker → reuse (rule-id verified vs
+  the catalog), a "Guard" marker → hook, a "Guidance only" marker → its body routed through `classify` (so a
+  guidance that's really an action surfaces as a would-be hook — the promote-prose signal). Markers are
+  extracted BEFORE the heuristic pass and their body lines CONSUMED (a new `skipLines` arg to
+  `segmentInstructions`) so nothing double-counts; each rule carries `source:'marker'|'heuristic'`.
+  **vigiles's OWN CLAUDE.md went 0 → 47 routed** (5 reuse / 6 hook / 5 meta / 31 semantic) — the embarrassing
+  dogfood-zero is closed. A hand-written non-rule-id "Enforced by" value is a CLAIM, not emitted (Fable's gate).
 - **REPORT UI surfaces "documented but OFF"** (`report/src/components/RuleInventory.tsx`): the CompileCTA now
   renders a `⛔ N documented but OFF` callout off the catalog `enabled:false` — the payoff of the catalog
   work, previously computed but buried. `RoutedRule` mirror gains `enabled` + `source`.
