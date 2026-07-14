@@ -34,7 +34,7 @@ enforceable (`boundaries/dependencies` in the catalog → "dir X may import dir 
 semantic). `INTENT_MAP` is DEMOTED to a small alias fast-path. `research/rule-compiler-multilang-design.md`
 **§0** = the honest DONE / DOABLE-cheaply / HARD scope (read it).
 
-**Shipped this session (~20 commits):** design doc + §0 reframe/scope; `fix(segment)` precision (INDEX-SMELL
+**Shipped this session (~26 commits):** design doc + §0 reframe/scope; `fix(segment)` precision (INDEX-SMELL
 veto, anti-context, decoration/emoji/ordered, RULE_HEADING bug); `feat(rule-routing)` `meta` category +
 "hard to codify" bucket (incl. report UI); intents (+curly/consistent-type-imports/no-only-tests); SCOPE
 markers; `feat(segment)` RULE-NAME cue; **`feat(core)` `src/core/rule-catalog.ts`** (`enumerateEslintCatalog`,
@@ -61,6 +61,33 @@ routing/segment/instruction-sources/cli/scan-cli/audit suites all green (only fa
 reuse needs the catalog, own-repo only), ~7% hook, ~90% "hard". A categorizer fan-out re-classed the 207
 "hard": **39% segmenter NOISE / 32% misroute / 29% genuinely hard** — the 93% overstated the problem, so the
 finish pass attacked noise + misroute (precision-first). vigiles's OWN doc now routes 47 (was 0) via S0/S1.
+Measured slice: a doc that NAMES lint rules → **100% precision / 100% recall** on reuse (added require/
+disallow/forbid/ban/enforce to FORM_HEAD to close curly-style "Require `x`" misses).
+
+**CLARITY PASS (latest ~5 commits — founder pushback: "you're confused af, improve audit docs first"):** the
+word "compile" was overloaded across THREE things → un-overloaded. (1) `vigiles compile` = the spec→markdown
+verb ONLY. (2) the audit routing preview = **"the rule map"** (read-only, deterministic). (3) `@vigiles/
+compiler` = **"synthesize"**. Renamed `mechanism:"compile"`→`"synthesize"` (cascades src/rule-routing.ts +
+report/schema.ts). **DELETED the misleading `CompileCTA`** (it printed `npx vigiles compile` — the wrong verb
+— + false "turns rows into config + one model pass" copy) → `RuleMap` "Your rules, mapped" with an honest
+opt-in next step PER LANE. Wrote the keystone doc section "From prose to enforced: the rule map" (docs/
+verifying-instruction-files.md). Reframed the **phantom `/pr-to-lint-rule`** refs (11 files) — it's a real but
+DEV-ONLY skill (`dev/skills/pr-to-lint-rule/`), so docs no longer tell users to "run" it; custom-rule
+synthesis is "experimental / not yet generally available". Fable + 2 subagents drove this (context-rot avoid).
+
+**KEY SCOPE TRUTH (do not re-confuse):** the audit rule-compile tier is really TWO layers. (A) the DETERMINISTIC
+**rule map** in `vigiles audit` (`src/rule-routing.ts`) — a read-only PRE-FILTER: reuse-match (names/curated-
+intent → existing lint rule) + hook + prose + hard; SHIPPED, model-free, nothing auto-runs. (B) the model
+work — reuse-matching is the `strengthen` SKILL; custom-rule SYNTHESIS is `@vigiles/compiler` (real engine +
+a two-stage blind-gold TRUST GATE: `node compiler/gate.js` → on 10 rules, 6 kept / 2 abstain / 2 prose;
+refuses to ship a checker it can't prove sound), delivered as the DEV-ONLY `pr-to-lint-rule` skill. Everything
+in (B) is OPT-IN, on the user's sub, agent-invoked — NEVER auto after install. `init` only NUDGES.
+
+**NEXT (clear):** GRADUATE `dev/skills/pr-to-lint-rule` into a SHIPPED, consent-gated synthesis skill wrapping
+the `compiler/` trust gate (the thing that makes the "hard" lane real for users). Then: broaden the reuse
+catalog — esp. parameterized built-ins (`no-restricted-syntax`/`-imports`/`-globals`) that capture "no
+classes"/"no barrel files"/"no default exports" deterministically, shrinking the synthesis residue. Then:
+`.claude/` sources; ruff/pylint (ruff's catalog is FOREIGN-SAFE, no consent gate needed).
 
 **NEXT (in order):** (1) **`.claude/` rule sources** (a distinct source shape). (2) **`.claude-plugin/`-only
 sub-project refinement** to `isFixturePath` (NOT `package.json`-adjacency — Fable: that kills monorepo
