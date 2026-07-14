@@ -114,6 +114,21 @@ There's a small family of inline **marks** that `lint` checks, each binding a re
 
 **Typo-safe at authoring time, too.** `vigiles generate types` emits a `.vigiles/generated.d.ts` so `enforce("eslint/no-consolee")` red-squiggles in your editor. `generate-schema` gives the YAML-frontmatter mode the same via your YAML language server. Both have `--check` CI freshness modes. [How it works →](linter-support.md#generate-types)
 
+## From prose to enforced: the rule map
+
+`vigiles audit` reads the prose rules in your instruction file and **maps** each one to how it could be enforced. This is a **read-only, deterministic** step — no model runs, nothing executes, and it's identical on every machine. It just sorts your rules into four lanes:
+
+| Lane                  | Meaning                                                                                                                                           | The honest next step (opt-in)                                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ✓ **Enforceable now** | matches an off-the-shelf linter rule (ESLint/Ruff/…) — and the map shows whether it's already on, one line away, or **documented but turned off** | enable it in your lint config (one line), or ask your agent to run the **`strengthen`** skill                                                     |
+| ⛓ **Hook**            | an action a linter can't see (`git push`, "run tests before commit")                                                                              | author a [compiled hook](compiled-hooks.md), then `vigiles compile` wires it into your settings                                                   |
+| ✎ **Prose**           | a judgment call no checker can decide ("keep it readable")                                                                                        | honestly stays prose                                                                                                                              |
+| ⚙ **Hard to codify**  | looks like a code rule but no off-the-shelf rule matches                                                                                          | stays prose for now — a custom-rule **synthesis** skill (writes a rule + a soundness gate) is planned; nothing is generated for you automatically |
+
+**What runs a model is always a skill _you_ invoke** — on your own subscription, behind consent. `audit` maps and reports; it never rewrites your config, compiles a rule, or calls a model on its own. Installing vigiles does **not** start compiling anything.
+
+> **"Compile" means one thing here.** `vigiles compile` builds your `CLAUDE.md` and hooks from typed sources — it is unrelated to the rule map above. The map's "hard to codify" lane hands off to a _synthesis_ skill, never to `vigiles compile`.
+
 ## The validation rules — the full matrix
 
 Beyond the references above, `vigiles lint` runs a set of **deterministic validation rules** over your instruction files, skills, subagents, and hooks. Each has a default severity (`"warn"` / `"error"` / `false`) and is configured in `.vigilesrc.json`. Every rule is **deterministic** — no model, no API key — and links to its own reference doc.

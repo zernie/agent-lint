@@ -133,11 +133,12 @@ function FoldedGroup({
  * honest zones:
  *   1. Deterministic scan (no model) — documented rules that map to an
  *      off-the-shelf lint rule, grouped by state so the actionable ones lead.
- *   2. A compile CTA describing the opt-in tier — never fabricated result rows.
+ *   2. "Your rules, mapped" — the deterministic routing preview with an honest,
+ *      opt-in next step per lane; never fabricated result rows.
  */
 /** The five routing categories, in ladder order (enforceable-now → hook →
  * agent-note → prose → hard-to-codify), with the glyph + one-line meaning the
- * compile CTA lists. The HARD bucket is labelled so difficulty reads clearly. */
+ * rule map lists. The HARD bucket is labelled so difficulty reads clearly. */
 const ROUTE_META: Record<
   RuleCategory,
   { glyph: string; label: string; blurb: string }

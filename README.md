@@ -152,7 +152,7 @@ Your rules → enforced   1 of 4 enforced · 2 one line away · 1 contradicted b
        your CLAUDE.md says enforce it; your config quietly turns it off
 ```
 
-You wrote the rule. Your agent treats it as gospel and follows it — until it doesn't, and nothing tells you which time. vigiles checks each mapped rule three ways: enforced, **one line away**, or — the one people screenshot — documented but silently **turned off**. Deterministic, no model. Want the rest compiled — a custom rule for a rule no linter ships, a hook for `git push`, the judgment calls honestly left alone? That's the opt-in `compile` tier (one model pass, then CI is plain lint).
+You wrote the rule. Your agent treats it as gospel and follows it — until it doesn't, and nothing tells you which time. vigiles checks each mapped rule three ways: enforced, **one line away**, or — the one people screenshot — documented but silently **turned off**. Deterministic, no model. Acting on the map is **opt-in and agent-driven**: enable a rule in one line (the `strengthen` skill does it for you), turn an action rule like `git push` into a compiled hook, leave judgment calls as prose. Nothing runs a model — or changes your config — unless you ask.
 **[How enforcement works →](docs/verifying-instruction-files.md)**
 
 ## Proof 4 — it can quietly read your secrets and send them out
