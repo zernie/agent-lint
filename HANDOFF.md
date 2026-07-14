@@ -76,7 +76,18 @@ catches regressions (was scratchpad-only before). It CAUGHT a real bug: bare "do
 content/style rules (langchain/pandas) → fixed to presence-context. 2 shared-matcher bugs fixed en route
 (FORM_HEAD `no\s+\S`→`no`; matchesWholeToken sentence-end `.`). Live: 4 reuse hits over the 21-doc corpus, 0 FP.
 Fable steered the architecture (INTENT_MAP+gate over a separate map). **`compiler/` gate is the real synthesis
-engine (6/10 kept, 2 abstain on its corpus); shipping it as the `pr-to-lint-rule` skill is the next big step.**
+engine (6/10 kept, 2 abstain on its corpus).**
+
+**"b then a" DONE (latest):** (b) SHARPENED the rule map's 4th lane — `synthesize`/`unrouted` relabeled
+**"custom rule (⚙)"** ("doable, opt-in — a custom rule CAN enforce it") vs `semantic` **"judgment call (✎)"**
+(genuinely undecidable), in report UI (`RuleInventory.tsx`) + `docs/verifying-instruction-files.md`. (a)
+REWROTE the DEV-ONLY `pr-to-lint-rule` skill (`dev/skills/`) from a generic "generate a rule" recipe into
+the GATED synthesis skill — the explicit hand-off target of audit's custom-rule lane: REUSE-first
+(ADOPT>REUSE>SYNTHESIZE) → nail intent + read codebase → synthesize rule + INDEPENDENT intent-test (adversarial
+cases) → TRUST GATE (P=R=1.0 else ABSTAIN, never ship an unproven checker). Points at `compiler/gate.js` +
+`gold/gold.json` + `npm run demo` (both verified running: gate shows R5 abstain-selftest + R10 silent-leak-
+caught; demo keeps 3, abstains 2). Fixed the broken `../linter-docs/` path (→ `../../../skills/linter-docs/`).
+Stays user-invoked (`disable-model-invocation`) — nothing auto-runs on install. Commits e2d4f57 + e7044d4, pushed.
 
 **CLARITY PASS (founder pushback: "you're confused af, improve audit docs first"):** the
 word "compile" was overloaded across THREE things → un-overloaded. (1) `vigiles compile` = the spec→markdown
