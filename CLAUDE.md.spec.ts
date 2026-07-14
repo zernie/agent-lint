@@ -102,7 +102,7 @@ TESTS + FIXTURES + BENCHMARKS:
 BUILD + TOOLING + GENERATED:
 
 - \`scripts/\` — the BUILD pipeline only (\`api-extractor.mjs\`, \`build-report.mjs\`), invoked by \`npm run build\`/CI.
-- \`tools/\` — HUMAN-run maintenance scripts, never in CI (\`dogfood-sweep.sh\`, \`refresh-vendor.sh\`, \`demo.sh\`, \`fp-sweep.sh\`, \`make-demo-gif.py\`).
+- \`tools/\` — HUMAN-run maintenance scripts, never in CI. Each documented in \`tools/README.md\` (what + WHEN-run + live/dead status): live corpus-maintenance (\`refresh-vendor.sh\`, \`dogfood-sweep.sh\`), pre-launch \`fp-sweep.sh\`, and the demo-asset tooling (\`demo.sh\`, \`make-demo-gif.py\`) for the unbuilt roadmap demo.
 - \`api-surface/\` — the committed public-API surface snapshots (\`*.api.md\`), one per exported entry point. A generated CONTRACT (lockfile-class), reviewed as a diff, never hand-edited: CI diffs the live \`.d.ts\` surface against these (the API surface gate) and fails a PR that changes a public export until \`npm run api:report\` regenerates + commits it. (Renamed 2026-07-14 from \`etc/\`, which was Microsoft API Extractor's default output dir; the report folder is set in \`scripts/api-extractor.mjs\`.) Distinct from the human API REFERENCE (TypeDoc → GitHub Pages).
 - \`.github/\` — CI workflows (\`ci.yml\` is the gate). \`.vigiles/\` — vigiles's own runtime output (gitignored: hook observations, eval locks, the runs ledger).`,
   },

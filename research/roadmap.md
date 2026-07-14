@@ -821,6 +821,12 @@ assertRates`) is the recommended path for testing one skill, but
   green no-op because no locks are committed. Either commit eval-locks so `--check`
   actually gates, and/or add a deterministic "each eval's plugin/skillsDir LOADS + its
   skill target RESOLVES" check (no model). See `research/dogfood-corpus.md`. · **LOW**
+- **Wrap the FP / dogfood sweeps as contributor skills** — `tools/fp-sweep.sh` +
+  `tools/dogfood-sweep.sh` have real model-judgment on their output (which flags are
+  true false positives / which detectors regressed). At launch, wrap each as a
+  `.claude/skills/` contributor skill that INVOKES the script + reasons about the
+  result (the `audit-feedback-loop` genre) — with a trigger eval per great-agent-flow.
+  Keep the scripts as the mechanism. See `tools/README.md`. · **LOW**
 - **Dogfood: Codex corpus parity** — the vendored `test/dogfood/` corpus is CC-only;
   Codex is covered only by artificial tmp fixtures (`scan-cli.test.ts`). Vendor a real
   Codex plugin slice (SHA-pinned, MIT, provenance) so the corpus is symmetric across
