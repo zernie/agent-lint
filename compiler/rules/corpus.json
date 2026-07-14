@@ -1,0 +1,77 @@
+[
+  {
+    "id": "R1",
+    "slug": "no-console-log",
+    "prose": "Never use console.log; use the project logger.",
+    "category": "forbidden-api",
+    "mechanizable": true
+  },
+  {
+    "id": "R2",
+    "slug": "max-function-lines",
+    "prose": "Keep functions under 40 lines.",
+    "category": "metric",
+    "mechanizable": true
+  },
+  {
+    "id": "R3",
+    "slug": "no-deprecated-import",
+    "prose": "Do not import from the deprecated design system (@acme/legacy-ui).",
+    "category": "import-restriction",
+    "mechanizable": true
+  },
+  {
+    "id": "R4",
+    "slug": "mk-prefix-exports",
+    "prose": "All exported functions must be prefixed with 'mk'.",
+    "category": "naming",
+    "mechanizable": true,
+    "note": "arbitrary / no-training-prior rule (Path A probe)"
+  },
+  {
+    "id": "R5",
+    "slug": "no-hardcoded-secret",
+    "prose": "Never hardcode secrets (passwords, API keys, tokens) in source.",
+    "category": "forbidden-pattern",
+    "mechanizable": true,
+    "note": "checker synthesized NAIVELY on purpose -> should fail its own self-test and abstain"
+  },
+  {
+    "id": "R6",
+    "slug": "prefer-composition",
+    "prose": "Prefer composition over inheritance.",
+    "category": "semantic",
+    "mechanizable": false
+  },
+  {
+    "id": "R7",
+    "slug": "self-documenting",
+    "prose": "Write clear, self-documenting code.",
+    "category": "semantic",
+    "mechanizable": false
+  },
+  {
+    "id": "R8",
+    "slug": "no-empty-catch",
+    "prose": "Empty catch blocks are forbidden: never silently swallow a caught error.",
+    "category": "forbidden-pattern",
+    "mechanizable": true,
+    "note": "blind-synthesized by an independent agent (synth-agent/)"
+  },
+  {
+    "id": "R9",
+    "slug": "no-explicit-any",
+    "prose": "Do not use the `any` type; use a specific type or `unknown`.",
+    "category": "type-restriction",
+    "mechanizable": true,
+    "note": "TypeScript-only; needs typescript-eslint parser"
+  },
+  {
+    "id": "R10",
+    "slug": "no-eslint-disable",
+    "prose": "Never use eslint-disable to suppress linting errors.",
+    "category": "meta",
+    "mechanizable": true,
+    "note": "comment-scanning rule (torus-ts declares it)"
+  }
+]

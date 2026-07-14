@@ -1,0 +1,62 @@
+[
+  {
+    "id": "R1",
+    "slug": "no-console-log",
+    "status": "kept",
+    "note": "self-test + gold OK (P=1.00 R=1.00)"
+  },
+  {
+    "id": "R2",
+    "slug": "max-function-lines",
+    "status": "kept-ungraded",
+    "note": "passed self-test; no independent gold yet (label honestly, do not claim sound)"
+  },
+  {
+    "id": "R3",
+    "slug": "no-deprecated-import",
+    "status": "kept-ungraded",
+    "note": "passed self-test; no independent gold yet (label honestly, do not claim sound)"
+  },
+  {
+    "id": "R4",
+    "slug": "mk-prefix-exports",
+    "status": "kept-ungraded",
+    "note": "passed self-test; no independent gold yet (label honestly, do not claim sound)"
+  },
+  {
+    "id": "R5",
+    "slug": "no-hardcoded-secret",
+    "status": "abstain-selftest",
+    "note": "FAILED self-test: Should have 1 error but had 0: []"
+  },
+  {
+    "id": "R6",
+    "slug": "prefer-composition",
+    "status": "declare",
+    "note": "semantic; no checker synthesized"
+  },
+  {
+    "id": "R7",
+    "slug": "self-documenting",
+    "status": "declare",
+    "note": "semantic; no checker synthesized"
+  },
+  {
+    "id": "R8",
+    "slug": "no-empty-catch",
+    "status": "kept",
+    "note": "self-test + gold OK (P=1.00 R=1.00)"
+  },
+  {
+    "id": "R9",
+    "slug": "no-explicit-any",
+    "status": "kept",
+    "note": "self-test + gold OK (P=1.00 R=1.00)"
+  },
+  {
+    "id": "R10",
+    "slug": "no-eslint-disable",
+    "status": "abstain-gold",
+    "note": "SILENT LEAK caught: FALSE+(PROSE mention, not a directive -> must NOT flag)"
+  }
+]

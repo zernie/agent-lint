@@ -13,5 +13,5 @@
     "disallowed-tools-contract": "error",
     "description-overlap": "error"
   },
-  "exclude": ["bench/**", "startup/**"]
+  "exclude": ["bench/**", "startup/**", "compiler/**"]
 }
