@@ -32,3 +32,6 @@ report/dist
 .tmp-genh-*/
 .tmp-compile-genh-*/
 .vigiles-test-types-tmp/
+
+# session scratch (OSS dogfood corpus, repro scripts)
+scratchpad/

@@ -19,6 +19,7 @@ import {
   readdirSync,
   rmSync,
   lstatSync,
+  realpathSync,
   type Dirent,
 } from "node:fs";
 import { resolve, dirname, basename, relative, isAbsolute } from "node:path";
@@ -135,7 +136,11 @@ import {
   type RuleInventoryItem,
 } from "./rule-inventory.js";
 import { routeRules, mergeRoutings, type RuleRouting } from "./rule-routing.js";
-import { isFixturePath } from "./instruction-sources.js";
+import {
+  isFixturePath,
+  dedupeInstructionFiles,
+  type RawInstructionFile,
+} from "./instruction-sources.js";
 import { enumerateEslintCatalog } from "./core/rule-catalog.js";
 import {
   runAdoptabilityTier,
@@ -2129,19 +2134,19 @@ function gatherInstructionFiles(
   root: string,
   instructionFile: string,
 ): { path: string; text: string }[] {
-  const files: { path: string; text: string }[] = [];
-  const seen = new Set<string>();
-  const add = (rel: string): void => {
-    if (seen.has(rel)) return;
+  const raw: RawInstructionFile[] = [];
+  const collect = (rel: string): void => {
     const p = resolve(root, rel);
-    if (existsSync(p)) {
-      files.push({ path: rel, text: readFileSync(p, "utf-8") });
-      seen.add(rel);
-    }
+    if (!existsSync(p)) return;
+    raw.push({
+      path: rel,
+      canonical: realpathSync(p),
+      text: readFileSync(p, "utf-8"),
+    });
   };
   // Root instruction files first (stable, deterministic order).
   for (const name of new Set([instructionFile, "CLAUDE.md", "AGENTS.md"]))
-    add(name);
+    collect(name);
   // Nested subdirectory memory, minus fixture/demo/build/test noise.
   try {
     const nested = globSync(["**/CLAUDE.md", "**/AGENTS.md"], {
@@ -2150,11 +2155,13 @@ function gatherInstructionFiles(
     })
       .filter((rel) => !isFixturePath(rel))
       .sort();
-    for (const rel of nested) add(rel);
+    for (const rel of nested) collect(rel);
   } catch {
     // best-effort — a glob failure just means root-only, never breaks the audit
   }
-  return files;
+  // Dedup a CLAUDE.md⇄AGENTS.md mirror (symlink or byte-identical sync) to ONE
+  // artifact so its rules aren't double-counted (compose-with-sync-tools).
+  return dedupeInstructionFiles(raw);
 }
 
 /** The deterministic State-B routing preview for `audit`: segment the instruction

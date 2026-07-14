@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { isFixturePath } from "./instruction-sources.js";
+import {
+  isFixturePath,
+  dedupeInstructionFiles,
+} from "./instruction-sources.js";
 
 describe("isFixturePath", () => {
   it("keeps a repo's real subdirectory memory", () => {
@@ -51,5 +54,46 @@ describe("isFixturePath", () => {
   it("handles Windows-style separators", () => {
     expect(isFixturePath("test\\dogfood\\CLAUDE.md")).toBe(true);
     expect(isFixturePath("src\\core\\CLAUDE.md")).toBe(false);
+  });
+
+  it("is case-insensitive (Examples/, Demo/, Test/) and catches __mocks__", () => {
+    expect(isFixturePath("Examples/CLAUDE.md")).toBe(true);
+    expect(isFixturePath("Demo/CLAUDE.md")).toBe(true);
+    expect(isFixturePath("Test/CLAUDE.md")).toBe(true);
+    expect(isFixturePath("Vendor/x/CLAUDE.md")).toBe(true);
+    expect(isFixturePath("src/__mocks__/CLAUDE.md")).toBe(true);
+  });
+});
+
+describe("dedupeInstructionFiles", () => {
+  it("keeps distinct files (different path + content)", () => {
+    const out = dedupeInstructionFiles([
+      { path: "CLAUDE.md", canonical: "/r/CLAUDE.md", text: "# A\n- rule a" },
+      { path: "AGENTS.md", canonical: "/r/AGENTS.md", text: "# B\n- rule b" },
+    ]);
+    expect(out.map((f) => f.path)).toEqual(["CLAUDE.md", "AGENTS.md"]);
+  });
+
+  it("dedupes a SYMLINKED mirror (same canonical path), first wins", () => {
+    const out = dedupeInstructionFiles([
+      { path: "CLAUDE.md", canonical: "/r/CLAUDE.md", text: "# A\n- rule a" },
+      // AGENTS.md → symlink to CLAUDE.md: same realpath
+      { path: "AGENTS.md", canonical: "/r/CLAUDE.md", text: "# A\n- rule a" },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].path).toBe("CLAUDE.md");
+  });
+
+  it("dedupes a BYTE-IDENTICAL synced mirror (different path, same content)", () => {
+    const out = dedupeInstructionFiles([
+      { path: "CLAUDE.md", canonical: "/r/CLAUDE.md", text: "# same\n- r" },
+      { path: "AGENTS.md", canonical: "/r/AGENTS.md", text: "# same\n- r" },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].path).toBe("CLAUDE.md");
+  });
+
+  it("[] → []", () => {
+    expect(dedupeInstructionFiles([])).toEqual([]);
   });
 });
