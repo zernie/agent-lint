@@ -103,9 +103,18 @@ function isHarnessLoadedFile(
   if (base === SKILL_FILE) return true;
   for (const layout of layouts) {
     if (base === layout.instructionFile) return true;
-    // Subagent / slash-command surfaces the harness enumerates by directory.
+    // Subagent / slash-command surfaces live at a REAL surface root — the repo
+    // root, the user-surface root (e.g. `.claude/`), or the materialize root —
+    // NOT any nested dir that merely shares the name. A doc under `docs/prompts/`
+    // is documentation, not Codex's `prompts` command surface.
+    const roots = [
+      "",
+      ...[layout.userSurfaceRoot, layout.materializeRoot]
+        .filter((r): r is string => !!r)
+        .map((r) => `${r}/`),
+    ];
     for (const dir of [layout.agentDir, layout.commandDir]) {
-      if (dir && (norm.startsWith(`${dir}/`) || norm.includes(`/${dir}/`))) {
+      if (dir && roots.some((r) => norm.startsWith(`${r}${dir}/`))) {
         return true;
       }
     }

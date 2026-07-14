@@ -68,6 +68,35 @@ describe("findOrphanDocs()", () => {
     }
   });
 
+  it("only exempts a harness surface at a real root, not a docs subdir sharing the name", () => {
+    const dir = makeTmpDir("orphans-surface-root");
+    try {
+      mkdirSync(join(dir, "docs/prompts"), { recursive: true });
+      mkdirSync(join(dir, "prompts"), { recursive: true });
+      // Codex's command surface is `prompts`. At the REPO ROOT it's a real
+      // surface (never an orphan); under `docs/` it's just documentation and
+      // must still be flagged — the exemption anchors to the surface root, not
+      // any nested dir that shares the name.
+      writeFileSync(join(dir, "prompts/run.md"), "# a real command surface");
+      writeFileSync(join(dir, "docs/prompts/guide.md"), "# unreferenced doc");
+      const codexLayout = {
+        ...claudeCodeLayout,
+        name: "codex",
+        instructionFile: "AGENTS.md",
+        agentDir: "",
+        commandDir: "prompts",
+      };
+      const report = findOrphanDocs({
+        basePath: dir,
+        include: ["**/*.md"],
+        layouts: [codexLayout],
+      });
+      assert.deepEqual([...report.orphans], ["docs/prompts/guide.md"]);
+    } finally {
+      cleanupTmpDir(dir);
+    }
+  });
+
   it("still credits a doc that only a CLAUDE.md references", () => {
     const dir = makeTmpDir("orphans-cref");
     try {
