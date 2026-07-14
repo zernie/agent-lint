@@ -166,6 +166,14 @@ describe("buildAuditReport", () => {
       "meta",
       "recommendations",
       "score",
+      "verdict",
+    ]);
+    expect(Object.keys(r.verdict).sort()).toEqual([
+      "fixesToNextGrade",
+      "grade",
+      "perRecommendation",
+      "pointsToNextGrade",
+      "sentence",
     ]);
     expect(Object.keys(r.meta).sort()).toEqual([
       "dir",

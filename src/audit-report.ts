@@ -13,10 +13,13 @@
  */
 import { auditScore, type AuditScore } from "./audit-score.js";
 import { optimize, type Recommendation } from "./optimize.js";
+import { computeVerdict, type Verdict } from "./audit-verdict.js";
 import type { LedgerSummary } from "./observe.js";
 import type { AdoptabilityResult } from "./adoptability.js";
 import type { ScanReport, MarketplaceInfo } from "./scan.js";
 import type { PluginScore } from "./leaderboard.js";
+import type { RuleInventoryItem } from "./rule-inventory.js";
+import type { RuleRouting } from "./rule-routing.js";
 
 /** The current schema version. Bump only on a BREAKING change to the shape. */
 export const AUDIT_SCHEMA_VERSION = 1;
@@ -86,6 +89,13 @@ export interface AuditReport {
   readonly meta: AuditReportMeta;
   /** The five deterministic category rings + the weighted overall + grade. */
   readonly score: AuditScore;
+  /**
+   * The one-line verdict + per-recommendation `pointsIfFixed`, both derived by
+   * RE-SCORING (never a hardcoded number). Drives the report's verdict-led header
+   * ("Two one-line fixes away from a B.") and the `+N pts` badges on fix cards.
+   * Pure/deterministic — always present.
+   */
+  readonly verdict: Verdict;
   /** The deterministic, ranked fixes (the inline recommendations). */
   readonly recommendations: readonly Recommendation[];
   readonly inventory: AuditInventory;
@@ -110,6 +120,24 @@ export interface AuditReport {
    * the pure builder stays fs-free.
    */
   readonly observations?: LedgerSummary;
+  /**
+   * The deterministic rule-inventory teaser — prose rules in the harness that
+   * map to an off-the-shelf lint rule + whether that rule is already in the
+   * config (the one-line-config-fix nudge). No model, no config execution. The
+   * CLI computes it (reads the instruction + config text, calls
+   * `buildRuleInventory`) and passes it in, so the pure builder stays fs-free.
+   * Present only when at least one intent resolves. Additive/optional — schema
+   * version unchanged. See `research/audit-rule-compile-tier.md`.
+   */
+  readonly rulesInventory?: readonly RuleInventoryItem[];
+  /**
+   * The deterministic State-B routing PREVIEW — the instruction file segmented
+   * into atomic rules, each routed (reuse / hook / semantic / unrouted) to how
+   * it would be enforced, with per-category counts. No model, fs-only. Grounds
+   * the report's "compile" upsell in real numbers instead of generic copy.
+   * Present only when at least one atomic rule was segmented. Additive/optional.
+   */
+  readonly ruleRouting?: RuleRouting;
 }
 
 export interface BuildAuditReportOptions {
@@ -124,6 +152,16 @@ export interface BuildAuditReportOptions {
    * when there's nothing to adopt.
    */
   readonly adoptableSurfaces?: readonly string[];
+  /**
+   * The rule-inventory items the CLI computed via `buildRuleInventory` (reading
+   * the instruction + config text). Omit/empty when nothing resolved.
+   */
+  readonly rulesInventory?: readonly RuleInventoryItem[];
+  /**
+   * The State-B routing preview the CLI computed via `routeRules`. Omit when
+   * nothing segmented.
+   */
+  readonly ruleRouting?: RuleRouting;
 }
 
 /** The one command that adopts every un-spec'd surface (bare `init`). */
@@ -159,6 +197,9 @@ export function buildAuditReport(
   opts: BuildAuditReportOptions,
 ): AuditReport {
   const adoptable = buildAdoptable(opts.adoptableSurfaces);
+  const score = auditScore(report);
+  const recommendations = optimize(report).recommendations;
+  const verdict = computeVerdict({ report, score, recommendations });
   return {
     meta: {
       schemaVersion: AUDIT_SCHEMA_VERSION,
@@ -168,8 +209,9 @@ export function buildAuditReport(
       harness: opts.harness,
       dir: report.dir,
     },
-    score: auditScore(report),
-    recommendations: optimize(report).recommendations,
+    score,
+    verdict,
+    recommendations,
     inventory: {
       skills: report.skills.length,
       agents: report.agents.length,
@@ -183,6 +225,12 @@ export function buildAuditReport(
     },
     ...(adoptable ? { adoptable } : {}),
     ...(opts.observations ? { observations: opts.observations } : {}),
+    ...(opts.rulesInventory && opts.rulesInventory.length
+      ? { rulesInventory: opts.rulesInventory }
+      : {}),
+    ...(opts.ruleRouting && opts.ruleRouting.segmented > 0
+      ? { ruleRouting: opts.ruleRouting }
+      : {}),
   };
 }
 

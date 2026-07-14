@@ -1,10 +1,10 @@
-<!-- vigiles:sha256:604c53346d1e9863 compiled from research/CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:198340af79033341 compiled from research/CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
 ## Scope
 
-The `research/` corpus is the INTERNAL record (design rationale, competitive analysis, the moat/positioning narrative) — tier 2 in the doc-tiers rule, NEVER linked from public docs. This file is its INDEX. Each doc carries `status:`/`topic:` frontmatter: STATUS is one of `active` (current thinking), `shipped` (built — the doc is the design record), `idea` (proposed, not built), `superseded` (replaced — see the newer doc), `rejected` (decided against). TOPIC groups by area (spec, hooks, eval, testing, adapters, audit, sandbox, linters, positioning, roadmap, proofs, skills, security, docs, benchmark, misc). Query the corpus deterministically: `grep -l 'status: shipped' research/*.md`, `grep -l 'topic: eval' research/*.md`. READ-FIRST keystones: `roadmap.md` (the front door) and `harness-state-space.md` (the organizing thesis). The ROOT `CLAUDE.md` keyFiles map the CODE; this maps the RESEARCH.
+The `research/` corpus is the INTERNAL record (design rationale, competitive analysis, the moat/positioning narrative) — tier 2 in the doc-tiers rule, NEVER linked from public docs. This file is its INDEX. Each doc carries `status:`/`topic:` frontmatter: STATUS is one of `active` (current thinking), `shipped` (built — the doc is the design record), `idea` (proposed, not built), `superseded` (replaced — see the newer doc), `rejected` (decided against). TOPIC groups by area (spec, hooks, eval, testing, adapters, audit, compiler, sandbox, linters, positioning, roadmap, proofs, skills, security, docs, benchmark, misc). Query the corpus deterministically: `grep -l 'status: shipped' research/*.md`, `grep -l 'topic: eval' research/*.md`. READ-FIRST keystones: `roadmap.md` (the front door) and `harness-state-space.md` (the organizing thesis). The ROOT `CLAUDE.md` keyFiles map the CODE; this maps the RESEARCH.
 
 ## Key Files
 
@@ -16,6 +16,7 @@ The `research/` corpus is the INTERNAL record (design rationale, competitive ana
 - `research/multi-harness-compile.md` — [active] How vigiles compiles/verifies a repo targeting multiple harnesses (CC+Codex) per-surface
 - `research/opencode-prototype-findings.md` — [shipped] OpenCode adapter prototype validates the AdapterCapabilities tier (mockable, no shell hooks)
 - `research/adoption-gateway-preview.md` — [idea] Proposes an audit preview showing newcomers what vigiles would catch; extraction=LLM, verification=deterministic moat
+- `research/audit-rule-compile-tier.md` — [shipped] Design spec for the audit rule-compile tier: the deterministic rule-inventory teaser (prose→off-the-shelf-rule + config-state) and the opt-in model-gated compile path — makes CLAUDE.md rules real from the report
 - `research/audit-adoption-ux.md` — [shipped] Design record for how audit report drives spec creation (init flow); default creates specs, no browser file writes
 - `research/audit-eval-thickening-and-gate.md` — [shipped] Records audit's behavioral tier expanding to three evals (fire/collide/hold) plus the adversarial-gate eval build
 - `research/audit-lighthouse-design.md` — [shipped] Locked design for vigiles audit as "Lighthouse for your harness" — rings, HTML report, battery, --deep tier
@@ -29,6 +30,7 @@ The `research/` corpus is the INTERNAL record (design rationale, competitive ana
 - `research/scan-lint-unification.md` — [idea] Proposal to unify scan and lint into one shared rule engine with two frontends (ESLint-style), not yet built
 - `research/benchmark-methodology.md` — [active] Defines the A/B-over-real-task method behind vigiles's "what actually works" measurement claims
 - `research/benchmarks-runtime-gates.md` — [rejected] Empirical finding that runtime enforcement gates don't improve capable-agent behavior; redirected focus to verification
+- `research/compiler-end-to-end-flow.md` — [design] End-to-end rule-compiler flow (prose rule → enforced, at scale): segment → classify → reuse/synthesize/hook/prose route, blind adversarial gate, suppressions ratchet, harvest-at-scale — the @vigiles/compiler opt-in tier design of record
 - `research/adoption-strategy.md` — [superseded] Early adoption-wizard design (vigiles setup, adoption levels); superseded by later init/setup-plan mechanics
 - `research/install-enforcement-dx.md` — [shipped] Design record for vigiles init's rule-group enforcement model (structural/workflow/nudge), landscape-grounded in Clippy/Biome/Ruff conventions
 - `research/readme-revamp-concepts.md` — [idea] Five distinct whole-README redesign concepts/positioning options to resolve audit-vs-instruments front-door tension

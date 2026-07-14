@@ -131,6 +131,11 @@ import {
   type AuditReport,
 } from "./audit-report.js";
 import {
+  buildRuleInventory,
+  type RuleInventoryItem,
+} from "./rule-inventory.js";
+import { routeRules, type RuleRouting } from "./rule-routing.js";
+import {
   runAdoptabilityTier,
   formatAdoptability,
   type AdoptabilityResult,
@@ -2001,6 +2006,138 @@ function discoverAdoptableForAudit(
   }
   out.push(...discoverAdoptableSurfaces(root));
   return out;
+}
+
+/** Lint-config file BASENAMES whose CONTENTS (textual, NEVER executed) reveal
+ * which rules a repo has configured — read best-effort for the rule-inventory
+ * teaser. Deliberately not resolved/executed (that would be the RCE path); we
+ * grep the raw text. Includes oxlint + biome (same rule names as ESLint) since
+ * modern TS repos lint with them. */
+const RULE_INVENTORY_CONFIG_FILES = new Set([
+  "eslint.config.js",
+  "eslint.config.mjs",
+  "eslint.config.cjs",
+  "eslint.config.ts",
+  ".eslintrc",
+  ".eslintrc.json",
+  ".eslintrc.js",
+  ".eslintrc.cjs",
+  ".eslintrc.yml",
+  ".eslintrc.yaml",
+  ".oxlintrc.json",
+  ".oxlintrc.jsonc",
+  "oxlint.json",
+  "biome.json",
+  "biome.jsonc",
+  "ruff.toml",
+  ".ruff.toml",
+  "pyproject.toml",
+  ".pylintrc",
+  "clippy.toml",
+  ".clippy.toml",
+  ".rubocop.yml",
+  ".stylelintrc",
+  ".stylelintrc.json",
+]);
+
+/** Dirs never worth walking for a config file. */
+const RULE_INVENTORY_SKIP_DIRS = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  "out",
+  "coverage",
+  ".next",
+  ".turbo",
+  ".cache",
+  ".yarn",
+]);
+
+/** readdir that returns [] instead of throwing (perms, races). */
+function safeReaddir(dir: string) {
+  try {
+    return readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+
+/** Collect lint-config CONTENTS from the repo root AND nested subdirs (depth ≤ 2)
+ * — textual only, never executed. Nested because monorepos/webapps keep their
+ * eslint/oxlint config under `web/`, `frontend/`, `packages/*`, etc. Bounded
+ * (skips heavy dirs; caps files) so it stays cheap on huge repos. */
+function collectLintConfigText(root: string): string {
+  let text = "";
+  let filesRead = 0;
+  const visit = (dir: string, depth: number): void => {
+    if (filesRead >= 60) return;
+    for (const e of safeReaddir(dir)) {
+      if (e.isFile() && RULE_INVENTORY_CONFIG_FILES.has(e.name)) {
+        try {
+          text += readFileSync(resolve(dir, e.name), "utf-8") + "\n";
+          filesRead++;
+        } catch {
+          /* best-effort */
+        }
+      } else if (
+        e.isDirectory() &&
+        depth < 2 &&
+        !e.name.startsWith(".") &&
+        !RULE_INVENTORY_SKIP_DIRS.has(e.name)
+      ) {
+        visit(resolve(dir, e.name), depth + 1);
+      }
+    }
+  };
+  visit(root, 0);
+  return text;
+}
+
+/** The deterministic rule-inventory teaser for `audit`: read the instruction
+ * file(s) + lint-config TEXT (never executed) and map documented intents to
+ * off-the-shelf rules + whether they're already configured. Best-effort, fs-only;
+ * NO model, NO config execution — safe on any repo. Composition-root. */
+function computeRuleInventory(
+  root: string,
+  instructionFile: string,
+): RuleInventoryItem[] {
+  try {
+    const instructionText = readInstructionText(root, instructionFile);
+    if (!instructionText.trim()) return [];
+    return buildRuleInventory(instructionText, collectLintConfigText(root));
+  } catch {
+    return [];
+  }
+}
+
+/** Read EVERY agent instruction file present (not just the harness-native one) —
+ * rules are often documented in AGENTS.md even under a claude-code harness. */
+function readInstructionText(root: string, instructionFile: string): string {
+  let instructionText = "";
+  for (const name of new Set([instructionFile, "CLAUDE.md", "AGENTS.md"])) {
+    const p = resolve(root, name);
+    if (existsSync(p)) instructionText += readFileSync(p, "utf-8") + "\n";
+  }
+  return instructionText;
+}
+
+/** The deterministic State-B routing preview for `audit`: segment the instruction
+ * file(s) into atomic rules and route each (reuse / hook / semantic / unrouted) —
+ * NO model, fs-only. `undefined` when there's nothing to segment (kept off the
+ * report). Best-effort; a routing failure never breaks the audit. */
+function computeRuleRouting(
+  root: string,
+  instructionFile: string,
+): RuleRouting | undefined {
+  try {
+    const instructionText = readInstructionText(root, instructionFile);
+    if (!instructionText.trim()) return undefined;
+    const routing = routeRules(instructionText, instructionFile);
+    return routing.segmented > 0 ? routing : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** The terminal "adoptable surfaces" nudge — N un-spec'd surfaces + the create-all
@@ -6542,6 +6679,11 @@ async function main(): Promise<void> {
           vigilesVersion: getVersion(),
           adoptableSurfaces,
           observations: summarizeObservations(ledgerRecords),
+          rulesInventory: computeRuleInventory(
+            root,
+            adapter.layout.instructionFile,
+          ),
+          ruleRouting: computeRuleRouting(root, adapter.layout.instructionFile),
         });
         const sc = auditReport.score;
         const plan = optimize(report);

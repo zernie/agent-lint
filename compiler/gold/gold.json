@@ -1,0 +1,36 @@
+[
+  { "rule":"no-console-log", "label":"violating",  "code":"console.log('x')", "note":"real call" },
+  { "rule":"no-console-log", "label":"violating",  "code":"console.log(a, b)", "note":"real call multi-arg" },
+  { "rule":"no-console-log", "label":"violating",  "code":"void console.log(1)", "note":"call in void expr" },
+  { "rule":"no-console-log", "label":"compliant",  "code":"console.error('x')", "note":"different method" },
+  { "rule":"no-console-log", "label":"compliant",  "code":"logger.log('x')", "note":"not console" },
+  { "rule":"no-console-log", "label":"compliant",  "code":"const s = 'console.log(1)'", "note":"string literal, not a call" },
+  { "rule":"no-console-log", "label":"compliant",  "code":"// console.log(1)\nconst x = 1", "note":"in a line comment" },
+  { "rule":"no-console-log", "label":"compliant",  "code":"/** @example console.log(1) */\nconst x = 1", "note":"in a JSDoc example" },
+  { "rule":"no-console-log", "label":"compliant",  "code":"const consoleLog = 1", "note":"identifier lookalike" },
+
+  { "rule":"no-explicit-any", "label":"violating", "code":"let x: any", "note":"type annotation" },
+  { "rule":"no-explicit-any", "label":"violating", "code":"function f(y: any) {}", "note":"param type" },
+  { "rule":"no-explicit-any", "label":"violating", "code":"const z = v as any", "note":"as-cast" },
+  { "rule":"no-explicit-any", "label":"violating", "code":"let a: any[]", "note":"array of any" },
+  { "rule":"no-explicit-any", "label":"compliant", "code":"let x: unknown", "note":"unknown, not any" },
+  { "rule":"no-explicit-any", "label":"compliant", "code":"type anything = string", "note":"identifier contains 'any'" },
+  { "rule":"no-explicit-any", "label":"compliant", "code":"const anyOf = 1", "note":"identifier lookalike" },
+  { "rule":"no-explicit-any", "label":"compliant", "code":"let s: 'any'", "note":"string-literal type, not the any keyword" },
+
+  { "rule":"no-eslint-disable", "label":"violating", "code":"/* eslint-disable no-console */\nconst x = 1", "note":"real block directive" },
+  { "rule":"no-eslint-disable", "label":"violating", "code":"// eslint-disable-next-line no-console\nconsole.log(1)", "note":"real inline directive" },
+  { "rule":"no-eslint-disable", "label":"compliant", "code":"const a = 1; // we should not eslint-disable this line", "note":"PROSE mention, not a directive -> must NOT flag" },
+  { "rule":"no-eslint-disable", "label":"compliant", "code":"const s = 'eslint-disable'", "note":"string literal, not a comment" },
+  { "rule":"no-eslint-disable", "label":"compliant", "code":"/* eslint-enable no-console */\nconst y = 2", "note":"eslint-ENABLE, not disable" },
+
+  { "rule":"no-hardcoded-secret", "label":"violating", "code":"const password = 'hunter2'", "note":"caught by naive rule" },
+  { "rule":"no-hardcoded-secret", "label":"violating", "code":"const apiKey = 'AKIA1234567890ABCD'", "note":"MISSED by naive rule -> FN" },
+  { "rule":"no-hardcoded-secret", "label":"violating", "code":"const token = 'ghp_abcdefghijklmnop'", "note":"MISSED by naive rule -> FN" },
+  { "rule":"no-hardcoded-secret", "label":"compliant", "code":"const password = process.env.PW", "note":"env, not hardcoded" },
+
+  { "rule":"no-empty-catch", "label":"violating", "code":"try { f() } catch (e) {}", "note":"empty catch" },
+  { "rule":"no-empty-catch", "label":"violating", "code":"try { f() } catch {}", "note":"empty optional-catch" },
+  { "rule":"no-empty-catch", "label":"compliant", "code":"try { f() } catch (e) { log(e) }", "note":"handled" },
+  { "rule":"no-empty-catch", "label":"compliant", "code":"try { f() } catch (e) { throw e }", "note":"rethrow" }
+]
