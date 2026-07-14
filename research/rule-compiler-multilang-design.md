@@ -268,6 +268,44 @@ denominator, or read a non-English file (→ a loud "unsupported language" notic
 documented norm ("comments explain why") is itself undecidable. Those are the opt-in model tier's job,
 behind the existing consent + gate.
 
+## 5b. The hook lane — enforcement taxonomy (Fable, 2026-07-14)
+
+Grounded in reclassifying the 137 "unrouted" rules from the real corpus, a big slice are NOT lint
+rules — they're process/VCS/shell/agent norms that "should be a hook". "Most rules are hooks" is the
+wrong frame; the right axis is **enforcement boundary × failure asymmetry**. Five sub-classes:
+
+| Class                  | Example                                                           | Enforced at                                                       | Instrument                                                                     |
+| ---------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **H1 disaster guard**  | force-push, `rm -rf`, secret read, `curl\|sh`                     | agent tool-call (**no git event exists**)                         | compiled hook + verify battery; server-side branch protection is the real WALL |
+| **H2 tool-redirect**   | "use `just test` not `cargo test`", "don't run `eslint` directly" | agent tool-call (best fit — deny msg re-steers the model in-loop) | compiled hook; #34692 barely matters                                           |
+| **H3 sequencing**      | "run `pnpm check` before push"; "ruff after edit"                 | push→lefthook/CI; edit→PostToolUse `react`                        | delegate git part; react for edit-time                                         |
+| **H4 VCS/intent**      | no co-author footer; "unless explicitly asked"                    | commit-msg→lefthook; **"unless asked" → the `ask` decision**      | `ask` is the differentiator lefthook has no analogue for                       |
+| **H5 agent-attention** | "never re-read a file", "don't re-run a test"                     | **nothing — and nothing should try**                              | route to `meta`; MEASURE (flight recorder), never gate                         |
+
+Two spine rules (anti-false-safety): **(1) No gate without its proof** — never SUGGEST a hook without
+pairing it with the test that proves it blocks (the `assertBlocksDisasters` battery for
+catalog-mapped disasters; a scaffolded `runHook` test built from the rule's own examples otherwise) —
+this is the 2/7→7/7 finding productized. **(2) Honesty tags** per row — `wall` (server-side,
+unbypassable) / `strong-default` (blocks in-loop but bypassable — #34692 for harness hooks,
+`--no-verify` for client git hooks) / `suggested` (audit printed a snippet, nothing installed, **NOT
+counted as coverage**) / `no-gate`. Composition insight audit can print: an H1 harness gate blocking
+`--no-verify` is what protects your H3 git hooks.
+
+Where vigiles's own hook machinery EARNS its place (be skeptical — delegate loudly elsewhere): (a)
+**the boundary nothing else sees** — non-git tool calls (`rm -rf`, `curl|sh`, `cargo test` vs `just
+test`, ruff-after-edit); lefthook is structurally blind to these; (b) **the VERIFY battery** — it
+audits ANY hook incl. hand-written bash ("prove your guard blocks"); (c) **the `ask` decision** — no
+lefthook analogue, exactly encodes "unless explicitly asked". Where git hooks are mature (commit-msg,
+pre-push sequencing), audit says **"use lefthook"** out loud.
+
+Router change: split `hook` → **`gate`** (agent tool-call boundary; a `flavor` of disaster / redirect
+/ ask / stateful / react) + **`git-hook`** (commit/push boundary → lefthook/CI). Do NOT add an
+agent-guidance category — `meta` already IS one; the re-read/re-run family only landed in `unrouted`
+because `META_CUES` lacked the cues. **SHIPPED:** H5→`meta` cues + index-leakage rejection. **NEXT:**
+the `hook`→`gate`/`git-hook` split with flavor + honesty tags + the "no gate without its proof"
+pairing in audit. Full record in this section; the compiled-hook engine is `vigiles/hook`
+(experimental, capped by #34692) + `guardrail-check.ts` (the battery).
+
 ## 6. Build plan
 
 1. **Segmentation bug-fixes** (§2a) + `INDEX-SMELL` veto + `index`/`meta` routing categories.
