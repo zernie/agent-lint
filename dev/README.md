@@ -6,8 +6,10 @@ and **not** published to npm, so `vigiles init` never installs them into a user'
 project:
 
 - `skills/generate-logo` — generate/iterate the vigiles logo (ImageRouter API).
-- `skills/pr-to-lint-rule` — turn a recurring PR review comment into a custom
-  lint rule with tests + a spec entry.
+- `skills/pr-to-lint-rule` — synthesize a prose rule (the hand-off target of a
+  `vigiles audit` **custom rule (⚙)** lane) into a custom lint rule, gated by an
+  independent soundness test that **abstains** rather than ship a checker it
+  can't prove sound. Wraps the `compiler/` trust gate.
 - `skills/enforce-rules-format` — validate vigiles's own spec rules carry a
   proper enforce/check/guidance classification.
 - `skills/audit-feedback-loop` — score this repo's feedback-loop maturity.
