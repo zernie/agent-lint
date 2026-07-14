@@ -52,6 +52,7 @@ export default claude({
 
     // ── compiler ──
     "research/compiler-end-to-end-flow.md": `[design] End-to-end rule-compiler flow (prose rule → enforced, at scale): segment → classify → reuse/synthesize/hook/prose route, blind adversarial gate, suppressions ratchet, harvest-at-scale — the @vigiles/compiler opt-in tier design of record`,
+    "research/rule-compiler-multilang-design.md": `[active] Multi-language (Ruff+Pylint) design for the rule-compile tier + a segmentation model, grounded in a 20-repo OSS corpus: Intent→Realization data model, per-linter ConfigProbe port (ruff select-replaces-default, pylint inverted polarity), both-keys language scoping, intent-verdict fold (ruff-absorbs-pylint is not a contradiction), the segmentation tier-ladder + reject-first negative signals; AGENTS.md is the #1 code-norm carrier, CLAUDE.md a redirect stub`,
 
     // ── docs ──
     "research/adoption-strategy.md": `[superseded] Early adoption-wizard design (vigiles setup, adoption levels); superseded by later init/setup-plan mechanics`,
