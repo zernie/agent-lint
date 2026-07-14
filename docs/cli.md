@@ -672,8 +672,10 @@ The plugin provides hooks:
 - **SessionStart** — surfaces the project's vigiles state
 
 > Internal vigiles-development skills (`generate-logo`, `pr-to-lint-rule`,
-> `enforce-rules-format`, `audit-feedback-loop`) live under `dev/` and are **not**
-> shipped to consumers. Contributors load them with `--plugin-dir dev/`.
+> `enforce-rules-format`, `audit-feedback-loop`, `audience-check`, `code-quality`)
+> live under `.claude/skills/` — this repo's own harness, auto-loaded when a
+> contributor works in-repo. They are **not** shipped to consumers (`.claude/` is
+> not published).
 
 ### Codex
 

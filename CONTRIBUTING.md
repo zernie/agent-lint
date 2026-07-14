@@ -31,7 +31,7 @@ src/
   validate.test.ts  Test suite (node:test)
 schemas/            Built-in mdschema YAML presets
 skills/             Shipped consumer skills (test-harness, adopt-spec, strengthen, edit-spec, debug-my-harness, linter-docs)
-dev/skills/         Internal dev-only skills, NOT shipped (generate-logo, pr-to-lint-rule, enforce-rules-format, audit-feedback-loop, audience-check, code-quality)
+.claude/skills/     This repo's OWN harness — contributor-only, NOT shipped (auto-loads in-repo): generate-logo, pr-to-lint-rule, enforce-rules-format, audit-feedback-loop, audience-check, code-quality + vendored deep-research, review-docs
 dist/               Compiled JavaScript output (git-ignored)
 ```
 
