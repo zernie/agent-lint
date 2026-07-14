@@ -26,29 +26,35 @@ Python. **No PR opened yet.** Full vitest not re-run this session; targeted suit
 design passes + a real 20-repo OSS corpus; has the whole plan, the ConfigProbe/Intent-Realization
 model, and the build order.
 
-**Shipped this session (4 commits, pushed):**
+**⚠️ THE REFRAME (founder correction, mid-session — supersedes "expand the map"):** DON'T hand-curate
+prose→rule mappings, it's a dead end. The match target is the repo's **DYNAMIC rule catalog** — run
+the linter, enumerate the rules it ACTUALLY has, match prose against THAT. Spike (`scratchpad/spike.mjs`)
+on THIS repo: **702 available rules** (vs the static map's ~23), 548 available-but-off. Architecture IS
+enforceable (`boundaries/dependencies` in the catalog → "dir X may import dir Y" is `reuse`, not
+semantic). `INTENT_MAP` is DEMOTED to a small alias fast-path. `research/rule-compiler-multilang-design.md`
+**§0** = the honest DONE / DOABLE-cheaply / HARD scope (read it).
 
-- `docs:` the design doc (indexed in `research/CLAUDE.md`).
-- `fix(segment):` corpus-grounded precision — `RULE_HEADING` `do`-substring bug word-bounded,
-  `INDEX-SMELL` veto (`` `path` — desc `` bullets), anti-context headings, decoration-strip
-  (`**Never**`/`✅`), ordered/emoji bullets, copulas out of the verb lexicon. +regression tests.
-- `feat(rule-routing):` new `meta` category (agent-instructions ≠ code rules) + `unrouted` reframed
-  as the explicit **"hard to codify"** bucket end-to-end incl. the report UI (`RuleInventory.tsx`).
-- `feat(rule-inventory):` +curly / consistent-type-imports / no-only-tests intents (real docs name them).
+**Shipped this session (8 commits, pushed):** the design doc + §0 reframe/scope; `fix(segment)`
+precision (INDEX-SMELL veto, anti-context, decoration/emoji/ordered, RULE_HEADING bug); `feat(rule-routing)`
+`meta` category + explicit "hard to codify" bucket (incl. report UI); +curly/consistent-type-imports/
+no-only-tests intents; **HANDOFF refresh**; **code+doc SCOPE MARKERS** (readInstructionText root-only,
+INTENT_MAP fast-path); **`feat(segment)` RULE-NAME cue** (a bullet NAMING a rule → high, recovers the
+named-but-medium bullets — reuse 2→4 on the corpus, tightened so segmented 162→147); **`feat(core)`
+`src/core/rule-catalog.ts`** — the dynamic catalog primitive (`enumerateEslintCatalog`, own-repo/executes,
+tested, 100% cov) — BUILT, NOT WIRED.
 
-**GROUNDED REALITY** (ran the real router on 8 LIVE CLAUDE.md/AGENTS.md): deterministic reuse is
-**~2%** (2/118 segmented; was 0 before this session). WHY low — all honest, not bugs: (1) clean
-AGENTS.md deliberately OMIT generic lint rules (2026 best-practice) → most content is
-project/process/semantic → correctly "hard"; (2) when a doc DOES name a rule, the map often lacks it
-(fixed 2); (3) rule-naming bullets lacking a lexicon VERB score "medium" → cut by the high-only
-default (no-explicit-any/no-floating-promises named but dropped); (4) vigiles's OWN structured
-CLAUDE.md → 0 segmented (the S0/S1 marker tier isn't built).
+**GROUNDED REALITY** (real router on 8 LIVE docs): deterministic reuse ~2-3% — honest, not a bug. Clean
+AGENTS.md deliberately OMIT generic lint rules (2026 best-practice) → most content is project/process/
+semantic → correctly "hard". On docs that DO name rules (workers-sdk) we now catch ~all of them.
+vigiles's OWN structured CLAUDE.md → 0 (S0/S1 marker tier unbuilt).
 
-**NEXT LEVERS (ranked, user asked which of #1/#2 first — decide + go):** (1) a **RULE-NAME cue** in
-`segment.ts` — a bullet naming an off-the-shelf rule → HIGH confidence (recovers named-but-medium
-bullets, cheapest win); (2) the **S0/S1 structured tier** — compile vigiles-style docs w/
-`**Enforced by**` markers (0 today, ~100% precision possible, the loop-closer); (3) the **`Intent →
-Realization` regroup** + per-linter `ConfigProbe` (ruff/pylint) + Python intents (§6 of the design doc).
+**NEXT (the reframe's payoff, in order):** (1) **WIRE the catalog into matching** — own-repo tier: match
+a prose rule-name token against the LIVE `enumerateEslintCatalog` (702), not the static 23; surface
+available-but-off rules; route boundaries/import intents to `reuse`. Keep it OWN-REPO/consented (it
+executes the linter); the foreign-safe default stays the textual INTENT_MAP + RULE-NAME cue. (2) **Parse
+ALL instruction sources** — nested `CLAUDE.md` (marked in `readInstructionText`; needs per-file routing
+for provenance + a fixture-noise policy — NOT a 5-liner). (3) **S0/S1 structured tier** (compile
+`**Enforced by**`-marked docs, 0 today). (4) Cross-language Ruff/Pylint (§3) — secondary to the catalog.
 
 **Repro tools in `scratchpad/`:** `assess.mjs`/`probe.mjs`/`mini.mjs` run `routeRules` over
 `realdocs/` (8 fetched real instruction files) + `configs/`+`eslint-configs/` (real linter configs
