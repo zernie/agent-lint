@@ -153,6 +153,13 @@ See the [agent setup & workflows guide](agent-setup.md).
 
 ### `compile [files...]` — harness selection
 
+> **Not to be confused with the rule engine.** `vigiles compile` is the **spec
+> compiler** (`.spec.ts` → `.md`). It is a *different system* from the
+> **`@vigiles/rule-enforcer`** package (dir `rule-enforcer/`), which turns *prose*
+> rules from your CLAUDE.md into enforceable lint rules (route → synthesize →
+> gate). Same word "compile", unrelated jobs. See
+> `research/rule-enforceability.md`.
+
 `compile` renders each `.spec.ts` to its instruction file / `SKILL.md` /
 subagent. Which **harness dialect** it renders (the `SKILL.md` frontmatter
 profile, the subagent tool catalog) is resolved deterministically — no cwd
