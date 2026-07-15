@@ -400,12 +400,16 @@ const GUARD_RE = /^\*\*Guard:\*\*/;
 const GUIDANCE_RE = /^\*\*Guidance only\*\*/;
 const MARK_HEADING = /^(#{2,6})\s+(.*)$/;
 const RULE_ID_SHAPE = /^@?[a-z][a-z0-9._/-]*$/;
+// Pylint's numeric alias (C0116, W9006) — the catalog advertises these as
+// matchable, so a marker using one must parse as a rule id, not a prose claim.
+const PYLINT_CODE_SHAPE = /^[A-Z]\d+$/;
 
 /** Does this `**Enforced by:**` value parse as a lint-rule id (vs a prose claim
  * like "CI" or "the linter")? A hand-written marker is a CLAIM — only a rule-id
  * shape is treated as a real reuse rule. */
 function looksLikeRuleId(s: string): boolean {
-  return s.length >= 3 && RULE_ID_SHAPE.test(s.trim());
+  const t = s.trim();
+  return (t.length >= 3 && RULE_ID_SHAPE.test(t)) || PYLINT_CODE_SHAPE.test(t);
 }
 
 /**
@@ -487,6 +491,7 @@ function extractMarkedRules(
       mechanism: MECHANISM[marked.category],
       source: "marker",
       ...(marked.rule ? { rule: marked.rule } : {}),
+      ...(marked.linter ? { linter: marked.linter } : {}),
       ...(marked.enabled !== undefined ? { enabled: marked.enabled } : {}),
     });
   }

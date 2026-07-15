@@ -461,6 +461,55 @@ describe("routeRules", () => {
     expect(r.rules.some((x) => x.category === "reuse")).toBe(true);
   });
 
+  it("a MARKED reuse rule carries its catalog linter (polyglot provenance)", () => {
+    const availableRules = {
+      linter: "pylint" as const,
+      available: 1,
+      enabled: 0,
+      rules: [
+        {
+          id: "missing-function-docstring",
+          linter: "pylint" as const,
+          plugin: null,
+          code: "C0116",
+          enabled: false,
+        },
+      ],
+    };
+    const r = routeRules(
+      "### Docstrings\n\n**Enforced by:** `missing-function-docstring`",
+      "CLAUDE.md",
+      { availableRules },
+    );
+    const marked = r.rules.find((x) => x.source === "marker");
+    expect(marked?.linter).toBe("pylint"); // NOT undefined
+    expect(marked?.enabled).toBe(false);
+  });
+
+  it("a MARKER using a Pylint numeric code (C0116) is accepted, not rejected as prose", () => {
+    const availableRules = {
+      linter: "pylint" as const,
+      available: 1,
+      enabled: 0,
+      rules: [
+        {
+          id: "missing-function-docstring",
+          linter: "pylint" as const,
+          plugin: null,
+          code: "C0116",
+          enabled: false,
+        },
+      ],
+    };
+    const r = routeRules("### D\n\n**Enforced by:** `C0116`", "CLAUDE.md", {
+      availableRules,
+    });
+    const marked = r.rules.find((x) => x.source === "marker");
+    expect(marked?.category).toBe("reuse");
+    expect(marked?.rule).toBe("C0116");
+    expect(marked?.linter).toBe("pylint");
+  });
+
   it("returns an empty routing for prose with no rules", () => {
     const r = routeRules("This project is a knowledge base. It has notes.");
     expect(r.segmented).toBe(0);

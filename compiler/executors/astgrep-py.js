@@ -49,19 +49,30 @@ function loadSelfTest(entry) {
 function selfTest(entry) {
   const st = loadSelfTest(entry);
   if (!st) return { ok: false, note: "missing self-test" };
-  for (const code of st.invalid || []) {
-    if (!matches(st.rule, code))
-      return {
-        ok: false,
-        note: "FAILED self-test: expected a match on " + snippet(code),
-      };
-  }
-  for (const code of st.valid || []) {
-    if (matches(st.rule, code))
-      return {
-        ok: false,
-        note: "FAILED self-test: unexpected match on " + snippet(code),
-      };
+  // A synthesized rule with an invalid ast-grep pattern/constraints makes
+  // matches() throw — convert that to a failed self-test (abstain), NOT an
+  // uncaught crash that aborts the whole gate (mirrors the ESLint executor
+  // turning RuleTester failures into { ok: false }).
+  try {
+    for (const code of st.invalid || []) {
+      if (!matches(st.rule, code))
+        return {
+          ok: false,
+          note: "FAILED self-test: expected a match on " + snippet(code),
+        };
+    }
+    for (const code of st.valid || []) {
+      if (matches(st.rule, code))
+        return {
+          ok: false,
+          note: "FAILED self-test: unexpected match on " + snippet(code),
+        };
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      note: "FAILED self-test: invalid rule — " + String(e.message).slice(0, 80),
+    };
   }
   return { ok: true };
 }

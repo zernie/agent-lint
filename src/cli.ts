@@ -2200,14 +2200,36 @@ function gatherInstructionFiles(
  * sticky `audit.measure` consent as the other executing checks AND on own-repo
  * (never a stranger's toolchain). The textual routing is the foreign-safe default;
  * the catalog only ADDS enabled-state nudges and matches named-but-`/`-broken rules. */
-/** Does the repo have a Python surface worth running pylint against? A pylint
- * config file (`.pylintrc` / `pyproject.toml` / `setup.cfg`) is the strong
- * signal; we don't glob for `*.py` (slow) — a Python repo that wants rule
- * routing carries one of these. Keeps a pure-JS repo from spawning pylint. */
+/** Does the repo actually USE Pylint — i.e. is there a real Pylint config to run
+ * against? A DEDICATED pylintrc file (`.pylintrc`, `pylintrc`, `.pylintrc.toml`,
+ * `pylintrc.toml`) is unambiguous. A SHARED file (`pyproject.toml`, `setup.cfg`,
+ * `tox.ini`) counts ONLY when it carries a Pylint section — otherwise a Ruff-only
+ * / packaging-only `pyproject.toml` would falsely make us spawn pylint and route
+ * docs as `reuse`/`enabled` against a linter the repo doesn't use. Mirrors
+ * Pylint's own config search order. */
 function hasPythonSurface(root: string): boolean {
-  return [".pylintrc", "pyproject.toml", "setup.cfg"].some((f) =>
-    existsSync(resolve(root, f)),
-  );
+  const dedicated = [
+    ".pylintrc",
+    "pylintrc",
+    ".pylintrc.toml",
+    "pylintrc.toml",
+  ];
+  if (dedicated.some((f) => existsSync(resolve(root, f)))) return true;
+  // A pylint section: `[tool.pylint...]` (pyproject) or `[pylint...]` / `[MASTER]`
+  // / `[MESSAGES CONTROL]` (setup.cfg / tox.ini, incl. case variants).
+  const pylintSection =
+    /(\[tool\.pylint)|(\[pylint)|(\[MASTER\])|(\[MESSAGES CONTROL\])/i;
+  for (const f of ["pyproject.toml", "setup.cfg", "tox.ini"]) {
+    const p = resolve(root, f);
+    if (existsSync(p)) {
+      try {
+        if (pylintSection.test(readFileSync(p, "utf-8"))) return true;
+      } catch {
+        /* unreadable — treat as no pylint config */
+      }
+    }
+  }
+  return false;
 }
 
 function computeRuleRouting(
