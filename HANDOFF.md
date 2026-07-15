@@ -15,68 +15,51 @@
 
 ## RESUME HERE
 
-**Branch `claude/rules-compiler-python-3xqhtd`** — **PR #73 OPEN**, `feat: full
-ESLint/Pylint parity in the audit rule map (catalog + Python synthesis)`. HEAD
-`7fa3386`. **Waiting on CI to go green to SQUASH-MERGE** (a self-check-in via
-ScheduleWakeup polls it). After merge: **deliver the Telegram Russian CC prompt**
-the user asked for — the version that runs `vigiles audit`, reads
-`vigiles-report.json` `ruleRouting`, and opens `vigiles-report.html` in the browser.
-(#72 already merged as `cd61af5`; this branch was restarted from main for #73.)
+**Branch `claude/rules-compiler-python-3xqhtd`** — **PR #74 OPEN**, `refactor(audit):
+decompose the rule-map pipeline + design-of-record docs`. HEAD `8616589`. Contains a
+pipeline REFACTOR + the ALPHA/experimental pass (below). **Not yet merged** — offered
+to watch CI + merge; user may want to review first. (#72 merged `cd61af5`; #73 merged
+`2a86291` = full ESLint/Pylint parity; branch restarted from main for #74.)
 
-**Merge protocol reminder:** if #73 is already merged when you resume, it's finished —
-restart this branch from `origin/main` for any follow-up, never stack on merged history.
+**Merge protocol:** if #74 is already merged when you resume, it's finished — restart
+this branch from `origin/main` for any follow-up, never stack on merged history.
 
-### What PR #73 contains (all built + green locally)
+### What PR #74 contains (all built + green locally; full suite passes bar the known env-only `dialect-drift`)
 
-- **Pylint dynamic catalog + enabled-state** (`src/core/rule-catalog.ts`) —
-  `enumeratePylintCatalog` shells `pylint --list-msgs` + `--list-msgs-enabled`
-  (SECTION-AWARE), so a Python repo gets the SAME dynamic catalog + "documented but
-  OFF" nudge as ESLint, plugins included; matchable by symbol OR numeric code.
-  `mergeCatalogs` unions ESLint+Pylint for polyglot. `AvailableRule.linter`/`code`.
-- **Python custom-rule synthesis** (`@vigiles/compiler`, Fable-designed) — `astgrep-py`
-  engine on the trust gate; ONE gate, injected per-engine executors; rules are ast-grep
-  JSON objects (data-not-code) via `@ast-grep/napi`+`lang-python`. Cross-engine leak
-  proof (P2 py-no-print `$A` → abstain-gold) + provenance guard.
-- **Two-tier detection** (`segment.ts`/`rule-routing.ts`/`cli.ts`/`audit-report.ts`) —
-  CONFIDENT / POSSIBLE (rule-ish, below the bar) / SKIPPED (index/description/section/
-  no-signal, each with a reason). POSSIBLE calibrated to NORM_SIGNAL bullets only; a
-  no-signal reject is RESCUED to confident only via catalog/pattern/intent match.
-- **OSS dogfood, CI-run** — `rule-routing-oss.test.ts` (3 vendored MIT Python AGENTS.md)
-  - `rule-catalog-oss.test.ts` (drives the REAL pylint binary; authored config).
-- **DX** — audit auto-gitignores `vigiles-report.{json,html}`, `--out=<dir>`, `--no-open`.
-- **Design-of-record** — `research/rule-compiler-design.md` (crisp front door). 3
-  frozen decisions: 2 linters (ESLint+Pylint), two-tier detection, show skipped.
+- **Pipeline REFACTOR (behavior-preserving)** — `segmentInstructions` (CC 108) → a thin
+  dispatcher over pure per-block helpers; `extractMarkedRules` (CC 39) → `markerFor`/
+  `markerRuleFrom`; the rescue ladder → a module-level `RESCUE_SOURCES`; the tier split →
+  a pure `partitionCandidates`; new `src/rule-signals.ts` (FORM_HEAD/RULE_PREDICATE/
+  NORM_SIGNAL in ONE home); exported `LANE_META` (category→glyph+label, CLI reads it).
+  `segment.ts` + `rule-routing.ts` went ~27 lint warnings → 0. **Fable differential-fuzz
+  reviewed** (3.6k output comparisons, real+adversarial+fuzz): zero divergence.
+- **Rule map marked ALPHA/experimental** — HTML report: rule section DEMOTED below the
+  deterministic sections + an `experimental` badge; CLI header `Rule map [experimental]`.
+  Public docs (`verifying-instruction-files.md`, `what-vigiles-catches.md`) frame it as a
+  preview + document the confident/possible/skipped tiers.
+- **`research/rule-compiler-design.md` §8 = the SCOPE-FREEZE (load-bearing).** The map's
+  SHAPE is FROZEN (`segment→merge→route→LANE_META`); changing it needs a MEASURED
+  precision/recall win, not a vibe. Marked backlog (broaden dogfood #1, Ruff, recall
+  tuning, …) — default answer to "improve the map?" is NO unless #1 or measured. §9 =
+  the OSS-e2e/LLM-in-CI answer: the MAP is model-free → already CI-dogfooded on real OSS
+  (`rule-routing-oss`/`rule-catalog-oss`); only synthesis/behavioral tiers are model-gated
+  → on-sub + manual, never CI. **Read §8 before touching the rule map.**
 
-### Codex review — ALL 11 threads addressed (don't re-fix)
+### Rule map = ALPHA + FROZEN. Backlog is MARKED, not chased (design doc §8)
 
-Codex left 11 P2s across successive commits; every one is fixed on `7fa3386`:
-per-linter provenance on marked rules; numeric-code markers (`C0116`) accepted;
-report renders possible/skipped-only maps; ast-grep self-test try/catch; meta rules
-counted in the terminal summary; medium-mode no-signal folds rescued-only;
-`hasPythonSurface` requires a REAL pylint config (rc/section, all config filenames);
-**mergeCatalogs combines colliding ids conservatively** (enabled OR-s, provenance
-follows the enforcer, code alias tied to the enforcing entry — `no-else-return` is in
-both linters); **consent resolved BEFORE routing the rule map** so a first interactive
-`audit` enriches its own run (report still prints before the prompt — read leads).
-Last two fixes = commit `7fa3386`; collision fix = `618c84e`.
-
-### Roadmapped LOW (not in #73; need user go-ahead for a fast-follow)
-
-- **X** — `rule-routing.ts`: strip a leading `<linter>/` prefix (`eslint/no-var`) before
-  the catalog lookup, else a prefixed marked ref misses reuse. (W = consent-before-routing
-  is now DONE in #73; X is still open — verified no prefix-strip in rule-routing.ts.)
-- **Z** — `segment.ts`: don't over-suppress a rule bullet under an H2 like `## Rules`.
-- **Y** — `rule-routing.ts`: honor checkbox markers (`- [ ] enforce(...)`).
-- SKIPPED-inline-vs-json presentation; probe a real linted file (not hardcoded
-  `src/index.ts`); Codex corpus parity (vendored corpus is CC-only); EvalDriver→core-port;
-  no-model floor for the 9 skill evals; `no-internal-links-in-public-docs` as a lint rule.
+Do NOT sink effort here — the detection problem is undecidable, tuning is infinite.
+Pre-approved only: broaden the deterministic dogfood corpus (#1, no model needed), or a
+MEASURED win. Still-open LOW bugs (roadmap): strip a leading `<linter>/` prefix before
+the catalog lookup; don't over-suppress a rule bullet under an H2 like `## Rules`; honor
+checkbox markers (`- [ ] enforce(...)`); probe a real linted file (not hardcoded
+`src/index.ts`); Codex corpus parity (vendored corpus is CC-only).
 
 ## Design-of-record
 
-- **`research/rule-compiler-multilang-design.md` §0.0** — the authoritative rule-map
-  snapshot: TWO linters (ESLint + Pylint both full — catalog + enabled-state as of
-  2026-07-15; Ruff NOT yet), the 4 reuse mechanisms, ranked next steps. READ FIRST for that
-  tier. The remaining ESLint-only capability is custom-rule SYNTHESIS (Python target unbuilt).
+- **`research/rule-compiler-design.md`** — THE front door (STATUS: ALPHA). Pipeline
+  diagram, the rescue-ladder/no-signal-fold decisions, the category↔lane↔glyph table,
+  §8 scope-freeze+backlog, §9 testing. Read FIRST. (`rule-compiler-multilang-design.md`
+  is the older build-log; it defers to this doc.)
 - **`research/dogfood-corpus.md`** — the dogfood map + policy (read before touching any
   dogfood artifact). The word "dogfood" covers FOUR different things — only
   `test/dogfood/` is the SHA-pinned vendored corpus; `examples/harness/dogfood/`=skill
