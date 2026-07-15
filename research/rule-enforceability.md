@@ -47,8 +47,37 @@ mcp-python-sdk (Python), cloudflare/workers-sdk (TS). 125 segmented rules.
 **Net: ~65% mechanizable (homes 1+2); ~90% covered by some vigiles surface (1+2+3).** NOT the
 "~10% niche" an off-the-shelf-only reading implies.
 
-<!-- SYNTH-SUCCESS BENCHMARK: pending (running 2026-07-15). Update the "~40% synthesizable" figure
-with the measured fraction of real rules that yield a gate-PASSING checker once it lands. -->
+## Synthesis success — measured (benchmark, 2026-07-15)
+
+**Of 34 real code-quality rules** extracted from the 7-file corpus (Py/TS/Rust), each turned into
+the least-power enforcement and **actually run** against violating + compliant + adversarial-edge
+snippets:
+
+- **off-the-shelf: 53%** (existing ruff/eslint/clippy rule, configured + run)
+- **config-selector: 6%** (eslint `no-restricted-*`)
+- **custom-AST-works: 26%** (a real AST checker, 9–22 LOC, held on the adversarial edge)
+- **genuinely-semantic: 15%** (no sound deterministic check — e.g. "`time.monotonic` *for
+  durations*", "action-verb function names")
+
+→ **~85% of code-quality rules mechanizable with a deterministic checker** (defensible range
+75–85%). Four load-bearing caveats, or the number lies:
+
+1. **This is 85% of CODE-QUALITY rules, NOT of a whole AGENTS.md.** Code-quality is a *minority*
+   of a real file — the rest is commands/process/boundaries (home #3) + prose (home #4). Do not
+   read "85%" as "85% of a file." (Reconciles with the ~65%-of-all-rules figure above.)
+2. **Synthesizer-sensitive.** The benchmark's model-in-the-loop picked the least-power, *sound*
+   enforcement. A weaker synthesizer defaults to regex and ships **leaky** checkers → the gate must
+   abstain them (fewer "works", not more false-enforced). This is exactly what the trust-gate is for.
+3. **Env-sensitive (Rust).** All 6 Rust rules ran because `clippy-driver`/`syn` were cached offline;
+   a colder env drops the mechanizable % by ~15pt (Rust rules become "custom-hard").
+4. **Qualifier-stripping.** Some off-the-shelf verdicts enforce a sound *superset* ("ban all
+   `eval`") of a semantic rule ("no `eval` on user input") — close, not exact.
+
+**Soundness finding (validates the gate):** of 11 custom checkers, the 2 that used a naive
+regex/line pass **leaked** on the edge (flagged `Tester` for a "no `Test` class" rule; flagged a
+doc-comment token); the **AST-level version held every time**. The 2 rules whose proxy stayed
+leaky are precisely the genuinely-semantic ones — a good adversarial gate makes those *abstain*,
+not ship. Direct evidence for AST-not-regex + the trust-gate.
 
 ## How synthesis works (home #2) — opt-in copy-prompt, $0 to vigiles
 
