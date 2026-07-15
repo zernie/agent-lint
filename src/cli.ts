@@ -2339,7 +2339,7 @@ function formatRuleMapSummary(routing: RuleRouting | undefined): string {
   const lane = (c: RuleCategory): string =>
     `${LANE_META[c].glyph} ${String(counts[c])} ${LANE_META[c].label}`;
   const lines = [
-    "Rule map — how your prose rules could be enforced (heuristic, precision-first):",
+    "Rule map [experimental] — how your prose rules could be enforced (heuristic, precision-first; misses some rules):",
     `  ${lane("reuse")} · ${lane("hook")} · ${lane("unrouted")} · ${lane("semantic")}` +
       (counts.meta > 0 ? ` · ${lane("meta")}` : ""),
   ];
