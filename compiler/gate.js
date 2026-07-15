@@ -38,7 +38,15 @@ const gold = (() => {
 // pass "helpfully" copying cases across would silently void the leak check). Engine-agnostic: each
 // executor reports its self-test's code strings; a collision fails the whole gate loudly.
 function provenanceViolations(entry, ex) {
-  const stCodes = new Set(ex.selfTestCode(entry).map((c) => c.trim()));
+  // A malformed self-test may yield a non-string case (e.g. an ESLint invalid
+  // object missing `.code`) — filter to strings so `.trim()` can't throw here
+  // and abort the whole gate before the self-test verdict runs.
+  const stCodes = new Set(
+    ex
+      .selfTestCode(entry)
+      .filter((c) => typeof c === "string")
+      .map((c) => c.trim()),
+  );
   return gold
     .filter((g) => g.rule === entry.slug)
     .map((g) => g.code.trim())
@@ -88,42 +96,54 @@ function runGate() {
     }
     const ex = executorFor(entry);
 
-    // Integrity precondition: Stage 1 and Stage 2 must not share cases.
-    const contaminated = provenanceViolations(entry, ex);
-    if (contaminated.length) {
-      results.push({
-        id: entry.id,
-        slug: entry.slug,
-        status: "abstain-contaminated",
-        note: "gold case reused in self-test (Stage 2 not independent): " + contaminated[0].slice(0, 40),
-      });
-      continue;
-    }
+    // A malformed synthesized rule/self-test (a case missing `.code`, a bad
+    // ast-grep pattern) must ABSTAIN this one rule, never abort the whole
+    // corpus — mirror the executor's own try/catch so the rest still runs.
+    try {
+      // Integrity precondition: Stage 1 and Stage 2 must not share cases.
+      const contaminated = provenanceViolations(entry, ex);
+      if (contaminated.length) {
+        results.push({
+          id: entry.id,
+          slug: entry.slug,
+          status: "abstain-contaminated",
+          note: "gold case reused in self-test (Stage 2 not independent): " + contaminated[0].slice(0, 40),
+        });
+        continue;
+      }
 
-    const st = ex.selfTest(entry);
-    if (!st.ok) {
-      results.push({ id: entry.id, slug: entry.slug, status: "abstain-selftest", note: st.note });
-      continue;
-    }
+      const st = ex.selfTest(entry);
+      if (!st.ok) {
+        results.push({ id: entry.id, slug: entry.slug, status: "abstain-selftest", note: st.note });
+        continue;
+      }
 
-    const g = goldTest(entry, ex);
-    if (!g.covered) {
+      const g = goldTest(entry, ex);
+      if (!g.covered) {
+        results.push({
+          id: entry.id,
+          slug: entry.slug,
+          status: "kept-ungraded",
+          note: "passed self-test; no independent gold yet (label honestly, do not claim sound)",
+        });
+      } else if (g.ok) {
+        results.push({
+          id: entry.id,
+          slug: entry.slug,
+          status: "kept",
+          note: "self-test + gold OK (P=" + g.precision.toFixed(2) + " R=" + g.recall.toFixed(2) + ")",
+        });
+      } else {
+        // The finding, operationalized: passed its own test, leaked on the independent gold.
+        results.push({ id: entry.id, slug: entry.slug, status: "abstain-gold", note: "SILENT LEAK caught: " + g.note });
+      }
+    } catch (e) {
       results.push({
         id: entry.id,
         slug: entry.slug,
-        status: "kept-ungraded",
-        note: "passed self-test; no independent gold yet (label honestly, do not claim sound)",
+        status: "abstain-selftest",
+        note: "self-test malformed: " + String(e && e.message ? e.message : e).slice(0, 80),
       });
-    } else if (g.ok) {
-      results.push({
-        id: entry.id,
-        slug: entry.slug,
-        status: "kept",
-        note: "self-test + gold OK (P=" + g.precision.toFixed(2) + " R=" + g.recall.toFixed(2) + ")",
-      });
-    } else {
-      // The finding, operationalized: passed its own test, leaked on the independent gold.
-      results.push({ id: entry.id, slug: entry.slug, status: "abstain-gold", note: "SILENT LEAK caught: " + g.note });
     }
   }
   return results;

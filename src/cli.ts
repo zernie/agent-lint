@@ -22,7 +22,14 @@ import {
   realpathSync,
   type Dirent,
 } from "node:fs";
-import { resolve, dirname, basename, relative, isAbsolute } from "node:path";
+import {
+  resolve,
+  dirname,
+  basename,
+  relative,
+  isAbsolute,
+  sep as pathSep,
+} from "node:path";
 import { globSync } from "glob";
 import { generateTypes } from "./core/generate-types.js";
 import {
@@ -7157,10 +7164,14 @@ async function main(): Promise<void> {
         // Keep the generated artifacts out of git so a zero-config `audit` leaves
         // a clean `git status` (works without `init`). Entries are relative to the
         // git root (cwd); a custom --out dir is ignored by its relative path.
+        // .gitignore patterns are POSIX-separated, so normalize away Windows
+        // backslashes (`relative()` yields `reports\x` on Windows, which would
+        // never match `reports/x`).
         if (wroteReports.length > 0) {
-          const rel = wroteReports.map(
-            (f) => relative(process.cwd(), resolve(outDir, f)) || f,
-          );
+          const rel = wroteReports.map((f) => {
+            const r = relative(process.cwd(), resolve(outDir, f)) || f;
+            return pathSep === "/" ? r : r.split(pathSep).join("/");
+          });
           ensureReportGitignored(process.cwd(), rel);
         }
       }
