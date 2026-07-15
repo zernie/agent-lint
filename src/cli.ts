@@ -93,6 +93,7 @@ import {
   type ProbeHarness,
 } from "./scan-behavioral.js";
 import {
+  ADAPTERS,
   detectAdapterResult,
   resolveAdapter,
   resolveHarnessSelection,
@@ -1490,21 +1491,41 @@ async function runLint(
     silent,
   );
 
-  // 7. Orphan docs check — find .md files no other markdown references.
-  // Enforces the `vigiles/orphan-docs` built-in rule when declared in a
-  // spec. Include/exclude come from .vigilesrc.json#orphans (tsconfig-
-  // style globs); default include is docs/ + research/ for the
-  // vigiles-repo convention.
+  // 7. Orphan docs check — OPT-IN (the `orphans` block in .vigilesrc.json is
+  // the on-switch). "Unreferenced" only means "rot" for a hand-cross-linked
+  // corpus; on a nav-managed doc site (Docusaurus/MkDocs) the page graph lives
+  // in config, not inline links, so an unconditional scan is ~all false
+  // positives there (an OSS sweep confirmed it). So we scan only when the repo
+  // declares the block; its `include` defaults to docs/ (research/ etc. are
+  // opted into explicitly). `enforce("vigiles/orphan-docs")` in a spec only
+  // validates the rule NAME — the block is what drives the scan.
+  const orphansCfg = config?.orphans;
   if (!silent) console.log("\nOrphan docs check:\n");
-  const orphanReport = findOrphanDocs({
-    basePath: process.cwd(),
-    include: config?.orphans?.include,
-    exclude: config?.orphans?.exclude,
-  });
-  if (!silent) {
-    for (const line of formatOrphanReport(orphanReport).split("\n")) {
-      console.log(`  ${line}`);
+  let orphanReport: ReturnType<typeof findOrphanDocs> = {
+    include: [],
+    totalDocs: 0,
+    referencedDocs: [],
+    orphans: [],
+  };
+  if (orphansCfg) {
+    orphanReport = findOrphanDocs({
+      basePath: process.cwd(),
+      include: orphansCfg.include,
+      exclude: orphansCfg.exclude,
+      // Exempt every registered harness's surface files (instruction file,
+      // SKILL.md, subagents, commands) as orphan candidates — layout-driven so
+      // core carries no harness literal (see src/core/orphans.ts).
+      layouts: ADAPTERS.map((a) => a.layout),
+    });
+    if (!silent) {
+      for (const line of formatOrphanReport(orphanReport).split("\n")) {
+        console.log(`  ${line}`);
+      }
     }
+  } else if (!silent) {
+    console.log(
+      "  ⊘ not enabled — add an `orphans` block to .vigilesrc.json to opt in (scans docs/ by default)",
+    );
   }
 
   // 7b. Untested-surface check — skills/agents/hooks shipping without a test or

@@ -395,12 +395,12 @@ export default defineConfig({
 | `discover`  | `boolean`              | Auto-discover linter rules for coverage reporting                                                                                                                                                                |
 | `maxRules`  | `number`               | Compilation fails if a spec exceeds this rule count                                                                                                                                                              |
 | `maxTokens` | `number`               | Compilation fails if estimated tokens exceed this limit                                                                                                                                                          |
-| `orphans`   | `object`               | Orphan-docs scan globs (see below)                                                                                                                                                                               |
+| `orphans`   | `object`               | Opt-in orphan-docs scan (see below)                                                                                                                                                                              |
 | `harness`   | `string` \| `string[]` | The harness(es) this repo targets — `"codex"`, or `["claude-code", "codex"]`. Selects the compile dialect; written by `init`. Omitted → auto-detect. See [CLI: compile](cli.md#compile-files--harness-selection) |
 
 ### Orphan-docs configuration
 
-The orphan-docs check (`enforce("vigiles/orphan-docs")`) scans markdown files looking for ones that no other markdown references. By default it follows the vigiles-repo convention (the `docs/` tree plus your project's internal notes directory), but each project sets its own scope via tsconfig-style globs in `.vigilesrc.json`:
+The orphan-docs check flags markdown files that no other markdown references. It is **opt-in**: it runs only when your `.vigilesrc.json` declares an `orphans` block, because "unreferenced" only signals rot in a hand-cross-linked corpus — not in a nav-managed doc site (Docusaurus/MkDocs), where the page graph lives in config. Its `include` defaults to `docs/`; add your own dirs (e.g. an internal `research/` notes tree) explicitly:
 
 ```json
 {
@@ -411,7 +411,7 @@ The orphan-docs check (`enforce("vigiles/orphan-docs")`) scans markdown files lo
 }
 ```
 
-- `include` — glob patterns of `.md` files to scan. Defaults to `["docs/**/*.md"]` plus your project's internal notes directory. Set to `[]` to disable scanning.
+- `include` — glob patterns of `.md` files to scan. Defaults to `["docs/**/*.md"]`. Set to `[]` to opt in but scan nothing.
 - `exclude` — glob patterns to skip within the include scope. Same shape as `tsconfig.json#exclude`.
 
 `node_modules/**`, `dist/**`, `.vigiles/**`, and `.git/**` are always excluded.

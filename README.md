@@ -55,7 +55,10 @@
 
   DON'T SHAME OSS: catches are ANONYMIZED (no obra/superpowers, madappgang,
   claude-flow by name) — real names live only in research/audit-captures/.
-  Guard/compiled-hooks + the 2/7→7/7 battery are PARKED FOR LAUNCH — not the hero.
+  Guard/compiled-hooks stay PARKED FOR LAUNCH as a hero section; the 2/7→7/7 finding is
+  surfaced as ONE supporting, receipts-linked evidence line under Proof 4 (→
+  docs/compiled-hooks.md §disler battery + src/hook-dogfood.test.ts) — reachable
+  evidence under the Lighthouse umbrella, not the hero, not the brand.
 
   RULES: lead with the reader's CONCRETE PAIN; ≤ ~3-line paragraphs; ONE bold per
   block; ONE idea per sentence; NO internal vocabulary (moat/flywheel) / NO
@@ -165,6 +168,9 @@ You wrote the rule. Your agent treats it as gospel and follows it — until it d
 ```
 
 Hand one subagent all three powers and a poisoned web page can make it read your `.env` and POST it anywhere — no exploit code, just the tools it was given. The **80 looks like a B** — and that's the trap: a healthy grade hiding a subagent that's a data-leak waiting to happen. vigiles spots it from the tool list alone, free, no model.
+
+And the guard you'd write to stop it usually doesn't work: a widely-copied "safety hook" pattern blocks only **2 of 7** classic dangerous commands in our battery — the other five sail through while the hook _looks_ like it's working. A hook vigiles compiles for you blocks **7 of 7**, because the exit code and JSON contract are generated, not hand-written.
+**[The safety-hook battery →](docs/compiled-hooks.md)**
 
 That's the whole idea: it checks your harness against **reality, not style**. Every tool, hook, file, script, and skill you reference is verified to actually resolve — and where you name a linter rule, it's checked to exist _and_ be enabled (ESLint, Ruff, Clippy, and more).
 **[Everything it catches →](docs/what-vigiles-catches.md)** · point `audit` at a whole marketplace and it ranks every plugin the same way.
