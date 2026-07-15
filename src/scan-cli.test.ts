@@ -271,7 +271,7 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
       meta: { schemaVersion: number; harness: string };
       inventory: { skills: number; mcp: boolean };
     };
-    assert.equal(report.meta.schemaVersion, 1);
+    assert.equal(report.meta.schemaVersion, 2);
     assert.equal(report.meta.harness, "codex");
     assert.equal(report.inventory.skills, 1);
     assert.equal(report.inventory.mcp, true);
@@ -321,7 +321,7 @@ describe("audit default — folds the deterministic fix into the report", () => 
       score: { overall: number; grade: string };
       recommendations: { surface: string }[];
     };
-    assert.equal(report.meta.schemaVersion, 1);
+    assert.equal(report.meta.schemaVersion, 2);
     assert.equal(report.meta.tool, "vigiles");
     assert.ok(report.meta.dir, "meta.dir present");
     assert.ok(
@@ -759,7 +759,7 @@ describe("audit default artifacts (html + json) written to cwd", () => {
       meta: { schemaVersion: number; generatedAt?: string };
       score: { overall: number };
     };
-    assert.equal(report.meta.schemaVersion, 1);
+    assert.equal(report.meta.schemaVersion, 2);
     assert.ok(report.meta.generatedAt, "json artifact is timestamped");
     assert.ok(typeof report.score.overall === "number");
   });

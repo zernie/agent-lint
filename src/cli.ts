@@ -2178,16 +2178,21 @@ function gatherInstructionFiles(
 function computeRuleRouting(
   root: string,
   instructionFile: string,
-  harness: string,
 ): RuleRouting | undefined {
   try {
     const files = gatherInstructionFiles(root, instructionFile);
     if (files.every((f) => !f.text.trim())) return undefined;
-    // Own-repo + consented + ESLint (claude-code) → enumerate the live catalog.
+    // Own-repo + consented → enumerate the live ESLint catalog. NOT gated on the
+    // agent harness: the catalog is a property of the repo's LINTER (its ESLint
+    // config on disk), not of Claude-Code-vs-Codex, so a Codex JS/TS repo gets the
+    // same catalog match + enabled-state (adapter-aware-lint-rules: never gate a
+    // harness-agnostic capability on CC). enumerateEslintCatalog returns null when
+    // no ESLint config resolves (e.g. a pure-Python repo) → undefined, so a non-JS
+    // repo simply falls back to the foreign-safe textual routing regardless.
     const ownRepo = resolve(root) === resolve(process.cwd());
     const consented = loadConfig().audit?.measure === true;
     const availableRules =
-      harness === "claude-code" && ownRepo && consented
+      ownRepo && consented
         ? (enumerateEslintCatalog(root) ?? undefined)
         : undefined;
     // Route each source SEPARATELY (each rule keeps its own file + line numbers),
@@ -6745,11 +6750,7 @@ async function main(): Promise<void> {
             root,
             adapter.layout.instructionFile,
           ),
-          ruleRouting: computeRuleRouting(
-            root,
-            adapter.layout.instructionFile,
-            adapter.name,
-          ),
+          ruleRouting: computeRuleRouting(root, adapter.layout.instructionFile),
         });
         const sc = auditReport.score;
         const plan = optimize(report);
