@@ -330,21 +330,31 @@ function namedRuleTokens(text: string): string[] {
  * rule; the DYNAMIC catalog (if present) and the static `INTENT_MAP` both feed
  * `reuse`; reuse wins over a soft semantic cue.
  */
+/** A dynamic-catalog lookup result: which linter the named rule belongs to, and
+ * whether it's currently enabled. Carrying the linter (not just a bool) is what
+ * lets a polyglot repo's map say `pylint:invalid-name` vs `eslint:no-console`. */
+type CatalogHit = { enabled: boolean; linter: "eslint" | "pylint" };
+
 function classify(
   text: string,
-  catalog?: ReadonlyMap<string, boolean>,
+  catalog?: ReadonlyMap<string, CatalogHit>,
 ): Classification {
   if (HOOK_CUES.some((re) => re.test(text))) return { category: "hook" };
   if (META_CUES.some((re) => re.test(text))) return { category: "meta" };
   // Dynamic catalog: a bullet that NAMES one of the repo's real rules → reuse,
-  // carrying whether it's currently enabled (a disabled hit = the "documented but
-  // OFF" nudge). Own-repo only — catalog is present only when the linter was
-  // enumerated with consent.
+  // carrying its linter + whether it's currently enabled (a disabled hit = the
+  // "documented but OFF" nudge). Own-repo only — catalog is present only when the
+  // linter was enumerated with consent.
   if (catalog) {
     for (const tok of namedRuleTokens(text)) {
-      const enabled = catalog.get(tok);
-      if (enabled !== undefined)
-        return { category: "reuse", rule: tok, enabled };
+      const hit = catalog.get(tok);
+      if (hit !== undefined)
+        return {
+          category: "reuse",
+          rule: tok,
+          enabled: hit.enabled,
+          linter: hit.linter,
+        };
     }
   }
   for (const m of INTENT_MAP) {
@@ -394,7 +404,7 @@ function looksLikeRuleId(s: string): boolean {
 function extractMarkedRules(
   text: string,
   file: string | undefined,
-  catalog: ReadonlyMap<string, boolean> | undefined,
+  catalog: ReadonlyMap<string, CatalogHit> | undefined,
 ): { rules: RoutedRule[]; skip: Set<number> } {
   const lines = text.split("\n");
   const rules: RoutedRule[] = [];
@@ -413,11 +423,13 @@ function extractMarkedRules(
       const em = ENFORCED_RE.exec(bl);
       if (em) {
         if (!looksLikeRuleId(em[1])) break; // a prose claim, not a rule id
-        const enabled = catalog?.get(em[1].trim());
+        const hit = catalog?.get(em[1].trim());
         marked = {
           category: "reuse",
           rule: em[1].trim(),
-          ...(enabled !== undefined ? { enabled } : {}),
+          ...(hit !== undefined
+            ? { enabled: hit.enabled, linter: hit.linter }
+            : {}),
         };
         break;
       }
@@ -474,17 +486,19 @@ export function routeRules(
 ): RuleRouting {
   const minConfidence = options.minConfidence ?? "high";
   const catalog = options.availableRules
-    ? new Map<string, boolean>(
-        options.availableRules.rules.flatMap((r) =>
+    ? new Map<string, CatalogHit>(
+        options.availableRules.rules.flatMap((r) => {
           // A rule is matchable by its id AND, for Pylint, its numeric code
-          // (`C0116`) — a doc may name either the symbol or the code.
-          r.code
+          // (`C0116`) — a doc may name either the symbol or the code. Both keys
+          // carry the linter so a merged polyglot catalog keeps provenance.
+          const hit: CatalogHit = { enabled: r.enabled, linter: r.linter };
+          return r.code
             ? [
-                [r.id, r.enabled],
-                [r.code, r.enabled],
+                [r.id, hit],
+                [r.code, hit],
               ]
-            : [[r.id, r.enabled]],
-        ),
+            : [[r.id, hit]];
+        }),
       )
     : undefined;
   // A MEDIUM segment that NAMES a rule the repo's catalog actually has is

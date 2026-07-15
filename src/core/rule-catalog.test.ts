@@ -32,7 +32,12 @@ describe("parseEslintCatalog (pure)", () => {
     expect(catalog.enabled).toBe(2);
 
     const core = catalog.rules.find((r) => r.id === "no-console");
-    expect(core).toEqual({ id: "no-console", plugin: null, enabled: true });
+    expect(core).toEqual({
+      id: "no-console",
+      linter: "eslint",
+      plugin: null,
+      enabled: true,
+    });
 
     const disabledCore = catalog.rules.find((r) => r.id === "no-debugger");
     expect(disabledCore?.plugin).toBeNull();
@@ -43,6 +48,7 @@ describe("parseEslintCatalog (pure)", () => {
     );
     expect(boundaries).toEqual({
       id: "boundaries/dependencies",
+      linter: "eslint",
       plugin: "boundaries",
       enabled: true,
     });
@@ -121,6 +127,7 @@ describe("parsePylintCatalog (pure)", () => {
     );
     expect(docstring).toEqual({
       id: "missing-function-docstring",
+      linter: "pylint",
       plugin: null,
       code: "C0116",
       enabled: true,
@@ -139,6 +146,7 @@ describe("parsePylintCatalog (pure)", () => {
     // the plugin message resolved + is enabled (plugin-inclusive catalog)
     expect(catalog.rules.find((r) => r.id === "missing-raises-doc")).toEqual({
       id: "missing-raises-doc",
+      linter: "pylint",
       plugin: null,
       code: "W9006",
       enabled: true,
@@ -168,15 +176,29 @@ describe("mergeCatalogs (pure)", () => {
     linter: "eslint",
     available: 1,
     enabled: 1,
-    rules: [{ id: "no-console", plugin: null, enabled: true }],
+    rules: [
+      { id: "no-console", linter: "eslint", plugin: null, enabled: true },
+    ],
   };
   const pylint: RuleCatalog = {
     linter: "pylint",
     available: 2,
     enabled: 1,
     rules: [
-      { id: "invalid-name", plugin: null, code: "C0103", enabled: true },
-      { id: "unused-import", plugin: null, code: "W0611", enabled: false },
+      {
+        id: "invalid-name",
+        linter: "pylint",
+        plugin: null,
+        code: "C0103",
+        enabled: true,
+      },
+      {
+        id: "unused-import",
+        linter: "pylint",
+        plugin: null,
+        code: "W0611",
+        enabled: false,
+      },
     ],
   };
 
@@ -204,7 +226,9 @@ describe("mergeCatalogs (pure)", () => {
       linter: "pylint",
       available: 1,
       enabled: 0,
-      rules: [{ id: "no-console", plugin: null, enabled: false }],
+      rules: [
+        { id: "no-console", linter: "pylint", plugin: null, enabled: false },
+      ],
     };
     const merged = mergeCatalogs(eslint, dup);
     expect(merged?.rules).toHaveLength(1);

@@ -137,10 +137,16 @@ describe("routeRules", () => {
       rules: [
         {
           id: "no-only-tests/no-only-tests",
+          linter: "eslint" as const,
           plugin: "no-only-tests",
           enabled: false,
         },
-        { id: "boundaries/dependencies", plugin: "boundaries", enabled: true },
+        {
+          id: "boundaries/dependencies",
+          linter: "eslint" as const,
+          plugin: "boundaries",
+          enabled: true,
+        },
       ],
     };
     const md = [
@@ -173,7 +179,12 @@ describe("routeRules", () => {
       available: 1,
       enabled: 1,
       rules: [
-        { id: "boundaries/dependencies", plugin: "boundaries", enabled: true },
+        {
+          id: "boundaries/dependencies",
+          linter: "eslint" as const,
+          plugin: "boundaries",
+          enabled: true,
+        },
       ],
     };
     // Declarative subject ("The core layer must not …"), no imperative head — the
@@ -324,6 +335,7 @@ describe("routeRules", () => {
       rules: [
         {
           id: "@typescript-eslint/no-explicit-any",
+          linter: "eslint" as const,
           plugin: "@typescript-eslint",
           enabled: false,
         },
@@ -338,6 +350,55 @@ describe("routeRules", () => {
     const rule = r.rules.find((x) => x.source === "marker");
     expect(rule?.category).toBe("reuse");
     expect(rule?.enabled).toBe(false); // documented but OFF
+  });
+
+  it("keeps per-linter provenance in a POLYGLOT catalog (eslint + pylint merged)", () => {
+    // A project with BOTH linters: the merged catalog carries each rule's linter,
+    // so a routed reuse hit says pylint:invalid-name vs eslint:no-console — not a
+    // linter-less `undefined:`. This is the multi-linter resolution.
+    const availableRules = {
+      linter: "eslint" as const, // cosmetic summary; routing reads each rule's linter
+      available: 2,
+      enabled: 1,
+      rules: [
+        {
+          id: "@typescript-eslint/no-floating-promises",
+          linter: "eslint" as const,
+          plugin: "@typescript-eslint",
+          enabled: true,
+        },
+        {
+          id: "invalid-name",
+          linter: "pylint" as const,
+          plugin: null,
+          code: "C0103",
+          enabled: false,
+        },
+      ],
+    };
+    const md = [
+      "# Rules",
+      "",
+      "## JS",
+      "",
+      "- No floating promises (`@typescript-eslint/no-floating-promises`).",
+      "",
+      "## Python",
+      "",
+      "- Follow naming conventions (`invalid-name`).",
+      "",
+    ].join("\n");
+    const reuse = routeRules(md, "CLAUDE.md", { availableRules }).rules.filter(
+      (x) => x.category === "reuse",
+    );
+    const js = reuse.find(
+      (x) => x.rule === "@typescript-eslint/no-floating-promises",
+    );
+    const py = reuse.find((x) => x.rule === "invalid-name");
+    expect(js?.linter).toBe("eslint");
+    expect(js?.enabled).toBe(true);
+    expect(py?.linter).toBe("pylint"); // NOT undefined — provenance kept
+    expect(py?.enabled).toBe(false); // documented but OFF
   });
 
   it("returns an empty routing for prose with no rules", () => {

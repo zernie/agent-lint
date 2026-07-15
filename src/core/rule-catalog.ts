@@ -32,6 +32,10 @@ export interface AvailableRule {
   /** The rule id: `no-console`, `@typescript-eslint/no-explicit-any`, `boundaries/dependencies`.
    * For Pylint this is the SYMBOLIC name (`missing-function-docstring`). */
   id: string;
+  /** The linter this rule belongs to. Carried PER-RULE (not only on the catalog)
+   * so a merged polyglot catalog keeps each rule's provenance — a routed reuse
+   * hit can then say `pylint:invalid-name` vs `eslint:no-console`. */
+  linter: "eslint" | "pylint";
   /** The plugin prefix (`@typescript-eslint`, `boundaries`), or null for a core rule.
    * Pylint's `--list-msgs` doesn't attribute a message to its plugin, so it's null there. */
   plugin: string | null;
@@ -76,12 +80,22 @@ function buildRules(
 ): AvailableRule[] {
   const rules: AvailableRule[] = [];
   for (const id of core) {
-    rules.push({ id, plugin: null, enabled: enabledSet.has(id) });
+    rules.push({
+      id,
+      linter: "eslint",
+      plugin: null,
+      enabled: enabledSet.has(id),
+    });
   }
   for (const [prefix, pluginRules] of Object.entries(plugins)) {
     for (const rule of pluginRules) {
       const id = `${prefix}/${rule}`;
-      rules.push({ id, plugin: prefix, enabled: enabledSet.has(id) });
+      rules.push({
+        id,
+        linter: "eslint",
+        plugin: prefix,
+        enabled: enabledSet.has(id),
+      });
     }
   }
   return rules;
@@ -173,7 +187,13 @@ export function parsePylintCatalog(
     const [, name, code] = m;
     if (seen.has(name)) continue;
     seen.add(name);
-    rules.push({ id: name, plugin: null, code, enabled: enabledSet.has(name) });
+    rules.push({
+      id: name,
+      linter: "pylint",
+      plugin: null,
+      code,
+      enabled: enabledSet.has(name),
+    });
   }
   if (rules.length === 0) return null;
   const enabled = rules.reduce((n, r) => (r.enabled ? n + 1 : n), 0);
