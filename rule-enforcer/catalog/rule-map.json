@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "purpose": "Tier-1 (REUSE) mapping for the vigiles rule-compiler: agent-prose intent -> the EXISTING off-the-shelf lint rule that already enforces it. When a repo declares an intent in prose (CLAUDE.md / AGENTS.md) but the mapped rule is off or absent in its ESLint config, the remedy is a one-line config change, NOT synthesis. The catalog is the SUPERSET the compiler routes against; the deterministic high-precision subset lives in src/rule-inventory.ts (INTENT_MAP) and is not edited here.",
+    "purpose": "Tier-1 (REUSE) mapping for the vigiles rule-enforcer: agent-prose intent -> the EXISTING off-the-shelf lint rule that already enforces it. When a repo declares an intent in prose (CLAUDE.md / AGENTS.md) but the mapped rule is off or absent in its ESLint config, the remedy is a one-line config change, NOT synthesis. The catalog is the SUPERSET the compiler routes against; the deterministic high-precision subset lives in src/rule-inventory.ts (INTENT_MAP) and is not edited here.",
     "how_to_read": "Each map entry: intent (human phrasing) -> keywords (prose forms AND rule-name/code tokens a human would write, so the classifier can match) -> existing (real, current rule ids to route to) -> config_fix (the one-line enable) -> optional note (type-aware requirement, heuristic caveat, deprecation/rename). semantic_no_existing lists intents that have NO off-the-shelf rule and fall through to synthesis or stay prose-only.",
     "sources": [
       "core = ESLint core (eslint)",

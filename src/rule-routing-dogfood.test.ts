@@ -122,6 +122,45 @@ describe("routing dogfood — Pylint basics (Python instruction file)", () => {
   });
 });
 
+describe("routing dogfood — Ruff net-new intents (Python)", () => {
+  // Intents Pylint does NOT cover; each routes to a ruff code verified to exist
+  // against ruff 0.15.8. Shared Python norms still route to pylint (disjointness).
+  const DOC = [
+    "# Backend guidelines",
+    "",
+    "- All imports go at the top; inline imports hide dependencies.",
+    "- Type hints are required for all code.",
+    "- Use `logger.exception()` instead of `logger.error()` in handlers.",
+    "- No print statements — use structured logging.",
+    "- Keep sorted imports; run isort.",
+  ].join("\n");
+  const byRule = new Map(
+    routeRules(DOC, "CLAUDE.md")
+      .rules.filter((r) => r.category === "reuse")
+      .map((r) => [r.rule, r.linter]),
+  );
+
+  it("routes the net-new Python intents to their verified Ruff codes", () => {
+    const expected: [string, string][] = [
+      ["PLC0415", "ruff"], // "inline imports"
+      ["ANN001", "ruff"], // "type hints are required"
+      ["TRY400", "ruff"], // "logger.exception"
+      ["T201", "ruff"], // "print statements"
+      ["I001", "ruff"], // "sorted imports" / "isort"
+    ];
+    for (const [rule, linter] of expected) {
+      expect(byRule.get(rule), `${rule} routed`).toBe(linter);
+    }
+  });
+
+  it("a shared Python norm still routes to Pylint, not Ruff", () => {
+    const r = routeRules("- Do not use a bare except.", "CLAUDE.md").rules.find(
+      (x) => x.category === "reuse",
+    );
+    expect(r?.linter).toBe("pylint");
+  });
+});
+
 describe("INTENT_MAP invariant — keyword disjointness across linters", () => {
   it("no keyword is claimed by two linters (classify is first-match-wins)", () => {
     const owner = new Map<string, string>();

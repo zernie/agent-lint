@@ -187,15 +187,15 @@ jobs:
           node bench/corpus/verify.mjs
           node bench/corpus/verify-headroom.mjs
 
-      # The @vigiles/compiler trust gate — prove the two-stage soundness gate
+      # The @vigiles/rule-enforcer trust gate — prove the two-stage soundness gate
       # still ABSTAINS the leaky synthesized checkers (its whole reason to
       # exist). gate.js asserts the known-correct kept/abstain verdicts and
       # exits non-zero on drift. Its own package + lockfile, so install in place.
       # Deterministic, no model. See research/dogfood-corpus.md.
-      - name: Compiler trust gate (soundness dogfood)
+      - name: Rule-enforcer trust gate (soundness dogfood)
         run: |
-          npm ci --prefix compiler
-          node compiler/gate.js
+          npm ci --prefix rule-enforcer
+          node rule-enforcer/gate.js
 
   harness:
     # Dogfood the harness-testing pillar on the in-repo build: the deterministic
