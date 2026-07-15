@@ -830,6 +830,60 @@ assertRates`) is the recommended path for testing one skill, but
   ON/OFF nuance of the reuse lane (own-repo + consent), not whether it routes to
   reuse. Fix: pick a representative linted file per config target (or merge
   configs across JS/TS paths) instead of the hardcoded path. Codex review on #72. · **LOW**
+- **Rule map: two-tier detection (confident + possible-review)** — DESIGNED 2026-07-15
+  (`research/rule-compiler-design.md` decision #2), not built. Detection is single-tier
+  today (precision-first, silently drops ambiguous bullets). Split the output into a
+  CONFIDENT set (routed as now) + a POSSIBLE set (rule-ish bullets that didn't clear the
+  bar — declarative "Every X must Y") surfaced separately, so recall misses are visible
+  to a human without polluting the confident lanes. The honest fix for the undecidable
+  rule-vs-not-rule problem. · **MEDIUM**
+- **Rule map: report shows SKIPPED bullets + a best-effort caveat** — DESIGNED 2026-07-15
+  (`research/rule-compiler-design.md` decision #3), not built. Today the report lists only
+  detected rules, so a user can't tell "no rules" from "missed your declarative ones". Add:
+  the skipped bullets each with a one-word reason (heading/setup-step/description/context)
+  - a one-line "detection is a heuristic, precision-first filter" caveat. Likely inline
+    counts + caveat, full skipped list in `--json`. · **MEDIUM**
+- **Rule-catalog: normalize an `eslint/` prefix before the catalog lookup** —
+  `routeRuleToMechanism` (`src/core/rule-routing.ts`) matches a reuse candidate
+  against the enumerated ESLint catalog by bare rule id, but a marked ref written
+  as `eslint/no-var` (the `enforce()` prefix form) isn't stripped before the lookup,
+  so it misses the catalog and falls through to `synthesize` even though the rule is
+  real + enabled. Fix: strip a leading `<linter>/` segment before matching. Codex
+  review on #72. · **LOW**
+- **Audit: apply the measure-consent BEFORE building the rule map on first run** —
+  in `cli.ts` the rule-routing map's own-repo ESLint-catalog read (`computeRuleRouting`)
+  runs the enumerate step gated on `ownRepo && consented`, but on the FIRST interactive
+  run the consent prompt is resolved AFTER the map is assembled, so the very first
+  `audit` misses the dynamic catalog (falls back to the static INTENT_MAP) and only the
+  second run sees it. Fix: resolve `decideExecute`/consent before `computeRuleRouting`.
+  Codex review on #72. · **LOW**
+- **Segment: don't over-suppress rule bullets under a process heading** — the
+  markdown segmenter (`src/core/segment.ts`) drops list items nested under a
+  process/section heading to avoid treating steps as rules, but a legitimate rule
+  bullet under an H2 like `## Rules` / `## Conventions` gets suppressed too, so it
+  never reaches the routing map. Fix: only suppress under genuinely procedural
+  headings (a small denylist / heading-intent check), not every H2. Codex review on
+  #72. · **LOW**
+- **Rule-routing: honor checkbox rule markers in the pre-pass** — the reuse pre-pass
+  (`src/core/rule-routing.ts`) recognizes a marked linter ref inside a bullet but not
+  when the bullet is a GitHub task-list checkbox (`- [ ] enforce(...)` / `- [x] ...`),
+  so a checkbox-styled rule is skipped. Fix: strip the `[ ]`/`[x]` checkbox token
+  before parsing the bullet. Codex review on #72. · **LOW**
+- ~~**Python custom-rule SYNTHESIS**~~ — **DONE 2026-07-15.** Added an `astgrep-py`
+  engine to `@vigiles/compiler`: one gate, injected per-engine executors
+  (`compiler/executors/{eslint,astgrep-py}.js`), corpus entries carry an `engine` field.
+  Python rules are synthesized as ast-grep rule OBJECTS (JSON — data, not code) run
+  in-process via `@ast-grep/napi` + `@ast-grep/lang-python`. 3 dogfood rules
+  (py-no-bare-except/py-no-print/py-no-eval); the naive `print($A)` ABSTAINS on the gold
+  (recall leak — misses zero/multi-arg) proving the gate still catches leaks cross-engine.
+  Added a provenance guard (gold reused in a self-test → abstain-contaminated, engine-
+  agnostic). CI-enforced via the existing compiler-gate step (EXPECTED extended P1/P2/P3).
+  Fable-designed. FOLLOW-UP (not built): wiring the audit "custom rule ⚙" lane to actually
+  invoke this synthesis lane is a separate change with its own consent story. · shipped
+- **Ruff routing** — extend the dynamic catalog approach to Ruff (`ruff rule --all` is
+  static to the binary, `ruff.toml`/`pyproject` is data → FOREIGN-SAFE, no consent gate
+  needed, unlike ESLint/Pylint). Highest-value next linter for modern Python; closes the
+  public "ESLint/Ruff/…" wording discrepancy. See the design doc "What's next" #1. · **LOW**
 - **Wrap the FP / dogfood sweeps as contributor skills** — `tools/fp-sweep.sh` +
   `tools/dogfood-sweep.sh` have real model-judgment on their output (which flags are
   true false positives / which detectors regressed). At launch, wrap each as a

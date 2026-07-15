@@ -281,10 +281,12 @@ function RuleMap({ routing }: { routing?: RuleRouting }) {
               </ul>
             </div>
           )}
+          <RuleMapTiers routing={routing} />
           <RuleMapNextSteps />
         </>
       ) : (
         <>
+          <RuleMapTiers routing={routing} />
           <p className="mt-1.5 text-xs text-muted-foreground">
             Segments your instruction file into atomic rules and routes each one
             — deterministically, no model:
@@ -313,6 +315,57 @@ function RuleMap({ routing }: { routing?: RuleRouting }) {
           <RuleMapNextSteps />
         </>
       )}
+    </div>
+  );
+}
+
+/** The POSSIBLE (review) + SKIPPED tiers — detection is precision-first, so this
+ * is where a rule-ish bullet below the confidence bar (possible) and the bullets
+ * we set aside with a reason (skipped) surface, so nothing is silently dropped. */
+function RuleMapTiers({ routing }: { routing?: RuleRouting }) {
+  const possible = routing?.possible ?? [];
+  const skipped = routing?.skipped ?? [];
+  if (possible.length === 0 && skipped.length === 0) return null;
+  const byReason: Record<string, number> = {};
+  for (const s of skipped) byReason[s.reason] = (byReason[s.reason] ?? 0) + 1;
+  return (
+    <div className="mt-2.5 space-y-2">
+      {possible.length > 0 && (
+        <div className="rounded-md border border-dashed border-border p-2.5">
+          <p className="text-xs font-semibold text-foreground">
+            ? {possible.length} possible — rule-ish, below the confidence bar
+            (review)
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {possible.slice(0, 6).map((r, i) => (
+              <li
+                key={`${r.lineStart}-${i}`}
+                className="truncate text-xs italic text-muted-foreground opacity-80"
+              >
+                “{r.text}”
+              </li>
+            ))}
+            {possible.length > 6 && (
+              <li className="text-xs text-muted-foreground">
+                +{possible.length - 6} more
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+      {skipped.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          ⊘ {skipped.length} skipped — not treated as rules (
+          {Object.entries(byReason)
+            .map(([reason, n]) => `${n} ${reason}`)
+            .join(" · ")}
+          )
+        </p>
+      )}
+      <p className="text-xs text-muted-foreground opacity-70">
+        Detection is a best-effort, precision-first filter — it won’t catch
+        every rule. Full per-bullet lists are in the JSON report.
+      </p>
     </div>
   );
 }

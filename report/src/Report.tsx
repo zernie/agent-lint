@@ -289,7 +289,10 @@ export function Report({ data }: { data: AuditReport }) {
       })()}
 
       {((rulesInventory && rulesInventory.length > 0) ||
-        (ruleRouting && ruleRouting.segmented > 0)) && (
+        (ruleRouting &&
+          (ruleRouting.segmented > 0 ||
+            (ruleRouting.possible?.length ?? 0) > 0 ||
+            (ruleRouting.skipped?.length ?? 0) > 0))) && (
         <>
           <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Your rules → enforced

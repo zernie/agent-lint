@@ -58,5 +58,23 @@
     "slug": "no-eslint-disable",
     "status": "abstain-gold",
     "note": "SILENT LEAK caught: FALSE+(PROSE mention, not a directive -> must NOT flag)"
+  },
+  {
+    "id": "P1",
+    "slug": "py-no-bare-except",
+    "status": "kept",
+    "note": "self-test + gold OK (P=1.00 R=1.00)"
+  },
+  {
+    "id": "P2",
+    "slug": "py-no-print",
+    "status": "abstain-gold",
+    "note": "SILENT LEAK caught: MISS(zero-arg — MISSED by naive $A) MISS(multi-arg — MISSED by naive $A)"
+  },
+  {
+    "id": "P3",
+    "slug": "py-no-eval",
+    "status": "kept",
+    "note": "self-test + gold OK (P=1.00 R=1.00)"
   }
 ]

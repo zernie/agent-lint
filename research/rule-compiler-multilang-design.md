@@ -5,7 +5,13 @@ topic: compiler
 
 # Rule-compiler: multi-language design (Ruff + Pylint) + segmentation, grounded in a 20-repo corpus
 
-> Design-of-record (2026-07-14). The `audit` rule-compile tier (`src/rule-inventory.ts` and
+> **The crisp design-of-record is now `research/rule-compiler-design.md` — read that
+> first.** This doc is the detailed BUILD-LOG (segmentation model + the multi-language
+> reasoning + the OSS corpus). Note: the design-of-record FROZE the rule map at 2
+> linters (ESLint + Pylint) for now, so the Ruff-routing plans below are future/parked,
+> not active — and detection moved to a two-tier (confident + possible-review) target.
+
+> Build-log (2026-07-14). The `audit` rule-compile tier (`src/rule-inventory.ts` and
 > `src/rule-routing.ts`, backed by `@vigiles/compiler`) reads prose rules in a repo's
 > convention docs and reports which map to off-the-shelf lint rules and whether they're
 > enforced. It is **ESLint-only in its data** today. This doc designs the expansion to
@@ -36,9 +42,21 @@ nothing executes (the ONE exception: the ESLint catalog enumeration in mechanism
 NOT the `enforce()` cross-ref engine (`core/linters.ts`, which already resolves 7 catalogs incl. Python);
 the rule map is the AUDIT feature that SUGGESTS which prose could become a lint rule.
 
-**Linters the rule map supports today: exactly TWO — ESLint (full) and Pylint (routing-only). Ruff is NOT
-yet routed.** (The "ESLint/Ruff/…" phrasing in public docs describes the separate `enforce()` engine, not
-this map — a real discrepancy, see "What's next".)
+**Linters the rule map supports today: exactly TWO — ESLint (full) and Pylint (full: dynamic catalog +
+enabled-state + routing intents). Ruff is NOT yet routed.** (The "ESLint/Ruff/…" phrasing in public docs
+describes the separate `enforce()` engine, not this map — a real discrepancy, see "What's next".)
+
+**UPDATE 2026-07-15 — Pylint gained the dynamic catalog + enabled-state** (`enumeratePylintCatalog`,
+`src/core/rule-catalog.ts`), closing the two gaps this §0.0 previously called deferred. It shells
+`pylint --list-msgs` (available) + `--list-msgs-enabled` (enabled, section-aware — the `Disabled messages:`
+/ `Non-emittable messages:` sections are NOT misread as enabled), so a Python repo now gets the SAME
+own-repo catalog match + "documented but OFF" nudge as ESLint, **plugin messages included** (a loaded
+pylint plugin's `W9xxx` message is in the listing). Each rule is matchable by its symbolic name OR its
+numeric code (`missing-function-docstring` or `C0116`). The "inverted-polarity ConfigProbe" the design
+called for (§3/§5b) turned out **unnecessary** — `--list-msgs-enabled` resolves enabled-state directly, so
+there is no polarity to reason about. `mergeCatalogs` unions ESLint + Pylint for a polyglot repo. The ONE
+remaining ESLint-only capability is **custom-rule SYNTHESIS** (the `@vigiles/compiler` engine emits ESLint
+rules only; a Python target — a pylint/astroid checker or, cheaper, an ast-grep YAML rule — is unbuilt).
 
 **The four lanes** (`RuleCategory` in `src/rule-routing.ts`):
 
@@ -53,31 +71,39 @@ this map — a real discrepancy, see "What's next".)
 
 **The reuse-match mechanisms** (how a prose rule becomes `reuse`), in `classify()` precedence order:
 
-| #   | Mechanism          | Where                                      | Linters                   | Foreign-safe?            | What it does                                                                                   |
-| --- | ------------------ | ------------------------------------------ | ------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------- |
-| S   | S0/S1 markers      | `extractMarkedRules` (rule-routing.ts)     | any                       | yes                      | `**Enforced by:**`→reuse · `**Guard:**`→hook · `**Guidance only**`→classify body               |
-| 1   | Dynamic catalog    | `enumerateEslintCatalog` (rule-catalog.ts) | **ESLint only**           | **NO** — executes ESLint | ~702 real rules (292 core + 410 plugin); matches prose that NAMES a rule; powers enabled-state |
-| 2   | `INTENT_MAP`       | rule-inventory.ts                          | **22 ESLint + 12 Pylint** | yes                      | curated intent→rule aliases (e.g. "no console" → `no-console`)                                 |
-| 3   | `PATTERN_RULE_MAP` | rule-routing.ts                            | **5 ESLint + 1 Pylint**   | yes                      | constructs → `no-restricted-syntax`; docstring-presence → `missing-function-docstring`         |
+| #   | Mechanism          | Where                                               | Linters                   | Foreign-safe?                | What it does                                                                                                                                                             |
+| --- | ------------------ | --------------------------------------------------- | ------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| S   | S0/S1 markers      | `extractMarkedRules` (rule-routing.ts)              | any                       | yes                          | `**Enforced by:**`→reuse · `**Guard:**`→hook · `**Guidance only**`→classify body                                                                                         |
+| 1   | Dynamic catalog    | `enumerate{Eslint,Pylint}Catalog` (rule-catalog.ts) | **ESLint + Pylint**       | **NO** — executes the linter | ESLint ~702 real rules (292 core + 410 plugin); Pylint ~389 messages + plugins via `--list-msgs`; matches prose that NAMES a rule (symbol or code); powers enabled-state |
+| 2   | `INTENT_MAP`       | rule-inventory.ts                                   | **22 ESLint + 12 Pylint** | yes                          | curated intent→rule aliases (e.g. "no console" → `no-console`)                                                                                                           |
+| 3   | `PATTERN_RULE_MAP` | rule-routing.ts                                     | **5 ESLint + 1 Pylint**   | yes                          | constructs → `no-restricted-syntax`; docstring-presence → `missing-function-docstring`                                                                                   |
 
-Mechanism #1 EXECUTES the linter (loads the repo's real ESLint config), so it is gated: **own-repo + the
-sticky `audit.measure` consent + claude-code only**; on a stranger's repo / no consent / failure it falls
-back to the foreign-safe textual path (#S, #2, #3). Mechanisms #2 and #3 are pure text → route, no execution.
+Mechanism #1 EXECUTES the linter (loads the repo's real ESLint config, or runs `pylint` with the repo's
+rcfile + `load-plugins`), so it is gated: **own-repo + the sticky `audit.measure` consent**; on a stranger's
+repo / no consent / failure it falls back to the foreign-safe textual path (#S, #2, #3). NOT gated on the
+agent harness (a catalog is a linter fact, not a CC-vs-Codex fact). Mechanisms #2 and #3 are pure text →
+route, no execution.
 
 **Enabled-state ("documented but OFF")** — the "you wrote this rule but your config silently disables it"
-payoff: **ESLint only.** `buildRuleInventory` is gated to eslint because Pylint is ON-BY-DEFAULT (a deny-list
-/ inverted polarity) — the eslint-shaped "is it enabled?" check would mislabel it. So Pylint is **route-only**
-(it says "this maps to `pylint/X`" but not on/off); the inverted-polarity `ConfigProbe` for Pylint is deferred (§3, §5b).
+payoff: **ESLint AND Pylint** (as of 2026-07-15). ESLint reads severity from the resolved config; Pylint
+reads `--list-msgs-enabled` (config-respecting, plugin-inclusive). The feared "inverted polarity" of Pylint's
+on-by-default deny-list is a non-issue — `--list-msgs-enabled` gives the resolved enabled SET directly, so
+no ConfigProbe polarity logic is needed. (`buildRuleInventory`, the SEPARATE `rulesInventory` cross-ref, is
+still ESLint-gated — that's a different surface from this routing catalog.)
 
 **Per-linter support quality:**
 
 - **ESLint — FULL.** dynamic catalog (own-repo, ~702 rules) + 22 intents + 5 construct patterns + enabled-state
   (ON / one-line-away / documented-but-OFF). Architecture rules count (`boundaries/dependencies` → reuse).
-- **Pylint — BASICS, route-only.** 12 intents (bare-except, broad-exception-caught, dangerous-default-value,
+- **Pylint — FULL (catalog + enabled-state), as of 2026-07-15.** Dynamic catalog (`enumeratePylintCatalog`,
+  own-repo + consent) enumerating ~389 core messages + every loaded plugin's messages, each matchable by
+  symbol OR numeric code, with correct enabled-state (`--list-msgs-enabled`) for the "documented but OFF"
+  nudge. PLUS the 12 curated intents (bare-except, broad-exception-caught, dangerous-default-value,
   invalid-name, too-many-arguments/statements, wildcard-import, global-statement, line-too-long, unused-import,
   consider-using-f-string; each symbol verified via `pylint --help-msg`) + 1 docstring-presence pattern
-  (`missing-function-docstring`). NO catalog enumeration, NO enabled-state. Keywords are Python-UNAMBIGUOUS
-  (bare `snake_case` / `import *` / "unused imports" deliberately excluded) → 0 cross-language false positives.
+  (`missing-function-docstring`). Keywords are Python-UNAMBIGUOUS (bare `snake_case` / `import *` / "unused
+  imports" deliberately excluded) → 0 cross-language false positives. The ONE gap vs ESLint: no custom-rule
+  SYNTHESIS for Python (the compiler emits ESLint rules only) — see "What's next".
 - **Ruff — NONE (in the map).** 0 intents, not routed. Highest-value next linter for modern Python.
 
 **Grounded reality (17-doc OSS fan-out).** Foreign TEXTUAL reuse ≈ **0%** — real third-party docs almost never
@@ -98,12 +124,17 @@ are NOT yet in the 100% coverage `include` list (behavior is gated; line-coverag
 1. **Ruff routing** — foreign-safe (the rule set is static to the binary, `pyproject.toml`/`ruff.toml` is
    data not code, `select` replaces the default → no consent gate). Arguably higher-value than Pylint for
    modern Python. Closes the public "ESLint/Ruff/…" discrepancy.
-2. **Pylint enabled-state** — the §3 inverted-polarity `ConfigProbe` (routing is done; the config-state half
-   isn't), so a Python repo also gets "documented but OFF".
-3. **More catalog linters** — the dynamic-catalog approach (#1) generalizes beyond ESLint; today it's ESLint-only.
-4. **Graduate synthesis** — the gated `pr-to-lint-rule` skill is DEV-ONLY today (the ⚙ custom-rule lane's
+2. ~~**Pylint enabled-state**~~ — **DONE 2026-07-15** (`enumeratePylintCatalog` + `--list-msgs-enabled`; the
+   inverted-polarity ConfigProbe proved unnecessary). A Python repo now gets "documented but OFF".
+3. **Python custom-rule SYNTHESIS** — the ONLY remaining ESLint-vs-Pylint asymmetry: the `@vigiles/compiler`
+   engine (the "custom rule ⚙" lane's hand-off) emits ESLint rules + a JS self-test only. A Python target
+   would be a new synthesis backend — a pylint/astroid checker, or (cheaper, and ast-grep already does Python)
+   an ast-grep YAML rule + a Python self-test harness, re-pointing the trust gate. Larger than the catalog fix.
+4. **More catalog linters** — the dynamic-catalog approach (#1) now covers ESLint + Pylint; it generalizes
+   further (Ruff via `ruff rule --all`, etc.).
+5. **Graduate synthesis** — the gated `pr-to-lint-rule` skill is DEV-ONLY today (the ⚙ custom-rule lane's
    hand-off); ship it to users once the trust gate is proven in the wild.
-5. **Fuzzy semantic mapping** ("keep functions small" → `max-lines-per-function`) — genuinely needs the model
+6. **Fuzzy semantic mapping** ("keep functions small" → `max-lines-per-function`) — genuinely needs the model
    tier; the deterministic map only catches prose that NAMES a rule/token/construct.
 
 ## 0. Spike + honest scope (2026-07-14) — DYNAMIC catalog, not a static map

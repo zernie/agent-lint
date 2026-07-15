@@ -234,7 +234,10 @@ export function buildAuditReport(
     ...(opts.rulesInventory && opts.rulesInventory.length
       ? { rulesInventory: opts.rulesInventory }
       : {}),
-    ...(opts.ruleRouting && opts.ruleRouting.segmented > 0
+    ...(opts.ruleRouting &&
+    (opts.ruleRouting.segmented > 0 ||
+      opts.ruleRouting.possible.length > 0 ||
+      opts.ruleRouting.skipped.length > 0)
       ? { ruleRouting: opts.ruleRouting }
       : {}),
   };

@@ -22,7 +22,14 @@ import {
   realpathSync,
   type Dirent,
 } from "node:fs";
-import { resolve, dirname, basename, relative, isAbsolute } from "node:path";
+import {
+  resolve,
+  dirname,
+  basename,
+  relative,
+  isAbsolute,
+  sep as pathSep,
+} from "node:path";
 import { globSync } from "glob";
 import { generateTypes } from "./core/generate-types.js";
 import {
@@ -142,7 +149,11 @@ import {
   dedupeInstructionFiles,
   type RawInstructionFile,
 } from "./instruction-sources.js";
-import { enumerateEslintCatalog } from "./core/rule-catalog.js";
+import {
+  enumerateEslintCatalog,
+  enumeratePylintCatalog,
+  mergeCatalogs,
+} from "./core/rule-catalog.js";
 import {
   runAdoptabilityTier,
   formatAdoptability,
@@ -2196,6 +2207,38 @@ function gatherInstructionFiles(
  * sticky `audit.measure` consent as the other executing checks AND on own-repo
  * (never a stranger's toolchain). The textual routing is the foreign-safe default;
  * the catalog only ADDS enabled-state nudges and matches named-but-`/`-broken rules. */
+/** Does the repo actually USE Pylint — i.e. is there a real Pylint config to run
+ * against? A DEDICATED pylintrc file (`.pylintrc`, `pylintrc`, `.pylintrc.toml`,
+ * `pylintrc.toml`) is unambiguous. A SHARED file (`pyproject.toml`, `setup.cfg`,
+ * `tox.ini`) counts ONLY when it carries a Pylint section — otherwise a Ruff-only
+ * / packaging-only `pyproject.toml` would falsely make us spawn pylint and route
+ * docs as `reuse`/`enabled` against a linter the repo doesn't use. Mirrors
+ * Pylint's own config search order. */
+function hasPythonSurface(root: string): boolean {
+  const dedicated = [
+    ".pylintrc",
+    "pylintrc",
+    ".pylintrc.toml",
+    "pylintrc.toml",
+  ];
+  if (dedicated.some((f) => existsSync(resolve(root, f)))) return true;
+  // A pylint section: `[tool.pylint...]` (pyproject) or `[pylint...]` / `[MASTER]`
+  // / `[MESSAGES CONTROL]` (setup.cfg / tox.ini, incl. case variants).
+  const pylintSection =
+    /(\[tool\.pylint)|(\[pylint)|(\[MASTER\])|(\[MESSAGES CONTROL\])/i;
+  for (const f of ["pyproject.toml", "setup.cfg", "tox.ini"]) {
+    const p = resolve(root, f);
+    if (existsSync(p)) {
+      try {
+        if (pylintSection.test(readFileSync(p, "utf-8"))) return true;
+      } catch {
+        /* unreadable — treat as no pylint config */
+      }
+    }
+  }
+  return false;
+}
+
 function computeRuleRouting(
   root: string,
   instructionFile: string,
@@ -2203,18 +2246,25 @@ function computeRuleRouting(
   try {
     const files = gatherInstructionFiles(root, instructionFile);
     if (files.every((f) => !f.text.trim())) return undefined;
-    // Own-repo + consented → enumerate the live ESLint catalog. NOT gated on the
-    // agent harness: the catalog is a property of the repo's LINTER (its ESLint
-    // config on disk), not of Claude-Code-vs-Codex, so a Codex JS/TS repo gets the
-    // same catalog match + enabled-state (adapter-aware-lint-rules: never gate a
-    // harness-agnostic capability on CC). enumerateEslintCatalog returns null when
-    // no ESLint config resolves (e.g. a pure-Python repo) → undefined, so a non-JS
-    // repo simply falls back to the foreign-safe textual routing regardless.
+    // Own-repo + consented → enumerate the live rule catalog of whichever
+    // linter(s) the repo has: ESLint (JS/TS) and/or Pylint (Python), merged so a
+    // polyglot repo matches against both. NOT gated on the agent harness — a
+    // catalog is a property of the repo's LINTER (its config on disk), not of
+    // Claude-Code-vs-Codex (adapter-aware-lint-rules: never gate a harness-
+    // agnostic capability on CC). Each enumerate returns null when its linter
+    // doesn't apply, so a repo with neither falls back to the foreign-safe textual
+    // routing. Enumerating EXECUTES the linter (plugin code loads), hence own-repo
+    // + consent — same posture for both.
     const ownRepo = resolve(root) === resolve(process.cwd());
     const consented = loadConfig().audit?.measure === true;
     const availableRules =
       ownRepo && consented
-        ? (enumerateEslintCatalog(root) ?? undefined)
+        ? mergeCatalogs(
+            enumerateEslintCatalog(root),
+            // Only spawn pylint when the repo actually has a Python surface —
+            // avoids a needless (and possibly noisy) pylint run on a pure-JS repo.
+            hasPythonSurface(root) ? enumeratePylintCatalog(root) : null,
+          )
         : undefined;
     // Route each source SEPARATELY (each rule keeps its own file + line numbers),
     // then merge — so a CLAUDE.md rule and an AGENTS.md rule carry correct
@@ -2222,7 +2272,14 @@ function computeRuleRouting(
     const routing = mergeRoutings(
       files.map((f) => routeRules(f.text, f.path, { availableRules })),
     );
-    return routing.segmented > 0 ? routing : undefined;
+    // Keep the routing if it found ANY confident rule, possible rule, or skipped
+    // bullet — so the two-tier + skipped report surfaces even a doc with 0
+    // confident rules (all its bullets landed in possible/skipped).
+    return routing.segmented > 0 ||
+      routing.possible.length > 0 ||
+      routing.skipped.length > 0
+      ? routing
+      : undefined;
   } catch {
     return undefined;
   }
@@ -2254,6 +2311,41 @@ function formatTriggerNudge(triggerableSkills: number): string {
     `ℹ Do your ${String(n)} skill${n === 1 ? "" : "s"} actually fire? The deterministic read can't tell — ` +
     `run \`audit\` interactively to measure, or test with \`measureTriggerRate\` (vigiles/testing).`
   );
+}
+
+/** A terminal summary of the rule map: the CONFIDENT lane counts + the POSSIBLE
+ * (review) and SKIPPED tiers, with the honest caveat that detection is a
+ * heuristic filter. The full per-rule map + skipped list live in the HTML/JSON
+ * report; this is the "be clear about what was detected" headline. "" when there
+ * is nothing to show. */
+function formatRuleMapSummary(routing: RuleRouting | undefined): string {
+  if (!routing) return "";
+  const { counts, possible, skipped } = routing;
+  const confident =
+    counts.reuse +
+    counts.hook +
+    counts.unrouted +
+    counts.semantic +
+    counts.meta;
+  if (confident === 0 && possible.length === 0 && skipped.length === 0)
+    return "";
+  const lines = [
+    "Rule map — how your prose rules could be enforced (heuristic, precision-first):",
+    `  ✓ ${String(counts.reuse)} enforceable · ⛓ ${String(counts.hook)} hook · ⚙ ${String(counts.unrouted)} custom · ✎ ${String(counts.semantic)} judgment` +
+      (counts.meta > 0 ? ` · ☰ ${String(counts.meta)} agent-note` : ""),
+  ];
+  if (possible.length > 0)
+    lines.push(
+      `  ? ${String(possible.length)} possible — rule-ish, but below the confidence bar (review these)`,
+    );
+  if (skipped.length > 0)
+    lines.push(
+      `  ⊘ ${String(skipped.length)} skipped — not treated as rules (setup steps, descriptions, index entries, no norm signal)`,
+    );
+  lines.push(
+    "  Detection is a best-effort filter — it won't catch every rule. Full map + skipped list in the report (or --json).",
+  );
+  return lines.join("\n");
 }
 
 function scaffoldSpec(args: string[]): void {
@@ -5106,7 +5198,7 @@ function printUsage(command: string | undefined): void {
     "  vigiles audit [dir...]          Lighthouse for your harness — a LOCAL report: rings + what's broken + fixes (a deterministic read; 2+ dirs → leaderboard)",
   );
   console.log(
-    "                                 writes vigiles-report.html + vigiles-report.json (--no-html/--no-json) · --json for machine output. NOT a CI step — use `vigiles lint` in CI.",
+    "                                 writes vigiles-report.html + .json (auto-gitignored; --out=<dir> · --no-html/--no-json · --no-open · --json for machine output). NOT a CI step — use `vigiles lint` in CI.",
   );
   console.log(
     "                                 the executing checks (run your hooks · live MCP · do skills fire?) run only interactively — `audit` asks once (remembered); automation uses the vigiles/testing API",
@@ -6187,17 +6279,52 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
 }
 
 /**
+ * Idempotently keep the generated report artifacts OUT of git — the tool that
+ * writes a build artifact keeps it ignored (the `next build` → `.next` pattern),
+ * so `vigiles audit` (which runs zero-config, without `init`) never leaves
+ * surprise untracked files in `git status`. Appends only the MISSING entries
+ * under a labelled block if a `.gitignore` exists; if none exists, prints a
+ * one-line nudge rather than creating one silently. Best-effort — a failure here
+ * never breaks the audit. `entries` are paths relative to the git root (cwd).
+ */
+function ensureReportGitignored(cwd: string, entries: readonly string[]): void {
+  if (entries.length === 0) return;
+  const gi = resolve(cwd, ".gitignore");
+  try {
+    if (!existsSync(gi)) {
+      console.log(
+        `\nℹ tip: add ${entries.join(" + ")} to a .gitignore (generated report artifacts)`,
+      );
+      return;
+    }
+    const content = readFileSync(gi, "utf-8");
+    const present = new Set(content.split("\n").map((l) => l.trim()));
+    const missing = entries.filter((e) => !present.has(e));
+    if (missing.length === 0) return;
+    const sep = content.length === 0 || content.endsWith("\n") ? "" : "\n";
+    writeFileSync(
+      gi,
+      `${content}${sep}\n# vigiles audit report (generated)\n${missing.join("\n")}\n`,
+    );
+    console.log(`✓ Added ${missing.join(" + ")} to .gitignore`);
+  } catch {
+    /* best-effort — a read-only or missing .gitignore never breaks the audit */
+  }
+}
+
+/**
  * Write the versioned JSON artifact (`vigiles-report.json`) — the upload/CI
  * boundary a hosted dashboard ingests. Stamps `meta.generatedAt` here (at write
  * time, not in the pure builder, so the HTML-embedded form stays deterministic).
  */
-function writeAuditJson(report: AuditReport): void {
-  const jsonPath = resolve(process.cwd(), "vigiles-report.json");
+function writeAuditJson(report: AuditReport, outDir: string): void {
+  const jsonPath = resolve(outDir, "vigiles-report.json");
   const stamped: AuditReport = {
     ...report,
     meta: { ...report.meta, generatedAt: new Date().toISOString() },
   };
   try {
+    mkdirSync(outDir, { recursive: true });
     writeFileSync(jsonPath, JSON.stringify(stamped, null, 2) + "\n");
     console.log("✓ Wrote vigiles-report.json — the upload/CI artifact");
   } catch (e) {
@@ -6233,12 +6360,20 @@ function openBestEffort(file: string): void {
  * for a human at a TTY, open it best-effort. The shareable Lighthouse artifact;
  * never spawns a browser for an agent / CI run.
  */
-function writeAuditHtml(report: AuditReport): void {
-  const htmlPath = resolve(process.cwd(), "vigiles-report.html");
+function writeAuditHtml(
+  report: AuditReport,
+  outDir: string,
+  open: boolean,
+): void {
+  const htmlPath = resolve(outDir, "vigiles-report.html");
   try {
+    mkdirSync(outDir, { recursive: true });
     writeFileSync(htmlPath, renderAuditHtml(report));
     console.log("\n✓ Wrote vigiles-report.html — open it for the full report");
-    if (process.stdout.isTTY) openBestEffort(htmlPath);
+    // Great DX: pop the report open in the browser for a human at a TTY (the
+    // `lighthouse --view` behaviour). `--no-open` suppresses it; an agent / CI
+    // run (no TTY) never spawns a browser.
+    if (open && process.stdout.isTTY) openBestEffort(htmlPath);
   } catch (e) {
     // No template (unbuilt checkout) or a write error — skip the HTML; the JSON
     // artifact + terminal report don't depend on it.
@@ -6762,7 +6897,13 @@ async function main(): Promise<void> {
         // Read the local flight recorder ONCE — feeds both the JSON report
         // (structured summary, the product boundary) and the terminal render.
         const ledgerRecords = readObservations(root);
-        const auditReport = buildAuditReport(report, {
+        // The report scaffold WITHOUT the rule map — the map's catalog
+        // enrichment (enabled-state / "documented but OFF") enumerates the repo's
+        // linter, which is gated on the SAME audit.measure consent as the
+        // executing checks. So the map is routed AFTER consent (resolved below)
+        // and folded into the report there, so a first-time "yes" enriches THIS
+        // run — not the next one.
+        const auditReportBase = buildAuditReport(report, {
           harness: adapter.name,
           vigilesVersion: getVersion(),
           adoptableSurfaces,
@@ -6771,22 +6912,18 @@ async function main(): Promise<void> {
             root,
             adapter.layout.instructionFile,
           ),
-          ruleRouting: computeRuleRouting(root, adapter.layout.instructionFile),
         });
-        const sc = auditReport.score;
+        const sc = auditReportBase.score;
         const plan = optimize(report);
+        // The deterministic READ leads: rings + report + fixes + nudges print
+        // BEFORE the consent prompt, so a plain `audit` shows its findings first.
+        // (JSON stays silent until the single blob below, after consent.)
         if (!json) {
           // The Lighthouse rings: per-category 0–100 + the weighted overall,
           // shown before the detailed report so the headline signal leads.
           console.log(formatAuditScore(sc));
           console.log("");
-        }
-        console.log(
-          json
-            ? JSON.stringify(auditReport, null, 2)
-            : formatScanReport(report),
-        );
-        if (!json) {
+          console.log(formatScanReport(report));
           // Fold each finding's fix inline (replaces the former --fix-plan/--explain
           // flags): the deterministic, free recommendation list under the report.
           const fixes = formatRecommendations(plan);
@@ -6803,16 +6940,14 @@ async function main(): Promise<void> {
               .length,
           );
           if (fireNudge) console.log("\n" + fireNudge);
-          // The flight recorder: a compact summary of what the harness actually
-          // DID in real sessions (hook/agent decisions), read off the local
-          // agent-readable ledger. Empty (skipped) until something is recorded.
-          const ledgerSummary = formatLedgerSummary(ledgerRecords);
-          if (ledgerSummary) console.log("\n" + ledgerSummary);
         }
         // ONE read-vs-run decision for the EXECUTING checks (live MCP + skill
-        // firing). A plain `audit` is a deterministic READ; these run only on
-        // consent — ASK once at a TTY (remembered); headless stays a read + a
-        // nudge (no execution flag — automation uses the vigiles/testing API).
+        // firing) AND the rule map's catalog enrichment (enumerating the repo's
+        // linter also executes it). A plain `audit` is a deterministic READ;
+        // these run only on consent — ASK once at a TTY (remembered); headless
+        // stays a read + a nudge (no execution flag — automation uses the
+        // vigiles/testing API). Resolved AFTER the report (so the read leads) but
+        // BEFORE the rule map is routed, so a first-time "yes" enriches THIS run.
         // (The safety battery is NOT here — it needs cross-platform confinement
         // that isn't shipped, so it lives in the vigiles/testing API.)
         const isForeign = root !== process.cwd();
@@ -6832,6 +6967,30 @@ async function main(): Promise<void> {
           args,
           adapter.name,
         );
+        // Consent is now settled (and remembered via .vigilesrc.json, which
+        // computeRuleRouting re-reads) — route the prose rules, enumerating the
+        // live catalog when consented + own-repo. Feeds the JSON report, the
+        // written artifacts, and the terminal rule-map summary.
+        const ruleRouting = computeRuleRouting(
+          root,
+          adapter.layout.instructionFile,
+        );
+        const auditReport: AuditReport = ruleRouting
+          ? { ...auditReportBase, ruleRouting }
+          : auditReportBase;
+        if (json) {
+          console.log(JSON.stringify(auditReport, null, 2));
+        } else {
+          // The rule map — what audit detected in your instruction file and how
+          // each rule could be enforced (confident / possible / skipped tiers).
+          const ruleMap = formatRuleMapSummary(ruleRouting);
+          if (ruleMap) console.log("\n" + ruleMap);
+          // The flight recorder: a compact summary of what the harness actually
+          // DID in real sessions (hook/agent decisions), read off the local
+          // agent-readable ledger. Empty (skipped) until something is recorded.
+          const ledgerSummary = formatLedgerSummary(ledgerRecords);
+          if (ledgerSummary) console.log("\n" + ledgerSummary);
+        }
         // LIVE MCP tool resolution STARTS each declared MCP server — a server is
         // exactly what connects to a real Postgres / authenticates a real API on
         // boot. So it runs only under consent (`execute`) AND own-repo (never
@@ -6958,10 +7117,19 @@ async function main(): Promise<void> {
         const finalReport: AuditReport = adoptabilityResult
           ? { ...auditReport, adoptability: adoptabilityResult }
           : auditReport;
+        // Where the report artifacts land: cwd by default, or `--out=<dir>` (for
+        // CI upload / a custom location). The dir is created if missing.
+        const outFlag = args.find((a) => a.startsWith("--out="));
+        const outDir = outFlag
+          ? resolve(process.cwd(), outFlag.slice("--out=".length))
+          : process.cwd();
+        const openReport = !args.includes("--no-open");
+        const wroteReports: string[] = [];
         // The versioned JSON artifact — the upload/CI boundary (a hosted dashboard
         // ingests this). Written by default in the human path; --no-json to skip.
         if (!json && !args.includes("--no-json")) {
-          writeAuditJson(finalReport);
+          writeAuditJson(finalReport, outDir);
+          wroteReports.push("vigiles-report.json");
         }
         // The HTML report has two deliveries. STATIC (default): write the
         // shareable file whose buttons copy the `init` command. LIVE (`--serve`,
@@ -6990,7 +7158,21 @@ async function main(): Promise<void> {
         if (serveLive) {
           await runAuditServe(finalReport, finalReport.adoptable, errMsg);
         } else if (!json && !args.includes("--no-html")) {
-          writeAuditHtml(finalReport);
+          writeAuditHtml(finalReport, outDir, openReport);
+          wroteReports.push("vigiles-report.html");
+        }
+        // Keep the generated artifacts out of git so a zero-config `audit` leaves
+        // a clean `git status` (works without `init`). Entries are relative to the
+        // git root (cwd); a custom --out dir is ignored by its relative path.
+        // .gitignore patterns are POSIX-separated, so normalize away Windows
+        // backslashes (`relative()` yields `reports\x` on Windows, which would
+        // never match `reports/x`).
+        if (wroteReports.length > 0) {
+          const rel = wroteReports.map((f) => {
+            const r = relative(process.cwd(), resolve(outDir, f)) || f;
+            return pathSep === "/" ? r : r.split(pathSep).join("/");
+          });
+          ensureReportGitignored(process.cwd(), rel);
         }
       }
       break;

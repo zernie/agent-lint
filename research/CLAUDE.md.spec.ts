@@ -52,6 +52,7 @@ export default claude({
     "research/benchmarks-runtime-gates.md": `[rejected] Empirical finding that runtime enforcement gates don't improve capable-agent behavior; redirected focus to verification`,
 
     // ── compiler ──
+    "research/rule-compiler-design.md": `[active] Rule-compiler DESIGN-OF-RECORD (the crisp front door): the multi-linter model (enumerate each linter → merge → per-linter provenance; FROZEN at 2, ESLint+Pylint), the undecidable rule-vs-not-rule problem (heuristic segmenter, precision-first), and the 3 decisions of 2026-07-15 — two-tier detection (confident + possible-review), the report shows skipped bullets + a best-effort caveat, linters frozen at 2. Built-vs-target-state table. Points to the two build-logs below`,
     "research/compiler-end-to-end-flow.md": `[design] End-to-end rule-compiler flow (prose rule → enforced, at scale): segment → classify → reuse/synthesize/hook/prose route, blind adversarial gate, suppressions ratchet, harvest-at-scale — the @vigiles/compiler opt-in tier design of record`,
     "research/rule-compiler-multilang-design.md": `[active] Multi-language (Ruff+Pylint) design for the rule-compile tier + a segmentation model, grounded in a 20-repo OSS corpus: Intent→Realization data model, per-linter ConfigProbe port (ruff select-replaces-default, pylint inverted polarity), both-keys language scoping, intent-verdict fold (ruff-absorbs-pylint is not a contradiction), the segmentation tier-ladder + reject-first negative signals; AGENTS.md is the #1 code-norm carrier, CLAUDE.md a redirect stub`,
 

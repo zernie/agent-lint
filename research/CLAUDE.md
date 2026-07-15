@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:79b94f44c04d3247 compiled from research/CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:c564b282762a2f7c compiled from research/CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -31,6 +31,7 @@ The `research/` corpus is the INTERNAL record (design rationale, competitive ana
 - `research/benchmark-methodology.md` — [active] Defines the A/B-over-real-task method behind vigiles's "what actually works" measurement claims
 - `research/dogfood-corpus.md` — [active] The dogfood-corpus index + vendoring policy (SHA-pin/MIT-only/provenance/CI-enforced): maps every dogfood artifact → is-it-CI-enforced → by-what
 - `research/benchmarks-runtime-gates.md` — [rejected] Empirical finding that runtime enforcement gates don't improve capable-agent behavior; redirected focus to verification
+- `research/rule-compiler-design.md` — [active] Rule-compiler DESIGN-OF-RECORD (the crisp front door): the multi-linter model (enumerate each linter → merge → per-linter provenance; FROZEN at 2, ESLint+Pylint), the undecidable rule-vs-not-rule problem (heuristic segmenter, precision-first), and the 3 decisions of 2026-07-15 — two-tier detection (confident + possible-review), the report shows skipped bullets + a best-effort caveat, linters frozen at 2. Built-vs-target-state table. Points to the two build-logs below
 - `research/compiler-end-to-end-flow.md` — [design] End-to-end rule-compiler flow (prose rule → enforced, at scale): segment → classify → reuse/synthesize/hook/prose route, blind adversarial gate, suppressions ratchet, harvest-at-scale — the @vigiles/compiler opt-in tier design of record
 - `research/rule-compiler-multilang-design.md` — [active] Multi-language (Ruff+Pylint) design for the rule-compile tier + a segmentation model, grounded in a 20-repo OSS corpus: Intent→Realization data model, per-linter ConfigProbe port (ruff select-replaces-default, pylint inverted polarity), both-keys language scoping, intent-verdict fold (ruff-absorbs-pylint is not a contradiction), the segmentation tier-ladder + reject-first negative signals; AGENTS.md is the #1 code-norm carrier, CLAUDE.md a redirect stub
 - `research/adoption-strategy.md` — [superseded] Early adoption-wizard design (vigiles setup, adoption levels); superseded by later init/setup-plan mechanics

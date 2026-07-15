@@ -9,6 +9,8 @@
     "demo": "node run-demo.js"
   },
   "dependencies": {
+    "@ast-grep/lang-python": "^0.0.6",
+    "@ast-grep/napi": "^0.43.0",
     "@typescript-eslint/parser": "^8.63.0",
     "eslint": "^9.39.4",
     "typescript": "^6.0.3"
