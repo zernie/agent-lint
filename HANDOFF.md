@@ -37,7 +37,7 @@ this branch from `origin/main` for any follow-up, never stack on merged history.
   deterministic sections + an `experimental` badge; CLI header `Rule map [experimental]`.
   Public docs (`verifying-instruction-files.md`, `what-vigiles-catches.md`) frame it as a
   preview + document the confident/possible/skipped tiers.
-- **`research/rule-compiler-design.md` §8 = the SCOPE-FREEZE (load-bearing).** The map's
+- **`research/rule-enforcer-design.md` §8 = the SCOPE-FREEZE (load-bearing).** The map's
   SHAPE is FROZEN (`segment→merge→route→LANE_META`); changing it needs a MEASURED
   precision/recall win, not a vibe. Marked backlog (broaden dogfood #1, Ruff, recall
   tuning, …) — default answer to "improve the map?" is NO unless #1 or measured. §9 =
@@ -56,14 +56,14 @@ checkbox markers (`- [ ] enforce(...)`); probe a real linted file (not hardcoded
 
 ## Design-of-record
 
-- **`research/rule-compiler-design.md`** — THE front door (STATUS: ALPHA). Pipeline
+- **`research/rule-enforcer-design.md`** — THE front door (STATUS: ALPHA). Pipeline
   diagram, the rescue-ladder/no-signal-fold decisions, the category↔lane↔glyph table,
-  §8 scope-freeze+backlog, §9 testing. Read FIRST. (`rule-compiler-multilang-design.md`
+  §8 scope-freeze+backlog, §9 testing. Read FIRST. (`rule-enforcer-multilang-design.md`
   is the older build-log; it defers to this doc.)
 - **`research/dogfood-corpus.md`** — the dogfood map + policy (read before touching any
   dogfood artifact). The word "dogfood" covers FOUR different things — only
   `test/dogfood/` is the SHA-pinned vendored corpus; `examples/harness/dogfood/`=skill
-  examples (model-gated MANUAL), `compiler/gold/`=package-internal, `research/audit-captures/`
+  examples (model-gated MANUAL), `rule-enforcer/gold/`=package-internal, `research/audit-captures/`
   =captured audit OUTPUT (not tests).
 
 ## Gotchas (still live)

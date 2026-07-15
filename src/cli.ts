@@ -2167,7 +2167,7 @@ function computeRuleInventory(
  * instruction files PLUS nested subdirectory-memory (`src/CLAUDE.md`,
  * `research/CLAUDE.md`, …), skipping fixture/demo/build/test dirs (`isFixturePath`)
  * so a repo's real memory is read without the test-fixture noise. `.claude/` rule
- * sources remain a future source. research/rule-compiler-multilang-design.md §0. */
+ * sources remain a future source. research/rule-enforcer-multilang-design.md §0. */
 function gatherInstructionFiles(
   root: string,
   instructionFile: string,

@@ -9,7 +9,9 @@ topic: linters
 > `docs/verifying-instruction-files.md`; this is the WHY behind each rule's
 > severity and why "make it all impossible by construction" is not achievable.
 > Companion to `harness-state-space.md` (the minimize-the-state-space thesis)
-> and `install-enforcement-dx.md` (the rule GROUPS that ship this).
+> and `install-enforcement-dx.md` (the rule GROUPS that ship this). NB this doc is
+> about the severity of vigiles's OWN checks; for "how much of a USER's prose
+> CLAUDE.md is enforceable and by what mechanism" see `rule-enforceability.md`.
 
 ## The question this answers
 

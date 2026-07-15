@@ -2,7 +2,7 @@ node:internal/modules/cjs/loader:1386
   throw err;
   ^
 
-Error: Cannot find module '/workspace/agent-rules-compiler/gate.js'
+Error: Cannot find module '/workspace/agent-rules-rule-enforcer/gate.js'
     at Function._resolveFilename (node:internal/modules/cjs/loader:1383:15)
     at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)

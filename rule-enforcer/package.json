@@ -1,5 +1,5 @@
 {
-  "name": "@vigiles/compiler",
+  "name": "@vigiles/rule-enforcer",
   "version": "0.0.1",
   "type": "commonjs",
   "private": true,

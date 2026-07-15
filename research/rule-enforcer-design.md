@@ -3,7 +3,7 @@ status: active
 topic: compiler
 ---
 
-# Rule compiler — design of record
+# Rule enforcer — design of record
 
 > **STATUS: ALPHA (experimental).** Only 2 linters, scarce dogfood, an undecidable
 > core, and a complex pipeline with no "finished" state. **§8 is the load-bearing
@@ -11,16 +11,16 @@ topic: compiler
 > "improving" this**, because the tuning is otherwise infinite. §9 answers how we
 > test it on OSS given the model-gated parts.
 >
-> The crisp answer to "what is the rule compiler, what can it realistically do, and
+> The crisp answer to "what is the rule enforcer, what can it realistically do, and
 > how does it behave with several linters / freeform prose?" The two companion docs
-> are BUILD-LOGS with the blow-by-blow: `rule-compiler-multilang-design.md`
+> are BUILD-LOGS with the blow-by-blow: `rule-enforcer-multilang-design.md`
 > (segmentation + the multi-language reasoning) and `compiler-end-to-end-flow.md`
-> (the `@vigiles/compiler` synthesis pipeline). THIS doc is the front door — read it
+> (the `@vigiles/rule-enforcer` synthesis pipeline). THIS doc is the front door — read it
 > first, then drop into those for detail. Records the 2026-07-15 design decisions.
 
 ## 0. What it is (and isn't)
 
-The "rule compiler" is TWO layers that share one question — _can this prose rule be
+The "rule enforcer" is TWO layers that share one question — _can this prose rule be
 turned into an enforced check?_:
 
 1. **The rule MAP** (deterministic, in `vigiles audit`) — reads the prose rules in a
@@ -28,9 +28,9 @@ turned into an enforced check?_:
    each one into a lane (enforceable / hook / custom / judgment). No model, nothing
    executes (except the own-repo linter-catalog read, gated). Code:
    `src/segment.ts`, `src/rule-routing.ts`, and `src/core/rule-catalog.ts`.
-2. **The SYNTHESIS tier** (`@vigiles/compiler`, opt-in, model-gated) — for the
+2. **The SYNTHESIS tier** (`@vigiles/rule-enforcer`, opt-in, model-gated) — for the
    "custom rule" residue, writes an actual checker + proves it sound on a blind gold
-   set or abstains. `compiler/`.
+   set or abstains. `rule-enforcer/`.
 
 It is **NOT** the `enforce()` cross-reference engine (`src/core/linters.ts`). That
 engine _verifies a rule you already named_ across 7 catalogs; the rule map _discovers_
@@ -64,7 +64,7 @@ which prose _could_ become a rule across 2. See §4 — do not conflate them.
         ▼                                     ▼
    audit-report.ts → AuditReport      report/RuleInventory.tsx (HTML)
         │
-        └── ⚙ "unrouted" lane hands off to  @vigiles/compiler (§5) — a SEPARATE
+        └── ⚙ "unrouted" lane hands off to  @vigiles/rule-enforcer (§5) — a SEPARATE
             package; proves a synthesized checker on a blind gold set or abstains.
 ```
 
@@ -103,15 +103,27 @@ prose rules (CLAUDE.md / AGENTS.md)          your project's linters
 - Enabled-state (`✓ on` / `⛔ off`) comes from running the real linter, so it's an
   **own-repo + consent** capability; a foreign repo gets the textual match only.
 
-### DECISION (2026-07-15): the map supports exactly TWO linters — ESLint + Pylint — and that is FROZEN for now.
+### DECISION (2026-07-15): map linters — ESLint + Pylint, and (UPDATED same day) + Ruff.
 
-Ruff, RuboCop, Clippy, Stylelint are **deliberately out of scope** for the rule map.
-A prose rule that would map to (say) a Ruff rule simply won't resolve to reuse — it
-falls to "custom" or "judgment". This is a scope line, not a bug, and the report +
-docs must **say so plainly** rather than imply broad coverage. Effort goes to
-detection reliability + the report contract (below), not linter breadth. Ruff (which
-is foreign-safe — static rule set, TOML config is data) remains the cheapest _future_
-add if we lift the freeze, but we are not building it now.
+> **UPDATE (2026-07-15, later same day): the freeze was lifted for RUFF.** Real Python repos
+> use ruff, not pylint (measured: Python AGENTS.md matched pylint checks their toolchain doesn't
+> run). Ruff was added **route-only** for the NET-NEW intents pylint lacks (PLC0415, E402,
+> ANN001/201, TRY400, T201, I001), keyword-disjoint from pylint, every code verified against
+> ruff 0.15.8. Config-state stays eslint-only (ruff `select`/`ignore` ConfigProbe pending).
+> So the map now supports **ESLint + Pylint + Ruff (route-only)**. See
+> `rule-enforceability.md` (the current linter-support table) and `src/rule-inventory.ts`.
+> **CLIPPY (Rust) is still the open GAP** — Rust AGENTS.md route ~0% purely from that; it is the
+> next ruff-like win. RuboCop/Stylelint remain out of scope for routing (verification-only via
+> `enforce()`). The original frozen-at-2 text below is kept as the historical decision.
+
+Original decision (superseded for ruff): Ruff, RuboCop, Clippy, Stylelint are **deliberately out
+of scope** for the rule map. A prose rule that would map to (say) a Ruff rule simply won't resolve
+to reuse — it falls to "custom" or "judgment". This is a scope line, not a bug, and the report +
+docs must **say so plainly** rather than imply broad coverage. Effort goes to detection reliability
+
+- the report contract (below), not linter breadth. Ruff (which is foreign-safe — static rule set,
+  TOML config is data) remains the cheapest _future_ add if we lift the freeze, but we are not
+  building it now.
 
 ## 2. Separating rules from non-rules — the undecidable core
 
@@ -239,12 +251,12 @@ the single source the terminal + report read):
 
 ## 5. The synthesis tier (the ⚙ lane's hand-off)
 
-`@vigiles/compiler`, opt-in + model-gated. Decision order **REUSE > SYNTHESIZE**: only
+`@vigiles/rule-enforcer`, opt-in + model-gated. Decision order **REUSE > SYNTHESIZE**: only
 the residue no off-the-shelf rule covers is synthesized. A synthesized checker must
 pass its own self-test AND an independent blind gold set (precision = recall = 1.0) or
 it **abstains** — never ships a checker it can't prove sound. One gate, per-engine
 executors: **ESLint** rules (JS module) and **Python** (an ast-grep rule object —
-data, not code). **Built** (both engines; `compiler/gate.js`, `compiler/executors/`).
+data, not code). **Built** (both engines; `rule-enforcer/gate.js`, `rule-enforcer/executors/`).
 
 ## 6. What's realistically doable
 
@@ -270,7 +282,7 @@ per-rule provenance, enabled-state, the 5-category / 4-lane routing, the two-tie
 detection (confident + possible + skipped-with-reason), the rescue ladder + no-signal
 fold (§2), and synthesis for both engines — all CI-dogfooded
 (`src/rule-routing-oss.test.ts`, `src/rule-catalog-oss.test.ts`, `src/segment.test.ts`,
-`compiler/gate.js`).
+`rule-enforcer/gate.js`).
 
 ## 8. Status: ALPHA — the scope-freeze + backlog (READ THIS before "improving" it)
 
@@ -368,7 +380,7 @@ on real projects when it uses an LLM?": **the part that would need an LLM is not
   - `src/segment.test.ts` + the routing suites cover the detector logic.
     So the deterministic OSS e2e is already there — the honest gap is BREADTH (few repos),
     not the ability to run it. (Broadening it is backlog #1, and needs no model.)
-- **The synthesis trust GATE is deterministic** — `compiler/gate.js` runs in CI on a
+- **The synthesis trust GATE is deterministic** — `rule-enforcer/gate.js` runs in CI on a
   FIXED gold corpus (proves a synthesized checker is sound on a blind set or abstains).
   No model at CI time; the verdicts are pinned.
 - **What genuinely CAN'T go in CI** is the LLM SYNTHESIS of a NEW rule from a user's
@@ -386,8 +398,8 @@ deterministic OSS corpus (backlog #1) — no model required.
 
 ## See also
 
-- `research/rule-compiler-multilang-design.md` — segmentation model + multi-language
+- `research/rule-enforcer-multilang-design.md` — segmentation model + multi-language
   build-log (the detailed §0/§0.0 record).
-- `research/compiler-end-to-end-flow.md` — the `@vigiles/compiler` synthesis pipeline.
+- `research/compiler-end-to-end-flow.md` — the `@vigiles/rule-enforcer` synthesis pipeline.
 - `research/reference-verification-limits.md` — the general proxy-vs-judgment /
   undecidability boundary this doc's §2 is a specific instance of.

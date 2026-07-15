@@ -30,6 +30,48 @@ topic: roadmap
 > _Business direction / positioning / monetization live in the private `startup/` vault
 > (this is a public doc — see the `doc-tiers` rule)._
 
+### Enforcement-tier backlog — ranked (from the 2026-07-15 breadth benchmark)
+
+> Grounded by the 21-real-rulebook run (`rule-enforceability.md` breadth section): off-the-shelf
+> routing is only **~4%** at breadth; the rest is a **⅓ mechanizable / ⅓ prose / ⅓ not-even-a-rule**
+> split. That reorders where rule-engine effort pays off. (Launch readiness below is still the ship
+> gate; this is the enforcement-tier work behind it.)
+
+1. **Segmenter PRECISION** — ✅ **first pass shipped 2026-07-15** (`src/segment.ts`). ⅓ of segmented
+   "rules" were commands / headings / pointers, NOT rules. Added two verified-safe gate rejects:
+   (a) **`leadin`** — a colon-terminated procedure/enumeration header ("To add a setting:", "Python
+   check:") whose enforceable content lives in the sub-list it introduces (confirmed on the corpus:
+   sub-items segment independently, so the header drops for free); fires only when the header carries
+   NO rule signal, so a norm-bearing header ("`expect` must come from test context — never …:") is
+   kept. (b) **determiner-led `description`** — "The v1 README lives on the `v1.x` branch", "Each test
+   lives in its own folder" — architecture FACTS, not norms; the determiner lead is what keeps it from
+   eating verb-first imperatives ("Check you are not on main"). Measured: **818 → 789 segments across
+   the 22-file corpus** (−29), hand-verified as ~28 clean non-rule drops + 1 minor edge-case-advice
+   loss (a description-led compound bullet whose trailing sentence was advice); 0 real-rule regressions
+   in the test suite. Distinct `leadin` reject reason (NOT `no-signal`) so routing does not re-surface
+   it in the recall-review tier. **Still open:** the pointer/`Label: command` E-bucket (route-4
+   verification targets, not norms) and the recall sibling. (Precision first — it was the bigger noise
+   source at breadth.)
+2. **AST-not-regex + gate-ABSTAIN** — the measured soundness law: every checker that leaked (2/13)
+   was regex or a context-blind selector. Make the `compile-rules` synth prefer the target-language
+   AST; make the gate ABSTAIN a checker that can't be proven sound. The cry-wolf guard.
+3. **Clippy support (Rust routing)** — ✅ **shipped 2026-07-15** (`src/rule-inventory.ts`). 7 real
+   clippy restriction lints mapped from the corpus's actual Rust prose (`.unwrap()`→unwrap_used,
+   `.expect()`→expect_used, `panic!`, `unreachable!`, `todo!`, `dbg!`, wildcard-match-arm→
+   wildcard_enum_match_arm). Rust-unambiguous keywords (macro `!` / `.method` / `clippy::` forms +
+   "wildcard arm(s)" NOT bare "wildcard"), guarded by the cross-language-FP test. Route-only (like
+   ruff/pylint — config-state stays eslint-gated; the Cargo.toml `[lints.clippy]` ConfigProbe is #4).
+   Measured: codex/ghostty were **0%**; now the corpus routes clippy (codex→wildcard, ruff-repo→
+   unwrap) — modest absolute count (these rulebooks are short/project-specific), but Rust is no longer
+   a blind spot and it scales with any Rust-heavy rulebook. Tests added (positive Rust-routing +
+   Python-doc-never-clippy guard).
+4. **Ruff config-state (ConfigProbe)** — ruff is route-only; wire `select`/`ignore` detection → the
+   "disabled → one-flip" / "✓ enforced" states for Python (currently eslint-only).
+5. **5-homes routing surfaced in `audit`** — route each rule to its home explicitly (off-the-shelf /
+   synth / hook / ref-verify / prose), not just reuse-vs-unrouted (see `rule-enforceability.md`).
+6. **Evidence in the finding** — "enforceable AND violated in N files right now" (smaller real
+   surface than hoped, but the sharpest wow where it lands).
+
 ## 🚀 Launch readiness (pre-HN) — the current top priority (2026-06-24)
 
 > **▶ The full triage lives in [`pre-release-focus.md`](pre-release-focus.md)** — the
@@ -831,7 +873,7 @@ assertRates`) is the recommended path for testing one skill, but
   reuse. Fix: pick a representative linted file per config target (or merge
   configs across JS/TS paths) instead of the hardcoded path. Codex review on #72. · **LOW**
 - **⚠️ The rule map is ALPHA + its SHAPE IS FROZEN.** Before adding any rule-map
-  heuristic / lane / linter / rescue source, read `research/rule-compiler-design.md`
+  heuristic / lane / linter / rescue source, read `research/rule-enforcer-design.md`
   §8 (scope-freeze + backlog) — the tuning is otherwise infinite. The default answer to
   "improve the rule map?" is NO unless it's "broaden the deterministic dogfood corpus"
   (§8 backlog #1) or a MEASURED precision/recall win. The specific LOW bugs below are the
@@ -866,8 +908,8 @@ assertRates`) is the recommended path for testing one skill, but
   so a checkbox-styled rule is skipped. Fix: strip the `[ ]`/`[x]` checkbox token
   before parsing the bullet. Codex review on #72. · **LOW**
 - ~~**Python custom-rule SYNTHESIS**~~ — **DONE 2026-07-15.** Added an `astgrep-py`
-  engine to `@vigiles/compiler`: one gate, injected per-engine executors
-  (`compiler/executors/{eslint,astgrep-py}.js`), corpus entries carry an `engine` field.
+  engine to `@vigiles/rule-enforcer`: one gate, injected per-engine executors
+  (`rule-enforcer/executors/{eslint,astgrep-py}.js`), corpus entries carry an `engine` field.
   Python rules are synthesized as ast-grep rule OBJECTS (JSON — data, not code) run
   in-process via `@ast-grep/napi` + `@ast-grep/lang-python`. 3 dogfood rules
   (py-no-bare-except/py-no-print/py-no-eval); the naive `print($A)` ABSTAINS on the gold
