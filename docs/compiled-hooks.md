@@ -4,6 +4,8 @@
 
 vigiles lets you author a hook as a **pure typed function** `(event) => Decision` against a **closed vocabulary** (`vigiles/hook`), then compiles it to the harness protocol. The point isn't ergonomics — it's that **whole classes of hook bugs become unrepresentable**: you can't write the bug because the API has no way to express it.
 
+> **What compilation does and does not do.** Compilation guarantees the _contract_ — a `deny` actually emits exit-2/`permissionDecision:deny` instead of a warn-only or `exit 1` that silently allows. It does **not** give you _detection_: a compiled hook whose logic is `cmd.includes("rm -rf /")` still sails past `rm -fr /`, `/bin/rm -rf /`, or `rm -rf "$HOME"`. Catching disguised commands is the job of the **matching logic** you write (match the _operation_, e.g. via `leafCommandsNormalized`, not the raw string). Compilation makes the decision fire soundly; the logic decides _what_ to fire on. Keep the two separate — a bug-proof contract around blind logic is still blind.
+
 ## Contents
 
 - [The bug classes it eliminates](#the-bug-classes-it-eliminates)
