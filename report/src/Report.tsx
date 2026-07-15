@@ -288,24 +288,6 @@ export function Report({ data }: { data: AuditReport }) {
         );
       })()}
 
-      {((rulesInventory && rulesInventory.length > 0) ||
-        (ruleRouting &&
-          (ruleRouting.segmented > 0 ||
-            (ruleRouting.possible?.length ?? 0) > 0 ||
-            (ruleRouting.skipped?.length ?? 0) > 0))) && (
-        <>
-          <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Your rules → enforced
-          </h2>
-          <p className="mb-3 text-xs text-muted-foreground">
-            Prose rules in your instruction file that map to an off-the-shelf
-            lint rule — and whether it's actually enforced. The gap between what
-            you wrote and what your config does.
-          </p>
-          <RuleInventory data={rulesInventory ?? []} routing={ruleRouting} />
-        </>
-      )}
-
       {adoptability && (
         <>
           <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
@@ -330,6 +312,29 @@ export function Report({ data }: { data: AuditReport }) {
             <code className="mx-1 font-mono">.vigiles/runs.jsonl</code> ledger.
           </p>
           <Observations data={observations} />
+        </>
+      )}
+
+      {/* The rule map — EXPERIMENTAL + demoted below the deterministic sections.
+          Detection is a heuristic, precision-first filter (it misses some rules),
+          so it sits low and is badged experimental so a reader doesn't read it as
+          a settled finding like the reference/hook checks above. */}
+      {((rulesInventory && rulesInventory.length > 0) ||
+        (ruleRouting &&
+          (ruleRouting.segmented > 0 ||
+            (ruleRouting.possible?.length ?? 0) > 0 ||
+            (ruleRouting.skipped?.length ?? 0) > 0))) && (
+        <>
+          <h2 className="mb-3 mt-9 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            Your rules → enforced
+            <Badge className="border-warn text-warn">experimental</Badge>
+          </h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Prose rules in your instruction file that map to an off-the-shelf
+            lint rule — and whether it's actually enforced. Detection is a
+            heuristic, precision-first preview: it won't catch every rule.
+          </p>
+          <RuleInventory data={rulesInventory ?? []} routing={ruleRouting} />
         </>
       )}
 
