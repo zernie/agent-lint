@@ -1,8 +1,9 @@
 /**
  * Dogfood — does vigiles's OWN `generate-logo` skill trigger (and only then)?
  *
- * `generate-logo` is an INTERNAL, contributor-only dev skill (it lives under
- * `dev/skills/`, not the shipped consumer plugin), but it stays a useful narrow
+ * `generate-logo` is an INTERNAL, contributor-only skill (it lives under
+ * `.claude/skills/`, this repo's own harness, not the shipped consumer plugin),
+ * but it stays a useful narrow
  * model-invocable dogfood: it should fire ONLY on a request about the vigiles
  * logo, and a narrow skill's risk is the opposite of a broad one — high
  * precision, but watch recall doesn't collapse. The precision-aware
@@ -26,13 +27,16 @@ import { fileURLToPath } from "node:url";
 
 const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 1);
 
-// generate-logo is an INTERNAL dev skill (not in the shipped plugin), so load it
-// from the contributor-only `dev/` plugin, not the repo root.
-const pluginDir = fileURLToPath(new URL("../../../dev/", import.meta.url));
-const skill = "vigiles-dev:generate-logo";
+// generate-logo is an INTERNAL skill (not in the shipped plugin), so load it from
+// this repo's own `.claude/skills/`, packaged as a throwaway plugin by skillsDir
+// (default plugin name `vigiles-loose-skills`), not the shipped repo-root plugin.
+const skillsDir = fileURLToPath(
+  new URL("../../../.claude/skills/", import.meta.url),
+);
+const skill = "vigiles-loose-skills:generate-logo";
 
 const report = await measureTriggerRate({
-  pluginDir,
+  skillsDir,
   stubSkillBodies: true, // trigger = frontmatter only; stub the body to stop at selection
   // SHOULD fire — logo requests, varied phrasings (>= 10 for the diversity gate):
   prompts: [

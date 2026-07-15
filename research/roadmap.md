@@ -67,7 +67,7 @@ topic: roadmap
 >   than the library); (2) draw a hard **public vs internal line** — un-export or
 >   loudly label the experimental/parked surface (`guards.ts`, `hook-spec.ts`
 >   effect-region, the opencode prototype, the deep typed-spec exports) so a later
->   breaking change burns nobody (audit via the `api-extractor` `etc/*.api.md`
+>   breaking change burns nobody (audit via the `api-extractor` `api-surface/*.api.md`
 >   surface); (3) ship a one-paragraph **0.x stability statement** ("CLI stable;
 >   library API 0.x, evolving") — honest beats a fake 1.0.
 > - **PROMOTED — first-run hardening + don't-cry-wolf:** a clean `npx vigiles@latest`
@@ -816,6 +816,45 @@ assertRates`) is the recommended path for testing one skill, but
   unconfined; `sandbox-exec`/docker for non-Linux. [feature-ideas §13](feature-ideas.md) · **LOW**
 - **Deterministic subagent / command wiring** — register + drive without a model.
   [coverage-matrix](harness-testing-coverage-matrix.md) · **LOW**
+- **Dogfood: a no-model floor for the 9 skill evals** — `examples/harness/dogfood/*.eval.mjs`
+  are CI'd only for SYNTAX; their staleness gate (the eval LOCK / `eval --check`) is a
+  green no-op because no locks are committed. Either commit eval-locks so `--check`
+  actually gates, and/or add a deterministic "each eval's plugin/skillsDir LOADS + its
+  skill target RESOLVES" check (no model). See `research/dogfood-corpus.md`. · **LOW**
+- **Rule-catalog: probe a real linted file, not a hardcoded `src/index.ts`** —
+  `enumerateEslintCatalog` (`src/core/rule-catalog.ts`) calls
+  `calculateConfigForFile("src/index.ts")`, so on an own-repo whose ESLint flat
+  config scopes rules to a different target (JS-only `files:["**/*.js"]`, a
+  monorepo `packages/app/**`), the enabled-state read is wrong — a rule enabled
+  for the real target can be mislabeled "documented but OFF". Affects only the
+  ON/OFF nuance of the reuse lane (own-repo + consent), not whether it routes to
+  reuse. Fix: pick a representative linted file per config target (or merge
+  configs across JS/TS paths) instead of the hardcoded path. Codex review on #72. · **LOW**
+- **Wrap the FP / dogfood sweeps as contributor skills** — `tools/fp-sweep.sh` +
+  `tools/dogfood-sweep.sh` have real model-judgment on their output (which flags are
+  true false positives / which detectors regressed). At launch, wrap each as a
+  `.claude/skills/` contributor skill that INVOKES the script + reasons about the
+  result (the `audit-feedback-loop` genre) — with a trigger eval per great-agent-flow.
+  Keep the scripts as the mechanism. See `tools/README.md`. · **LOW**
+- **Dogfood: Codex corpus parity** — the vendored `test/dogfood/` corpus is CC-only;
+  Codex is covered only by artificial tmp fixtures (`scan-cli.test.ts`). Vendor a real
+  Codex plugin slice (SHA-pinned, MIT, provenance) so the corpus is symmetric across
+  adapters like the port-conformance already is. See `research/dogfood-corpus.md`. · **LOW**
+- **Promote `EvalDriver` to a core port on the `HarnessAdapter` bundle** — today
+  the eval-driver seam (`EvalDriver`/`ModelOutputParser`/`AgentRunner`) + the
+  shared trace vocabulary (`ToolCall`/`HookFire`/`SubagentTrace`/`EvalUsage`) live
+  in the library layer (`eval.ts`/`harness-test.ts`), and the default
+  `claudeEvalDriver` is wired at the composition root (documented in `eval.ts`,
+  commit `ca49fed`). That is DEFENSIBLE — the eval tier is a library subsystem,
+  not the reference-verification core — so this is a nice-to-have symmetry, NOT a
+  boundary fix. If done: hoist the trace/eval type vocabulary into a new `core/`
+  module (so `core/adapter.ts` can carry `evalDriver?: EvalDriver` like the other
+  five ports + `harnessTestDriver`), set it on both adapters, rewire
+  `eval.ts`+`harness-test.ts`+`integration.ts`+`check.ts` to import types from
+  core, keep BOTH 100% coverage gates green, and regen `api-surface/*.api.md`. ~day-sized,
+  do in isolation. The trap to avoid: dragging eval/trace types into core muddies
+  the reference-verification domain — only do it if the symmetry is judged worth
+  that. · **LOW**
 
 ## Backlog — lower priority / niche
 

@@ -2,7 +2,7 @@
  * API Extractor driver — the public-API surface gate.
  *
  * Runs Microsoft API Extractor over EVERY public entry point in package.json
- * `exports` and writes a committed surface report per entry under `etc/`. Two
+ * `exports` and writes a committed surface report per entry under `api-surface/`. Two
  * modes:
  *
  *   node scripts/api-extractor.mjs --local   # regenerate the reports (after an
@@ -10,7 +10,7 @@
  *   node scripts/api-extractor.mjs           # CI gate: FAIL if the live surface
  *                                            # drifts from the committed report
  *
- * The committed `etc/*.api.md` files are the contract — a PR that adds/removes/
+ * The committed `api-surface/*.api.md` files are the contract — a PR that adds/removes/
  * changes a public export shows up as a report diff, so the surface can't
  * silently regrow (the reason this exists; see research/roadmap.md). The
  * `temp/*.api.json` doc models feed `npm run docs:api` (API Documenter →
@@ -52,7 +52,7 @@ function configFor(entry) {
       compiler: { tsconfigFilePath: path.join(root, "tsconfig.json") },
       apiReport: {
         enabled: true,
-        reportFolder: path.join(root, "etc"),
+        reportFolder: path.join(root, "api-surface"),
         reportFileName: `${entry.name}.api.md`,
         reportTempFolder: path.join(root, "temp"),
       },
@@ -99,7 +99,7 @@ for (const entry of ENTRIES) {
     failed += 1;
     if (!localBuild && result.apiReportChanged) {
       console.error(
-        `✗ ${entry.name}: public API surface changed vs etc/${entry.name}.api.md — ` +
+        `✗ ${entry.name}: public API surface changed vs api-surface/${entry.name}.api.md — ` +
           `run \`npm run api:report\`, review the diff, and commit it if intended.`,
       );
     }
@@ -112,6 +112,6 @@ if (failed > 0) {
 }
 console.log(
   localBuild
-    ? `API surface reports regenerated for ${String(ENTRIES.length)} entries (etc/*.api.md).`
+    ? `API surface reports regenerated for ${String(ENTRIES.length)} entries (api-surface/*.api.md).`
     : `API surface verified for ${String(ENTRIES.length)} entries — no drift.`,
 );

@@ -14,7 +14,7 @@ const TEMPLATE = `<!doctype html><html><body><div id="root"></div>
 
 const report: AuditReport = {
   meta: {
-    schemaVersion: 1,
+    schemaVersion: 2,
     tool: "vigiles",
     kind: "audit",
     vigilesVersion: "1.0.0",
@@ -63,7 +63,7 @@ describe("injectReportData", () => {
   it("replaces the placeholder with the report JSON (data lands in the file)", () => {
     const html = injectReportData(TEMPLATE, report);
     expect(html).not.toContain("__VIGILES_DATA_PLACEHOLDER__");
-    expect(html).toContain('"schemaVersion":1');
+    expect(html).toContain('"schemaVersion":2');
     expect(html).toContain('"grade":"B"');
     expect(html).toContain("subagent-tool-contract");
     // Still a single self-contained document.

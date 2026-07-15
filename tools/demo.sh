@@ -2,7 +2,7 @@
 # vigiles demo — a self-contained, zero-dependency script for recording an
 # asciinema cast / GIF of the Lint layer catching stale references.
 #
-#   asciinema rec --command "bash scripts/demo.sh" vigiles.cast
+#   asciinema rec --command "bash tools/demo.sh" vigiles.cast
 #   # then: agg vigiles.cast vigiles.gif   (or upload the cast to asciinema.org)
 #
 # It builds a throwaway repo whose CLAUDE.md points at a file that moved and a

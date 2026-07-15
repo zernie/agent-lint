@@ -38,7 +38,7 @@
   all agree.
 
   SPINE = proof/demo-led. Real, screenshotable catches on shipped plugins, THEN
-  mechanism. Every proof traces to a real dogfood run (research/dogfood/) — NEVER
+  mechanism. Every proof traces to a real dogfood run (research/audit-captures/) — NEVER
   fabricate one. Order = most-RELATABLE first (broken tool ref → skill collision →
   rules-not-enforced → secrets-exfil gotcha LAST as the bite). The intro triplet
   maps to the three "vibes break silently" proofs (1, 2, 4); Proof 3 (your rules →
@@ -54,7 +54,7 @@
   init/compile/eject manage the spec layer (personas noticed the verb-count gap).
 
   DON'T SHAME OSS: catches are ANONYMIZED (no obra/superpowers, madappgang,
-  claude-flow by name) — real names live only in research/dogfood/.
+  claude-flow by name) — real names live only in research/audit-captures/.
   Guard/compiled-hooks stay PARKED FOR LAUNCH as a hero section; the 2/7→7/7 finding is
   surfaced as ONE supporting, receipts-linked evidence line under Proof 4 (→
   docs/compiled-hooks.md §disler battery + src/hook-dogfood.test.ts) — reachable
@@ -155,7 +155,7 @@ Your rules → enforced   1 of 4 enforced · 2 one line away · 1 contradicted b
        your CLAUDE.md says enforce it; your config quietly turns it off
 ```
 
-You wrote the rule. Your agent treats it as gospel and follows it — until it doesn't, and nothing tells you which time. vigiles checks each mapped rule three ways: enforced, **one line away**, or — the one people screenshot — documented but silently **turned off**. Deterministic, no model. Want the rest compiled — a custom rule for a rule no linter ships, a hook for `git push`, the judgment calls honestly left alone? That's the opt-in `compile` tier (one model pass, then CI is plain lint).
+You wrote the rule. Your agent treats it as gospel and follows it — until it doesn't, and nothing tells you which time. vigiles checks each mapped rule three ways: enforced, **one line away**, or — the one people screenshot — documented but silently **turned off**. Deterministic, no model. Acting on the map is **opt-in and agent-driven**: enable a rule in one line (the `strengthen` skill does it for you), turn an action rule like `git push` into a compiled hook, leave judgment calls as prose. Nothing runs a model — or changes your config — unless you ask.
 **[How enforcement works →](docs/verifying-instruction-files.md)**
 
 ## Proof 4 — it can quietly read your secrets and send them out

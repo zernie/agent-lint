@@ -3,7 +3,7 @@ import type { AuditReport } from "@/schema";
 /** Dev/fallback fixture — shown by `npm run dev` and if the CLI hasn't injected data. */
 export const SAMPLE: AuditReport = {
   meta: {
-    schemaVersion: 1,
+    schemaVersion: 2,
     tool: "vigiles",
     kind: "audit",
     vigilesVersion: "0.0.0",
@@ -113,7 +113,7 @@ export const SAMPLE: AuditReport = {
   },
   ruleRouting: {
     segmented: 8,
-    counts: { reuse: 3, hook: 2, semantic: 1, unrouted: 2 },
+    counts: { reuse: 3, hook: 2, meta: 0, semantic: 1, unrouted: 2 },
     rules: [
       {
         text: "Never use `console.log` in shipped code.",
@@ -126,6 +126,10 @@ export const SAMPLE: AuditReport = {
         mechanism: "config-line",
         rule: "no-console",
         linter: "eslint",
+        // Named in the docs but turned OFF in the config — the sharp catalog
+        // finding surfaced by the "documented but OFF" callout.
+        enabled: false,
+        source: "marker",
       },
       {
         text: "Never push directly to `main` — open a PR.",
@@ -165,7 +169,7 @@ export const SAMPLE: AuditReport = {
         lineEnd: 22,
         confidence: "high",
         category: "unrouted",
-        mechanism: "compile",
+        mechanism: "synthesize",
       },
     ],
   },

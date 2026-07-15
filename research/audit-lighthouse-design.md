@@ -41,7 +41,7 @@ skills actually fire.
   trigger-rate — kills the `--prompts` friction that made the eval un-wowable).
   `--prompts=` stays as an override.
 - **HTML written by DEFAULT** to `vigiles-report.html` + offer to open (`--no-html` to
-  suppress). Self-contained (inline CSS, zero deps, like `scripts/make-demo-gif.py`).
+  suppress). Self-contained (inline CSS, zero deps, like `tools/make-demo-gif.py`).
   The shareable wow; nobody in agent-tooling ships this.
 - **`--json`** for CI. **`--only=cat,cat`** to narrow (Lighthouse's --only-categories).
 - **Folded/dropped flags:** `--check-hooks` (default), `--verify-mcp`+`--trigger`

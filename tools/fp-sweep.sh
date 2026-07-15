@@ -8,8 +8,8 @@
 # to zernie/vigiles only, so this can't run there).
 #
 # Usage:
-#   scripts/fp-sweep.sh                 # uses `npx vigiles@latest`
-#   VIGILES="node dist/cli.js" scripts/fp-sweep.sh   # use a local build
+#   tools/fp-sweep.sh                 # uses `npx vigiles@latest`
+#   VIGILES="node dist/cli.js" tools/fp-sweep.sh   # use a local build
 #
 # Output: per-plugin scan logs in /tmp/vigiles-fp-sweep/, plus a summary of every
 # line containing ✗ (the high-precision failures to triage FP-vs-real by hand).

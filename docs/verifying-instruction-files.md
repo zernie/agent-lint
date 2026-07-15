@@ -114,6 +114,23 @@ There's a small family of inline **marks** that `lint` checks, each binding a re
 
 **Typo-safe at authoring time, too.** `vigiles generate types` emits a `.vigiles/generated.d.ts` so `enforce("eslint/no-consolee")` red-squiggles in your editor. `generate-schema` gives the YAML-frontmatter mode the same via your YAML language server. Both have `--check` CI freshness modes. [How it works →](linter-support.md#generate-types)
 
+## From prose to enforced: the rule map
+
+`vigiles audit` reads the prose rules in your instruction file and **maps** each one to how it could be enforced. This is a **read-only, deterministic** step — no model runs, nothing executes, and it's identical on every machine. It just sorts your rules into four lanes:
+
+| Lane                  | Meaning                                                                                                                                             | The honest next step (opt-in)                                                                                                                                                                                            |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ✓ **Enforceable now** | matches an off-the-shelf linter rule (ESLint/Ruff/…) — and the map shows whether it's already on, one line away, or **documented but turned off**   | enable it in your lint config (one line), or ask your agent to run the **`strengthen`** skill                                                                                                                            |
+| ⛓ **Hook**            | an action a linter can't see (`git push`, "run tests before commit")                                                                                | author a [compiled hook](compiled-hooks.md), then `vigiles compile` wires it into your settings                                                                                                                          |
+| ⚙ **Custom rule**     | no off-the-shelf rule fits, but a **custom one CAN** enforce it ("wrap API calls in a retry", "validate the input schema") — doable, not a dead end | an **experimental** rule-**synthesis** step (not yet generally available) writes + gates a custom rule from codebase context — abstaining rather than shipping a checker it can't prove sound; opt-in and never auto-run |
+| ✎ **Judgment call**   | genuinely undecidable — no checker can decide it ("keep it readable", "write idiomatic code")                                                       | honestly stays prose                                                                                                                                                                                                     |
+
+**Linter coverage today.** The Enforceable-now lane matches against **ESLint** (full — it reads your live config, so it can tell a rule that's on from one you documented but left **off**) and **Python / Pylint** basics (routing only — it names the rule, not yet its on/off state). Ruff and more linters are on the way. Everything the map can't match to a rule still gets a lane — hook, custom rule, or judgment call — so nothing is silently dropped.
+
+**What runs a model is always a skill _you_ invoke** — on your own subscription, behind consent. `audit` maps and reports; it never rewrites your config, compiles a rule, or calls a model on its own. Installing vigiles does **not** start compiling anything.
+
+> **"Compile" means one thing here.** `vigiles compile` builds your `CLAUDE.md` and hooks from typed sources — it is unrelated to the rule map above. The map's **custom-rule** lane hands off to a _synthesis_ skill, never to `vigiles compile`.
+
 ## The validation rules — the full matrix
 
 Beyond the references above, `vigiles lint` runs a set of **deterministic validation rules** over your instruction files, skills, subagents, and hooks. Each has a default severity (`"warn"` / `"error"` / `false`) and is configured in `.vigilesrc.json`. Every rule is **deterministic** — no model, no API key — and links to its own reference doc.
@@ -252,17 +269,17 @@ The flow, from save:
 
 ### Claude Code
 
-|                                     | Without vigiles              | With vigiles                                                  |
-| ----------------------------------- | ---------------------------- | ------------------------------------------------------------- |
-| **Instructions**                    | Hand-written CLAUDE.md       | Compiled from `.spec.ts` (build artifact)                     |
-| **Linter rule references**          | Trust-based (nobody checks)  | Verified at compile time against real config                  |
-| **File paths**                      | Rot silently when renamed    | `file()` references checked against filesystem                |
-| **Commands**                        | Stale scripts go unnoticed   | `cmd()` references checked against package.json               |
-| **Direct edits to CLAUDE.md**       | Anyone can, nobody knows     | PreToolUse hook blocks edits, redirects to spec               |
-| **Spec / config changes**           | CLAUDE.md drifts out of sync | PostToolUse hooks auto-compile and regenerate types           |
-| **guidance → enforce upgrades**     | Manual guesswork             | `/strengthen` reads per-linter docs, suggests upgrades        |
-| **New lint rules from PR feedback** | Copy-paste from review       | `/pr-to-lint-rule` generates rule + tests + spec entry        |
-| **CI**                              | Nothing to verify            | `vigiles lint` catches hand-edits, disabled rules, stale refs |
+|                                  | Without vigiles              | With vigiles                                                                                    |
+| -------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------- |
+| **Instructions**                 | Hand-written CLAUDE.md       | Compiled from `.spec.ts` (build artifact)                                                       |
+| **Linter rule references**       | Trust-based (nobody checks)  | Verified at compile time against real config                                                    |
+| **File paths**                   | Rot silently when renamed    | `file()` references checked against filesystem                                                  |
+| **Commands**                     | Stale scripts go unnoticed   | `cmd()` references checked against package.json                                                 |
+| **Direct edits to CLAUDE.md**    | Anyone can, nobody knows     | PreToolUse hook blocks edits, redirects to spec                                                 |
+| **Spec / config changes**        | CLAUDE.md drifts out of sync | PostToolUse hooks auto-compile and regenerate types                                             |
+| **guidance → enforce upgrades**  | Manual guesswork             | `/strengthen` reads per-linter docs, suggests upgrades                                          |
+| **Custom lint rules from prose** | Copy-paste from review       | Experimental — a synthesis skill drafts a rule + a soundness gate (not yet generally available) |
+| **CI**                           | Nothing to verify            | `vigiles lint` catches hand-edits, disabled rules, stale refs                                   |
 
 **Codex / AGENTS.md** gets the same compile-time checks and the same `vigiles lint` CI pipeline — just no hooks (no plugin system), so you run `vigiles compile` manually or in CI.
 

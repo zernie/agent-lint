@@ -129,8 +129,8 @@ export interface RuleInventoryItem {
   configFix: string;
 }
 
-export type RuleCategory = "reuse" | "hook" | "semantic" | "unrouted";
-export type RuleMechanism = "config-line" | "hook" | "prose" | "compile";
+export type RuleCategory = "reuse" | "hook" | "meta" | "semantic" | "unrouted";
+export type RuleMechanism = "config-line" | "hook" | "prose" | "synthesize";
 
 /** One segmented, deterministically-routed rule (mirror of the CLI's RoutedRule). */
 export interface RoutedRule {
@@ -144,6 +144,12 @@ export interface RoutedRule {
   mechanism: RuleMechanism;
   rule?: string;
   linter?: string;
+  /** reuse via the dynamic catalog: whether the rule is currently ENABLED in the
+   * repo's config. `false` = "documented but OFF" (the sharp finding). */
+  enabled?: boolean;
+  /** "marker" = an explicit `**Enforced by:**`/`**Guard:**`/`**Guidance only**`
+   * marker (definitive); "heuristic" = the Tier-A segmenter. */
+  source?: "marker" | "heuristic";
 }
 
 /** The deterministic State-B routing preview (mirror of the CLI's RuleRouting). */

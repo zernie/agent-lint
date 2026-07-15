@@ -21,8 +21,13 @@ import type { PluginScore } from "./leaderboard.js";
 import type { RuleInventoryItem } from "./rule-inventory.js";
 import type { RuleRouting } from "./rule-routing.js";
 
-/** The current schema version. Bump only on a BREAKING change to the shape. */
-export const AUDIT_SCHEMA_VERSION = 1;
+/**
+ * The current schema version. Bump only on a BREAKING change to the shape.
+ * v2 (2026-07-15): the rule-map `mechanism` enum value for an unrouted rule
+ * changed `"compile"` → `"synthesize"` (a non-additive enum change), so a v1
+ * consumer that gated on `meta.schemaVersion` would mis-handle it — hence the bump.
+ */
+export const AUDIT_SCHEMA_VERSION = 2;
 
 export interface AuditReportMeta {
   /** Wire-format version — consumers gate on this. */
@@ -132,9 +137,10 @@ export interface AuditReport {
   readonly rulesInventory?: readonly RuleInventoryItem[];
   /**
    * The deterministic State-B routing PREVIEW — the instruction file segmented
-   * into atomic rules, each routed (reuse / hook / semantic / unrouted) to how
+   * into atomic rules, each routed (reuse / hook / meta / semantic / unrouted) to how
    * it would be enforced, with per-category counts. No model, fs-only. Grounds
-   * the report's "compile" upsell in real numbers instead of generic copy.
+   * the report's "rule map" (strengthen / hook / prose / synthesize) in real
+   * numbers instead of generic copy.
    * Present only when at least one atomic rule was segmented. Additive/optional.
    */
   readonly ruleRouting?: RuleRouting;

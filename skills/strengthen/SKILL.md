@@ -142,12 +142,12 @@ Group the output into tiers:
 → enforce("eslint/sonarjs/cognitive-complexity", "Keep functions simple")
 ```
 
-**Tier 4: No match** (stays as guidance, or candidate for `/pr-to-lint-rule`)
+**Tier 4: No match** (stays as guidance — candidate for a future rule-synthesis skill)
 
 ```
 "research-first": guidance("Google unfamiliar APIs first.")
-→ No linter rule can enforce this. Stays as guidance.
-→ Want me to run /pr-to-lint-rule to create a custom rule?
+→ No linter rule can enforce this. Stays as guidance for now.
+→ (Custom-rule synthesis is planned but not yet shipped.)
 ```
 
 ### Step 6: Apply Changes
@@ -168,4 +168,4 @@ Group the output into tiers:
 4. Run `npm run build && npx vigiles compile` to verify
 5. If compilation fails, report the error and revert
 
-**For Tier 4 (no match):** Ask the user if they want to run `/pr-to-lint-rule` for any of the unmatched rules to create custom rules.
+**For Tier 4 (no match):** Tell the user these rules stay as guidance — custom-rule synthesis is a planned skill, not yet available.

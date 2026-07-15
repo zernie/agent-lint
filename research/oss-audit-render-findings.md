@@ -98,7 +98,7 @@ new layout observation (#6)._
    - **wshobson `agent-teams` → A, a `team-lead` `Agent` tool never available.**
    - (older obra/superpowers had a missing `using-superpowers/SKILL.md` — but latest
      main is clean, so don't rely on it.)
-     Use these, ANONYMIZED per don't-shame-OSS (real names only here / `research/dogfood/`).
+     Use these, ANONYMIZED per don't-shame-OSS (real names only here / `research/audit-captures/`).
      A clearly-LABELLED illustrative snippet is OK for clarity, but ANCHOR on a real catch.
 2. **Be honest about what audit catches on a RAW plugin:** tool-contract + hook-event
    - description-overlap + hygiene — NOT "your CLAUDE.md is lying" (file/rule cross-ref

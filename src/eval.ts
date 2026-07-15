@@ -2089,7 +2089,19 @@ export interface EvalDriver {
   readonly harness?: string;
 }
 
-/** The default (Claude Code) eval driver: real `claude` + stream-json parsing. */
+/**
+ * The default (Claude Code) eval driver: real `claude` + stream-json parsing.
+ *
+ * This lives at the COMPOSITION ROOT (`src/eval.ts`) on purpose, not in
+ * `src/adapters/claude-code/` — it is NOT a boundary leak. Claude Code is the
+ * wired DEFAULT (`measureTriggerRate`/`runEval` fall back to it), so `eval.ts`
+ * must reference it directly; wiring the default is precisely a composition
+ * root's job. `codexEvalDriver` lives in its adapter dir instead because Codex
+ * is caller-INJECTED (never a default), so `eval.ts` never imports it. Relocating
+ * this into the adapter would make `eval.ts → adapters/claude-code → eval.ts` a
+ * circular import (the shared `EvalDriver`/`ModelOutputParser` types live here).
+ * The asymmetry reflects default-vs-injected, not a hexagonal violation.
+ */
 export const claudeEvalDriver: EvalDriver = {
   runner: spawnAgent,
   parse: parseClaudeRun,

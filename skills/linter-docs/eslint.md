@@ -1,6 +1,6 @@
 # ESLint — Reference
 
-Shared linter reference for vigiles skills. Used by `strengthen` (find existing rules) and `pr-to-lint-rule` (write custom rules).
+Shared linter reference for vigiles skills. Used by `strengthen` (find existing rules) and the planned rule-synthesis skill (write custom rules, not yet shipped).
 
 ## Check Existing Plugins First
 

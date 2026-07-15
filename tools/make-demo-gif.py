@@ -2,8 +2,8 @@
 """Generate vigiles-demo.gif — an animated terminal of `vigiles lint` catching
 stale references. Pure Pillow (no recorder needed); the output lines are
 representative of `vigiles lint` output (mode-neutral — `lint` works on a
-spec-compiled CLAUDE.md and on plain inline markdown; see scripts/demo.sh).
-Regenerate: `python3 scripts/make-demo-gif.py` (needs Pillow: `pip install
+spec-compiled CLAUDE.md and on plain inline markdown; see tools/demo.sh).
+Regenerate: `python3 tools/make-demo-gif.py` (needs Pillow: `pip install
 Pillow`). Run from the repo root."""
 from PIL import Image, ImageDraw, ImageFont
 

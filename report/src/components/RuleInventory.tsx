@@ -133,57 +133,87 @@ function FoldedGroup({
  * honest zones:
  *   1. Deterministic scan (no model) — documented rules that map to an
  *      off-the-shelf lint rule, grouped by state so the actionable ones lead.
- *   2. A compile CTA describing the opt-in tier — never fabricated result rows.
+ *   2. "Your rules, mapped" — the deterministic routing preview with an honest,
+ *      opt-in next step per lane; never fabricated result rows.
  */
-/** The four routing rungs, in ladder order (config-line → hook → prose →
- * compile), with the glyph + one-line meaning the compile CTA lists. */
+/** The five routing categories, in ladder order (enforceable-now → hook →
+ * agent-note → prose → hard-to-codify), with the glyph + one-line meaning the
+ * rule map lists. The HARD bucket is labelled so difficulty reads clearly. */
 const ROUTE_META: Record<
   RuleCategory,
   { glyph: string; label: string; blurb: string }
 > = {
   reuse: {
-    glyph: "↺",
-    label: "reuse",
-    blurb: "an off-the-shelf rule already exists → enable it",
+    glyph: "✓",
+    label: "enforceable now",
+    blurb: "an off-the-shelf rule already exists → one config line",
   },
   hook: {
     glyph: "⛓",
     label: "hook",
-    blurb: "action rules a linter can't see (git push, rm -rf)",
+    blurb:
+      "an action rule a linter can't see (git push, rm -rf) → a hook gates it",
+  },
+  meta: {
+    glyph: "☰",
+    label: "agent note",
+    blurb: "an instruction to the agent, not a code rule → stays prose",
   },
   semantic: {
     glyph: "✎",
-    label: "prose",
-    blurb: "judgment calls, honestly left un-enforced",
-  },
-  unrouted: {
-    glyph: "✨",
-    label: "unrouted",
+    label: "judgment call",
     blurb:
-      "no deterministic route — compile decides (reuse / synthesize / prose)",
+      "no checker can decide it (“readable”, “idiomatic”) → honestly stays prose",
+  },
+  // The synthesize lane is DOABLE, not a dead end: no off-the-shelf rule matches,
+  // but a CUSTOM rule can enforce it ("wrap API calls in retry", "validate the
+  // input schema"). Kept distinct from `semantic` so it never reads as generic
+  // "hard prose" — it's the opt-in synthesis skill's target.
+  unrouted: {
+    glyph: "⚙",
+    label: "custom rule",
+    blurb:
+      "no off-the-shelf rule fits, but a custom one CAN — the opt-in synthesis skill writes + gates it (abstains if it can't prove it sound)",
   },
 };
-const ROUTE_ORDER: RuleCategory[] = ["reuse", "hook", "semantic", "unrouted"];
+// Ladder order: enforceable-now → hook → the two "stays prose" lanes → the
+// SYNTHESIZE lane last (doable-but-opt-in), so a reader sees reuse first and the
+// custom-rule candidates as a distinct, actionable tail — not generic "hard".
+const ROUTE_ORDER: RuleCategory[] = [
+  "reuse",
+  "hook",
+  "meta",
+  "semantic",
+  "unrouted",
+];
 
 /**
- * The opt-in compile tier, grounded in the DETERMINISTIC routing preview when we
- * have one: real per-category counts + a couple of example rules, so the upsell
- * shows the reader THEIR rules routed — not a generic pitch. Falls back to the
- * static description when no routing ran.
+ * "Your rules, mapped" — the DETERMINISTIC routing preview (no model, nothing
+ * executes): real per-category counts + an example per lane, so the reader sees
+ * THEIR rules routed. Each lane's next step is honest and OPT-IN — enable a
+ * config line / run the strengthen skill / author a compiled hook / stays prose.
+ * NB this is NOT `vigiles compile` (that's the unrelated spec→markdown verb).
  */
-function CompileCTA({ routing }: { routing?: RuleRouting }) {
+function RuleMap({ routing }: { routing?: RuleRouting }) {
   // One representative example rule per non-reuse category (reuse is already the
   // detailed hero above), quote trimmed for the line.
   const exampleFor = (cat: RuleCategory): string | undefined =>
     routing?.rules.find((r) => r.category === cat)?.text;
 
+  // The sharp catalog finding: a rule your docs NAME as reuse that your linter
+  // actually has turned OFF ("documented but OFF"). Only present when the audit
+  // enumerated the live catalog (own-repo, consented) — enabled === false.
+  const off = (routing?.rules ?? []).filter(
+    (r) => r.category === "reuse" && r.enabled === false,
+  );
+
   return (
     <div className="rounded-lg border border-dashed border-border p-4">
       <div className="flex items-center gap-2 text-sm font-semibold">
         <Sparkles size={15} className="text-muted-foreground" />
-        Compile — the full picture
+        Your rules, mapped
         <span className="text-xs font-normal text-muted-foreground">
-          opt-in · runs a model once
+          deterministic · no model
         </span>
       </div>
       {routing && routing.segmented > 0 ? (
@@ -206,6 +236,11 @@ function CompileCTA({ routing }: { routing?: RuleRouting }) {
                     {ROUTE_META[cat].label}
                   </span>{" "}
                   — {ROUTE_META[cat].blurb}
+                  {cat === "reuse" && off.length > 0 && (
+                    <span className={cn("ml-1 font-semibold", TEXT.bad)}>
+                      ({off.length} documented but OFF)
+                    </span>
+                  )}
                   {ex && (
                     <span className="mt-0.5 block truncate pl-4 italic opacity-80">
                       e.g. “{ex}”
@@ -215,50 +250,110 @@ function CompileCTA({ routing }: { routing?: RuleRouting }) {
               );
             })}
           </ul>
-          <p className="mt-2.5 text-xs text-muted-foreground">
-            <span className="font-mono text-foreground">compile</span> turns the
-            reuse + hook rows into config and hooks, and takes one model pass at
-            the <span className="font-mono text-foreground">unrouted</span>{" "}
-            rest. CI afterwards is plain lint + hooks — $0 and deterministic.
-            <code className="ml-2 rounded bg-border px-1.5 py-0.5 font-mono text-foreground">
-              npx vigiles compile
-            </code>
-          </p>
+          {/* The wow: your instructions NAME these rules, but your linter has
+              them turned off — read straight off the live catalog, no model. */}
+          {off.length > 0 && (
+            <div className={cn("mt-2.5 rounded-md border p-2.5", "border-l-4")}>
+              <p className={cn("text-xs font-semibold", TEXT.bad)}>
+                ⛔ {off.length} documented but OFF
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Your instructions name{" "}
+                {off.length === 1 ? "this rule" : "these rules"} as enforced,
+                but your linter config has {off.length === 1 ? "it" : "them"}{" "}
+                disabled:
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {off.slice(0, 6).map((r) => (
+                  <li
+                    key={r.rule}
+                    className="font-mono text-xs text-muted-foreground"
+                  >
+                    <code className={TEXT.bad}>{r.rule}</code>{" "}
+                    <span className="opacity-70">— {r.text}</span>
+                  </li>
+                ))}
+                {off.length > 6 && (
+                  <li className="text-xs text-muted-foreground">
+                    +{off.length - 6} more
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
+          <RuleMapNextSteps />
         </>
       ) : (
         <>
           <p className="mt-1.5 text-xs text-muted-foreground">
-            Segments your instruction file into atomic rules and routes each
-            one:
+            Segments your instruction file into atomic rules and routes each one
+            — deterministically, no model:
           </p>
           <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
             <li>
-              <span className="font-mono text-foreground">↺ reuse</span> — an
-              off-the-shelf rule already exists → enable it
-            </li>
-            <li>
-              <span className="font-mono text-foreground">⚙ synthesize</span> —
-              a custom rule, checked against held-out examples before it's
-              trusted
+              <span className="font-mono text-foreground">
+                ✓ enforceable now
+              </span>{" "}
+              — an off-the-shelf rule already exists → enable it
             </li>
             <li>
               <span className="font-mono text-foreground">⛓ hook</span> — action
               rules a linter can't see (git push, rm -rf)
             </li>
             <li>
-              <span className="font-mono text-foreground">✎ prose</span> —
-              judgment calls, honestly left un-enforced
+              <span className="font-mono text-foreground">⚙ custom rule</span> —
+              no off-the-shelf rule fits, but a custom one CAN (“wrap API calls
+              in retry”) → the opt-in synthesis skill, gated
+            </li>
+            <li>
+              <span className="font-mono text-foreground">✎ judgment call</span>{" "}
+              — genuinely undecidable (“readable”), honestly left as prose
             </li>
           </ul>
-          <p className="mt-2.5 text-xs text-muted-foreground">
-            One model pass now; CI afterwards is plain lint + hooks — $0 and
-            deterministic.
-            <code className="ml-2 rounded bg-border px-1.5 py-0.5 font-mono text-foreground">
-              npx vigiles compile
-            </code>
-          </p>
+          <RuleMapNextSteps />
         </>
       )}
+    </div>
+  );
+}
+
+/** The honest, opt-in next step per lane — no fabricated command. `vigiles
+ * compile` appears ONLY for hooks (it genuinely compiles a hook to settings);
+ * reuse is a config line / the strengthen skill; synthesis is a planned skill. */
+function RuleMapNextSteps() {
+  return (
+    <div className="mt-2.5 space-y-1 text-xs text-muted-foreground">
+      <p>
+        <span className="font-medium text-foreground">Enforceable now</span> —
+        enable each in your lint config (one line), or ask your agent to run the{" "}
+        <code className="rounded bg-border px-1 font-mono">strengthen</code>{" "}
+        skill.
+      </p>
+      <p>
+        <span className="font-medium text-foreground">Hooks</span> — author a
+        compiled hook in{" "}
+        <code className="rounded bg-border px-1 font-mono">
+          .vigiles/hooks/
+        </code>
+        , then{" "}
+        <code className="rounded bg-border px-1 font-mono">
+          npx vigiles compile
+        </code>{" "}
+        wires it into your settings.
+      </p>
+      <p>
+        <span className="font-medium text-foreground">Custom rule (⚙)</span> —
+        no off-the-shelf rule fits, but a custom one CAN enforce it (e.g. “wrap
+        API calls in a retry”). Doable, not a dead end — the opt-in synthesis
+        skill writes and gates it (with a bit of codebase context); it abstains
+        rather than ship a checker it can’t prove sound. Nothing is generated
+        for you automatically.
+      </p>
+      <p>
+        <span className="font-medium text-foreground">Judgment call (✎)</span> —
+        genuinely undecidable (“keep it readable”); no checker can decide it, so
+        it honestly stays prose.
+      </p>
     </div>
   );
 }
@@ -387,9 +482,9 @@ export function RuleInventory({
         </FoldedGroup>
       )}
 
-      {/* Zone 2 — the opt-in compile tier, grounded in the deterministic routing
-          preview (real counts + examples) when present; static pitch otherwise. */}
-      <CompileCTA routing={routing} />
+      {/* Zone 2 — "your rules, mapped": the deterministic routing preview (real
+          counts + examples) with an honest, opt-in next step per lane. */}
+      <RuleMap routing={routing} />
     </div>
   );
 }

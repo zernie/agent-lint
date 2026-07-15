@@ -7,7 +7,7 @@ against **reality** — offline, model-free, in every CI run. Consumed by
 `src/scan-vendor.test.ts` (golden rule verdicts), `src/scan-cli.test.ts` (CLI
 e2e), and the hook/sandbox/agent suites.
 
-Saved audit **reports** from dogfood runs live separately in `research/dogfood/`
+Saved audit **reports** from dogfood runs live separately in `research/audit-captures/`
 (the human-readable `audit`/`lint` output); this dir holds the **inputs** (the
 plugin snapshots) the tests load.
 

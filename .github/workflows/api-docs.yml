@@ -2,7 +2,7 @@ name: API docs
 
 # Publish the generated API reference (TypeDoc → HTML) to GitHub Pages on every
 # push to main. Browsable site complementing the hand-written guides in docs/ and
-# the committed surface reports in etc/*.api.md. TypeDoc config: typedoc.json
+# the committed surface reports in api-surface/*.api.md. TypeDoc config: typedoc.json
 # (curated to the public authoring surfaces, public-only, members inline).
 #
 # REQUIRED ONE-TIME SETUP (repo admin, can't be done from code):
