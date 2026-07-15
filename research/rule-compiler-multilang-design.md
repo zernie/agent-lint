@@ -5,7 +5,13 @@ topic: compiler
 
 # Rule-compiler: multi-language design (Ruff + Pylint) + segmentation, grounded in a 20-repo corpus
 
-> Design-of-record (2026-07-14). The `audit` rule-compile tier (`src/rule-inventory.ts` and
+> **The crisp design-of-record is now `research/rule-compiler-design.md` — read that
+> first.** This doc is the detailed BUILD-LOG (segmentation model + the multi-language
+> reasoning + the OSS corpus). Note: the design-of-record FROZE the rule map at 2
+> linters (ESLint + Pylint) for now, so the Ruff-routing plans below are future/parked,
+> not active — and detection moved to a two-tier (confident + possible-review) target.
+
+> Build-log (2026-07-14). The `audit` rule-compile tier (`src/rule-inventory.ts` and
 > `src/rule-routing.ts`, backed by `@vigiles/compiler`) reads prose rules in a repo's
 > convention docs and reports which map to off-the-shelf lint rules and whether they're
 > enforced. It is **ESLint-only in its data** today. This doc designs the expansion to
