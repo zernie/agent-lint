@@ -1,4 +1,4 @@
-# @vigiles/compiler
+# @vigiles/rule-compiler
 
 The opt-in **rule-compiler** tier of vigiles. It turns a natural-language agent
 rule (from a `CLAUDE.md` / `AGENTS.md`) into a self-tested lint rule, and — this

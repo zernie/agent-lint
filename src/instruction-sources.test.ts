@@ -28,7 +28,7 @@ describe("isFixturePath", () => {
       true,
     );
     expect(isFixturePath("fixtures/example-project/CLAUDE.md")).toBe(true);
-    expect(isFixturePath("compiler/demo-project/CLAUDE.md")).toBe(true);
+    expect(isFixturePath("rule-compiler/demo-project/CLAUDE.md")).toBe(true);
     expect(isFixturePath("bench/ecosystem/skills/x/CLAUDE.md")).toBe(true);
     expect(isFixturePath("mocks/server/CLAUDE.md")).toBe(true);
     expect(isFixturePath(".tmp-genh-1/CLAUDE.md")).toBe(true);
