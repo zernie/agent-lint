@@ -60,11 +60,47 @@ describe("real-OSS routing dogfood (vendored Python AGENTS.md)", () => {
       });
 
       it("every reuse hit uses a supported linter and every rule is honestly categorized", () => {
-        const KNOWN = new Set(["eslint", "pylint", "ruff"]);
+        const KNOWN = new Set(["eslint", "pylint", "ruff", "clippy"]);
         for (const x of reuse) expect(KNOWN.has(x.linter ?? "")).toBe(true);
         const CATS = new Set(["reuse", "hook", "meta", "semantic", "unrouted"]);
         for (const x of r.rules) expect(CATS.has(x.category)).toBe(true);
       });
+
+      it("does NOT mis-attribute a Python doc to clippy (Rust linter)", () => {
+        // The clippy keywords are Rust-unambiguous; a pure-Python doc must never
+        // route to clippy (the cross-language FP the routing invariant forbids).
+        expect(reuse.some((x) => x.linter === "clippy")).toBe(false);
+      });
     });
   }
+});
+
+describe("Clippy (Rust) routing — the codex/ghostty 0%→ win (backlog #3)", () => {
+  // Grounded in the real codex AGENTS.md prose. A Rust rulebook that names these
+  // norms must now route to clippy instead of the 0% it got when clippy was
+  // unmapped.
+  // One norm per bullet — the router is first-match (one rule per bullet), so a
+  // combined "avoid panic!, unreachable!, .unwrap()" bullet yields ONE rule, not
+  // three; separate bullets exercise each mapping.
+  const rust = [
+    "# Rust conventions",
+    "- Avoid `.unwrap()` in library code.",
+    "- Never use `panic!`.",
+    "- Do not use `unreachable!`.",
+    "- No `dbg!` in committed code.",
+    "- Make `match` exhaustive; avoid wildcard arms.",
+  ].join("\n");
+  const reuse = routeRules(rust, "AGENTS.md").rules.filter(
+    (x) => x.category === "reuse",
+  );
+
+  it("routes each Rust norm to its clippy restriction lint (all clippy, no mis-linter)", () => {
+    const rules = new Set(reuse.map((x) => x.rule));
+    expect(reuse.every((x) => x.linter === "clippy")).toBe(true);
+    expect(rules.has("clippy::unwrap_used")).toBe(true);
+    expect(rules.has("clippy::panic")).toBe(true);
+    expect(rules.has("clippy::unreachable")).toBe(true);
+    expect(rules.has("clippy::dbg_macro")).toBe(true);
+    expect(rules.has("clippy::wildcard_enum_match_arm")).toBe(true);
+  });
 });
