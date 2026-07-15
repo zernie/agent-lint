@@ -41,7 +41,35 @@ things in one:
   section = a desc per every root dir. **Verdict from the investigation: 8/10 hexagonal,
   CI-enforced; adapters symmetric via the adapter-contract registry loop.**
 
-## LATEST (2026-07-15) — full ESLint↔Pylint parity in the rule map (2 commits, unpushed→pushed)
+## LATEST (2026-07-15) — rule-compiler DESIGN-OF-RECORD + two-tier detection (PR #73)
+
+**PR #73 is OPEN** (`feat: full ESLint/Pylint parity in the audit rule map`) — all the
+rule-compiler work below is on it. NOT merged yet.
+
+**Design-of-record + 3 decisions** (`research/rule-compiler-design.md`, the new crisp front
+door; multilang doc demoted to build-log). The founder pushed back on eager implementation +
+wanted the multi-linter / rule-detection design written down. Decisions (AskUserQuestion):
+(1) rule map FROZEN at 2 linters (ESLint+Pylint); (2) detection TWO-TIER (confident + possible-
+review); (3) report shows SKIPPED bullets + a best-effort caveat.
+
+**Two-tier detection BUILT** (segment.ts + rule-routing.ts + cli.ts + audit-report.ts):
+
+- The segmenter gate returns a REJECT REASON; `segmentInstructions` → `{ segments, skipped }`.
+- `RuleRouting` gains `possible` + `skipped` (additive, no schema bump). routeRules splits:
+  CONFIDENT (routed) / POSSIBLE (rule-ish, below the bar — review) / SKIPPED (index/description/
+  section/no-signal, each with a reason). A `no-signal` reject is folded back in so a rule-NAMING
+  bullet is RESCUED to confident (recall win: "Every function must have a docstring" → reuse).
+- POSSIBLE calibrated to NORM_SIGNAL bullets only (must/should/never/avoid/FORBIDDEN/required…) —
+  on the real MCP AGENTS.md that's 7 genuine recall-misses, not 25 noisy ones; prose → skipped.
+- The audit TERMINAL now prints a rule-map summary (confident lane counts + possible/skipped +
+  "best-effort filter" caveat) — the "be clear about what you detected" ask.
+- MULTI-LINTER provenance fix: a merged polyglot catalog now tags each rule's linter
+  (`eslint:no-console` vs `pylint:invalid-name`, was `undefined:`). `AvailableRule.linter`.
+- Commits: b9a26d9 (Pylint catalog) · 04f8e7f (Python synthesis) · fed01d1 (OSS dogfood) ·
+  1a138d5 (provenance + design doc) · 4aa529b (two-tier) · b69f6a1 (norm-signal calibration).
+- Roadmapped (designed, partially built): the SKIPPED-inline-vs-json presentation is open.
+
+## EARLIER 2026-07-15 — full ESLint↔Pylint parity in the rule map
 
 Closed the ESLint-vs-Pylint asymmetry end to end. Two pieces:
 
