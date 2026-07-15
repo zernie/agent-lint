@@ -1,7 +1,8 @@
 ---
 name: verify-docs-findable
 description: Audit whether a repo's docs actually ANSWER the questions a reader has — by spawning fresh, cheap (Haiku) agents that cold-read ONLY the docs and measuring how fast they reach the answer, whether they hit dead-ends, whether they fall back to source code, and whether they cite docs that contradict each other. Use after a doc reorg, when docs "feel scattered," or when the same confusion keeps recurring. Surfaces findability gaps (a corpus can be COMPLETE — every doc indexed — yet not FINDABLE) plus a prioritized fix list. Works on any repo's docs, not just this one.
-argument-hint: [optional: a question, or "auto" to derive from recent confusions]
+argument-hint:
+  [optional: a question, or "auto" to derive from recent confusions]
 ---
 
 # verify-docs-findable — cold-read the docs with fresh eyes
@@ -16,7 +17,7 @@ alone.** A fresh cheap agent is that someone.
 
 - **Haiku (a small, cheap model), fresh (no session context).** The point is a naive cold
   reader, NOT a clever one. A strong model with your context will grep the source, reason
-  around gaps, and *hide* the doc problem. Haiku, told to use only the docs, exposes it.
+  around gaps, and _hide_ the doc problem. Haiku, told to use only the docs, exposes it.
 - **"Use ONLY the docs, start at the index."** The moment a verifier has to open source code
   to answer, the docs have failed — that's the signal. Steps-from-index is the metric.
 
@@ -26,8 +27,9 @@ alone.** A fresh cheap agent is that someone.
 
 Test the **recurring, load-bearing, and mis-stated** questions — the ones that actually cost
 time. Sources, in order:
+
 - What the user (or you) just got confused about this session — the highest-signal source.
-- The "canonical answers" the docs *claim* to provide (a docs corpus usually has ~5–8 facts
+- The "canonical answers" the docs _claim_ to provide (a docs corpus usually has ~5–8 facts
   it exists to convey; test those).
 - If none given: ask the user for the questions, or infer them from the corpus's top-level
   topics. Don't invent trivia — test what a real contributor needs.
@@ -52,13 +54,13 @@ Run all in one message so they go concurrently. (Haiku + parallel = the audit is
 
 ### 3. Score each answer
 
-| Signal | Good | Gap |
-| --- | --- | --- |
-| **Correct?** | matches ground truth | wrong/partial → the doc is wrong or missing |
-| **Steps from index** | 1–2 | 3+ → no signposted pointer |
-| **Dead-ends** | none | landed on a wrong-but-plausible doc first → title/scoping is misleading |
-| **Needed source code?** | no | yes → the docs don't actually state it |
-| **Contradictions** | — | cited two docs that disagree → a cohesion bug (fix immediately) |
+| Signal                  | Good                 | Gap                                                                     |
+| ----------------------- | -------------------- | ----------------------------------------------------------------------- |
+| **Correct?**            | matches ground truth | wrong/partial → the doc is wrong or missing                             |
+| **Steps from index**    | 1–2                  | 3+ → no signposted pointer                                              |
+| **Dead-ends**           | none                 | landed on a wrong-but-plausible doc first → title/scoping is misleading |
+| **Needed source code?** | no                   | yes → the docs don't actually state it                                  |
+| **Contradictions**      | —                    | cited two docs that disagree → a cohesion bug (fix immediately)         |
 
 Verifiers surface contradictions **for free** — a cold reader citing two docs that say
 different things is the cheapest contradiction-finder you have.
@@ -88,7 +90,7 @@ prioritized fix list. Report the before/after on any question you fixed and re-v
 ## Notes
 
 - This is orthogonal to "is every doc indexed?" completeness checks — it measures the layer
-  above: can a stranger *reach* the answer. Run it after any doc reorganization.
+  above: can a stranger _reach_ the answer. Run it after any doc reorganization.
 - Keep the question set in the repo (e.g. a `docs-findability-questions.md`) so the audit is
   repeatable and the canonical answers stay honest as the corpus grows.
 - Scales down (1 question, 1 agent, to spot-check one fix) and up (the full canonical set).
