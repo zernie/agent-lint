@@ -18,7 +18,16 @@ import { claude, guidance } from "../src/core/spec.js";
 
 export default claude({
   sections: {
-    scope: `The \`research/\` corpus is the INTERNAL record (design rationale, competitive analysis, the moat/positioning narrative) — tier 2 in the doc-tiers rule, NEVER linked from public docs. This file is its INDEX. Each doc carries \`status:\`/\`topic:\` frontmatter: STATUS is one of \`active\` (current thinking), \`shipped\` (built — the doc is the design record), \`idea\` (proposed, not built), \`superseded\` (replaced — see the newer doc), \`rejected\` (decided against). TOPIC groups by area (spec, hooks, eval, testing, adapters, audit, compiler, sandbox, linters, positioning, roadmap, proofs, skills, security, docs, benchmark, misc). Query the corpus deterministically: \`grep -l 'status: shipped' research/*.md\`, \`grep -l 'topic: eval' research/*.md\`. READ-FIRST keystones: \`roadmap.md\` (the front door) and \`harness-state-space.md\` (the organizing thesis). The ROOT \`CLAUDE.md\` keyFiles map the CODE; this maps the RESEARCH.`,
+    scope: `The \`research/\` corpus is the INTERNAL record (design rationale, competitive analysis, the moat/positioning narrative) — tier 2 in the doc-tiers rule, NEVER linked from public docs. This file is its INDEX. Each doc carries \`status:\`/\`topic:\` frontmatter: STATUS is one of \`active\` (current thinking), \`shipped\` (built — the doc is the design record), \`idea\` (proposed, not built), \`superseded\` (replaced — see the newer doc), \`rejected\` (decided against). TOPIC groups by area (spec, hooks, eval, testing, adapters, audit, compiler, sandbox, linters, positioning, roadmap, proofs, skills, security, docs, benchmark, misc). Query the corpus deterministically: \`grep -l 'status: shipped' research/*.md\`, \`grep -l 'topic: eval' research/*.md\`. READ-FIRST keystones: \`roadmap.md\` (the front door) and \`harness-state-space.md\` (the organizing thesis). The ROOT \`CLAUDE.md\` keyFiles map the CODE; this maps the RESEARCH.
+
+### Canonical answers — question → the ONE doc (do NOT re-derive; these recur + get mis-stated)
+
+- "How much of a real CLAUDE.md/AGENTS.md can vigiles enforce? is a rule with NO off-the-shelf linter rule still enforceable?" → \`rule-enforceability.md\` (~65% mechanizable; **no off-the-shelf rule ≠ not enforceable** — custom AST synthesis covers project-specific rules).
+- "How does synthesis work — does vigiles run or pay for a model?" → \`rule-enforceability.md\` + \`audit-rule-compile-tier.md\` (opt-in copy-prompt → the USER's own sub → deterministic trust-gate; **$0 to vigiles**, it never calls a model).
+- "Which linters does prose ROUTING support (ESLint/Ruff/Pylint/Clippy)?" → \`rule-enforceability.md\` linter-support table (**ESLint + Pylint + Ruff route-only; Clippy = GAP**). NB \`docs/linter-support.md\` is the DIFFERENT \`enforce()\` 7-catalog *verification*, not routing.
+- "What is \`@vigiles/rule-enforcer\` vs \`vigiles compile\`? are they the same?" → \`rule-enforceability.md\` naming section: **NO** — \`rule-enforcer\` = the prose→enforceable-rule ENGINE (route/synthesize/gate, dir \`rule-enforcer/\`); \`vigiles compile\` = the SPEC compiler (\`.spec.ts\`→\`.md\`). Different systems.
+- "Why is a rule warn vs error / can't everything be a type?" → \`enforcement-model.md\` (the severity gradient, decidability buckets A/B/C).
+- "What's the committed adoption direction?" → \`adoption-direction.md\` (audit-first, markdown = source of truth).`,
   },
 
   keyFiles: {
