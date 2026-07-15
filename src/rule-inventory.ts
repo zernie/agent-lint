@@ -258,6 +258,93 @@ export const INTENT_MAP: readonly IntentMapping[] = [
     configFix: '"no-only-tests/no-only-tests": "error"',
   },
 
+  // --- Ruff (Python) — the modern default (allow-list, like ESLint). These are
+  // the NET-NEW intents Pylint does NOT already cover (imports-inside-functions,
+  // annotations, logger.exception, print, import-sorting). The SHARED Python
+  // intents (bare-except, broad-except, mutable-default, wildcard, global,
+  // too-many-*, line-length, unused, f-strings, docstrings) stay with the Pylint
+  // entries below — one intent, one linter, so keyword disjointness holds (the
+  // `rule-routing-dogfood` invariant test) and prose never double-routes. Whether
+  // shared Python NL prose should later PREFER Ruff over Pylint is an open
+  // ownership decision, deferred. ROUTE-ONLY like Pylint: config-state
+  // (buildRuleInventory) stays gated to eslint — Ruff's select/ignore config shape
+  // differs from the eslint rules-map, so the eslint-shaped check would MISLABEL;
+  // accurate Ruff enabled-state is the catalog/ConfigProbe follow-up
+  // (rule-enforcer-multilang-design.md §3). Every CODE was verified to exist
+  // against ruff 0.15.8 (`ruff rule <CODE>`); keywords are Python-diagnostic (no
+  // cross-language phrase that would mis-attribute the linter in a JS/TS doc).
+  {
+    intent: "no imports inside functions (Python)",
+    linter: "ruff",
+    keywords: [
+      "PLC0415",
+      "inline import",
+      "inline imports",
+      "imports inside functions",
+      "import inside a function",
+      "import inside functions",
+    ],
+    rule: "PLC0415",
+    configFix:
+      'add "PLC0415" (import-outside-top-level) to [tool.ruff.lint] select',
+  },
+  {
+    // E402 flags module-level code BEFORE the imports; the "no imports inside
+    // functions" reading is PLC0415 above. Code-only keyword ON PURPOSE: the
+    // phrase "imports at the top" is ambiguous between the two AND collides with
+    // ESLint `import/first` in a JS doc, so it is NOT a keyword here (a missing
+    // route is recoverable; a wrong "enforceable" claim is not).
+    intent: "no module code before imports (Python)",
+    linter: "ruff",
+    keywords: ["E402"],
+    rule: "E402",
+    configFix:
+      'add "E402" (module-import-not-at-top-of-file) to [tool.ruff.lint] select',
+  },
+  {
+    intent: "require argument type annotations (Python)",
+    linter: "ruff",
+    keywords: [
+      "ANN001",
+      "type hints required",
+      "type hints are required",
+      "require type hints",
+    ],
+    rule: "ANN001",
+    configFix:
+      'add "ANN001" (missing-type-function-argument) to [tool.ruff.lint] select',
+  },
+  {
+    intent: "require return type annotations (Python)",
+    linter: "ruff",
+    keywords: ["ANN201"],
+    rule: "ANN201",
+    configFix:
+      'add "ANN201" (missing-return-type-undocumented-public-function) to [tool.ruff.lint] select',
+  },
+  {
+    intent: "use logger.exception in handlers (Python)",
+    linter: "ruff",
+    keywords: ["TRY400", "logger.exception", "logging.exception"],
+    rule: "TRY400",
+    configFix:
+      'add "TRY400" (error-instead-of-exception) to [tool.ruff.lint] select',
+  },
+  {
+    intent: "no print statements — use logging (Python)",
+    linter: "ruff",
+    keywords: ["T201", "print statement", "print statements"],
+    rule: "T201",
+    configFix: 'add "T201" (print) to [tool.ruff.lint] select',
+  },
+  {
+    intent: "keep imports sorted (Python)",
+    linter: "ruff",
+    keywords: ["I001", "sorted imports", "isort"],
+    rule: "I001",
+    configFix: 'add "I001" (unsorted-imports) to [tool.ruff.lint] select',
+  },
+
   // --- Pylint (Python) — routing basics. These feed classify() (routing → reuse);
   // buildRuleInventory is gated to eslint (see below) because pylint is
   // ON-BY-DEFAULT (deny-list), so the eslint-shaped config-state check would
