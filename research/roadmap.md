@@ -821,6 +821,15 @@ assertRates`) is the recommended path for testing one skill, but
   green no-op because no locks are committed. Either commit eval-locks so `--check`
   actually gates, and/or add a deterministic "each eval's plugin/skillsDir LOADS + its
   skill target RESOLVES" check (no model). See `research/dogfood-corpus.md`. · **LOW**
+- **Rule-catalog: probe a real linted file, not a hardcoded `src/index.ts`** —
+  `enumerateEslintCatalog` (`src/core/rule-catalog.ts`) calls
+  `calculateConfigForFile("src/index.ts")`, so on an own-repo whose ESLint flat
+  config scopes rules to a different target (JS-only `files:["**/*.js"]`, a
+  monorepo `packages/app/**`), the enabled-state read is wrong — a rule enabled
+  for the real target can be mislabeled "documented but OFF". Affects only the
+  ON/OFF nuance of the reuse lane (own-repo + consent), not whether it routes to
+  reuse. Fix: pick a representative linted file per config target (or merge
+  configs across JS/TS paths) instead of the hardcoded path. Codex review on #72. · **LOW**
 - **Wrap the FP / dogfood sweeps as contributor skills** — `tools/fp-sweep.sh` +
   `tools/dogfood-sweep.sh` have real model-judgment on their output (which flags are
   true false positives / which detectors regressed). At launch, wrap each as a
