@@ -830,6 +830,32 @@ assertRates`) is the recommended path for testing one skill, but
   ON/OFF nuance of the reuse lane (own-repo + consent), not whether it routes to
   reuse. Fix: pick a representative linted file per config target (or merge
   configs across JS/TS paths) instead of the hardcoded path. Codex review on #72. · **LOW**
+- **Rule-catalog: normalize an `eslint/` prefix before the catalog lookup** —
+  `routeRuleToMechanism` (`src/core/rule-routing.ts`) matches a reuse candidate
+  against the enumerated ESLint catalog by bare rule id, but a marked ref written
+  as `eslint/no-var` (the `enforce()` prefix form) isn't stripped before the lookup,
+  so it misses the catalog and falls through to `synthesize` even though the rule is
+  real + enabled. Fix: strip a leading `<linter>/` segment before matching. Codex
+  review on #72. · **LOW**
+- **Audit: apply the measure-consent BEFORE building the rule map on first run** —
+  in `cli.ts` the rule-routing map's own-repo ESLint-catalog read (`computeRuleRouting`)
+  runs the enumerate step gated on `ownRepo && consented`, but on the FIRST interactive
+  run the consent prompt is resolved AFTER the map is assembled, so the very first
+  `audit` misses the dynamic catalog (falls back to the static INTENT_MAP) and only the
+  second run sees it. Fix: resolve `decideExecute`/consent before `computeRuleRouting`.
+  Codex review on #72. · **LOW**
+- **Segment: don't over-suppress rule bullets under a process heading** — the
+  markdown segmenter (`src/core/segment.ts`) drops list items nested under a
+  process/section heading to avoid treating steps as rules, but a legitimate rule
+  bullet under an H2 like `## Rules` / `## Conventions` gets suppressed too, so it
+  never reaches the routing map. Fix: only suppress under genuinely procedural
+  headings (a small denylist / heading-intent check), not every H2. Codex review on
+  #72. · **LOW**
+- **Rule-routing: honor checkbox rule markers in the pre-pass** — the reuse pre-pass
+  (`src/core/rule-routing.ts`) recognizes a marked linter ref inside a bullet but not
+  when the bullet is a GitHub task-list checkbox (`- [ ] enforce(...)` / `- [x] ...`),
+  so a checkbox-styled rule is skipped. Fix: strip the `[ ]`/`[x]` checkbox token
+  before parsing the bullet. Codex review on #72. · **LOW**
 - **Wrap the FP / dogfood sweeps as contributor skills** — `tools/fp-sweep.sh` +
   `tools/dogfood-sweep.sh` have real model-judgment on their output (which flags are
   true false positives / which detectors regressed). At launch, wrap each as a
