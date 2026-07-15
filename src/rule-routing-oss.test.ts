@@ -44,11 +44,14 @@ describe("real-OSS routing dogfood (vendored Python AGENTS.md)", () => {
         ).toBe(true);
       });
 
-      it("has NO cross-language false positive (a pure-Python doc → only pylint reuse)", () => {
-        const wrong = reuse.filter((x) => x.linter !== "pylint");
+      it("has NO cross-language false positive (a pure-Python doc → only Python linters)", () => {
+        // Python docs may route to pylint OR ruff (both Python); the FP that
+        // matters is a Python norm mis-attributed to a JS/other linter.
+        const PY = new Set(["pylint", "ruff"]);
+        const wrong = reuse.filter((x) => !PY.has(x.linter ?? ""));
         expect(
           wrong.map((x) => `${x.linter}:${x.rule} ← ${x.text}`),
-          "unexpected non-pylint reuse in a Python doc",
+          "unexpected non-Python reuse in a Python doc",
         ).toEqual([]);
       });
 
@@ -57,7 +60,7 @@ describe("real-OSS routing dogfood (vendored Python AGENTS.md)", () => {
       });
 
       it("every reuse hit uses a supported linter and every rule is honestly categorized", () => {
-        const KNOWN = new Set(["eslint", "pylint"]);
+        const KNOWN = new Set(["eslint", "pylint", "ruff"]);
         for (const x of reuse) expect(KNOWN.has(x.linter ?? "")).toBe(true);
         const CATS = new Set(["reuse", "hook", "meta", "semantic", "unrouted"]);
         for (const x of r.rules) expect(CATS.has(x.category)).toBe(true);
