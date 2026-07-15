@@ -35,13 +35,18 @@
  * Pure, deterministic, dependency-free. Reuses `rule-inventory`'s hardened
  * whole-token matcher + `INTENT_MAP`, and `segment`'s Tier-A segmenter.
  */
-import { segmentInstructions, type SkippedBullet } from "./segment.js";
+import {
+  segmentInstructions,
+  type SegmentedRule,
+  type SkippedBullet,
+} from "./segment.js";
 import {
   INTENT_MAP,
   matchesWholeToken,
   type LinterName,
 } from "./rule-inventory.js";
 import type { RuleCatalog, AvailableRule } from "./core/rule-catalog.js";
+import { NORM_SIGNAL } from "./rule-signals.js";
 
 /** How a routed rule would be enforced (a MECHANISM ladder, not a 1-10 score). */
 export type RuleCategory = "reuse" | "hook" | "meta" | "semantic" | "unrouted";
@@ -54,6 +59,28 @@ const MECHANISM: Record<RuleCategory, RuleMechanism> = {
   meta: "prose",
   semantic: "prose",
   unrouted: "synthesize",
+};
+
+/**
+ * The user-facing presentation of each routing category — its glyph + lane
+ * label. The SINGLE SOURCE the terminal summary reads (and the HTML report
+ * mirrors), so the category-name → lane-label mapping lives in one place.
+ *
+ * NB the type name `unrouted` is a WIRE value (it appears in the versioned
+ * `AuditReport` JSON), which is why it isn't renamed to its lane label `custom`;
+ * this table is where the human-facing name is resolved. The category meanings
+ * are documented in the file header; the mapping is tabled in
+ * `research/rule-compiler-design.md` §4.
+ */
+export const LANE_META: Record<
+  RuleCategory,
+  { readonly glyph: string; readonly label: string }
+> = {
+  reuse: { glyph: "✓", label: "enforceable" },
+  hook: { glyph: "⛓", label: "hook" },
+  unrouted: { glyph: "⚙", label: "custom" },
+  semantic: { glyph: "✎", label: "judgment" },
+  meta: { glyph: "☰", label: "agent-note" },
 };
 
 /** One segmented, deterministically-routed rule with provenance. */
@@ -118,15 +145,10 @@ export interface RouteOptions {
   readonly availableRules?: RuleCatalog;
 }
 
-/**
- * A deontic/norm signal ANYWHERE in a bullet — the marker of a rule the imperative
- * gate missed because the norm isn't at the head ("every function MUST have a
- * docstring", "public APIs SHOULD stay stable"). Used to keep the POSSIBLE review
- * tier to genuine rule-candidates instead of arbitrary unparsed prose. Deliberately
- * narrow (modal verbs only) so it doesn't re-admit the noise it exists to exclude.
- */
-const NORM_SIGNAL =
-  /\b(?:must(?:n't)?|should(?:n't)?|shall|never|always|avoids?|require[sd]?|forbidden|disallow(?:ed)?|prohibited|banned?|prefers?|do not|don't)\b/i;
+// NORM_SIGNAL (a deontic modal ANYWHERE) keeps the POSSIBLE review tier to
+// genuine rule-candidates the imperative gate missed ("every function MUST have
+// a docstring") instead of arbitrary prose. It lives in ./rule-signals.ts
+// alongside the segment gate's RULE_PREDICATE twin so the two can't drift.
 
 /**
  * ACTION-rule cues — things a linter never sees (git, filesystem, shell,
@@ -256,10 +278,13 @@ interface PatternRule {
   /** The one-line config that enforces it (a parameterized selector / message). */
   readonly configFix: string;
 }
+/** Every construct-prohibition maps to the same ESLint rule with a different
+ * selector — one named constant so the shared id isn't repeated as a literal. */
+const NO_RESTRICTED_SYNTAX = "no-restricted-syntax";
 const PATTERN_RULE_MAP: readonly PatternRule[] = [
   {
     construct: "default exports",
-    rule: "no-restricted-syntax",
+    rule: NO_RESTRICTED_SYNTAX,
     linter: "eslint",
     pattern:
       /\b(?:no|never|avoid|don'?t\s+use|do\s+not\s+use|disallow|ban|forbid|prefer\s+named\s+(?:exports?\s+)?over)\b[^.\n]{0,24}\bdefault\s+exports?\b/i,
@@ -268,7 +293,7 @@ const PATTERN_RULE_MAP: readonly PatternRule[] = [
   },
   {
     construct: "enums",
-    rule: "no-restricted-syntax",
+    rule: NO_RESTRICTED_SYNTAX,
     linter: "eslint",
     pattern:
       /\b(?:no|never|avoid|don'?t\s+use|do\s+not\s+use|disallow|ban|forbid)\b[^.\n]{0,24}\benums?\b/i,
@@ -277,7 +302,7 @@ const PATTERN_RULE_MAP: readonly PatternRule[] = [
   },
   {
     construct: "for...in",
-    rule: "no-restricted-syntax",
+    rule: NO_RESTRICTED_SYNTAX,
     linter: "eslint",
     pattern:
       /\b(?:no|never|avoid|don'?t\s+use|do\s+not\s+use|disallow|ban|forbid)\b[^.\n]{0,16}\bfor[\s.]{0,3}in\b/i,
@@ -286,7 +311,7 @@ const PATTERN_RULE_MAP: readonly PatternRule[] = [
   },
   {
     construct: "namespaces",
-    rule: "no-restricted-syntax",
+    rule: NO_RESTRICTED_SYNTAX,
     linter: "eslint",
     pattern:
       /\b(?:no|never|avoid|don'?t\s+use|do\s+not\s+use|disallow|ban|forbid)\b[^.\n]{0,24}\bnamespaces?\b/i,
@@ -295,7 +320,7 @@ const PATTERN_RULE_MAP: readonly PatternRule[] = [
   },
   {
     construct: "classes",
-    rule: "no-restricted-syntax",
+    rule: NO_RESTRICTED_SYNTAX,
     linter: "eslint",
     pattern:
       /\b(?:no|never|avoid|don'?t\s+use|do\s+not\s+use|disallow|ban|forbid)\b[^.\n]{0,12}\b(?<!css |style |styling |utility |tailwind |dom |react |component )(?:es6?\s+|javascript\s+)?class(?:es)?\b(?![\s-]*(?:name|attribute|selector|list))/i,
@@ -455,6 +480,75 @@ function looksLikeRuleId(s: string): boolean {
  * is a CLAIM — only a rule-id-shaped value becomes a reuse rule (gated + verified
  * against the catalog when present; never an inferred contradiction).
  */
+/** A `**Guidance only**` body is prose UNLESS its text is really an action/agent
+ * cue (promote-prose): route the whole body through classify and keep it prose
+ * (`semantic`) unless classify sees a genuine hook/meta signal. */
+function guidanceClassification(
+  section: readonly string[],
+  catalog: ReadonlyMap<string, CatalogHit> | undefined,
+): Classification {
+  const c = classify(section.slice(1).join(" "), catalog);
+  return c.category === "hook" || c.category === "meta"
+    ? c
+    : { category: "semantic" };
+}
+
+/** Scan a marked section's BODY for the FIRST structured marker and return its
+ * classification, or null if the section declares none (or an `**Enforced by:**`
+ * whose value is a prose claim, not a rule id). */
+function markerFor(
+  section: readonly string[],
+  catalog: ReadonlyMap<string, CatalogHit> | undefined,
+): Classification | null {
+  for (const raw of section.slice(1)) {
+    const bl = raw.trim();
+    const em = ENFORCED_RE.exec(bl);
+    if (em) {
+      if (!looksLikeRuleId(em[1])) return null; // a prose claim, not a rule id
+      const rule = em[1].trim();
+      const hit = catalog?.get(rule);
+      return {
+        category: "reuse",
+        rule,
+        ...(hit !== undefined
+          ? { enabled: hit.enabled, linter: hit.linter }
+          : {}),
+      };
+    }
+    if (GUARD_RE.test(bl)) return { category: "hook" };
+    if (GUIDANCE_RE.test(bl)) return guidanceClassification(section, catalog);
+  }
+  return null;
+}
+
+/** Where a marker rule sits in the source — its heading text + line span. */
+interface MarkerLoc {
+  readonly text: string;
+  readonly quote: string;
+  readonly file: string | undefined;
+  readonly lineStart: number;
+  readonly lineEnd: number;
+}
+
+/** Build a definitive (zero-heuristic) marker `RoutedRule` from a classification
+ * and its source location. */
+function markerRuleFrom(marked: Classification, loc: MarkerLoc): RoutedRule {
+  return {
+    text: loc.text,
+    quote: loc.quote,
+    file: loc.file,
+    lineStart: loc.lineStart,
+    lineEnd: loc.lineEnd,
+    confidence: "high",
+    category: marked.category,
+    mechanism: MECHANISM[marked.category],
+    source: "marker",
+    ...(marked.rule ? { rule: marked.rule } : {}),
+    ...(marked.linter ? { linter: marked.linter } : {}),
+    ...(marked.enabled !== undefined ? { enabled: marked.enabled } : {}),
+  };
+}
+
 function extractMarkedRules(
   text: string,
   file: string | undefined,
@@ -468,65 +562,143 @@ function extractMarkedRules(
     if (!h) continue;
     let j = i + 1;
     while (j < lines.length && !MARK_HEADING.test(lines[j])) j++;
-    const section = lines.slice(i, j); // [heading … next-heading)
-    const heading = h[2].trim();
-
-    let marked: Classification | null = null;
-    for (const raw of section.slice(1)) {
-      const bl = raw.trim();
-      const em = ENFORCED_RE.exec(bl);
-      if (em) {
-        if (!looksLikeRuleId(em[1])) break; // a prose claim, not a rule id
-        const hit = catalog?.get(em[1].trim());
-        marked = {
-          category: "reuse",
-          rule: em[1].trim(),
-          ...(hit !== undefined
-            ? { enabled: hit.enabled, linter: hit.linter }
-            : {}),
-        };
-        break;
-      }
-      if (GUARD_RE.test(bl)) {
-        marked = { category: "hook" };
-        break;
-      }
-      if (GUIDANCE_RE.test(bl)) {
-        // Route the guidance BODY through classify (promote-prose): a guidance
-        // whose text is really an action shows up as a would-be hook.
-        const body = section.slice(1).join(" ");
-        const c = classify(body, catalog);
-        // A guidance body that names a catalog rule is still "documented as
-        // guidance" — keep it prose unless it's a genuine action/agent cue.
-        marked =
-          c.category === "hook" || c.category === "meta"
-            ? c
-            : { category: "semantic" };
-        break;
-      }
-    }
+    const marked = markerFor(lines.slice(i, j), catalog);
     if (!marked) continue;
 
     // Consume the section BODY lines (heading stays a non-candidate) so the
     // heuristic segmenter never re-emits this marked rule. (1-based.)
     for (let k = i + 1; k < j; k++) skip.add(k + 1);
 
-    rules.push({
-      text: heading,
-      quote: lines[i],
-      file,
-      lineStart: i + 1,
-      lineEnd: j,
-      confidence: "high",
-      category: marked.category,
-      mechanism: MECHANISM[marked.category],
-      source: "marker",
-      ...(marked.rule ? { rule: marked.rule } : {}),
-      ...(marked.linter ? { linter: marked.linter } : {}),
-      ...(marked.enabled !== undefined ? { enabled: marked.enabled } : {}),
-    });
+    rules.push(
+      markerRuleFrom(marked, {
+        text: h[2].trim(),
+        quote: lines[i],
+        file,
+        lineStart: i + 1,
+        lineEnd: j,
+      }),
+    );
   }
   return { rules, skip };
+}
+
+// --- Rescue ladder + tiering ----------------------------------------------
+
+/** A source that can RESCUE a medium/rejected bullet to CONFIDENT because it
+ * provably maps to an off-the-shelf rule — independent of the medium opt-in. */
+interface RescueSource {
+  readonly name: string;
+  readonly test: (
+    text: string,
+    catalog: ReadonlyMap<string, CatalogHit> | undefined,
+  ) => boolean;
+}
+
+/** The rescue sources, OR-ed (any one promotes a bullet to confident):
+ *  - `catalog` — the text NAMES a rule the repo's live catalog actually has
+ *    (ground truth, own-repo); rescues a declarative-subject bullet like
+ *    "The core layer must not import X (`boundaries/dependencies`)".
+ *  - `pattern` — a construct-prohibition ("No default exports") matching a
+ *    PATTERN_RULE_MAP entry (a real `no-restricted-syntax` rule).
+ *  - `intent` — an INTENT_MAP keyword match ("No bare except clauses"): a
+ *    code-shaped, high-precision reuse rule with no imperative verb.
+ * They are the higher-precision override of the segmenter's imperative-head cue,
+ * which alone would drop these medium-scoring bullets. */
+const RESCUE_SOURCES: readonly RescueSource[] = [
+  {
+    name: "catalog",
+    test: (t, cat) =>
+      cat !== undefined && namedRuleTokens(t).some((tok) => cat.has(tok)),
+  },
+  {
+    name: "pattern",
+    test: (t) => PATTERN_RULE_MAP.some((r) => r.pattern.test(t)),
+  },
+  {
+    name: "intent",
+    test: (t) =>
+      INTENT_MAP.some((m) => m.keywords.some((kw) => matchesWholeToken(t, kw))),
+  },
+];
+
+/** A bullet is RESCUED — promoted to confident — if any rescue source maps it to
+ * a real off-the-shelf rule (independent of the medium opt-in). */
+function isRescued(
+  text: string,
+  catalog: ReadonlyMap<string, CatalogHit> | undefined,
+): boolean {
+  return RESCUE_SOURCES.some((r) => r.test(text, catalog));
+}
+
+/** The shared shape of a real segment and a folded-back `no-signal` reject, so
+ * both flow through one tiering pass. */
+interface Candidate {
+  readonly text: string;
+  readonly exactQuote: string;
+  readonly file: string | undefined;
+  readonly lineStart: number;
+  readonly lineEnd: number;
+  readonly confidence: "high" | "medium";
+}
+
+const foldToCandidate = (s: SkippedBullet): Candidate => ({
+  text: s.text,
+  exactQuote: s.text,
+  file: s.file,
+  lineStart: s.lineStart,
+  lineEnd: s.lineEnd,
+  confidence: "medium",
+});
+
+const toNoSignalSkip = (s: Candidate): SkippedBullet => ({
+  text: s.text,
+  file: s.file,
+  lineStart: s.lineStart,
+  lineEnd: s.lineEnd,
+  reason: "no-signal",
+});
+
+/**
+ * Split segmenter output into the three routed tiers:
+ *
+ * - CONFIDENT — high, a medium opt-in, or a RESCUE (names/matches a real rule).
+ * - POSSIBLE — a non-confident leftover carrying a norm modal (`NORM_SIGNAL`):
+ *   a genuine recall-miss surfaced for review ("every function must have a
+ *   docstring"), not routed as fact.
+ * - SKIPPED — the rest (index/description/section rejects + no-signal leftovers).
+ *
+ * THE LOAD-BEARING ASYMMETRY: a gate-rejected `no-signal` bullet is folded back
+ * as a candidate but promoted to confident ONLY by a RESCUE — NEVER by the
+ * blanket medium opt-in, which must not resurrect what the gate explicitly
+ * rejected. See `research/rule-compiler-design.md` §2.
+ */
+function partitionCandidates(
+  segments: readonly SegmentedRule[],
+  rawSkipped: readonly SkippedBullet[],
+  catalog: ReadonlyMap<string, CatalogHit> | undefined,
+  minConfidence: "high" | "medium",
+): { confident: Candidate[]; possible: Candidate[]; skipped: SkippedBullet[] } {
+  const rescued = (t: string): boolean => isRescued(t, catalog);
+  const isConfident = (s: Candidate): boolean =>
+    minConfidence === "medium" || s.confidence === "high" || rescued(s.text);
+
+  const folds = rawSkipped
+    .filter((s) => s.reason === "no-signal")
+    .map(foldToCandidate);
+  const confident: Candidate[] = [
+    ...segments.filter(isConfident),
+    ...folds.filter((s) => rescued(s.text)),
+  ];
+  const leftover: Candidate[] = [
+    ...segments.filter((s) => !isConfident(s)),
+    ...folds.filter((s) => !rescued(s.text)),
+  ];
+  const possible = leftover.filter((s) => NORM_SIGNAL.test(s.text));
+  const skipped: SkippedBullet[] = [
+    ...rawSkipped.filter((s) => s.reason !== "no-signal"),
+    ...leftover.filter((s) => !NORM_SIGNAL.test(s.text)).map(toNoSignalSkip),
+  ];
+  return { confident, possible, skipped };
 }
 
 /**
@@ -543,51 +715,7 @@ export function routeRules(
   const catalog = options.availableRules
     ? buildCatalogLookup(options.availableRules.rules)
     : undefined;
-  // A MEDIUM segment that NAMES a rule the repo's catalog actually has is
-  // enforceable — the catalog is ground truth, so it's higher-precision than the
-  // segmenter's imperative-head cue. This rescues declarative-subject bullets
-  // ("The core layer must not import X (`boundaries/dependencies`)") that score
-  // medium (context+shape, no imperative head) and are otherwise dropped by the
-  // high-only default. Own-repo only (catalog present ⇒ enumerated with consent);
-  // the foreign-safe textual path stays conservative by design.
-  const namesCatalogRule = (text: string): boolean =>
-    catalog !== undefined &&
-    namedRuleTokens(text).some((tok) => catalog.has(tok));
-  // A MEDIUM segment matching a construct-prohibition ("No default exports")
-  // scores medium ("No" is a prohibition head, not a verb) but is a real reuse
-  // rule (no-restricted-syntax) — rescue it, same as the catalog rescue. The
-  // patterns are their own precision gate (prohibition + construct proximity).
-  const matchesPatternRule = (text: string): boolean =>
-    PATTERN_RULE_MAP.some((r) => r.pattern.test(text));
-  // A MEDIUM segment that matches an INTENT_MAP keyword (code-shaped, high-
-  // precision) is a real reuse rule — rescue it, same as catalog/restricted-
-  // syntax. Fixes construct-prohibitions with no verb ("No bare except clauses")
-  // that score medium and would otherwise drop before classify() reuses them.
-  const matchesIntentMap = (text: string): boolean =>
-    INTENT_MAP.some((m) =>
-      m.keywords.some((kw) => matchesWholeToken(text, kw)),
-    );
-  // A segment is CONFIDENT if it's high, rescued by the catalog/pattern/intent, or
-  // the caller opted into medium. Everything else the segmenter emitted is a
-  // POSSIBLE rule (medium, unrescued) — surfaced for review, not routed as fact.
-  // A RESCUE — the text NAMES/matches a real rule (catalog / restricted-syntax /
-  // intent). This promotes even a gate-rejected bullet to confident, because it
-  // provably maps to an off-the-shelf rule; independent of the medium opt-in.
-  const isRescued = (text: string): boolean =>
-    namesCatalogRule(text) ||
-    matchesPatternRule(text) ||
-    matchesIntentMap(text);
-  const isConfident = (s: { text: string; confidence: "high" | "medium" }) =>
-    minConfidence === "medium" || s.confidence === "high" || isRescued(s.text);
-
-  const toRouted = (s: {
-    text: string;
-    exactQuote: string;
-    file: string | undefined;
-    lineStart: number;
-    lineEnd: number;
-    confidence: "high" | "medium";
-  }): RoutedRule => {
+  const toRouted = (s: Candidate): RoutedRule => {
     const c = classify(s.text, catalog);
     return {
       text: s.text,
@@ -598,7 +726,7 @@ export function routeRules(
       confidence: s.confidence,
       category: c.category,
       mechanism: MECHANISM[c.category],
-      source: "heuristic" as const,
+      source: "heuristic",
       ...(c.rule ? { rule: c.rule } : {}),
       ...(c.linter ? { linter: c.linter } : {}),
       ...(c.enabled !== undefined ? { enabled: c.enabled } : {}),
@@ -606,63 +734,26 @@ export function routeRules(
   };
 
   // S0/S1 pre-pass: explicit markers are definitive and are CONSUMED (their body
-  // lines are skipped) so the heuristic segmenter can't double-count them.
+  // lines are skipped) so the heuristic segmenter can't double-count them. The
+  // segmenter output then splits into confident / possible / skipped tiers.
   const marked = extractMarkedRules(instructionText, file, catalog);
   const { segments, skipped: rawSkipped } = segmentInstructions(
     instructionText,
     file,
     marked.skip,
   );
-  // A bullet the gate rejected as `no-signal` is a rule CANDIDATE only if it
-  // carries a deontic/norm signal (a modal like must/should/never/avoid) — that
-  // keeps the POSSIBLE review tier to genuine recall-misses ("every function must
-  // have a docstring") instead of flooding it with prose ("README.md documents
-  // v2"). A no-signal bullet WITHOUT a norm signal is confidently not a rule, so
-  // it stays SKIPPED alongside the index/description/section rejects. A folded
-  // candidate that NAMES/matches a real rule is still rescued to CONFIDENT.
-  const asCandidate = (s: SkippedBullet) => ({
-    text: s.text,
-    exactQuote: s.text,
-    file: s.file,
-    lineStart: s.lineStart,
-    lineEnd: s.lineEnd,
-    confidence: "medium" as const,
-  });
-  // Real SEGMENTS route by the full confident check (incl. the medium opt-in).
-  // Gate-rejected `no-signal` bullets are folded back in as candidates, but they
-  // are promoted to confident ONLY by a real RESCUE — NEVER by the blanket medium
-  // opt-in, which must not resurrect bullets the gate explicitly rejected.
-  const noSignal = rawSkipped.filter((s) => s.reason === "no-signal");
-  const folds = noSignal.map(asCandidate);
-  const heuristicRules = [
-    ...segments.filter(isConfident),
-    ...folds.filter((s) => isRescued(s.text)),
-  ].map(toRouted);
-  // The non-confident leftovers split by the norm signal: a rule-ish bullet
-  // (carries a deontic modal) is a genuine recall-miss → POSSIBLE (review); the
-  // rest is prose → SKIPPED with a `no-signal` reason (visible, not dropped).
-  const leftover = [
-    ...segments.filter((s) => !isConfident(s)),
-    ...folds.filter((s) => !isRescued(s.text)),
-  ];
-  const possible = leftover
-    .filter((s) => NORM_SIGNAL.test(s.text))
-    .map(toRouted);
-  const skipped: SkippedBullet[] = [
-    ...rawSkipped.filter((s) => s.reason !== "no-signal"),
-    ...leftover
-      .filter((s) => !NORM_SIGNAL.test(s.text))
-      .map((s) => ({
-        text: s.text,
-        file: s.file,
-        lineStart: s.lineStart,
-        lineEnd: s.lineEnd,
-        reason: "no-signal" as const,
-      })),
-  ];
+  const tiers = partitionCandidates(
+    segments,
+    rawSkipped,
+    catalog,
+    minConfidence,
+  );
 
-  // Marker rules first (definitive), then the heuristic residue.
-  const rules: RoutedRule[] = [...marked.rules, ...heuristicRules];
+  // Marker rules first (definitive), then the confident heuristic residue.
+  const rules: RoutedRule[] = [
+    ...marked.rules,
+    ...tiers.confident.map(toRouted),
+  ];
   const counts: Record<RuleCategory, number> = {
     reuse: 0,
     hook: 0,
@@ -671,7 +762,13 @@ export function routeRules(
     unrouted: 0,
   };
   for (const r of rules) counts[r.category]++;
-  return { segmented: rules.length, counts, rules, possible, skipped };
+  return {
+    segmented: rules.length,
+    counts,
+    rules,
+    possible: tiers.possible.map(toRouted),
+    skipped: tiers.skipped,
+  };
 }
 
 /**
