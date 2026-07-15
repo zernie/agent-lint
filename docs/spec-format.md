@@ -128,9 +128,9 @@ Use `skill()` to define a SKILL.md spec. Compiles to markdown with YAML frontmat
 import { skill, file, cmd, ref, instructions } from "vigiles";
 
 export default skill({
-  name: "pr-to-lint-rule",
-  description: "Convert PR feedback into an automated lint rule",
-  argumentHint: "<description of recurring PR feedback>",
+  name: "example-skill",
+  description: "Example skill for illustration",
+  argumentHint: "<some argument>",
   disableModelInvocation: true,
   body: instructions`
     Check ${file("eslint.config.ts")} for existing rules.

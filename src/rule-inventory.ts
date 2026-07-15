@@ -57,6 +57,12 @@ export interface IntentMapping {
  * ESLint-only today — Ruff/Clippy/Pylint/RuboCop/Stylelint entries append here
  * with their own `linter` + rule-name keywords, no code change.
  */
+// SCOPE (2026-07-14): this hand-curated list is a small high-precision FAST-PATH
+// (alias enrichment for the most common rules), NOT the strategy. The strategy is
+// the DYNAMIC available-rule catalog — enumerate the rules the repo's linter
+// ACTUALLY has (spike: 702 for this repo vs ~23 here) and match prose against
+// THAT, own-repo/consented since it executes the linter. Do NOT keep growing this
+// by hand. See research/rule-compiler-multilang-design.md §0.
 export const INTENT_MAP: readonly IntentMapping[] = [
   {
     intent: "no console.log / use the logger",
@@ -218,6 +224,168 @@ export const INTENT_MAP: readonly IntentMapping[] = [
     configFix:
       '"no-warning-comments": ["error", {"terms": ["todo", "fixme"], "location": "anywhere"}]',
   },
+  // Grounded in the OSS-corpus sweep — rules real AGENTS.md files actually NAME
+  // (cloudflare/workers-sdk names all three inline). Keyword set is rule-name /
+  // code-shaped only, so it fires when the doc names the rule, never on prose.
+  {
+    intent: "require curly braces for control flow",
+    linter: "eslint",
+    keywords: ["curly", "curly braces"],
+    rule: "curly",
+    configFix: '"curly": ["error", "all"]',
+  },
+  {
+    intent: "use import type for type-only imports",
+    linter: "eslint",
+    keywords: [
+      "consistent-type-imports",
+      "@typescript-eslint/consistent-type-imports",
+    ],
+    rule: "@typescript-eslint/consistent-type-imports",
+    configFix: '"@typescript-eslint/consistent-type-imports": "error"',
+  },
+  {
+    intent: "no focused / .only tests committed",
+    linter: "eslint",
+    keywords: [
+      "no-only-tests",
+      "no-focused-tests",
+      "describe.only",
+      "it.only",
+      "test.only",
+    ],
+    rule: "no-only-tests/no-only-tests",
+    configFix: '"no-only-tests/no-only-tests": "error"',
+  },
+
+  // --- Pylint (Python) — routing basics. These feed classify() (routing → reuse);
+  // buildRuleInventory is gated to eslint (see below) because pylint is
+  // ON-BY-DEFAULT (deny-list), so the eslint-shaped config-state check would
+  // MISLABEL it (a symbol in `disable=` reads as "in-config", an absent one as
+  // "enable it"). Accurate pylint enabled-state needs the inverted-polarity
+  // ConfigProbe (research/rule-compiler-multilang-design.md §3), deferred —
+  // classify() needs NO enabled-state, so pylint prose still routes honestly.
+  // Keywords are code-shaped symbols + Python-UNAMBIGUOUS compounds (singular AND
+  // plural, since matchesWholeToken is boundary-exact); bare ambiguous words
+  // (`snake_case` — Rust/Ruby too, `import *` — JS `import * as`, "unused imports"
+  // — collides with eslint) are deliberately EXCLUDED to avoid cross-language FPs.
+  {
+    intent: "no bare except (Python)",
+    linter: "pylint",
+    keywords: ["bare-except", "bare except", "W0702"],
+    rule: "bare-except",
+    configFix:
+      "pylint enables bare-except (W0702) by default; keep it out of the disable list",
+  },
+  {
+    intent: "no broad exception catch (Python)",
+    linter: "pylint",
+    keywords: [
+      "broad-exception-caught",
+      "broad except",
+      "broad exception",
+      "W0718",
+    ],
+    rule: "broad-exception-caught",
+    configFix:
+      "pylint enables broad-exception-caught (W0718) by default; keep it out of the disable list",
+  },
+  {
+    intent: "require docstrings (Python)",
+    linter: "pylint",
+    // Bare "docstring"/"docstrings" removed — it over-fires on docstring
+    // CONTENT/STYLE rules (the dogfood caught langchain's "docstring warnings" /
+    // "backticks in docstrings"). Presence ("add docstrings", "docstrings for
+    // each") is handled by the PATTERN_RULE_MAP docstring-presence pattern in
+    // rule-routing.ts; only the rule SYMBOL matches here.
+    keywords: ["missing-docstring", "missing-function-docstring", "C0116"],
+    rule: "missing-function-docstring",
+    configFix:
+      "pylint enables missing-function-docstring (C0116) by default; keep it out of the disable list",
+  },
+  {
+    intent: "no mutable default arguments (Python)",
+    linter: "pylint",
+    keywords: [
+      "dangerous-default-value",
+      "mutable default",
+      "mutable default argument",
+      "mutable default arguments",
+      "W0102",
+    ],
+    rule: "dangerous-default-value",
+    configFix:
+      "pylint enables dangerous-default-value (W0102) by default; keep it out of the disable list",
+  },
+  {
+    intent: "prefer f-strings (Python)",
+    linter: "pylint",
+    keywords: ["f-string", "f-strings", "consider-using-f-string", "C0209"],
+    rule: "consider-using-f-string",
+    configFix:
+      "pylint enables consider-using-f-string (C0209) by default; keep it out of the disable list",
+  },
+  {
+    intent: "consistent naming (Python)",
+    linter: "pylint",
+    keywords: ["invalid-name", "C0103"],
+    rule: "invalid-name",
+    configFix:
+      "pylint enables invalid-name (C0103) by default; set naming-style in [tool.pylint], keep it out of disable",
+  },
+  {
+    intent: "limit function arguments (Python)",
+    linter: "pylint",
+    keywords: ["too-many-arguments", "R0913"],
+    rule: "too-many-arguments",
+    configFix:
+      "pylint enables too-many-arguments (R0913) by default; set max-args in [tool.pylint]",
+  },
+  {
+    intent: "limit function length (Python)",
+    linter: "pylint",
+    keywords: ["too-many-statements", "R0915"],
+    rule: "too-many-statements",
+    configFix:
+      "pylint enables too-many-statements (R0915) by default; set max-statements in [tool.pylint]",
+  },
+  {
+    intent: "no wildcard imports (Python)",
+    linter: "pylint",
+    keywords: [
+      "wildcard-import",
+      "wildcard import",
+      "wildcard imports",
+      "W0401",
+    ],
+    rule: "wildcard-import",
+    configFix:
+      "pylint enables wildcard-import (W0401) by default; keep it out of the disable list",
+  },
+  {
+    intent: "no global statement (Python)",
+    linter: "pylint",
+    keywords: ["global-statement", "global statement", "W0603"],
+    rule: "global-statement",
+    configFix:
+      "pylint enables global-statement (W0603) by default; keep it out of the disable list",
+  },
+  {
+    intent: "max line length (Python)",
+    linter: "pylint",
+    keywords: ["line-too-long", "C0301"],
+    rule: "line-too-long",
+    configFix:
+      "pylint enables line-too-long (C0301) by default; set max-line-length in [tool.pylint]",
+  },
+  {
+    intent: "no unused imports (Python)",
+    linter: "pylint",
+    keywords: ["unused-import", "W0611"],
+    rule: "unused-import",
+    configFix:
+      "pylint enables unused-import (W0611) by default; keep it out of the disable list",
+  },
 ];
 
 /**
@@ -267,10 +435,16 @@ function escapeRe(s: string): string {
  * non-`[\w/@.-]` character on each side (so `no-console` matches in
  * `` `no-console` `` and `enforce no-console;` but `no-console-x` does not,
  * and prose containing the substring elsewhere never trips it).
+ *
+ * The TRAILING boundary is a lookahead, not a consuming class, so a keyword at
+ * SENTENCE END ("No wildcard imports.") matches: a `.` is allowed unless it
+ * CONTINUES a code token (`.log` in `console.log`), which still blocks a partial
+ * match. `(?![\w/@-])` rejects a word/`/`/`@`/`-` continuation; `(?!\.[\w/@-])`
+ * rejects a dotted continuation but permits a trailing sentence `.`.
  */
 export function matchesWholeToken(text: string, keyword: string): boolean {
   const re = new RegExp(
-    `(^|[^\\w/@.-])${escapeRe(keyword)}([^\\w/@.-]|$)`,
+    `(^|[^\\w/@.-])${escapeRe(keyword)}(?![\\w/@-])(?!\\.[\\w/@-])`,
     "i",
   );
   return re.test(text);
@@ -369,6 +543,13 @@ export function buildRuleInventory(
   const items: RuleInventoryItem[] = [];
   for (const m of INTENT_MAP) {
     if (linters && !linters.includes(m.linter)) continue;
+    // ROUTE-ONLY for non-eslint linters: the config-state check below
+    // (ruleSetOff/ruleInConfig) is eslint-config-shaped and would MISLABEL a
+    // pylint rule, which is ON-BY-DEFAULT (a symbol in `disable=` reads as
+    // "in-config"; an absent one as "enable it" — both inverted). The routing
+    // preview (classify) still reuses these; accurate pylint enabled-state waits
+    // on the inverted-polarity ConfigProbe (design doc §3). Don't cry wolf.
+    if (m.linter !== "eslint") continue;
     const matched = m.keywords.find((kw) =>
       matchesWholeToken(instructionText, kw),
     );

@@ -61,7 +61,7 @@ source (excluded from the published API docs) so a later change burns nobody:
 ## How the surface is enforced
 
 The public surface is tracked by **API Extractor**: a committed report per
-entry point under [`etc/*.api.md`](etc/), checked in CI (`npm run api:check`),
+entry point under [`api-surface/*.api.md`](api-surface/), checked in CI (`npm run api:check`),
 so an export can't silently appear or change. See
 [`docs/cli.md`](docs/cli.md) for the verbs and
 [`docs/README.md`](docs/README.md) for the full doc index.

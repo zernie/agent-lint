@@ -4,7 +4,7 @@
  * handles the `hooks/hooks.json` convention and expands `${CLAUDE_PLUGIN_ROOT}`
  * — against actual shipped files, not a synthetic look-alike fixture.
  *
- * Reliability: the plugin is a VENDORED SNAPSHOT under ./vendor (pinned to a
+ * Reliability: the plugin is a VENDORED SNAPSHOT under ../../test/dogfood/ (pinned to a
  * commit, with upstream LICENSE + SOURCE). There is no clone at test time, so
  * this runs offline and deterministically — see ../../test/dogfood/<plugin>/SOURCE.
  *

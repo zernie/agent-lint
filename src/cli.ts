@@ -19,6 +19,7 @@ import {
   readdirSync,
   rmSync,
   lstatSync,
+  realpathSync,
   type Dirent,
 } from "node:fs";
 import { resolve, dirname, basename, relative, isAbsolute } from "node:path";
@@ -135,7 +136,13 @@ import {
   buildRuleInventory,
   type RuleInventoryItem,
 } from "./rule-inventory.js";
-import { routeRules, type RuleRouting } from "./rule-routing.js";
+import { routeRules, mergeRoutings, type RuleRouting } from "./rule-routing.js";
+import {
+  isFixturePath,
+  dedupeInstructionFiles,
+  type RawInstructionFile,
+} from "./instruction-sources.js";
+import { enumerateEslintCatalog } from "./core/rule-catalog.js";
 import {
   runAdoptabilityTier,
   formatAdoptability,
@@ -2124,7 +2131,11 @@ function computeRuleInventory(
   instructionFile: string,
 ): RuleInventoryItem[] {
   try {
-    const instructionText = readInstructionText(root, instructionFile);
+    // The inventory maps intents → rules; it has no per-file line provenance, so
+    // the concatenated text is fine here (unlike the routing preview below).
+    const instructionText = gatherInstructionFiles(root, instructionFile)
+      .map((f) => f.text)
+      .join("\n");
     if (!instructionText.trim()) return [];
     return buildRuleInventory(instructionText, collectLintConfigText(root));
   } catch {
@@ -2132,29 +2143,85 @@ function computeRuleInventory(
   }
 }
 
-/** Read EVERY agent instruction file present (not just the harness-native one) —
- * rules are often documented in AGENTS.md even under a claude-code harness. */
-function readInstructionText(root: string, instructionFile: string): string {
-  let instructionText = "";
-  for (const name of new Set([instructionFile, "CLAUDE.md", "AGENTS.md"])) {
-    const p = resolve(root, name);
-    if (existsSync(p)) instructionText += readFileSync(p, "utf-8") + "\n";
+/** Gather EVERY agent instruction file present (not just the harness-native one) —
+ * rules are often documented in AGENTS.md even under a claude-code harness — as a
+ * list of {path, text} so each is routed SEPARATELY and keeps its OWN provenance
+ * (concatenating first would corrupt per-file line numbers). Reads the ROOT
+ * instruction files PLUS nested subdirectory-memory (`src/CLAUDE.md`,
+ * `research/CLAUDE.md`, …), skipping fixture/demo/build/test dirs (`isFixturePath`)
+ * so a repo's real memory is read without the test-fixture noise. `.claude/` rule
+ * sources remain a future source. research/rule-compiler-multilang-design.md §0. */
+function gatherInstructionFiles(
+  root: string,
+  instructionFile: string,
+): { path: string; text: string }[] {
+  const raw: RawInstructionFile[] = [];
+  const collect = (rel: string): void => {
+    const p = resolve(root, rel);
+    if (!existsSync(p)) return;
+    raw.push({
+      path: rel,
+      canonical: realpathSync(p),
+      text: readFileSync(p, "utf-8"),
+    });
+  };
+  // Root instruction files first (stable, deterministic order).
+  for (const name of new Set([instructionFile, "CLAUDE.md", "AGENTS.md"]))
+    collect(name);
+  // Nested subdirectory memory, minus fixture/demo/build/test noise.
+  try {
+    const nested = globSync(["**/CLAUDE.md", "**/AGENTS.md"], {
+      cwd: root,
+      ignore: [...IGNORE_NODE_MODULES, "dist/**", ".git/**"],
+    })
+      .filter((rel) => !isFixturePath(rel))
+      .sort();
+    for (const rel of nested) collect(rel);
+  } catch {
+    // best-effort — a glob failure just means root-only, never breaks the audit
   }
-  return instructionText;
+  // Dedup a CLAUDE.md⇄AGENTS.md mirror (symlink or byte-identical sync) to ONE
+  // artifact so its rules aren't double-counted (compose-with-sync-tools).
+  return dedupeInstructionFiles(raw);
 }
 
 /** The deterministic State-B routing preview for `audit`: segment the instruction
- * file(s) into atomic rules and route each (reuse / hook / semantic / unrouted) —
+ * file(s) into atomic rules and route each (reuse / hook / meta / semantic / unrouted) —
  * NO model, fs-only. `undefined` when there's nothing to segment (kept off the
- * report). Best-effort; a routing failure never breaks the audit. */
+ * report). Best-effort; a routing failure never breaks the audit.
+ *
+ * The DYNAMIC catalog (every rule the repo's ESLint actually has + its enabled
+ * state) sharpens matching — but enumerating it EXECUTES the linter, so it is an
+ * OWN-REPO / CONSENTED capability (audit-side-effect-free): gated on the same
+ * sticky `audit.measure` consent as the other executing checks AND on own-repo
+ * (never a stranger's toolchain). The textual routing is the foreign-safe default;
+ * the catalog only ADDS enabled-state nudges and matches named-but-`/`-broken rules. */
 function computeRuleRouting(
   root: string,
   instructionFile: string,
 ): RuleRouting | undefined {
   try {
-    const instructionText = readInstructionText(root, instructionFile);
-    if (!instructionText.trim()) return undefined;
-    const routing = routeRules(instructionText, instructionFile);
+    const files = gatherInstructionFiles(root, instructionFile);
+    if (files.every((f) => !f.text.trim())) return undefined;
+    // Own-repo + consented → enumerate the live ESLint catalog. NOT gated on the
+    // agent harness: the catalog is a property of the repo's LINTER (its ESLint
+    // config on disk), not of Claude-Code-vs-Codex, so a Codex JS/TS repo gets the
+    // same catalog match + enabled-state (adapter-aware-lint-rules: never gate a
+    // harness-agnostic capability on CC). enumerateEslintCatalog returns null when
+    // no ESLint config resolves (e.g. a pure-Python repo) → undefined, so a non-JS
+    // repo simply falls back to the foreign-safe textual routing regardless.
+    const ownRepo = resolve(root) === resolve(process.cwd());
+    const consented = loadConfig().audit?.measure === true;
+    const availableRules =
+      ownRepo && consented
+        ? (enumerateEslintCatalog(root) ?? undefined)
+        : undefined;
+    // Route each source SEPARATELY (each rule keeps its own file + line numbers),
+    // then merge — so a CLAUDE.md rule and an AGENTS.md rule carry correct
+    // provenance instead of line numbers offset by a concatenation.
+    const routing = mergeRoutings(
+      files.map((f) => routeRules(f.text, f.path, { availableRules })),
+    );
     return routing.segmented > 0 ? routing : undefined;
   } catch {
     return undefined;

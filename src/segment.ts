@@ -26,13 +26,119 @@ export interface SegmentedRule {
 
 // --- Heuristic vocabulary --------------------------------------------------
 
-/** Imperative/prohibitive head the candidate must START with (form cue). */
+/** Imperative/prohibitive head the candidate must START with (form cue). The
+ * deontic verbs (require/disallow/forbid/ban/enforce) are common rule leads —
+ * "Require `curly` braces", "Disallow `var`" — so they belong here. NB "no" is
+ * `no\s` (the prohibition word + whitespace) NOT the old `no\s+\S`, which — via
+ * the shared trailing `\b` — only matched when the word after "No " began at a
+ * boundary, so "No bare except" / "No default exports" silently failed the form
+ * cue. Bare `no` + the shared `\b` (checked right after "no", a boundary before
+ * a space OR a backtick) matches "No bare" AND "No `any`", while "Note"/"Nowhere"
+ * (no boundary after "no") are still rejected. */
 const FORM_HEAD =
-  /^(?:use|avoid|prefer|never|always|don'?t|do not|no\s+\S|must|should|keep|run|write|add|remove|only)\b/i;
+  /^(?:use|avoid|prefer|never|always|don'?t|do not|no|must|should|keep|run|write|add|remove|only|require|requires?|disallow|forbid|ban|enforce)\b/i;
 
-/** Rule-ish heading gate for prose-under-heading candidacy. */
+/**
+ * Rule-ish heading gate for prose-under-heading candidacy. Word-bounded so the
+ * `do` alternate can't match inside `Documentation`/`Adoption`/`Download` (the
+ * measured bug). Accept-heading vocabulary grounded in the OSS-corpus survey
+ * (`## Coding Standards`/`## Code Style`/`## Naming`/`## Good practices`/
+ * `## Error Handling` are the real code-norm sections).
+ */
 const RULE_HEADING =
-  /rules?|conventions?|style|guidelines?|standards?|do(?:n'?ts?)?s?|never|always|must|require/i;
+  /\b(?:rules?|conventions?|code[ -]?style|style|guidelines?|standards?|naming|good practices?|error handling|do'?s?\s*(?:and|&|\/)\s*don'?ts?|don'?ts?|never|always|must|require)\b/i;
+
+/**
+ * Anti-context heading: a section whose content is overwhelmingly index /
+ * command / setup / narrative, not enforceable norms (the corpus's #1
+ * false-positive source). Content under one of these is rejected outright —
+ * UNLESS the heading is also rule-ish (`## Testing conventions` keeps its
+ * bullets), so the accept signal wins a tie.
+ */
+const ANTI_HEADING =
+  /\b(?:commands?|setup|install(?:ation)?|usage|getting started|quick ?start|examples?|key files|(?:code)?base structure|project structure|repository structure|architecture|overview|directory|layout|environment|commits?|pull requests?|testing|scripts?|dependencies|roadmap|changelog|table of contents|where to look)\b/i;
+
+/**
+ * INDEX-SMELL veto: a bullet whose content is a code span followed by a
+ * separator + description (`` `src/x.ts` — Type system ``, `` `npm test` — run ``)
+ * is a keyFiles/command INDEX entry, never a rule. The single highest-value
+ * rejection signal (the corpus's dominant false positive).
+ */
+const INDEX_SMELL = /^`[^`]+`\s*[:—–-]\s/;
+
+/**
+ * Broader index/reference-entry shapes the backtick INDEX_SMELL misses — from
+ * real-corpus leakage: a path MAPPING (`next-dev.ts → next-dev-server.ts`), a
+ * bullet LED by a file path + em-dash (`packages/x/ — Session replay`), or a
+ * `Label: <path>` pointer (`Skill file: .agents/skills/…`). Paths in these are
+ * backtick-wrapped, so we test a backtick-stripped shadow. The path DISCRIMINATOR
+ * — a file extension (`.ts`) or a trailing slash — is what keeps a rule id
+ * (`@scope/no-explicit-any`, no extension) from being mistaken for a path, so a
+ * rule-naming bullet is never rejected as an index entry.
+ */
+const INDEX_ARROW = /[\w./@-]*\.[a-z]{1,6}\b\s*(?:→|->|=>)/;
+// A multi-segment slash PATH before an arrow is a path-mapping/index row
+// (`node_modules/@astrojs/react/… → packages/…`) — ≥2 slashes keeps it path-
+// specific so a prose "A → B" isn't caught.
+const INDEX_ARROW_PATH = /[\w@.-]+(?:\/[\w@.*-]+){2,}\s*(?:→|->|=>)/;
+const INDEX_LABEL_PATH =
+  /^[A-Za-z][\w ]{0,24}:\s+\.?[\w@-]*\/[\w@./-]*(?:\.[a-z0-9]{1,6}\b|\/)/;
+const INDEX_PATH_LED = /^[\w@.-]+\/[\w@./-]*(?:\.[a-z0-9]{1,6}\b|\/)/;
+function looksLikeIndexEntry(t: string): boolean {
+  if (INDEX_SMELL.test(t)) return true;
+  const bare = t.replace(/`/g, " ").trim();
+  if (INDEX_ARROW.test(bare) || INDEX_ARROW_PATH.test(bare)) return true;
+  if (INDEX_LABEL_PATH.test(bare)) return true;
+  return INDEX_PATH_LED.test(bare) && /\s[—–]\s/.test(bare);
+}
+
+/**
+ * DESCRIPTION-LED reject: a segment that DESCRIBES a code entity rather than
+ * instructing about it. It leads with a backticked identifier/path, then a
+ * copula / code-KIND noun / descriptive verb ("`Foo` class in `x` executes …",
+ * "`bar` is the loader", "`apps/x` handles …"). A real rule leads with a VERB
+ * ("Use `Foo`", "Never `bar`") — never the code span itself — so a code-span
+ * lead-in followed by a descriptive word is an architecture/index sentence, the
+ * dogfood's #1 segmenter false positive (39% of the "hard" bucket was this
+ * kind of noise). High-precision: only when the descriptive word IMMEDIATELY
+ * follows the leading code span.
+ */
+const DESCRIPTION_LED =
+  /^`[^`]+`\s+(?:is|are|was|were|lives?|live|contains?|holds?|handles?|executes?|provides?|represents?|maps?|points?|implements?|exports?|defines?|wraps?|stores?|returns?|the|a|an|class|function|module|component|file|package|hook|utility|helper|type|interface|enum|constant|method|directory|folder|dir)\b/i;
+// A deontic predicate makes a code-span-led sentence a RULE, not a description
+// ("`const` is preferred over `let`", "`AbstractBase` class must be extended") —
+// so the description reject must NOT fire. Guards the copula/kind-noun ambiguity.
+const RULE_PREDICATE =
+  /\b(?:must|should|shall|never|always|require|avoid|prefer|banned|forbidden|prohibited|allowed|disallowed|deprecated|discouraged|mandatory|do not|don'?t|only|instead)\b/i;
+function looksLikeDescription(t: string): boolean {
+  const s = t.trim();
+  return DESCRIPTION_LED.test(s) && !RULE_PREDICATE.test(s);
+}
+
+/**
+ * RULE-NAME cue: a backticked token that is SHAPED like an off-the-shelf lint
+ * rule — a scoped/plugin rule (`@typescript-eslint/consistent-type-imports`,
+ * `import/no-cycle`) or a ≥3-segment kebab id (`no-floating-promises`). Requiring
+ * the backticks kills prose false positives (`up-to-date`, `state-of-the-art`,
+ * a file path). Naming a rule is a STRONG signal a bullet is an enforceable rule
+ * even when it has no imperative verb — the corpus's rule-naming bullets
+ * ("No floating promises (`@ts.../no-floating-promises`)") otherwise score
+ * "medium" and get dropped by the high-only default.
+ */
+const RULE_NAME_IN_CODE =
+  /`[^`]*(?:@[a-z][\w-]*\/[a-z][\w-]*|[a-z][\w-]*\/[a-z][\w-]*-[\w-]+|(?:no|prefer|require|consistent|max|min|func|id|sort|valid|padding|dot|array|object)-[a-z][a-z0-9-]+)[^`]*`/i;
+
+/**
+ * Leading markdown decoration a rule may be wrapped in — emphasis (`**bold**`),
+ * blockquote, checkbox, or a status emoji. Stripped on a SHADOW string before
+ * the imperative-head test so `- **Never** …` / `✅ Use const` still read as
+ * imperative. Provenance (exactQuote/offsets) is unaffected — only the form cue
+ * sees the stripped text.
+ */
+const LEAD_DECORATION = /^(?:\s+|>+|\*+|_+|~+|\[[ xX]\]\s*|[✅❌☑✔✖✗⚠ℹ])+/u;
+function stripLeadDecoration(s: string): string {
+  return s.replace(LEAD_DECORATION, "").trimStart();
+}
 
 /** Declarative subjects — these signal a statement, not an instruction. */
 const DECLARATION = /^(?:this|these|those|it|we|our|there)\b/i;
@@ -122,14 +228,9 @@ const VERBS = new Set<string>([
   "filters",
   "merge",
   "merges",
-  "be",
-  "is",
-  "are",
-  "have",
-  "has",
-  "may",
-  "should",
-  "must",
+  // Copulas/modals (be/is/are/have/has/may/should/must) are deliberately NOT
+  // here: as "shape" verbs they made the cue near-vacuous (almost any English
+  // sentence passed). Deontic modals still live in FORM_HEAD (the form cue).
   "pin",
   "pins",
   "lint",
@@ -178,6 +279,13 @@ const VERBS = new Set<string>([
   "squash",
   "enforce",
   "enforces",
+  "regenerate",
+  "regenerates",
+  "regen",
+  "rebuild",
+  "rebuilds",
+  "generate",
+  "generates",
   "define",
   "defines",
   "declare",
@@ -253,14 +361,32 @@ function gate(
 ): Confidence | null {
   const t = text.trim();
 
-  const form = FORM_HEAD.test(t);
+  // Reject an index/command/reference entry outright (`` `path` — description ``,
+  // `a.ts → b.ts`, `dir/x — …`, `Label: path`) — the corpus's dominant false
+  // positive. No cue count can rescue it.
+  if (looksLikeIndexEntry(t)) return null;
+  // Reject a DESCRIPTION-led sentence (`` `Foo` class in `x` executes … ``) — an
+  // architecture/index sentence, not a rule (the dogfood's #1 false positive).
+  if (looksLikeDescription(t)) return null;
+
   const context = isBullet || underRuleHeading;
+
+  // RULE-NAME cue: a bullet/section line that NAMES an off-the-shelf rule is a
+  // strong signal it's enforceable, even without an imperative verb — promote it
+  // to high so the high-only default doesn't drop it (recovers rule-naming
+  // bullets like "No floating promises (`@ts.../no-floating-promises`)").
+  if (context && RULE_NAME_IN_CODE.test(t)) return "high";
+
+  // The form/declaration cues see the text with leading decoration stripped, so
+  // `- **Never** …` reads as imperative and `**We** …` still reads declarative.
+  const head = stripLeadDecoration(t);
+  const form = FORM_HEAD.test(head);
   const shape =
     t.length >= 15 &&
     t.length <= 300 &&
     hasVerbish(t) &&
     !isLinkOnly(t) &&
-    !DECLARATION.test(t);
+    !DECLARATION.test(head);
 
   const cues = (form ? 1 : 0) + (context ? 1 : 0) + (shape ? 1 : 0);
   if (cues >= 3) return "high";
@@ -361,7 +487,9 @@ function emitFromSpan(
 
 // --- Scanner ---------------------------------------------------------------
 
-const LIST_ITEM = /^(\s*)([-*+])(\s+)(.*)$/;
+// Ordered (`1.`/`1)`) and emoji (`✅`/`❌`) bullets count as list items too —
+// the native `-*+` class missed them, so shouted/numbered rules were invisible.
+const LIST_ITEM = /^(\s*)([-*+]|\d+[.)]|[✅❌☑✔✖✗])(\s+)(.*)$/u;
 const HEADING = /^(#{1,6})\s+(.*)$/;
 const FENCE = /^\s*(```|~~~)/;
 const TABLE_LINE = /^\s*\|/;
@@ -376,6 +504,7 @@ const TABLE_LINE = /^\s*\|/;
 export function segmentInstructions(
   markdown: string,
   file?: string,
+  skipLines?: ReadonlySet<number>,
 ): SegmentedRule[] {
   const lines = markdown.split("\n");
   const lineOffsets = computeLineOffsets(lines);
@@ -383,6 +512,7 @@ export function segmentInstructions(
 
   let inFence = false;
   let currentHeadingIsRuleish = false;
+  let currentHeadingIsAntiContext = false;
   let i = 0;
 
   const lineSpan = (a: number, b: number): Span => ({
@@ -408,12 +538,24 @@ export function segmentInstructions(
     const h = HEADING.exec(line);
     if (h) {
       currentHeadingIsRuleish = RULE_HEADING.test(h[2]);
+      // Anti-context only when it is NOT also rule-ish, so an accept word wins a
+      // tie (`## Testing conventions` keeps its bullets; `## Testing` drops them).
+      currentHeadingIsAntiContext =
+        ANTI_HEADING.test(h[2]) && !currentHeadingIsRuleish;
       i++;
       continue;
     }
 
     // Tables: excluded from candidacy.
     if (TABLE_LINE.test(line)) {
+      i++;
+      continue;
+    }
+
+    // A line already CONSUMED by the structured-marker pre-pass (a marked
+    // section's body) is not re-segmented — this is the span-consumption that
+    // stops a marked rule being double-counted by the heuristic. (1-based.)
+    if (skipLines?.has(i + 1)) {
       i++;
       continue;
     }
@@ -449,7 +591,9 @@ export function segmentInstructions(
       const wholeText = normalize(markdown.slice(contentStart, contentEnd));
       const conf = gate(wholeText, true, currentHeadingIsRuleish);
 
-      if (conf !== null) {
+      // Reject bullets under an anti-context heading (Commands/Setup/Key Files/
+      // Architecture/…) — the corpus's dominant false-positive locus.
+      if (conf !== null && !currentHeadingIsAntiContext) {
         // Only attempt splitting for single-line items (keeps offsets exact).
         const spans = multiLine
           ? [trimSpan(markdown, contentSpan)]

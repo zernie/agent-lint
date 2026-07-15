@@ -1,0 +1,20 @@
+Vendored snapshot — DO NOT EDIT BY HAND.
+
+Upstream:  https://github.com/MadAppGang/claude-code
+Path:      plugins/frontend/agents/tester.md
+Commit:    6097ad4
+License:   MIT (see ./LICENSE) — © 2024 MadAppGang - Jack Rudenko
+
+Why this is here:
+  A TRUE-POSITIVE fixture — vendored precisely BECAUSE it reproduces real
+  bugs the deterministic scan must keep catching. src/scan-vendor.test.ts
+  asserts it keeps firing three findings on this one subagent:
+    - subagent-tool-contract  — `AskUserQuestion` is never available to a subagent
+    - frontmatter-valid       — the one-line `description:` isn't valid YAML
+    - lethal-trifecta (hard)  — Read/Bash + WebFetch/WebSearch + Bash/WebFetch
+                                (read-private ∧ ingest-untrusted ∧ exfiltrate)
+
+Included — the minimal SLICE only: agents/tester.md (the subagent that
+reproduces the findings). Nothing else from the upstream repo is vendored.
+
+Refresh: tools/refresh-vendor.sh (human-run; bumps the pinned commit).
