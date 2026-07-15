@@ -5186,7 +5186,7 @@ function printUsage(command: string | undefined): void {
     "  vigiles audit [dir...]          Lighthouse for your harness — a LOCAL report: rings + what's broken + fixes (a deterministic read; 2+ dirs → leaderboard)",
   );
   console.log(
-    "                                 writes vigiles-report.html + vigiles-report.json (--no-html/--no-json) · --json for machine output. NOT a CI step — use `vigiles lint` in CI.",
+    "                                 writes vigiles-report.html + .json (auto-gitignored; --out=<dir> · --no-html/--no-json · --no-open · --json for machine output). NOT a CI step — use `vigiles lint` in CI.",
   );
   console.log(
     "                                 the executing checks (run your hooks · live MCP · do skills fire?) run only interactively — `audit` asks once (remembered); automation uses the vigiles/testing API",
@@ -6267,17 +6267,52 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
 }
 
 /**
+ * Idempotently keep the generated report artifacts OUT of git — the tool that
+ * writes a build artifact keeps it ignored (the `next build` → `.next` pattern),
+ * so `vigiles audit` (which runs zero-config, without `init`) never leaves
+ * surprise untracked files in `git status`. Appends only the MISSING entries
+ * under a labelled block if a `.gitignore` exists; if none exists, prints a
+ * one-line nudge rather than creating one silently. Best-effort — a failure here
+ * never breaks the audit. `entries` are paths relative to the git root (cwd).
+ */
+function ensureReportGitignored(cwd: string, entries: readonly string[]): void {
+  if (entries.length === 0) return;
+  const gi = resolve(cwd, ".gitignore");
+  try {
+    if (!existsSync(gi)) {
+      console.log(
+        `\nℹ tip: add ${entries.join(" + ")} to a .gitignore (generated report artifacts)`,
+      );
+      return;
+    }
+    const content = readFileSync(gi, "utf-8");
+    const present = new Set(content.split("\n").map((l) => l.trim()));
+    const missing = entries.filter((e) => !present.has(e));
+    if (missing.length === 0) return;
+    const sep = content.length === 0 || content.endsWith("\n") ? "" : "\n";
+    writeFileSync(
+      gi,
+      `${content}${sep}\n# vigiles audit report (generated)\n${missing.join("\n")}\n`,
+    );
+    console.log(`✓ Added ${missing.join(" + ")} to .gitignore`);
+  } catch {
+    /* best-effort — a read-only or missing .gitignore never breaks the audit */
+  }
+}
+
+/**
  * Write the versioned JSON artifact (`vigiles-report.json`) — the upload/CI
  * boundary a hosted dashboard ingests. Stamps `meta.generatedAt` here (at write
  * time, not in the pure builder, so the HTML-embedded form stays deterministic).
  */
-function writeAuditJson(report: AuditReport): void {
-  const jsonPath = resolve(process.cwd(), "vigiles-report.json");
+function writeAuditJson(report: AuditReport, outDir: string): void {
+  const jsonPath = resolve(outDir, "vigiles-report.json");
   const stamped: AuditReport = {
     ...report,
     meta: { ...report.meta, generatedAt: new Date().toISOString() },
   };
   try {
+    mkdirSync(outDir, { recursive: true });
     writeFileSync(jsonPath, JSON.stringify(stamped, null, 2) + "\n");
     console.log("✓ Wrote vigiles-report.json — the upload/CI artifact");
   } catch (e) {
@@ -6313,12 +6348,20 @@ function openBestEffort(file: string): void {
  * for a human at a TTY, open it best-effort. The shareable Lighthouse artifact;
  * never spawns a browser for an agent / CI run.
  */
-function writeAuditHtml(report: AuditReport): void {
-  const htmlPath = resolve(process.cwd(), "vigiles-report.html");
+function writeAuditHtml(
+  report: AuditReport,
+  outDir: string,
+  open: boolean,
+): void {
+  const htmlPath = resolve(outDir, "vigiles-report.html");
   try {
+    mkdirSync(outDir, { recursive: true });
     writeFileSync(htmlPath, renderAuditHtml(report));
     console.log("\n✓ Wrote vigiles-report.html — open it for the full report");
-    if (process.stdout.isTTY) openBestEffort(htmlPath);
+    // Great DX: pop the report open in the browser for a human at a TTY (the
+    // `lighthouse --view` behaviour). `--no-open` suppresses it; an agent / CI
+    // run (no TTY) never spawns a browser.
+    if (open && process.stdout.isTTY) openBestEffort(htmlPath);
   } catch (e) {
     // No template (unbuilt checkout) or a write error — skip the HTML; the JSON
     // artifact + terminal report don't depend on it.
@@ -7048,10 +7091,19 @@ async function main(): Promise<void> {
         const finalReport: AuditReport = adoptabilityResult
           ? { ...auditReport, adoptability: adoptabilityResult }
           : auditReport;
+        // Where the report artifacts land: cwd by default, or `--out=<dir>` (for
+        // CI upload / a custom location). The dir is created if missing.
+        const outFlag = args.find((a) => a.startsWith("--out="));
+        const outDir = outFlag
+          ? resolve(process.cwd(), outFlag.slice("--out=".length))
+          : process.cwd();
+        const openReport = !args.includes("--no-open");
+        const wroteReports: string[] = [];
         // The versioned JSON artifact — the upload/CI boundary (a hosted dashboard
         // ingests this). Written by default in the human path; --no-json to skip.
         if (!json && !args.includes("--no-json")) {
-          writeAuditJson(finalReport);
+          writeAuditJson(finalReport, outDir);
+          wroteReports.push("vigiles-report.json");
         }
         // The HTML report has two deliveries. STATIC (default): write the
         // shareable file whose buttons copy the `init` command. LIVE (`--serve`,
@@ -7080,7 +7132,17 @@ async function main(): Promise<void> {
         if (serveLive) {
           await runAuditServe(finalReport, finalReport.adoptable, errMsg);
         } else if (!json && !args.includes("--no-html")) {
-          writeAuditHtml(finalReport);
+          writeAuditHtml(finalReport, outDir, openReport);
+          wroteReports.push("vigiles-report.html");
+        }
+        // Keep the generated artifacts out of git so a zero-config `audit` leaves
+        // a clean `git status` (works without `init`). Entries are relative to the
+        // git root (cwd); a custom --out dir is ignored by its relative path.
+        if (wroteReports.length > 0) {
+          const rel = wroteReports.map(
+            (f) => relative(process.cwd(), resolve(outDir, f)) || f,
+          );
+          ensureReportGitignored(process.cwd(), rel);
         }
       }
       break;
