@@ -5,6 +5,12 @@ topic: compiler
 
 # Rule compiler — design of record
 
+> **STATUS: ALPHA (experimental).** Only 2 linters, scarce dogfood, an undecidable
+> core, and a complex pipeline with no "finished" state. **§8 is the load-bearing
+> section — the scope-freeze + backlog — READ IT before spending any effort
+> "improving" this**, because the tuning is otherwise infinite. §9 answers how we
+> test it on OSS given the model-gated parts.
+>
 > The crisp answer to "what is the rule compiler, what can it realistically do, and
 > how does it behave with several linters / freeform prose?" The two companion docs
 > are BUILD-LOGS with the blow-by-blow: `rule-compiler-multilang-design.md`
@@ -265,6 +271,118 @@ detection (confident + possible + skipped-with-reason), the rescue ladder + no-s
 fold (§2), and synthesis for both engines — all CI-dogfooded
 (`src/rule-routing-oss.test.ts`, `src/rule-catalog-oss.test.ts`, `src/segment.test.ts`,
 `compiler/gate.js`).
+
+## 8. Status: ALPHA — the scope-freeze + backlog (READ THIS before "improving" it)
+
+The rule map is **alpha**, and the report/CLI/user-docs now say so (badged
+_experimental_). This section exists to STOP the feature becoming an infinite tuning
+sink — the detection problem has no optimum, so without a freeze we would spend
+unbounded energy for diminishing returns. The rule: **freeze the shape, capture the
+backlog, chase almost none of it.**
+
+### Why it's alpha — the honest constraints
+
+- **Only 2 linters** (ESLint + Pylint), frozen (§1). A rule that would map to Ruff /
+  RuboCop / Clippy / Stylelint falls to custom/judgment by design.
+- **Scarce dogfood.** A handful of vendored MIT OSS instruction files + one authored
+  real-pylint config — not a broad, representative corpus. Every calibration number (the
+  precision cutoffs, the reject vocabulary, the rescue lists) is only as trustworthy as
+  that corpus, so real-world recall/precision on an unseen repo is genuinely uncertain.
+- **The core is undecidable** (§2). "Is this line a rule?" has no ground truth; the
+  precision-first heuristic MISSES rules and always will — Rice's theorem, not a TODO.
+- **The pipeline is already complex** (segment gate + rescue ladder + tiers + catalog
+  collision handling). Each new heuristic buys a little recall and costs precision +
+  maintainability. The marginal return is diminishing and visible.
+
+### The BALANCE — why "just make it better" is a trap
+
+Quality here is a multi-way tradeoff with no maximum, only positions. Pushing any axis
+degrades another:
+
+- **feasibility** — some rules are undecidable or need whole-repo semantics no detector has.
+- **skill quality** — the synthesis tier is only as good as the model + gate; a wrong
+  synthesized rule is worse than none.
+- **token consumption** — richer detection / synthesis / codebase-research burns the
+  user's subscription; every model call must earn its cost.
+- **human-in-the-loop** — the honest design surfaces `possible`/`skipped` for a human to
+  judge instead of pretending to decide; more automation trades trust for coverage.
+- **codebase research** — better matches need context on the user's real code (their
+  installed rules, their conventions) — more input, more cost, more latency.
+
+There is no "finished" state to reach, which is precisely why we FREEZE rather than chase.
+
+### FROZEN pipeline shape (v1 — do not re-architect without measured evidence)
+
+The shape is settled:
+
+```
+segment (gate) → merge catalogs → route (markers → rescue → partition:
+                 confident | possible | skipped) → LANE_META presentation
+```
+
+Behavior-preserving REFACTORS (like the 2026-07-15 decomposition) are always welcome.
+Changing the SHAPE — adding a heuristic, a lane, a linter, or a rescue source — must
+clear a bar: **a measured precision/recall win on the (ideally broadened) dogfood
+corpus**, not a vibe. Absent that evidence, the answer is no.
+
+### Backlog — MARKED, not chased
+
+Real improvements exist; none earns open-ended effort now. Rough value order:
+
+1. **Broaden the deterministic dogfood corpus** — the single highest-leverage item, and
+   it needs NO model (see §9). Every calibration number depends on it.
+2. **Ruff** — the cheapest linter to add (static rule set, TOML config is data).
+3. **`possible`-tier recall tuning** — measure how many real rules land in
+   possible vs confident vs skipped, on the broadened corpus.
+4. **Codebase-research inputs** — feed the user's real conventions / rule catalog into
+   detection for higher-precision matches (costs context + latency).
+5. **Synthesis quality** — the model-gated custom-rule tier is the deepest + most
+   expensive; improve only behind the trust gate + on-sub measurement.
+6. **A `possible` → `confident` promotion UX** — let a human confirm a review-tier bullet
+   once and remember it (the human-in-the-loop lever).
+
+The default answer to "should we improve the rule map?" is **no — unless it's #1, or a
+measured win.**
+
+### The point: an impressive, HONEST demo — not an energy sink
+
+This feature earns its place as a striking demo: _"point vigiles at your repo and watch
+it map your prose rules to real lint rules — and flag the ones you documented but never
+enabled."_ That lands TODAY with the current shape. It does not need to be perfect to be
+impressive; it needs to be **honest** (hence the tiers + the experimental badge) and to
+not consume the energy the higher-leverage parts of vigiles need.
+
+## 9. How we test it — and the "OSS e2e with an LLM in CI?" question
+
+The pipeline splits cleanly into a DETERMINISTIC half (CI-testable on real OSS) and a
+MODEL-GATED half (not CI-able). That split IS the answer to "how do we e2e-test the map
+on real projects when it uses an LLM?": **the part that would need an LLM is not the map.**
+
+- **The rule MAP is model-free** — segment → route → catalog + enabled-state runs no
+  model, so it is e2e-dogfooded on real OSS **in CI today**:
+  - `src/rule-routing-oss.test.ts` — routes real vendored MIT OSS instruction files
+    (langchain / browser-use / modelcontextprotocol `AGENTS.md`) and asserts stable
+    routing invariants.
+  - `src/rule-catalog-oss.test.ts` — drives the **real `pylint` binary** (installed in
+    CI) on a real config and asserts enabled-state end to end.
+  - `src/segment.test.ts` + the routing suites cover the detector logic.
+    So the deterministic OSS e2e is already there — the honest gap is BREADTH (few repos),
+    not the ability to run it. (Broadening it is backlog #1, and needs no model.)
+- **The synthesis trust GATE is deterministic** — `compiler/gate.js` runs in CI on a
+  FIXED gold corpus (proves a synthesized checker is sound on a blind set or abstains).
+  No model at CI time; the verdicts are pinned.
+- **What genuinely CAN'T go in CI** is the LLM SYNTHESIS of a NEW rule from a user's
+  codebase, and any trigger/behavioral measurement — those need a model, cost tokens,
+  and are nondeterministic. They run on YOUR subscription, never CI — the same posture
+  as the eval tiers (R1 deterministic in CI, model-gated on-sub; see
+  `research/eval-coverage-and-isolation.md`). Validate them by MANUAL spot-checks on a
+  few real repos on-sub, labelled MANUAL per the dogfood-vendoring-policy — never a CI
+  job that needs an API key.
+
+**Bottom line:** the audit rule MAP doesn't use an LLM, so its OSS e2e is deterministic
+and already CI-run; only the opt-in synthesis / behavioral tiers use a model, and those
+are validated on-sub + manually, not in CI. The thing worth investing in is a broader
+deterministic OSS corpus (backlog #1) — no model required.
 
 ## See also
 

@@ -114,9 +114,11 @@ There's a small family of inline **marks** that `lint` checks, each binding a re
 
 **Typo-safe at authoring time, too.** `vigiles generate types` emits a `.vigiles/generated.d.ts` so `enforce("eslint/no-consolee")` red-squiggles in your editor. `generate-schema` gives the YAML-frontmatter mode the same via your YAML language server. Both have `--check` CI freshness modes. [How it works →](linter-support.md#generate-types)
 
-## From prose to enforced: the rule map
+## From prose to enforced: the rule map (experimental)
 
-`vigiles audit` reads the prose rules in your instruction file and **maps** each one to how it could be enforced. This is a **read-only, deterministic** step — no model runs, nothing executes, and it's identical on every machine. It just sorts your rules into four lanes:
+> **Experimental / preview.** The rule map is a **heuristic, precision-first** read — genuinely useful, but it **won't catch every rule**, so treat it as a preview, not a settled report. That's why it sits low in the terminal + HTML report and is badged _experimental_. The reference checks above (files / scripts / symbols) and the [validation rules](#the-validation-rules--the-full-matrix) below are the settled, deterministic gates.
+
+`vigiles audit` reads the prose rules in your instruction file and **maps** each one to how it could be enforced. This is a **read-only, deterministic** step — no model runs, nothing executes, and it's identical on every machine. It sorts your rules into these lanes (a fifth, ☰ **agent-note**, marks an agent instruction like "read X first" that isn't a code rule at all):
 
 | Lane                  | Meaning                                                                                                                                              | The honest next step (opt-in)                                                                                                                                                                                            |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -124,6 +126,14 @@ There's a small family of inline **marks** that `lint` checks, each binding a re
 | ⛓ **Hook**            | an action a linter can't see (`git push`, "run tests before commit")                                                                                 | author a [compiled hook](compiled-hooks.md), then `vigiles compile` wires it into your settings                                                                                                                          |
 | ⚙ **Custom rule**     | no off-the-shelf rule fits, but a **custom one CAN** enforce it ("wrap API calls in a retry", "validate the input schema") — doable, not a dead end  | an **experimental** rule-**synthesis** step (not yet generally available) writes + gates a custom rule from codebase context — abstaining rather than shipping a checker it can't prove sound; opt-in and never auto-run |
 | ✎ **Judgment call**   | genuinely undecidable — no checker can decide it ("keep it readable", "write idiomatic code")                                                        | honestly stays prose                                                                                                                                                                                                     |
+
+**How sure is it? Three tiers, shown separately — nothing is silently dropped.** Because detection is precision-first, `audit` doesn't force every bullet into a lane. It reports three sets:
+
+- **Confident** — cleared the precision bar; these get a lane in the table above.
+- **Possible (review)** — rule-ish, but below the bar. A review list, so a declarative rule the confident tier misses (e.g. "Every function must have a docstring") is still surfaced for you to promote or ignore — not lost.
+- **Skipped** — decided _not_ a rule, each with a one-word reason (setup step / description / index entry / no norm signal), so a wrong drop is eyeball-able.
+
+The terminal shows the counts + a precision-first caveat; `audit --json` carries all three sets in full for a machine reader.
 
 **Which linters — and what about a project with several?** The Enforceable-now lane matches against **two linters today: ESLint (JS/TS) and Pylint (Python)**. For both it reads your **live** rule set — installed **plugins** included — and tells a rule that's on from one you documented but left **off**.
 

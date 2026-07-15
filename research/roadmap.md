@@ -830,19 +830,18 @@ assertRates`) is the recommended path for testing one skill, but
   ON/OFF nuance of the reuse lane (own-repo + consent), not whether it routes to
   reuse. Fix: pick a representative linted file per config target (or merge
   configs across JS/TS paths) instead of the hardcoded path. Codex review on #72. · **LOW**
-- **Rule map: two-tier detection (confident + possible-review)** — DESIGNED 2026-07-15
-  (`research/rule-compiler-design.md` decision #2), not built. Detection is single-tier
-  today (precision-first, silently drops ambiguous bullets). Split the output into a
-  CONFIDENT set (routed as now) + a POSSIBLE set (rule-ish bullets that didn't clear the
-  bar — declarative "Every X must Y") surfaced separately, so recall misses are visible
-  to a human without polluting the confident lanes. The honest fix for the undecidable
-  rule-vs-not-rule problem. · **MEDIUM**
-- **Rule map: report shows SKIPPED bullets + a best-effort caveat** — DESIGNED 2026-07-15
-  (`research/rule-compiler-design.md` decision #3), not built. Today the report lists only
-  detected rules, so a user can't tell "no rules" from "missed your declarative ones". Add:
-  the skipped bullets each with a one-word reason (heading/setup-step/description/context)
-  - a one-line "detection is a heuristic, precision-first filter" caveat. Likely inline
-    counts + caveat, full skipped list in `--json`. · **MEDIUM**
+- **⚠️ The rule map is ALPHA + its SHAPE IS FROZEN.** Before adding any rule-map
+  heuristic / lane / linter / rescue source, read `research/rule-compiler-design.md`
+  §8 (scope-freeze + backlog) — the tuning is otherwise infinite. The default answer to
+  "improve the rule map?" is NO unless it's "broaden the deterministic dogfood corpus"
+  (§8 backlog #1) or a MEASURED precision/recall win. The specific LOW bugs below are the
+  only pre-approved rule-map work.
+- ~~**Rule map: two-tier detection (confident + possible-review)**~~ — **DONE 2026-07-15.**
+  `routeRules` splits output into confident / possible / skipped via `partitionCandidates`
+  (`src/rule-routing.ts`); the honest fix for the undecidable rule-vs-not problem. · shipped
+- ~~**Rule map: report shows SKIPPED bullets + a best-effort caveat**~~ — **DONE 2026-07-15.**
+  Terminal + HTML report render possible/skipped with reasons + a precision-first caveat;
+  `audit --json` carries all three sets. · shipped
 - **Rule-catalog: normalize an `eslint/` prefix before the catalog lookup** —
   `routeRuleToMechanism` (`src/core/rule-routing.ts`) matches a reuse candidate
   against the enumerated ESLint catalog by bare rule id, but a marked ref written
@@ -850,13 +849,10 @@ assertRates`) is the recommended path for testing one skill, but
   so it misses the catalog and falls through to `synthesize` even though the rule is
   real + enabled. Fix: strip a leading `<linter>/` segment before matching. Codex
   review on #72. · **LOW**
-- **Audit: apply the measure-consent BEFORE building the rule map on first run** —
-  in `cli.ts` the rule-routing map's own-repo ESLint-catalog read (`computeRuleRouting`)
-  runs the enumerate step gated on `ownRepo && consented`, but on the FIRST interactive
-  run the consent prompt is resolved AFTER the map is assembled, so the very first
-  `audit` misses the dynamic catalog (falls back to the static INTENT_MAP) and only the
-  second run sees it. Fix: resolve `decideExecute`/consent before `computeRuleRouting`.
-  Codex review on #72. · **LOW**
+- ~~**Audit: apply the measure-consent BEFORE building the rule map on first run**~~ —
+  **DONE 2026-07-15 (#73).** `cli.ts` now resolves `resolveExecution` consent BEFORE
+  `computeRuleRouting`, so the first interactive `audit` enriches its own run (the
+  deterministic report still prints before the prompt). Codex review on #73. · shipped
 - **Segment: don't over-suppress rule bullets under a process heading** — the
   markdown segmenter (`src/segment.ts`) drops list items nested under a
   process/section heading to avoid treating steps as rules, but a legitimate rule
