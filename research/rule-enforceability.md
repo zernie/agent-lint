@@ -21,14 +21,21 @@ only the *cheapest* tier. A project-specific rule that no linter ships (e.g. "a 
 checker enforces it (empirically verified, 2026-07-15, 5/5 real rules). Conflating "no off-the-
 shelf rule" with "not enforceable" under-counts the enforceable surface by ~5×.
 
-## The four enforcement homes — every prose rule lands in exactly one
+## The five enforcement homes — every prose rule lands in exactly one
 
-| Home | What it is | Cost to vigiles | Cost to user |
+| Home | What it is | Enforces or checks? | Cost to vigiles |
 | --- | --- | --- | --- |
-| **1. Off-the-shelf** | prose maps to an existing linter rule → flip one config line (`select`/`rules`) | free, deterministic | none (config edit) |
-| **2. Synthesized custom** | no off-the-shelf rule → generate a checker (custom AST rule / `no-restricted-syntax` selector) | **$0** — see below | user's own sub, a few tokens/rule |
-| **3. Verified, not enforced** | commands, file/script/path refs, boundaries → check they *resolve* (not "enforce a norm") | free, deterministic | none |
-| **4. Prose** | genuinely semantic/judgment ("comment sparingly", "prefer self-documenting APIs") | n/a | n/a |
+| **1. Off-the-shelf lint** | prose maps to an existing linter rule → flip one config line (`select`/`rules`) | **enforces** (CI blocks) | free, deterministic |
+| **2. Synthesized custom lint** | no off-the-shelf rule → generate a checker (custom AST rule / `no-restricted-syntax`) | **enforces** (CI blocks) | **$0** (user's sub, see below) |
+| **3. Hook / gate** | a "do X before Y" / "never do Z" / boundary rule → a PreToolUse / pre-commit **hook** that BLOCKS the action in the loop (`vigiles/hook`, compiled-hook instrument; classify `hook` category) | **enforces** (runtime block) | free, deterministic |
+| **4. Ref / command verification** | commands, file/script/path refs → check they *resolve* (do the named script/path/tool exist?) — NOT a norm to enforce | **checks** (are the instructions truthful) | free, deterministic |
+| **5. Prose** | genuinely semantic/judgment ("comment sparingly", "prefer self-documenting APIs") | neither | n/a |
+
+> **The `~35%` "commands/process/boundaries" bucket is NOT monolithic** — it splits across homes
+> 3, 4, 5: boundary / "do-X-before-Y" / "never-Z" rules are **hooks** (home 3, they *enforce* via a
+> runtime block — the compiled-hook instrument, the 2/7→7/7 finding); commands + path refs are
+> **verification** (home 4, check they resolve); pure process is prose (home 5). An earlier 4-home
+> framing lumped hooks into "verified, not enforced" — wrong: a hook *enforces*.
 
 ## Measured distribution on real OSS (7 real AGENTS.md, 2026-07-15)
 
@@ -40,11 +47,14 @@ mcp-python-sdk (Python), cloudflare/workers-sdk (TS). 125 segmented rules.
   25–32 LOC each).
 - **Off-the-shelf once gaps closed: ~+15%** (clippy for Rust is UNMAPPED → codex routes 0% purely
   from that; plus segmentation-recall misses rules the file even names).
-- **Commands/refs/boundaries: ~35%** → home #3 (the DOMINANT content of a real AGENTS.md, per
-  GitHub's 2,500-repo study — commands + snippets + boundaries, not code-quality rules).
-- **Genuinely semantic: ~10%** → home #4.
+- **Commands/refs/boundaries: ~35%** → splits across homes #3 (hooks — the boundary / "do-X-before-Y"
+  / "never-Z" rules, enforced by a gate) and #4 (verification — commands/paths resolve). The DOMINANT
+  content of a real AGENTS.md (per GitHub's 2,500-repo study — commands + snippets + boundaries).
+- **Genuinely semantic: ~10%** → home #5.
 
-**Net: ~65% mechanizable (homes 1+2); ~90% covered by some vigiles surface (1+2+3).** NOT the
+**Net: ~65% of rules mechanizable via LINT (homes 1+2, off-the-shelf + synthesized); hooks
+(home 3) enforce many boundary rules on top; verification (home 4) covers commands/refs → ~90%
+of a real file gets some vigiles surface, and only ~10% is pure semantic prose (home 5).** NOT the
 "~10% niche" an off-the-shelf-only reading implies.
 
 ## Synthesis success — measured (benchmark, 2026-07-15)
@@ -63,7 +73,8 @@ snippets:
 75–85%). Four load-bearing caveats, or the number lies:
 
 1. **This is 85% of CODE-QUALITY rules, NOT of a whole AGENTS.md.** Code-quality is a *minority*
-   of a real file — the rest is commands/process/boundaries (home #3) + prose (home #4). Do not
+   of a real file — the rest is commands/process/boundaries (homes #3 hook / #4 verify) + prose
+   (home #5). Do not
    read "85%" as "85% of a file." (Reconciles with the ~65%-of-all-rules figure above.)
 2. **Synthesizer-sensitive.** The benchmark's model-in-the-loop picked the least-power, *sound*
    enforcement. A weaker synthesizer defaults to regex and ships **leaky** checkers → the gate must
