@@ -27,10 +27,23 @@ export interface SegmentedRule {
 }
 
 /** Why the segmenter decided a bullet is NOT a rule (the transparency signal —
- * see `research/rule-enforcer-design.md` §3). `index`/`description`/`no-signal`
- * come from the gate; `section` means it sits under a non-rule heading
- * (Setup / Commands / Key Files / Architecture …). */
-export type RejectReason = "index" | "description" | "no-signal" | "section";
+ * see `research/rule-enforcer-design.md` §3). `index`/`description`/`leadin`/
+ * `no-signal` come from the gate; `section` means it sits under a non-rule
+ * heading (Setup / Commands / Key Files / Architecture …).
+ *
+ * `leadin` is a colon-terminated procedure/enumeration HEADER ("To add a
+ * setting:", "Run the full test suite:", "Python check:") whose enforceable
+ * content — if any — lives in the sub-bullets/code-block it introduces (verified
+ * on the OSS corpus: the sub-items are segmented independently, so dropping the
+ * header loses nothing). Kept DISTINCT from `no-signal` on purpose: routing
+ * re-surfaces `no-signal` skips in the "possible (review)" recall tier, and a
+ * lead-in is a CONFIDENT drop that must not re-enter that tier. */
+export type RejectReason =
+  | "index"
+  | "description"
+  | "leadin"
+  | "no-signal"
+  | "section";
 
 /** A BULLET the segmenter saw but did NOT treat as a rule, with the reason — so
  * the audit report can be honest about what it set aside (a heuristic misses
@@ -126,9 +139,38 @@ const DESCRIPTION_LED =
 // RULE, not a description ("`const` is preferred over `let`") — so the
 // description reject must NOT fire. It lives in ./rule-signals.ts alongside
 // NORM_SIGNAL (routing's twin) to keep the two from drifting.
+
+/**
+ * DETERMINER-LED description: a sentence that opens with a determiner + noun
+ * subject and a descriptive copula ("The v1 README lives on the `v1.x` branch",
+ * "Each test lives in its own folder", "Many fixtures now provide a config") —
+ * an architecture/layout FACT, not a norm. Requiring a DETERMINER lead
+ * (the/each/all/every/many/…) is what keeps this precise: it excludes
+ * verb-first imperatives that merely contain a later copula ("Check you are not
+ * on main", "otherwise use `rg` … fall back to `grep`") — the exact
+ * false-positives a bare subject-copula pattern hit on the corpus. The
+ * RULE_PREDICATE guard below still lets "Each PR **must** …" through as a rule.
+ */
+const DESCRIPTION_DET =
+  /^(?:the|a|an|each|all|every|most|many|our|its|their|this|these|those)\s+[`"']?[a-z][\w./-]*[`"']?(?:\s+[a-z][\w./-]*){0,3}\s+(?:is|are|was|were|lives?|resides?|exists?|contains?|holds?|serves?|provides?|has|have|uses?|maps?|points?|relies|rely|defaults?|becomes?|gets?|auto-\w+)\b/i;
 function looksLikeDescription(t: string): boolean {
   const s = t.trim();
-  return DESCRIPTION_LED.test(s) && !RULE_PREDICATE.test(s);
+  return (
+    (DESCRIPTION_LED.test(s) || DESCRIPTION_DET.test(s)) &&
+    !RULE_PREDICATE.test(s)
+  );
+}
+
+/**
+ * A rule SIGNAL present: an imperative/prohibitive HEAD (`FORM_HEAD` on the
+ * decoration-stripped text) OR a deontic modal ANYWHERE (`RULE_PREDICATE`). Used
+ * to spare a colon-terminated line from the `leadin` reject when it actually
+ * carries a norm ("`expect` must come from test context — never import …:",
+ * "Avoid large modules:") — those introduce examples but ARE rules; only
+ * signal-less headers ("Run the full test suite:", "Python check:") drop.
+ */
+function hasRuleSignal(head: string, full: string): boolean {
+  return FORM_HEAD.test(head) || RULE_PREDICATE.test(full);
 }
 
 /**
@@ -406,6 +448,14 @@ function gate(
   // The form/declaration cues see the text with leading decoration stripped, so
   // `- **Never** …` reads as imperative and `**We** …` still reads declarative.
   const head = stripLeadDecoration(t);
+
+  // Reject a colon-terminated LEAD-IN header ("To add a setting:", "Run the full
+  // test suite:", "Python check:") — a procedure/enumeration heading whose real
+  // content sits in the sub-list/code-block it introduces (segmented on its
+  // own). Fires only when the header carries NO rule signal, so a norm-bearing
+  // header ("`expect` must come from test context — never …:") is kept.
+  if (/:\s*$/.test(t) && !hasRuleSignal(head, t)) return { reject: "leadin" };
+
   const form = FORM_HEAD.test(head);
   const shape =
     t.length >= 15 &&

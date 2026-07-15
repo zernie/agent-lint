@@ -152,6 +152,71 @@ describe("segmentInstructions — bulleted rules", () => {
   });
 });
 
+describe("segmentInstructions — leadin & determiner-description precision", () => {
+  // A colon-terminated procedure/enumeration HEADER whose real content lives in
+  // the sub-list/code-block it introduces (corpus false-positives: OpenHands
+  // "To add a setting:", openai-agents "Run the full test suite:", sentry
+  // "Python check:"). Verified on the OSS corpus: the sub-items segment on their
+  // own, so dropping the header loses nothing.
+  it("PRECISION: rejects a signal-less colon lead-in (reason: leadin)", () => {
+    const r = segmentInstructionsFull(
+      [
+        // no heading — a bare bullet list, so the drop is the lead-in gate, not
+        // an anti-context ("Setup"/"Commands") section rejection.
+        "- To add a new user setting, follow these steps:",
+        "  - Add the field to the settings type",
+        "- Frobnicate the widget:",
+        "- Python check:",
+      ].join("\n"),
+    );
+    // the headers drop as lead-ins…
+    expect(r.segments.some((s) => s.text.includes("follow these steps"))).toBe(
+      false,
+    );
+    expect(r.skipped.some((s) => s.reason === "leadin")).toBe(true);
+    // …but the sub-bullet content survives.
+    expect(
+      r.segments.some((s) => s.text.includes("Add the field to the settings")),
+    ).toBe(true);
+  });
+
+  it("KEEPS a colon-terminated header that carries a norm (has rule signal)", () => {
+    // "Avoid large modules:" / "`expect` must come from test context — never …:"
+    // introduce examples but ARE rules — the norm word spares them the drop.
+    const keptImperative = segmentInstructions("- Avoid large modules:");
+    expect(keptImperative).toHaveLength(1);
+    const keptModal = segmentInstructions(
+      "- `expect` must come from test context — never import it:",
+    );
+    expect(keptModal).toHaveLength(1);
+  });
+
+  it("PRECISION: rejects a determiner-led description (reason: description)", () => {
+    // Architecture/layout FACTS, not norms (corpus: prisma "Each test lives in
+    // its own folder…", mcp-python-sdk "The v1 README lives on the `v1.x`
+    // branch.").
+    const drop = segmentInstructions(
+      [
+        "- Each test lives in its own folder under `packages/client/tests/`.",
+        "- The v1 README lives on the `v1.x` branch.",
+        "- Many fixtures now provide one config per schema variant.",
+      ].join("\n"),
+    );
+    expect(drop).toHaveLength(0);
+  });
+
+  it("does NOT reject a verb-first imperative that merely contains a later copula", () => {
+    // The determiner lead-in requirement is what keeps this precise — these are
+    // real rules a bare subject-copula pattern would wrongly drop.
+    expect(
+      segmentInstructions("- Check you are not on main before committing."),
+    ).toHaveLength(1);
+    expect(
+      segmentInstructions("- Ensure all tests pass before you merge."),
+    ).toHaveLength(1);
+  });
+});
+
 describe("segmentInstructions — prose under a rule-ish heading", () => {
   const rules = segmentInstructions(FIXTURE_PROSE, "CLAUDE.md");
 

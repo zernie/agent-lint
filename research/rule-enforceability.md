@@ -85,6 +85,14 @@ verification (home 4, the ~⅓ not-a-rule that's commands/pointers), (b) the opt
 (home 2, the enforceable ⅓, gated), and (c) honest abstention on the semantic ⅓. The highest-leverage
 product fix is segmenter **precision** (stop extracting headings/commands as "rules").
 
+> **Segmenter precision — first pass shipped 2026-07-15** (`src/segment.ts`, see `roadmap.md`
+> enforcement-tier #1). Two verified-safe gate rejects added — colon-terminated `leadin` headers
+> (signal-less procedure/enumeration lead-ins, content lives in the sub-list) and determiner-led
+> `description` facts ("The v1 README lives on `v1.x`"). Measured **818 → 789 segments** on the
+> 22-file corpus (−29), hand-verified ≈28 clean non-rule drops + 1 edge-case-advice loss, 0
+> real-rule test regressions. This tightens the "not-even-a-rule ⅓" toward the true rule surface;
+> the remaining E-bucket is pointer / `Label: command` reference rows (home-4 verification targets).
+
 ## Synthesis success — measured (code-quality subset benchmark, 2026-07-15)
 
 **Of 34 real code-quality rules** extracted from the 7-file corpus (Py/TS/Rust), each turned into

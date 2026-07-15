@@ -37,9 +37,21 @@ topic: roadmap
 > split. That reorders where rule-engine effort pays off. (Launch readiness below is still the ship
 > gate; this is the enforcement-tier work behind it.)
 
-1. **Segmenter PRECISION** — ⅓ of segmented "rules" are commands / headings / pointers, NOT rules.
-   The #1-leverage fix: cleans every downstream number AND the audit's honesty. (Recall is the
-   sibling problem — but precision first; it's the bigger noise source at breadth.)
+1. **Segmenter PRECISION** — ✅ **first pass shipped 2026-07-15** (`src/segment.ts`). ⅓ of segmented
+   "rules" were commands / headings / pointers, NOT rules. Added two verified-safe gate rejects:
+   (a) **`leadin`** — a colon-terminated procedure/enumeration header ("To add a setting:", "Python
+   check:") whose enforceable content lives in the sub-list it introduces (confirmed on the corpus:
+   sub-items segment independently, so the header drops for free); fires only when the header carries
+   NO rule signal, so a norm-bearing header ("`expect` must come from test context — never …:") is
+   kept. (b) **determiner-led `description`** — "The v1 README lives on the `v1.x` branch", "Each test
+   lives in its own folder" — architecture FACTS, not norms; the determiner lead is what keeps it from
+   eating verb-first imperatives ("Check you are not on main"). Measured: **818 → 789 segments across
+   the 22-file corpus** (−29), hand-verified as ~28 clean non-rule drops + 1 minor edge-case-advice
+   loss (a description-led compound bullet whose trailing sentence was advice); 0 real-rule regressions
+   in the test suite. Distinct `leadin` reject reason (NOT `no-signal`) so routing does not re-surface
+   it in the recall-review tier. **Still open:** the pointer/`Label: command` E-bucket (route-4
+   verification targets, not norms) and the recall sibling. (Precision first — it was the bigger noise
+   source at breadth.)
 2. **AST-not-regex + gate-ABSTAIN** — the measured soundness law: every checker that leaked (2/13)
    was regex or a context-blind selector. Make the `compile-rules` synth prefer the target-language
    AST; make the gate ABSTAIN a checker that can't be proven sound. The cry-wolf guard.
