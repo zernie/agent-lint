@@ -158,7 +158,7 @@ export interface SkippedBullet {
   file?: string;
   lineStart: number;
   lineEnd: number;
-  reason: "index" | "description" | "no-signal" | "section";
+  reason: "index" | "description" | "leadin" | "no-signal" | "section";
 }
 
 /** The deterministic State-B routing preview (mirror of the CLI's RuleRouting). */
