@@ -22,7 +22,11 @@ function route(file: string): RuleRouting {
   return routeRules(text, file);
 }
 
-const CASES = ["langchain.AGENTS.md", "browser-use.AGENTS.md"];
+const CASES = [
+  "langchain.AGENTS.md",
+  "browser-use.AGENTS.md",
+  "mcp-python-sdk.AGENTS.md",
+];
 
 describe("real-OSS routing dogfood (vendored Python AGENTS.md)", () => {
   for (const file of CASES) {

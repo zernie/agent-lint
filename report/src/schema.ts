@@ -152,11 +152,24 @@ export interface RoutedRule {
   source?: "marker" | "heuristic";
 }
 
+/** A bullet the segmenter did NOT treat as a rule, with the reason. */
+export interface SkippedBullet {
+  text: string;
+  file?: string;
+  lineStart: number;
+  lineEnd: number;
+  reason: "index" | "description" | "no-signal" | "section";
+}
+
 /** The deterministic State-B routing preview (mirror of the CLI's RuleRouting). */
 export interface RuleRouting {
   segmented: number;
   counts: Record<RuleCategory, number>;
   rules: RoutedRule[];
+  /** Rule-ish bullets below the confidence bar — surfaced for review. */
+  possible?: RoutedRule[];
+  /** Bullets confidently not treated as rules, each with a reason. */
+  skipped?: SkippedBullet[];
 }
 
 export interface AuditReport {

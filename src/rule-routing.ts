@@ -35,13 +35,13 @@
  * Pure, deterministic, dependency-free. Reuses `rule-inventory`'s hardened
  * whole-token matcher + `INTENT_MAP`, and `segment`'s Tier-A segmenter.
  */
-import { segmentInstructions } from "./segment.js";
+import { segmentInstructions, type SkippedBullet } from "./segment.js";
 import {
   INTENT_MAP,
   matchesWholeToken,
   type LinterName,
 } from "./rule-inventory.js";
-import type { RuleCatalog } from "./core/rule-catalog.js";
+import type { RuleCatalog, AvailableRule } from "./core/rule-catalog.js";
 
 /** How a routed rule would be enforced (a MECHANISM ladder, not a 1-10 score). */
 export type RuleCategory = "reuse" | "hook" | "meta" | "semantic" | "unrouted";
@@ -83,10 +83,19 @@ export interface RoutedRule {
 }
 
 export interface RuleRouting {
-  /** How many atomic rules were routed (after the confidence filter). */
+  /** How many CONFIDENT atomic rules were routed (high or rescued). */
   readonly segmented: number;
   readonly counts: Record<RuleCategory, number>;
+  /** The CONFIDENT tier — cleared the precision bar; these are the routed rules. */
   readonly rules: readonly RoutedRule[];
+  /** The POSSIBLE tier — rule-ish bullets (medium confidence) that did NOT clear
+   * the bar, still classified so a human can review + promote them. Detection is
+   * precision-first, so this is where a declarative rule ("Every X must Y") that
+   * the confident tier misses shows up. See `research/rule-compiler-design.md` §2. */
+  readonly possible: readonly RoutedRule[];
+  /** Bullets the segmenter decided were NOT rules, each with a reason — so the
+   * report is honest about what it set aside (§3). */
+  readonly skipped: readonly SkippedBullet[];
 }
 
 export interface RouteOptions {
@@ -108,6 +117,16 @@ export interface RouteOptions {
    */
   readonly availableRules?: RuleCatalog;
 }
+
+/**
+ * A deontic/norm signal ANYWHERE in a bullet — the marker of a rule the imperative
+ * gate missed because the norm isn't at the head ("every function MUST have a
+ * docstring", "public APIs SHOULD stay stable"). Used to keep the POSSIBLE review
+ * tier to genuine rule-candidates instead of arbitrary unparsed prose. Deliberately
+ * narrow (modal verbs only) so it doesn't re-admit the noise it exists to exclude.
+ */
+const NORM_SIGNAL =
+  /\b(?:must(?:n't)?|should(?:n't)?|shall|never|always|avoids?|require[sd]?|forbidden|disallow(?:ed)?|prohibited|banned?|prefers?|do not|don't)\b/i;
 
 /**
  * ACTION-rule cues — things a linter never sees (git, filesystem, shell,
@@ -330,21 +349,62 @@ function namedRuleTokens(text: string): string[] {
  * rule; the DYNAMIC catalog (if present) and the static `INTENT_MAP` both feed
  * `reuse`; reuse wins over a soft semantic cue.
  */
+/** A dynamic-catalog lookup result: which linter the named rule belongs to, and
+ * whether it's currently enabled. Carrying the linter (not just a bool) is what
+ * lets a polyglot repo's map say `pylint:invalid-name` vs `eslint:no-console`. */
+type CatalogHit = { enabled: boolean; linter: "eslint" | "pylint" };
+
+/** Combine two hits that a doc-token resolves to (a cross-linter id collision).
+ * enabled OR-s — a "**Enforced by:** X" claim is satisfied if ANY linter has X
+ * on, so we never cry "documented but OFF" when one linter enforces it — and
+ * provenance follows the enforcing linter. */
+function combineHits(a: CatalogHit, b: CatalogHit): CatalogHit {
+  if (a.enabled === b.enabled) return { enabled: a.enabled, linter: a.linter };
+  return a.enabled ? a : b; // exactly one is on → it wins (enabled OR-s to true)
+}
+
+/** Build the doc-token → hit lookup from a (possibly polyglot) rule list. A rule
+ * is matchable by its id AND, for Pylint, its numeric code. A bare id CAN collide
+ * across linters (`no-else-return` is in both ESLint and Pylint) → combine
+ * conservatively. A numeric code is unique to its linter, so it never collides
+ * and KEEPS its own (linter, enabled) — a doc naming the Pylint code `R1705`
+ * still surfaces "documented but OFF" even when the symbol is enabled in ESLint. */
+function buildCatalogLookup(
+  rules: readonly AvailableRule[],
+): Map<string, CatalogHit> {
+  const map = new Map<string, CatalogHit>();
+  const put = (key: string, hit: CatalogHit): void => {
+    const prev = map.get(key);
+    map.set(key, prev ? combineHits(prev, hit) : hit);
+  };
+  for (const r of rules) {
+    const hit: CatalogHit = { enabled: r.enabled, linter: r.linter };
+    put(r.id, hit);
+    if (r.code) put(r.code, hit);
+  }
+  return map;
+}
+
 function classify(
   text: string,
-  catalog?: ReadonlyMap<string, boolean>,
+  catalog?: ReadonlyMap<string, CatalogHit>,
 ): Classification {
   if (HOOK_CUES.some((re) => re.test(text))) return { category: "hook" };
   if (META_CUES.some((re) => re.test(text))) return { category: "meta" };
   // Dynamic catalog: a bullet that NAMES one of the repo's real rules → reuse,
-  // carrying whether it's currently enabled (a disabled hit = the "documented but
-  // OFF" nudge). Own-repo only — catalog is present only when the linter was
-  // enumerated with consent.
+  // carrying its linter + whether it's currently enabled (a disabled hit = the
+  // "documented but OFF" nudge). Own-repo only — catalog is present only when the
+  // linter was enumerated with consent.
   if (catalog) {
     for (const tok of namedRuleTokens(text)) {
-      const enabled = catalog.get(tok);
-      if (enabled !== undefined)
-        return { category: "reuse", rule: tok, enabled };
+      const hit = catalog.get(tok);
+      if (hit !== undefined)
+        return {
+          category: "reuse",
+          rule: tok,
+          enabled: hit.enabled,
+          linter: hit.linter,
+        };
     }
   }
   for (const m of INTENT_MAP) {
@@ -371,12 +431,16 @@ const GUARD_RE = /^\*\*Guard:\*\*/;
 const GUIDANCE_RE = /^\*\*Guidance only\*\*/;
 const MARK_HEADING = /^(#{2,6})\s+(.*)$/;
 const RULE_ID_SHAPE = /^@?[a-z][a-z0-9._/-]*$/;
+// Pylint's numeric alias (C0116, W9006) — the catalog advertises these as
+// matchable, so a marker using one must parse as a rule id, not a prose claim.
+const PYLINT_CODE_SHAPE = /^[A-Z]\d+$/;
 
 /** Does this `**Enforced by:**` value parse as a lint-rule id (vs a prose claim
  * like "CI" or "the linter")? A hand-written marker is a CLAIM — only a rule-id
  * shape is treated as a real reuse rule. */
 function looksLikeRuleId(s: string): boolean {
-  return s.length >= 3 && RULE_ID_SHAPE.test(s.trim());
+  const t = s.trim();
+  return (t.length >= 3 && RULE_ID_SHAPE.test(t)) || PYLINT_CODE_SHAPE.test(t);
 }
 
 /**
@@ -394,7 +458,7 @@ function looksLikeRuleId(s: string): boolean {
 function extractMarkedRules(
   text: string,
   file: string | undefined,
-  catalog: ReadonlyMap<string, boolean> | undefined,
+  catalog: ReadonlyMap<string, CatalogHit> | undefined,
 ): { rules: RoutedRule[]; skip: Set<number> } {
   const lines = text.split("\n");
   const rules: RoutedRule[] = [];
@@ -413,11 +477,13 @@ function extractMarkedRules(
       const em = ENFORCED_RE.exec(bl);
       if (em) {
         if (!looksLikeRuleId(em[1])) break; // a prose claim, not a rule id
-        const enabled = catalog?.get(em[1].trim());
+        const hit = catalog?.get(em[1].trim());
         marked = {
           category: "reuse",
           rule: em[1].trim(),
-          ...(enabled !== undefined ? { enabled } : {}),
+          ...(hit !== undefined
+            ? { enabled: hit.enabled, linter: hit.linter }
+            : {}),
         };
         break;
       }
@@ -456,6 +522,7 @@ function extractMarkedRules(
       mechanism: MECHANISM[marked.category],
       source: "marker",
       ...(marked.rule ? { rule: marked.rule } : {}),
+      ...(marked.linter ? { linter: marked.linter } : {}),
       ...(marked.enabled !== undefined ? { enabled: marked.enabled } : {}),
     });
   }
@@ -474,7 +541,7 @@ export function routeRules(
 ): RuleRouting {
   const minConfidence = options.minConfidence ?? "high";
   const catalog = options.availableRules
-    ? new Map(options.availableRules.rules.map((r) => [r.id, r.enabled]))
+    ? buildCatalogLookup(options.availableRules.rules)
     : undefined;
   // A MEDIUM segment that NAMES a rule the repo's catalog actually has is
   // enforceable — the catalog is ground truth, so it's higher-precision than the
@@ -500,22 +567,27 @@ export function routeRules(
     INTENT_MAP.some((m) =>
       m.keywords.some((kw) => matchesWholeToken(text, kw)),
     );
-  // S0/S1 pre-pass: explicit markers are definitive and are CONSUMED (their body
-  // lines are skipped) so the heuristic segmenter can't double-count them.
-  const marked = extractMarkedRules(instructionText, file, catalog);
-  const segments = segmentInstructions(
-    instructionText,
-    file,
-    marked.skip,
-  ).filter(
-    (s) =>
-      minConfidence === "medium" ||
-      s.confidence === "high" ||
-      namesCatalogRule(s.text) ||
-      matchesPatternRule(s.text) ||
-      matchesIntentMap(s.text),
-  );
-  const heuristicRules: RoutedRule[] = segments.map((s) => {
+  // A segment is CONFIDENT if it's high, rescued by the catalog/pattern/intent, or
+  // the caller opted into medium. Everything else the segmenter emitted is a
+  // POSSIBLE rule (medium, unrescued) — surfaced for review, not routed as fact.
+  // A RESCUE — the text NAMES/matches a real rule (catalog / restricted-syntax /
+  // intent). This promotes even a gate-rejected bullet to confident, because it
+  // provably maps to an off-the-shelf rule; independent of the medium opt-in.
+  const isRescued = (text: string): boolean =>
+    namesCatalogRule(text) ||
+    matchesPatternRule(text) ||
+    matchesIntentMap(text);
+  const isConfident = (s: { text: string; confidence: "high" | "medium" }) =>
+    minConfidence === "medium" || s.confidence === "high" || isRescued(s.text);
+
+  const toRouted = (s: {
+    text: string;
+    exactQuote: string;
+    file: string | undefined;
+    lineStart: number;
+    lineEnd: number;
+    confidence: "high" | "medium";
+  }): RoutedRule => {
     const c = classify(s.text, catalog);
     return {
       text: s.text,
@@ -531,7 +603,64 @@ export function routeRules(
       ...(c.linter ? { linter: c.linter } : {}),
       ...(c.enabled !== undefined ? { enabled: c.enabled } : {}),
     };
+  };
+
+  // S0/S1 pre-pass: explicit markers are definitive and are CONSUMED (their body
+  // lines are skipped) so the heuristic segmenter can't double-count them.
+  const marked = extractMarkedRules(instructionText, file, catalog);
+  const { segments, skipped: rawSkipped } = segmentInstructions(
+    instructionText,
+    file,
+    marked.skip,
+  );
+  // A bullet the gate rejected as `no-signal` is a rule CANDIDATE only if it
+  // carries a deontic/norm signal (a modal like must/should/never/avoid) — that
+  // keeps the POSSIBLE review tier to genuine recall-misses ("every function must
+  // have a docstring") instead of flooding it with prose ("README.md documents
+  // v2"). A no-signal bullet WITHOUT a norm signal is confidently not a rule, so
+  // it stays SKIPPED alongside the index/description/section rejects. A folded
+  // candidate that NAMES/matches a real rule is still rescued to CONFIDENT.
+  const asCandidate = (s: SkippedBullet) => ({
+    text: s.text,
+    exactQuote: s.text,
+    file: s.file,
+    lineStart: s.lineStart,
+    lineEnd: s.lineEnd,
+    confidence: "medium" as const,
   });
+  // Real SEGMENTS route by the full confident check (incl. the medium opt-in).
+  // Gate-rejected `no-signal` bullets are folded back in as candidates, but they
+  // are promoted to confident ONLY by a real RESCUE — NEVER by the blanket medium
+  // opt-in, which must not resurrect bullets the gate explicitly rejected.
+  const noSignal = rawSkipped.filter((s) => s.reason === "no-signal");
+  const folds = noSignal.map(asCandidate);
+  const heuristicRules = [
+    ...segments.filter(isConfident),
+    ...folds.filter((s) => isRescued(s.text)),
+  ].map(toRouted);
+  // The non-confident leftovers split by the norm signal: a rule-ish bullet
+  // (carries a deontic modal) is a genuine recall-miss → POSSIBLE (review); the
+  // rest is prose → SKIPPED with a `no-signal` reason (visible, not dropped).
+  const leftover = [
+    ...segments.filter((s) => !isConfident(s)),
+    ...folds.filter((s) => !isRescued(s.text)),
+  ];
+  const possible = leftover
+    .filter((s) => NORM_SIGNAL.test(s.text))
+    .map(toRouted);
+  const skipped: SkippedBullet[] = [
+    ...rawSkipped.filter((s) => s.reason !== "no-signal"),
+    ...leftover
+      .filter((s) => !NORM_SIGNAL.test(s.text))
+      .map((s) => ({
+        text: s.text,
+        file: s.file,
+        lineStart: s.lineStart,
+        lineEnd: s.lineEnd,
+        reason: "no-signal" as const,
+      })),
+  ];
+
   // Marker rules first (definitive), then the heuristic residue.
   const rules: RoutedRule[] = [...marked.rules, ...heuristicRules];
   const counts: Record<RuleCategory, number> = {
@@ -542,7 +671,7 @@ export function routeRules(
     unrouted: 0,
   };
   for (const r of rules) counts[r.category]++;
-  return { segmented: rules.length, counts, rules };
+  return { segmented: rules.length, counts, rules, possible, skipped };
 }
 
 /**
@@ -560,12 +689,16 @@ export function mergeRoutings(routings: readonly RuleRouting[]): RuleRouting {
     unrouted: 0,
   };
   const rules: RoutedRule[] = [];
+  const possible: RoutedRule[] = [];
+  const skipped: SkippedBullet[] = [];
   let segmented = 0;
   for (const r of routings) {
     segmented += r.segmented;
     rules.push(...r.rules);
+    possible.push(...r.possible);
+    skipped.push(...r.skipped);
     for (const k of Object.keys(counts) as RuleCategory[])
       counts[k] += r.counts[k];
   }
-  return { segmented, counts, rules };
+  return { segmented, counts, rules, possible, skipped };
 }

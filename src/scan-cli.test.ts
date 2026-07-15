@@ -332,6 +332,59 @@ describe("audit default — folds the deterministic fix into the report", () => 
   });
 });
 
+describe("audit report artifacts — auto-gitignore + --out", () => {
+  it("writes the report to cwd and idempotently gitignores it (no init needed)", () => {
+    const root = mkdtempSync(join(tmpdir(), "audit-gi-e2e-"));
+    try {
+      writeFileSync(
+        join(root, "CLAUDE.md"),
+        "# Rules\n\n- Never use eval().\n",
+      );
+      writeFileSync(join(root, ".gitignore"), "node_modules/\n");
+      execSync(`node ${CLI} audit . --no-open`, {
+        cwd: root,
+        encoding: "utf-8",
+      });
+      assert.ok(existsSync(join(root, "vigiles-report.json")), "json written");
+      assert.ok(existsSync(join(root, "vigiles-report.html")), "html written");
+      const gi = readFileSync(join(root, ".gitignore"), "utf-8");
+      assert.match(gi, /^vigiles-report\.json$/m);
+      assert.match(gi, /^vigiles-report\.html$/m);
+      // idempotent — a second audit does not duplicate the entry
+      execSync(`node ${CLI} audit . --no-open`, {
+        cwd: root,
+        encoding: "utf-8",
+      });
+      const gi2 = readFileSync(join(root, ".gitignore"), "utf-8");
+      assert.equal((gi2.match(/^vigiles-report\.json$/gm) ?? []).length, 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("--out=<dir> writes to a custom dir and gitignores its relative path", () => {
+    const root = mkdtempSync(join(tmpdir(), "audit-out-e2e-"));
+    try {
+      writeFileSync(
+        join(root, "CLAUDE.md"),
+        "# Rules\n\n- Never use eval().\n",
+      );
+      writeFileSync(join(root, ".gitignore"), "");
+      execSync(`node ${CLI} audit . --out=reports --no-open`, {
+        cwd: root,
+        encoding: "utf-8",
+      });
+      assert.ok(existsSync(join(root, "reports", "vigiles-report.json")));
+      assert.match(
+        readFileSync(join(root, ".gitignore"), "utf-8"),
+        /^reports\/vigiles-report\.json$/m,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("audit → adoption — adoptable-surfaces nudge + JSON data", () => {
   let root: string;
 

@@ -3,8 +3,17 @@ const tsParser = require("@typescript-eslint/parser");
 const fs = require("fs");
 const path = require("path");
 const { runGate } = require("./gate");
+const corpus = require("./rules/corpus.json");
 
-const kept = runGate().filter(r => r.status === "kept").map(r => r.slug);
+// The demo enforces the kept rules over a JS/TS demo project, so it loads only
+// the ESLint-engine rules (the Python ast-grep rules are kept + gated too, but
+// they are JSON rule objects run over Python, not ESLint modules — see gate.js).
+const eslintSlugs = new Set(
+  corpus.filter((e) => (e.engine || "eslint") === "eslint").map((e) => e.slug),
+);
+const kept = runGate()
+  .filter((r) => r.status === "kept" && eslintSlugs.has(r.slug))
+  .map((r) => r.slug);
 const rulesMap = {};
 const rulesConfig = {};
 for (const slug of kept) {

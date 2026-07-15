@@ -137,10 +137,16 @@ describe("routeRules", () => {
       rules: [
         {
           id: "no-only-tests/no-only-tests",
+          linter: "eslint" as const,
           plugin: "no-only-tests",
           enabled: false,
         },
-        { id: "boundaries/dependencies", plugin: "boundaries", enabled: true },
+        {
+          id: "boundaries/dependencies",
+          linter: "eslint" as const,
+          plugin: "boundaries",
+          enabled: true,
+        },
       ],
     };
     const md = [
@@ -167,13 +173,61 @@ describe("routeRules", () => {
     expect(arch?.enabled).toBe(true);
   });
 
+  it("polyglot collision: the symbol routes conservatively, the Pylint code stays OFF", () => {
+    // `no-else-return` is in BOTH linters — ESLint ON, Pylint OFF (code R1705).
+    // A doc naming the SYMBOL must not read "OFF" (ESLint enforces it); a doc
+    // naming the Pylint CODE must still surface the documented-but-OFF Pylint rule.
+    const availableRules = {
+      linter: "eslint" as const,
+      available: 2,
+      enabled: 1,
+      rules: [
+        {
+          id: "no-else-return",
+          linter: "eslint" as const,
+          plugin: null,
+          enabled: true,
+        },
+        {
+          id: "no-else-return",
+          linter: "pylint" as const,
+          plugin: null,
+          code: "R1705",
+          enabled: false,
+        },
+      ],
+    };
+    const md = [
+      "## Rules",
+      "",
+      "- Prefer a guard clause over else-after-return (`no-else-return`)",
+      "- No else after return (`R1705`)",
+    ].join("\n");
+    const r = routeRules(md, undefined, { availableRules });
+
+    const sym = r.rules.find((x) => x.rule === "no-else-return");
+    expect(sym?.category).toBe("reuse");
+    expect(sym?.enabled).toBe(true); // ESLint enforces it → not "documented but OFF"
+    expect(sym?.linter).toBe("eslint");
+
+    const code = r.rules.find((x) => x.rule === "R1705");
+    expect(code?.category).toBe("reuse");
+    expect(code?.enabled).toBe(false); // the disabled Pylint rule surfaces
+    expect(code?.linter).toBe("pylint");
+  });
+
   it("dynamic catalog rescues a MEDIUM declarative bullet that names a real repo rule", () => {
     const availableRules = {
       linter: "eslint" as const,
       available: 1,
       enabled: 1,
       rules: [
-        { id: "boundaries/dependencies", plugin: "boundaries", enabled: true },
+        {
+          id: "boundaries/dependencies",
+          linter: "eslint" as const,
+          plugin: "boundaries",
+          enabled: true,
+        },
       ],
     };
     // Declarative subject ("The core layer must not …"), no imperative head — the
@@ -324,6 +378,7 @@ describe("routeRules", () => {
       rules: [
         {
           id: "@typescript-eslint/no-explicit-any",
+          linter: "eslint" as const,
           plugin: "@typescript-eslint",
           enabled: false,
         },
@@ -340,9 +395,187 @@ describe("routeRules", () => {
     expect(rule?.enabled).toBe(false); // documented but OFF
   });
 
+  it("keeps per-linter provenance in a POLYGLOT catalog (eslint + pylint merged)", () => {
+    // A project with BOTH linters: the merged catalog carries each rule's linter,
+    // so a routed reuse hit says pylint:invalid-name vs eslint:no-console — not a
+    // linter-less `undefined:`. This is the multi-linter resolution.
+    const availableRules = {
+      linter: "eslint" as const, // cosmetic summary; routing reads each rule's linter
+      available: 2,
+      enabled: 1,
+      rules: [
+        {
+          id: "@typescript-eslint/no-floating-promises",
+          linter: "eslint" as const,
+          plugin: "@typescript-eslint",
+          enabled: true,
+        },
+        {
+          id: "invalid-name",
+          linter: "pylint" as const,
+          plugin: null,
+          code: "C0103",
+          enabled: false,
+        },
+      ],
+    };
+    const md = [
+      "# Rules",
+      "",
+      "## JS",
+      "",
+      "- No floating promises (`@typescript-eslint/no-floating-promises`).",
+      "",
+      "## Python",
+      "",
+      "- Follow naming conventions (`invalid-name`).",
+      "",
+    ].join("\n");
+    const reuse = routeRules(md, "CLAUDE.md", { availableRules }).rules.filter(
+      (x) => x.category === "reuse",
+    );
+    const js = reuse.find(
+      (x) => x.rule === "@typescript-eslint/no-floating-promises",
+    );
+    const py = reuse.find((x) => x.rule === "invalid-name");
+    expect(js?.linter).toBe("eslint");
+    expect(js?.enabled).toBe(true);
+    expect(py?.linter).toBe("pylint"); // NOT undefined — provenance kept
+    expect(py?.enabled).toBe(false); // documented but OFF
+  });
+
+  it("splits detection into CONFIDENT / POSSIBLE / SKIPPED tiers", () => {
+    const md = [
+      "# Rules",
+      "",
+      "## Conventions",
+      "",
+      "- Never use `eval()`.", // imperative → confident
+      "- Every public API should stay backwards compatible.", // declarative norm, no rule → possible
+      "",
+      "## Setup", // anti-context heading
+      "",
+      "- Run `npm install` to get started.", // → skipped (section)
+    ].join("\n");
+    const r = routeRules(md, "CLAUDE.md");
+
+    // CONFIDENT: the imperative rule is routed.
+    expect(r.rules.some((x) => x.text.includes("eval()"))).toBe(true);
+    // POSSIBLE: the declarative norm is surfaced for review, NOT routed as fact.
+    expect(
+      r.possible.some((x) => x.text.includes("backwards compatible")),
+    ).toBe(true);
+    expect(r.rules.some((x) => x.text.includes("backwards compatible"))).toBe(
+      false,
+    );
+    // SKIPPED: the setup bullet is set aside WITH a reason, not silently dropped.
+    const setup = r.skipped.find((s) => s.text.includes("npm install"));
+    expect(setup?.reason).toBe("section");
+  });
+
+  it("POSSIBLE keeps only norm-ish bullets; prose without a norm signal is skipped", () => {
+    const md = [
+      "## Notes",
+      "",
+      "- Every public API should stay backwards compatible.", // norm (should) → possible
+      "- `README.md` documents the v2 API.", // prose, no norm → skipped
+    ].join("\n");
+    const r = routeRules(md, "CLAUDE.md");
+    expect(
+      r.possible.some((x) => x.text.includes("backwards compatible")),
+    ).toBe(true);
+    expect(r.possible.some((x) => x.text.includes("documents"))).toBe(false);
+    // the descriptive bullet is set aside (visible) with a no-signal reason
+    expect(
+      r.skipped.some(
+        (s) => s.text.includes("documents") && s.reason === "no-signal",
+      ),
+    ).toBe(true);
+  });
+
+  it("rescues a declarative rule that NAMES/matches a real rule to CONFIDENT (recall)", () => {
+    // "Every function must have a docstring" fails the imperative gate (declarative
+    // subject) but matches the docstring pattern rule — so it's rescued to reuse,
+    // not lost. The two-tier fold recovers this recall.
+    const r = routeRules(
+      "## Docstrings\n\n- Every function must have a docstring.",
+      "CLAUDE.md",
+    );
+    expect(r.rules.some((x) => x.category === "reuse")).toBe(true);
+  });
+
+  it("minConfidence:'medium' does NOT promote a gate-rejected no-signal bullet", () => {
+    // A bullet the segmenter rejects as `no-signal` (context only, no rule/norm
+    // signal) is folded back in for a possible RESCUE — but the medium opt-in must
+    // NOT resurrect it as a confident rule (that would inflate `rules`/counts).
+    const md = "## Notes\n\n- The team meets weekly to sync.\n";
+    const med = routeRules(md, "CLAUDE.md", { minConfidence: "medium" });
+    expect(med.rules).toHaveLength(0);
+    expect(med.skipped.some((s) => s.reason === "no-signal")).toBe(true);
+    // a REAL medium segment is still promoted in medium mode (unchanged behaviour)
+    const seg = routeRules(
+      "## Notes\n\n- `README.md` documents the v2 API.\n",
+      "f",
+      {
+        minConfidence: "medium",
+      },
+    );
+    expect(seg.rules.length).toBeGreaterThan(0);
+  });
+
+  it("a MARKED reuse rule carries its catalog linter (polyglot provenance)", () => {
+    const availableRules = {
+      linter: "pylint" as const,
+      available: 1,
+      enabled: 0,
+      rules: [
+        {
+          id: "missing-function-docstring",
+          linter: "pylint" as const,
+          plugin: null,
+          code: "C0116",
+          enabled: false,
+        },
+      ],
+    };
+    const r = routeRules(
+      "### Docstrings\n\n**Enforced by:** `missing-function-docstring`",
+      "CLAUDE.md",
+      { availableRules },
+    );
+    const marked = r.rules.find((x) => x.source === "marker");
+    expect(marked?.linter).toBe("pylint"); // NOT undefined
+    expect(marked?.enabled).toBe(false);
+  });
+
+  it("a MARKER using a Pylint numeric code (C0116) is accepted, not rejected as prose", () => {
+    const availableRules = {
+      linter: "pylint" as const,
+      available: 1,
+      enabled: 0,
+      rules: [
+        {
+          id: "missing-function-docstring",
+          linter: "pylint" as const,
+          plugin: null,
+          code: "C0116",
+          enabled: false,
+        },
+      ],
+    };
+    const r = routeRules("### D\n\n**Enforced by:** `C0116`", "CLAUDE.md", {
+      availableRules,
+    });
+    const marked = r.rules.find((x) => x.source === "marker");
+    expect(marked?.category).toBe("reuse");
+    expect(marked?.rule).toBe("C0116");
+    expect(marked?.linter).toBe("pylint");
+  });
+
   it("returns an empty routing for prose with no rules", () => {
     const r = routeRules("This project is a knowledge base. It has notes.");
     expect(r.segmented).toBe(0);
     expect(r.rules).toEqual([]);
+    expect(r.possible).toEqual([]);
   });
 });

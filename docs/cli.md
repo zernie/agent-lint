@@ -19,6 +19,7 @@ npx vigiles eval --check            # Verify committed eval results against curr
 npx vigiles audit [dir]              # Lighthouse for your harness: category rings + fixes (a deterministic read); writes vigiles-report.html + .json
                                      # the executing checks (your hooks · live MCP · do skills FIRE?) run only interactively — a plain audit asks once
 npx vigiles audit <dir> --no-html    # Skip writing vigiles-report.html · --no-json skips the JSON artifact (both written by default)
+npx vigiles audit <dir> --out=reports  # Write the report to a custom dir (CI upload) · --no-open skips auto-opening the HTML · reports are auto-gitignored
 npx vigiles audit <dir> --json       # Print the versioned AuditReport JSON to stdout (the upload/CI contract)
 npx vigiles audit <after> --capability-diff=<before>  # Did this change WIDEN the agent's blast radius? (no model)
 npx vigiles generate types          # Emit .d.ts from project state (for spec mode; --check to verify)
@@ -337,9 +338,20 @@ description collision), `likely` dead-ends before `possible` proxies.
 **A shareable HTML report** is written to `vigiles-report.html` by default — a
 self-contained React app (category rings, findings, fix cards; auto light/dark)
 the CLI fills with the report JSON, so it opens offline by double-click. Screenshot
-it, attach it to a PR; for a human at a TTY it's opened best-effort. `--no-html`
-skips it. A versioned **`vigiles-report.json`** is written alongside (`--no-json` to
-skip) — the same contract `--json` prints, for CI or upload.
+it, attach it to a PR; for a human at a TTY it's **opened in your browser**
+automatically (like `lighthouse --view`; `--no-open` suppresses it). `--no-html`
+skips writing it. A versioned **`vigiles-report.json`** is written alongside
+(`--no-json` to skip) — the same contract `--json` prints, for CI or upload.
+
+**The report artifacts stay out of git.** Because `audit` runs zero-config
+(without `init`), it keeps `git status` clean itself: when it writes a report it
+idempotently adds `vigiles-report.*` to your `.gitignore` (appending only what's
+missing, under a labelled block; if you have no `.gitignore` it prints a one-line
+tip instead of creating one). It's the same pattern as `next build` keeping
+`.next/` ignored — the tool that writes a build artifact keeps it out of version
+control. Use **`--out=<dir>`** to write the report to a custom directory (created
+if missing; its relative path is what gets gitignored) — handy for a CI upload
+step.
 
 `audit` reports **harness-specific structure** (plugin layout, hook resolution),
 so it auto-detects the harness — printing the detected one and warning when a repo
