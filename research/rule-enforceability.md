@@ -9,33 +9,33 @@ topic: linters
 > enforce."** It is the single cohesive answer, because the picture was scattered across
 > `rule-enforcer-design.md` (engine), `audit-rule-compile-tier.md` (how audit surfaces it),
 > `adoption-direction.md` (the funnel) and the root `CLAUDE.md` — and that scatter caused
-> repeated mis-statements. Distinct from `enforcement-model.md` (which is about the *severity*
+> repeated mis-statements. Distinct from `enforcement-model.md` (which is about the _severity_
 > of vigiles's OWN checks — the A/B/C decidability gradient); THIS doc is about routing a
-> *user's* prose rule to an enforcement home and the resulting enforceable ceiling.
+> _user's_ prose rule to an enforcement home and the resulting enforceable ceiling.
 
 ## The load-bearing correction (the thing that keeps getting mis-stated)
 
 **"No off-the-shelf lint rule exists" does NOT mean "not enforceable."** Off-the-shelf routing is
-only the *cheapest* tier. A project-specific rule that no linter ships (e.g. "a function with a
+only the _cheapest_ tier. A project-specific rule that no linter ships (e.g. "a function with a
 `session` param must not call `session.commit()`") is still mechanizable — a ~25-line custom AST
 checker enforces it (empirically verified, 2026-07-15, 5/5 real rules). Conflating "no off-the-
 shelf rule" with "not enforceable" under-counts the enforceable surface by ~5×.
 
 ## The five enforcement homes — every prose rule lands in exactly one
 
-| Home | What it is | Enforces or checks? | Cost to vigiles |
-| --- | --- | --- | --- |
-| **1. Off-the-shelf lint** | prose maps to an existing linter rule → flip one config line (`select`/`rules`) | **enforces** (CI blocks) | free, deterministic |
-| **2. Synthesized custom lint** | no off-the-shelf rule → generate a checker (custom AST rule / `no-restricted-syntax`) | **enforces** (CI blocks) | **$0** (user's sub, see below) |
-| **3. Hook / gate** | a "do X before Y" / "never do Z" / boundary rule → a PreToolUse / pre-commit **hook** that BLOCKS the action in the loop (`vigiles/hook`, compiled-hook instrument; classify `hook` category) | **enforces** (runtime block) | free, deterministic |
-| **4. Ref / command verification** | commands, file/script/path refs → check they *resolve* (do the named script/path/tool exist?) — NOT a norm to enforce | **checks** (are the instructions truthful) | free, deterministic |
-| **5. Prose** | genuinely semantic/judgment ("comment sparingly", "prefer self-documenting APIs") | neither | n/a |
+| Home                              | What it is                                                                                                                                                                                    | Enforces or checks?                        | Cost to vigiles                |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------ |
+| **1. Off-the-shelf lint**         | prose maps to an existing linter rule → flip one config line (`select`/`rules`)                                                                                                               | **enforces** (CI blocks)                   | free, deterministic            |
+| **2. Synthesized custom lint**    | no off-the-shelf rule → generate a checker (custom AST rule / `no-restricted-syntax`)                                                                                                         | **enforces** (CI blocks)                   | **$0** (user's sub, see below) |
+| **3. Hook / gate**                | a "do X before Y" / "never do Z" / boundary rule → a PreToolUse / pre-commit **hook** that BLOCKS the action in the loop (`vigiles/hook`, compiled-hook instrument; classify `hook` category) | **enforces** (runtime block)               | free, deterministic            |
+| **4. Ref / command verification** | commands, file/script/path refs → check they _resolve_ (do the named script/path/tool exist?) — NOT a norm to enforce                                                                         | **checks** (are the instructions truthful) | free, deterministic            |
+| **5. Prose**                      | genuinely semantic/judgment ("comment sparingly", "prefer self-documenting APIs")                                                                                                             | neither                                    | n/a                            |
 
 > **The `~35%` "commands/process/boundaries" bucket is NOT monolithic** — it splits across homes
-> 3, 4, 5: boundary / "do-X-before-Y" / "never-Z" rules are **hooks** (home 3, they *enforce* via a
+> 3, 4, 5: boundary / "do-X-before-Y" / "never-Z" rules are **hooks** (home 3, they _enforce_ via a
 > runtime block — the compiled-hook instrument, the 2/7→7/7 finding); commands + path refs are
 > **verification** (home 4, check they resolve); pure process is prose (home 5). An earlier 4-home
-> framing lumped hooks into "verified, not enforced" — wrong: a hook *enforces*.
+> framing lumped hooks into "verified, not enforced" — wrong: a hook _enforces_.
 
 ## Measured distribution on real OSS (7 real AGENTS.md, 2026-07-15)
 
@@ -69,8 +69,8 @@ gives the honest, less-rosy picture, and it's the one to cite:
   Wilson CI ≈ ±13pp): **~⅓ compiled into a checker that survived an adversarial probe · ~⅓
   genuinely semantic · ~⅓ not-even-a-rule** (commands / headings / pointers).
 
-**The honest headline (do NOT overclaim):** *"a third of a rulebook is mechanizable, a third is
-prose, a third isn't a rule."* Fable's audit killed the "~61% / ~45% enforceable" point estimates —
+**The honest headline (do NOT overclaim):** _"a third of a rulebook is mechanizable, a third is
+prose, a third isn't a rule."_ Fable's audit killed the "~61% / ~45% enforceable" point estimates —
 they stack a **strong-model ceiling** (capable synth-agent, self-judged edges; the production skill
 does less), unexecuted router buckets, and a self-judged "not-a-rule" denominator. So: **31% is a
 CEILING, not a product number; the 2/13 (~15%) leak rate is a FLOOR.** Don't publish 61%.
@@ -102,28 +102,28 @@ snippets:
 - **off-the-shelf: 53%** (existing ruff/eslint/clippy rule, configured + run)
 - **config-selector: 6%** (eslint `no-restricted-*`)
 - **custom-AST-works: 26%** (a real AST checker, 9–22 LOC, held on the adversarial edge)
-- **genuinely-semantic: 15%** (no sound deterministic check — e.g. "`time.monotonic` *for
-  durations*", "action-verb function names")
+- **genuinely-semantic: 15%** (no sound deterministic check — e.g. "`time.monotonic` _for
+  durations_", "action-verb function names")
 
 → **~85% of code-quality rules mechanizable with a deterministic checker** (defensible range
 75–85%). Four load-bearing caveats, or the number lies:
 
-1. **This is 85% of CODE-QUALITY rules, NOT of a whole AGENTS.md.** Code-quality is a *minority*
+1. **This is 85% of CODE-QUALITY rules, NOT of a whole AGENTS.md.** Code-quality is a _minority_
    of a real file — the rest is commands/process/boundaries (homes #3 hook / #4 verify) + prose
    (home #5). Do not
    read "85%" as "85% of a file." (Reconciles with the ~65%-of-all-rules figure above.)
-2. **Synthesizer-sensitive.** The benchmark's model-in-the-loop picked the least-power, *sound*
+2. **Synthesizer-sensitive.** The benchmark's model-in-the-loop picked the least-power, _sound_
    enforcement. A weaker synthesizer defaults to regex and ships **leaky** checkers → the gate must
    abstain them (fewer "works", not more false-enforced). This is exactly what the trust-gate is for.
 3. **Env-sensitive (Rust).** All 6 Rust rules ran because `clippy-driver`/`syn` were cached offline;
    a colder env drops the mechanizable % by ~15pt (Rust rules become "custom-hard").
-4. **Qualifier-stripping.** Some off-the-shelf verdicts enforce a sound *superset* ("ban all
+4. **Qualifier-stripping.** Some off-the-shelf verdicts enforce a sound _superset_ ("ban all
    `eval`") of a semantic rule ("no `eval` on user input") — close, not exact.
 
 **Soundness finding (validates the gate):** of 11 custom checkers, the 2 that used a naive
 regex/line pass **leaked** on the edge (flagged `Tester` for a "no `Test` class" rule; flagged a
 doc-comment token); the **AST-level version held every time**. The 2 rules whose proxy stayed
-leaky are precisely the genuinely-semantic ones — a good adversarial gate makes those *abstain*,
+leaky are precisely the genuinely-semantic ones — a good adversarial gate makes those _abstain_,
 not ship. Direct evidence for AST-not-regex + the trust-gate.
 
 ## How synthesis works (home #2) — opt-in copy-prompt, $0 to vigiles
@@ -131,7 +131,7 @@ not ship. Direct evidence for AST-not-regex + the trust-gate.
 The mechanism that keeps getting mis-stated as "vigiles runs/charges for a model." It does NOT.
 (`audit-rule-compile-tier.md` is the design of record.)
 
-1. **Default `audit` runs no model** — a deterministic *divergence teaser* ("these rules map to
+1. **Default `audit` runs no model** — a deterministic _divergence teaser_ ("these rules map to
    linter rules your config has OFF"). Free, safe on any repo.
 2. Each un-compiled rule row carries a **copy-command / `CopyPrompt` button**
    (`report/src/components/RuleInventory.tsx`, reusing the `Adopt.tsx` pattern).
@@ -152,13 +152,13 @@ ships. Never claim a rule is enforceable off a checker that hasn't passed the ga
 
 ## Linter support (routing + config-state), current
 
-| Linter | Routing (prose→rule) | Config-state (enabled?) | Notes |
-| --- | --- | --- | --- |
-| ESLint (+TS) | ✅ | ✅ | mature; `no-restricted-syntax` covers many custom rules |
-| Ruff (Python) | ✅ net-new intents (2026-07-15) | ⏳ route-only (ConfigProbe pending) | the modern Python default |
-| Pylint (Python) | ✅ route-only | ⏳ (on-by-default polarity) | shared Python intents |
-| Clippy (Rust) | ✅ route-only (2026-07-15, 7 restriction lints) | ⏳ (Cargo.toml `[lints.clippy]` ConfigProbe pending) | closed the Rust 0% blind spot (`.unwrap`/`panic!`/`unreachable!`/`todo!`/`dbg!`/wildcard-arm); Rust-unambiguous keywords |
-| Stylelint / RuboCop / Cedar | verification only (`enforce()`) | — | cross-reference, not prose-routing |
+| Linter                      | Routing (prose→rule)                            | Config-state (enabled?)                              | Notes                                                                                                                    |
+| --------------------------- | ----------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| ESLint (+TS)                | ✅                                              | ✅                                                   | mature; `no-restricted-syntax` covers many custom rules                                                                  |
+| Ruff (Python)               | ✅ net-new intents (2026-07-15)                 | ⏳ route-only (ConfigProbe pending)                  | the modern Python default                                                                                                |
+| Pylint (Python)             | ✅ route-only                                   | ⏳ (on-by-default polarity)                          | shared Python intents                                                                                                    |
+| Clippy (Rust)               | ✅ route-only (2026-07-15, 7 restriction lints) | ⏳ (Cargo.toml `[lints.clippy]` ConfigProbe pending) | closed the Rust 0% blind spot (`.unwrap`/`panic!`/`unreachable!`/`todo!`/`dbg!`/wildcard-arm); Rust-unambiguous keywords |
+| Stylelint / RuboCop / Cedar | verification only (`enforce()`)                 | —                                                    | cross-reference, not prose-routing                                                                                       |
 
 ## The naming (a repeat confusion)
 
@@ -167,6 +167,7 @@ ships. Never claim a rule is enforceable off a checker that hasn't passed the ga
   (prose → enforceable checker: route → synthesize → gate). NOT the spec compiler.
 
 ## See also
+
 - `enforcement-model.md` — the SEVERITY/decidability gradient of vigiles's own checks (companion).
 - `audit-rule-compile-tier.md` — how `audit` surfaces homes #1/#2 (the copy-prompt tier).
 - `rule-enforcer-design.md` — the engine (classify → reuse/synthesize → trust-gate).

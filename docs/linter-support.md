@@ -2,7 +2,7 @@
 
 > **Scope:** this page is about **`enforce()` cross-reference verification** — checking that a rule
 > you NAME actually exists + is enabled (7 catalogs: ESLint, Ruff, Pylint, Clippy, Stylelint,
-> RuboCop, Cedar). It is **NOT** the prose→rule *routing* map (which auto-maps freeform prose to a
+> RuboCop, Cedar). It is **NOT** the prose→rule _routing_ map (which auto-maps freeform prose to a
 > rule and supports ESLint + Pylint + Ruff route-only). Don't conflate the two — see
 > `research/rule-enforceability.md` for routing/synthesis coverage.
 

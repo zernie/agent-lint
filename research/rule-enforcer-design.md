@@ -120,9 +120,10 @@ Original decision (superseded for ruff): Ruff, RuboCop, Clippy, Stylelint are **
 of scope** for the rule map. A prose rule that would map to (say) a Ruff rule simply won't resolve
 to reuse — it falls to "custom" or "judgment". This is a scope line, not a bug, and the report +
 docs must **say so plainly** rather than imply broad coverage. Effort goes to detection reliability
-+ the report contract (below), not linter breadth. Ruff (which is foreign-safe — static rule set,
-TOML config is data) remains the cheapest _future_ add if we lift the freeze, but we are not
-building it now.
+
+- the report contract (below), not linter breadth. Ruff (which is foreign-safe — static rule set,
+  TOML config is data) remains the cheapest _future_ add if we lift the freeze, but we are not
+  building it now.
 
 ## 2. Separating rules from non-rules — the undecidable core
 

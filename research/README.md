@@ -20,11 +20,11 @@ one click away.
 > **❓ Confused about enforcement / routing / naming? question → the ONE doc** (these
 > recur and get mis-stated — go straight to the answer, don't re-derive):
 >
-> - *How much of a real CLAUDE.md is enforceable? is "no off-the-shelf rule" the same as "not enforceable"?* → [`rule-enforceability.md`](rule-enforceability.md) (~65% mechanizable; **no** — custom synthesis covers project-specific rules).
-> - *How does synthesis work — does vigiles run/pay for a model?* → [`rule-enforceability.md`](rule-enforceability.md) + [`audit-rule-compile-tier.md`](audit-rule-compile-tier.md) (opt-in copy-prompt → the user's own sub → deterministic gate; **$0 to vigiles**).
-> - *Which linters does prose routing support (ESLint/Ruff/Pylint/Clippy)?* → [`rule-enforceability.md`](rule-enforceability.md) (ESLint + Pylint + Ruff route-only; Clippy = gap). `docs/linter-support.md` is the different `enforce()` verification.
-> - *`@vigiles/rule-enforcer` vs `vigiles compile` — same thing?* → [`rule-enforceability.md`](rule-enforceability.md) naming section (**no**: rule-enforcer = prose→rule engine; `compile` = spec→md).
-> - *Why warn vs error / can't it all be a type?* → [`enforcement-model.md`](enforcement-model.md) (decidability gradient).
+> - _How much of a real CLAUDE.md is enforceable? is "no off-the-shelf rule" the same as "not enforceable"?_ → [`rule-enforceability.md`](rule-enforceability.md) (~65% mechanizable; **no** — custom synthesis covers project-specific rules).
+> - _How does synthesis work — does vigiles run/pay for a model?_ → [`rule-enforceability.md`](rule-enforceability.md) + [`audit-rule-compile-tier.md`](audit-rule-compile-tier.md) (opt-in copy-prompt → the user's own sub → deterministic gate; **$0 to vigiles**).
+> - _Which linters does prose routing support (ESLint/Ruff/Pylint/Clippy)?_ → [`rule-enforceability.md`](rule-enforceability.md) (ESLint + Pylint + Ruff route-only; Clippy = gap). `docs/linter-support.md` is the different `enforce()` verification.
+> - _`@vigiles/rule-enforcer` vs `vigiles compile` — same thing?_ → [`rule-enforceability.md`](rule-enforceability.md) naming section (**no**: rule-enforcer = prose→rule engine; `compile` = spec→md).
+> - _Why warn vs error / can't it all be a type?_ → [`enforcement-model.md`](enforcement-model.md) (decidability gradient).
 
 > **💡 Looking for ideas (not the plan)?** The four idea backlogs, newest first:
 >
