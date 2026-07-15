@@ -30,6 +30,28 @@ topic: roadmap
 > _Business direction / positioning / monetization live in the private `startup/` vault
 > (this is a public doc — see the `doc-tiers` rule)._
 
+### Enforcement-tier backlog — ranked (from the 2026-07-15 breadth benchmark)
+
+> Grounded by the 21-real-rulebook run (`rule-enforceability.md` breadth section): off-the-shelf
+> routing is only **~4%** at breadth; the rest is a **⅓ mechanizable / ⅓ prose / ⅓ not-even-a-rule**
+> split. That reorders where rule-engine effort pays off. (Launch readiness below is still the ship
+> gate; this is the enforcement-tier work behind it.)
+
+1. **Segmenter PRECISION** — ⅓ of segmented "rules" are commands / headings / pointers, NOT rules.
+   The #1-leverage fix: cleans every downstream number AND the audit's honesty. (Recall is the
+   sibling problem — but precision first; it's the bigger noise source at breadth.)
+2. **AST-not-regex + gate-ABSTAIN** — the measured soundness law: every checker that leaked (2/13)
+   was regex or a context-blind selector. Make the `compile-rules` synth prefer the target-language
+   AST; make the gate ABSTAIN a checker that can't be proven sound. The cry-wolf guard.
+3. **Clippy support (Rust routing)** — Rust rulebooks (codex, ghostty) route ~0% purely from the
+   missing clippy map — a clean ruff-like win.
+4. **Ruff config-state (ConfigProbe)** — ruff is route-only; wire `select`/`ignore` detection → the
+   "disabled → one-flip" / "✓ enforced" states for Python (currently eslint-only).
+5. **5-homes routing surfaced in `audit`** — route each rule to its home explicitly (off-the-shelf /
+   synth / hook / ref-verify / prose), not just reuse-vs-unrouted (see `rule-enforceability.md`).
+6. **Evidence in the finding** — "enforceable AND violated in N files right now" (smaller real
+   surface than hoped, but the sharpest wow where it lands).
+
 ## 🚀 Launch readiness (pre-HN) — the current top priority (2026-06-24)
 
 > **▶ The full triage lives in [`pre-release-focus.md`](pre-release-focus.md)** — the
