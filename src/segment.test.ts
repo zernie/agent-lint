@@ -221,7 +221,7 @@ describe("segmentInstructions — atomicity, fences, tables", () => {
 
 // ---------------------------------------------------------------------------
 
-// Corpus-grounded precision fixes (design: research/rule-compiler-multilang-design.md §2a).
+// Corpus-grounded precision fixes (design: research/rule-enforcer-multilang-design.md §2a).
 const FIXTURE_CORPUS = `# Agent rules
 
 ## Key Files

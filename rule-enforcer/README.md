@@ -1,6 +1,6 @@
-# @vigiles/rule-compiler
+# @vigiles/rule-enforcer
 
-The opt-in **rule-compiler** tier of vigiles. It turns a natural-language agent
+The opt-in **rule-enforcer** tier of vigiles. It turns a natural-language agent
 rule (from a `CLAUDE.md` / `AGENTS.md`) into a self-tested lint rule, and — this
 is the point — **refuses to ship a checker it can't prove sound.**
 

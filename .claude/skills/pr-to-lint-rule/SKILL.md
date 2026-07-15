@@ -135,9 +135,9 @@ Run the synthesized checker against the Step-4 test (ESLint `RuleTester`, pytest
   prose, or (b) if you can fix the checker, do so and re-run the gate — but never
   ship an un-passed checker.
 
-The reference gate lives in `rule-compiler/gate.js` (two-stage: self-test + a blind
-adversarial gold set), the canonical adversarial cases in `rule-compiler/gold/gold.json`,
-and a runnable end-to-end demo (`cd compiler && npm run demo` — watch it keep the
+The reference gate lives in `rule-enforcer/gate.js` (two-stage: self-test + a blind
+adversarial gold set), the canonical adversarial cases in `rule-enforcer/gold/gold.json`,
+and a runnable end-to-end demo (`cd rule-enforcer && npm run demo` — watch it keep the
 sound rules and abstain the two leaky ones). Read them for the case shapes and the
 abstain discipline, then mirror it here; don't reinvent the gate.
 

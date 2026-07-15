@@ -7,7 +7,7 @@
  * NOISE that would flood the preview. `isFixturePath` is the precision-first
  * discriminator (over-skip a legit `sample-service` before flooding with fixture
  * rules). Pure + unit-tested; the fs discovery/glue lives in cli.ts
- * (`gatherInstructionFiles`). See research/rule-compiler-multilang-design.md §0.
+ * (`gatherInstructionFiles`). See research/rule-enforcer-multilang-design.md §0.
  */
 
 import { sha256short } from "./core/hash.js";

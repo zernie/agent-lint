@@ -70,7 +70,7 @@ const MECHANISM: Record<RuleCategory, RuleMechanism> = {
  * `AuditReport` JSON), which is why it isn't renamed to its lane label `custom`;
  * this table is where the human-facing name is resolved. The category meanings
  * are documented in the file header; the mapping is tabled in
- * `research/rule-compiler-design.md` §4.
+ * `research/rule-enforcer-design.md` §4.
  */
 export const LANE_META: Record<
   RuleCategory,
@@ -118,7 +118,7 @@ export interface RuleRouting {
   /** The POSSIBLE tier — rule-ish bullets (medium confidence) that did NOT clear
    * the bar, still classified so a human can review + promote them. Detection is
    * precision-first, so this is where a declarative rule ("Every X must Y") that
-   * the confident tier misses shows up. See `research/rule-compiler-design.md` §2. */
+   * the confident tier misses shows up. See `research/rule-enforcer-design.md` §2. */
   readonly possible: readonly RoutedRule[];
   /** Bullets the segmenter decided were NOT rules, each with a reason — so the
    * report is honest about what it set aside (§3). */
@@ -157,7 +157,7 @@ export interface RouteOptions {
  * (git-push + rm-rf only) reported ~2% hooks where the 252-rule hand-sort found
  * **37%** (the largest bucket); it was missing push-to-branch, before-push,
  * after-edit, tool-substitution, amend/rebase-pushed, and dependency guards.
- * See `research/rule-compiler-multilang-design.md` §5b (the hook lane).
+ * See `research/rule-enforcer-multilang-design.md` §5b (the hook lane).
  */
 const HOOK_CUES: readonly RegExp[] = [
   // — branch / push guards (vcs) —
@@ -658,7 +658,7 @@ const toNoSignalSkip = (s: Candidate): SkippedBullet => ({
  * THE LOAD-BEARING ASYMMETRY: a gate-rejected `no-signal` bullet is folded back
  * as a candidate but promoted to confident ONLY by a RESCUE — NEVER by the
  * blanket medium opt-in, which must not resurrect what the gate explicitly
- * rejected. See `research/rule-compiler-design.md` §2.
+ * rejected. See `research/rule-enforcer-design.md` §2.
  */
 function partitionCandidates(
   segments: readonly SegmentedRule[],

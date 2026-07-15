@@ -8,7 +8,7 @@
  * / boundaries), of which ~140 are enabled — vs the old static map's ~23. That
  * makes an architecture norm enforceable too (`boundaries/dependencies` is in the
  * catalog), which a static map never captured. See
- * `research/rule-compiler-multilang-design.md` §0 (the spike this productizes).
+ * `research/rule-enforcer-multilang-design.md` §0 (the spike this productizes).
  *
  * SAFETY — this EXECUTES the linter. Loading ESLint resolves the repo's real
  * config (which can run plugin/config code), so `enumerateEslintCatalog` is an

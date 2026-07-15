@@ -19,7 +19,7 @@
  * with slightly different word lists ON PURPOSE — different jobs, calibrated
  * separately against the OSS corpus. They are kept ADJACENT here so a widening
  * of one prompts a review of the other, rather than the two drifting apart in
- * separate files. See `research/rule-compiler-design.md` §2.
+ * separate files. See `research/rule-enforcer-design.md` §2.
  */
 
 /**

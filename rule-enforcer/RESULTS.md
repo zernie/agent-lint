@@ -1,12 +1,12 @@
 ---
-title: "Rule-compiler prototype — что доказано (ночной прогон 2026-07-09)"
+title: "Rule-enforcer prototype — что доказано (ночной прогон 2026-07-09)"
 created: 2026-07-09
 updated: 2026-07-09
-tags: [прототип, eslint, rule-compiler, результаты]
+tags: [прототип, eslint, rule-enforcer, результаты]
 lang: ru
 ---
 
-# Прототип rule-compiler — результаты
+# Прототип rule-enforcer — результаты
 
 Собран автономно в ночь 2026-07-09. Цель прогона: снять главный риск проекта — **реально ли из
 правила-словами получить работающее ESLint-правило, и можно ли машинно отсеять те, которым нельзя
@@ -103,7 +103,7 @@ author-in-the-loop был лишь стартовой заглушкой, а н�
 ## Как запустить
 
 ```
-cd idei/rule-compiler/prototype
+cd idei/rule-enforcer/prototype
 npm install          # ставит eslint@9
 node gate.js         # гейт доверия -> results.json
 node run-demo.js     # энфорсмент kept-правил по demo-project/
