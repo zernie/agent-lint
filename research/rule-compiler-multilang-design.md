@@ -9,7 +9,8 @@ topic: compiler
 > first.** This doc is the detailed BUILD-LOG (segmentation model + the multi-language
 > reasoning + the OSS corpus). Note: the design-of-record FROZE the rule map at 2
 > linters (ESLint + Pylint) for now, so the Ruff-routing plans below are future/parked,
-> not active — and detection moved to a two-tier (confident + possible-review) target.
+> not active — and detection is now a SHIPPED two-tier (confident + possible-review),
+> see the design-of-record §2/§3.
 
 > Build-log (2026-07-14). The `audit` rule-compile tier (`src/rule-inventory.ts` and
 > `src/rule-routing.ts`, backed by `@vigiles/compiler`) reads prose rules in a repo's

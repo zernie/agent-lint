@@ -8,6 +8,8 @@
  * atom costs credibility. When in doubt we UNDER-split and REJECT.
  */
 
+import { FORM_HEAD, RULE_PREDICATE } from "./rule-signals.js";
+
 /** A single atomic candidate rule extracted from an instructions file. */
 export interface SegmentedRule {
   /** Normalized rule text (bullet marker stripped, continuation joined, whitespace collapsed). */
@@ -50,18 +52,8 @@ export interface SegmentResult {
 }
 
 // --- Heuristic vocabulary --------------------------------------------------
-
-/** Imperative/prohibitive head the candidate must START with (form cue). The
- * deontic verbs (require/disallow/forbid/ban/enforce) are common rule leads —
- * "Require `curly` braces", "Disallow `var`" — so they belong here. NB "no" is
- * `no\s` (the prohibition word + whitespace) NOT the old `no\s+\S`, which — via
- * the shared trailing `\b` — only matched when the word after "No " began at a
- * boundary, so "No bare except" / "No default exports" silently failed the form
- * cue. Bare `no` + the shared `\b` (checked right after "no", a boundary before
- * a space OR a backtick) matches "No bare" AND "No `any`", while "Note"/"Nowhere"
- * (no boundary after "no") are still rejected. */
-const FORM_HEAD =
-  /^(?:use|avoid|prefer|never|always|don'?t|do not|no|must|should|keep|run|write|add|remove|only|require|requires?|disallow|forbid|ban|enforce)\b/i;
+// The deontic/imperative lexicon (FORM_HEAD, RULE_PREDICATE) lives in
+// ./rule-signals.ts so the routing stage's NORM_SIGNAL can't drift from it.
 
 /**
  * Rule-ish heading gate for prose-under-heading candidacy. Word-bounded so the
@@ -130,11 +122,10 @@ function looksLikeIndexEntry(t: string): boolean {
  */
 const DESCRIPTION_LED =
   /^`[^`]+`\s+(?:is|are|was|were|lives?|live|contains?|holds?|handles?|executes?|provides?|represents?|maps?|points?|implements?|exports?|defines?|wraps?|stores?|returns?|the|a|an|class|function|module|component|file|package|hook|utility|helper|type|interface|enum|constant|method|directory|folder|dir)\b/i;
-// A deontic predicate makes a code-span-led sentence a RULE, not a description
-// ("`const` is preferred over `let`", "`AbstractBase` class must be extended") —
-// so the description reject must NOT fire. Guards the copula/kind-noun ambiguity.
-const RULE_PREDICATE =
-  /\b(?:must|should|shall|never|always|require|avoid|prefer|banned|forbidden|prohibited|allowed|disallowed|deprecated|discouraged|mandatory|do not|don'?t|only|instead)\b/i;
+// RULE_PREDICATE (a deontic modal anywhere) makes a code-span-led sentence a
+// RULE, not a description ("`const` is preferred over `let`") — so the
+// description reject must NOT fire. It lives in ./rule-signals.ts alongside
+// NORM_SIGNAL (routing's twin) to keep the two from drifting.
 function looksLikeDescription(t: string): boolean {
   const s = t.trim();
   return DESCRIPTION_LED.test(s) && !RULE_PREDICATE.test(s);
@@ -446,6 +437,39 @@ function trimSpan(src: string, span: Span): Span {
   return { start, end };
 }
 
+/** Candidate cut offsets inside a span: after every ';' and after a sentence
+ * terminator that is followed by whitespace + a capital (a real boundary). */
+function findCutPoints(src: string, whole: Span): number[] {
+  const cuts: number[] = [];
+  for (let i = whole.start; i < whole.end; i++) {
+    const c = src[i];
+    if (c === ";") {
+      cuts.push(i + 1);
+    } else if (c === "." || c === "!" || c === "?") {
+      if (/^\s+[A-Z]/.test(src.slice(i + 1, whole.end))) cuts.push(i + 1);
+    }
+  }
+  return cuts;
+}
+
+/** Turn cut offsets into trimmed pieces (leading `;`/space stripped). Returns
+ * null if any piece is empty — the caller then keeps the span whole. */
+function buildPieces(src: string, bounds: readonly number[]): Span[] | null {
+  const pieces: Span[] = [];
+  for (let i = 0; i < bounds.length - 1; i++) {
+    const piece = trimSpan(src, { start: bounds[i], end: bounds[i + 1] });
+    while (
+      piece.start < piece.end &&
+      (src[piece.start] === ";" || /\s/.test(src[piece.start]))
+    ) {
+      piece.start++;
+    }
+    if (piece.start >= piece.end) return null;
+    pieces.push(piece);
+  }
+  return pieces;
+}
+
 /**
  * Try to split a single-line bullet's content span on ';' or sentence
  * boundaries. Returns the resulting spans ONLY IF there is >1 and every
@@ -458,64 +482,47 @@ function atomize(
   underRuleHeading: boolean,
 ): Span[] {
   const whole = trimSpan(src, contentSpan);
-  const wholeText = src.slice(whole.start, whole.end);
+  if (HAS_EXCEPT.test(src.slice(whole.start, whole.end))) return [whole];
 
-  if (HAS_EXCEPT.test(wholeText)) return [whole];
-
-  // Candidate cut points: ';' and sentence terminators followed by a capital.
-  const cuts: number[] = [];
-  for (let i = whole.start; i < whole.end; i++) {
-    const c = src[i];
-    if (c === ";") {
-      cuts.push(i + 1);
-    } else if (c === "." || c === "!" || c === "?") {
-      // sentence boundary: terminator + whitespace + capital letter
-      const rest = src.slice(i + 1, whole.end);
-      const m = /^\s+[A-Z]/.exec(rest);
-      if (m) cuts.push(i + 1);
-    }
-  }
+  const cuts = findCutPoints(src, whole);
   if (cuts.length === 0) return [whole];
 
-  const bounds = [whole.start, ...cuts, whole.end];
-  const pieces: Span[] = [];
-  for (let i = 0; i < bounds.length - 1; i++) {
-    const piece = trimSpan(src, { start: bounds[i], end: bounds[i + 1] });
-    // strip a leading semicolon left by the cut
-    while (
-      piece.start < piece.end &&
-      (src[piece.start] === ";" || /\s/.test(src[piece.start]))
-    ) {
-      piece.start++;
-    }
-    if (piece.start >= piece.end) return [whole];
-    pieces.push(piece);
-  }
+  const pieces = buildPieces(src, [whole.start, ...cuts, whole.end]);
+  if (pieces === null) return [whole];
 
   // Both/all halves must independently pass the gate, else keep whole.
-  for (const p of pieces) {
-    const text = normalize(src.slice(p.start, p.end));
-    if (confidenceOf(gate(text, isBullet, underRuleHeading)) === null)
-      return [whole];
-  }
-  return pieces.length > 1 ? pieces : [whole];
+  const allPass = pieces.every(
+    (p) =>
+      confidenceOf(
+        gate(normalize(src.slice(p.start, p.end)), isBullet, underRuleHeading),
+      ) !== null,
+  );
+  return allPass && pieces.length > 1 ? pieces : [whole];
 }
 
 // --- Emission --------------------------------------------------------------
 
+/** Immutable per-scan context — the source, its split lines + line index, and
+ * provenance file, threaded through the block helpers so they take a line index
+ * and a heading state, not the source + offsets + lines + file every time. */
+interface ScanCtx {
+  readonly src: string;
+  readonly lines: readonly string[];
+  readonly lineOffsets: readonly number[];
+  readonly file: string | undefined;
+}
+
 function emitFromSpan(
-  src: string,
-  lineOffsets: readonly number[],
-  file: string | undefined,
+  ctx: ScanCtx,
   span: Span,
   confidence: Confidence,
 ): SegmentedRule {
-  const exactQuote = src.slice(span.start, span.end);
+  const exactQuote = ctx.src.slice(span.start, span.end);
   return {
     text: normalize(exactQuote),
-    file,
-    lineStart: offsetToLine(lineOffsets, span.start),
-    lineEnd: offsetToLine(lineOffsets, span.end - 1),
+    file: ctx.file,
+    lineStart: offsetToLine(ctx.lineOffsets, span.start),
+    lineEnd: offsetToLine(ctx.lineOffsets, span.end - 1),
     exactQuote,
     confidence,
   };
@@ -530,12 +537,174 @@ const HEADING = /^(#{1,6})\s+(.*)$/;
 const FENCE = /^\s*(```|~~~)/;
 const TABLE_LINE = /^\s*\|/;
 
+/** Heading context the gate keys on: rule-ish (accept) vs anti-context (reject). */
+interface HeadingState {
+  readonly ruleish: boolean;
+  readonly antiContext: boolean;
+}
+
+/** What a block handler produced: emitted rules, recorded skips, and the next
+ * line index to resume the scan from. */
+interface BlockResult {
+  readonly emitted: readonly SegmentedRule[];
+  readonly skipped: readonly SkippedBullet[];
+  readonly next: number;
+}
+
+/** Extend a list item over its continuation lines — deeper-indented, non-blank,
+ * not a new marker / heading / fence. Returns the item's last line index. */
+function gatherListBody(
+  lines: readonly string[],
+  start: number,
+  markerIndent: number,
+): number {
+  let end = start;
+  for (let j = start + 1; j < lines.length; j++) {
+    const cand = lines[j];
+    if (cand.trim() === "" || FENCE.test(cand) || HEADING.test(cand)) break;
+    if (cand.length - cand.trimStart().length <= markerIndent) break;
+    if (LIST_ITEM.test(cand)) break; // nested/sibling bullet => separate candidate
+    end = j;
+  }
+  return end;
+}
+
+/** Extend a paragraph block until a blank / heading / list / fence / table. */
+function gatherParagraph(lines: readonly string[], start: number): number {
+  let end = start;
+  for (let j = start + 1; j < lines.length; j++) {
+    const cand = lines[j];
+    if (cand.trim() === "" || FENCE.test(cand) || HEADING.test(cand)) break;
+    if (LIST_ITEM.test(cand) || TABLE_LINE.test(cand)) break;
+    end = j;
+  }
+  return end;
+}
+
+/** Emit each atomized PIECE of a split bullet, re-gated independently (the
+ * whole-item case is handled by the caller, which emits the marker-inclusive
+ * span at its own gate result — so this only runs when `atomize` split). */
+function emitSplitSpans(
+  ctx: ScanCtx,
+  spans: readonly Span[],
+  ruleish: boolean,
+): SegmentedRule[] {
+  const out: SegmentedRule[] = [];
+  for (const s of spans) {
+    const text = normalize(ctx.src.slice(s.start, s.end));
+    const c = confidenceOf(gate(text, true, ruleish));
+    if (c !== null) out.push(emitFromSpan(ctx, s, c));
+  }
+  return out;
+}
+
+/** Handle a list item at line `i`: gather its body, gate it, and either emit
+ * (whole or atomized) or record why it was skipped. */
+function handleListItem(
+  ctx: ScanCtx,
+  i: number,
+  li: RegExpExecArray,
+  heading: HeadingState,
+): BlockResult {
+  const markerIndent = li[1].length;
+  const contentCol = li[1].length + li[2].length + li[3].length;
+  const endLine = gatherListBody(ctx.lines, i, markerIndent);
+  const contentStart = ctx.lineOffsets[i] + contentCol;
+  const contentEnd = ctx.lineOffsets[endLine] + ctx.lines[endLine].length;
+  const contentSpan: Span = { start: contentStart, end: contentEnd };
+
+  const wholeText = normalize(ctx.src.slice(contentStart, contentEnd));
+  const g = gate(wholeText, true, heading.ruleish);
+  const conf = confidenceOf(g);
+
+  // Reject bullets under an anti-context heading (Commands/Setup/Key Files/…).
+  if (conf !== null && !heading.antiContext) {
+    // Only single-line items are split (keeps offsets exact). A single span
+    // emits the MARKER-INCLUSIVE full line at the whole-item confidence; a real
+    // split emits each piece re-gated at its own confidence.
+    const spans =
+      endLine > i
+        ? [trimSpan(ctx.src, contentSpan)]
+        : atomize(ctx.src, contentSpan, true, heading.ruleish);
+    const fullSpan: Span = { start: ctx.lineOffsets[i], end: contentEnd };
+    return {
+      emitted:
+        spans.length === 1
+          ? [emitFromSpan(ctx, fullSpan, conf)]
+          : emitSplitSpans(ctx, spans, heading.ruleish),
+      skipped: [],
+      next: endLine + 1,
+    };
+  }
+
+  // NOT a rule — record it + why so the report is honest (§3). An anti-context
+  // rejection is a "section" skip; otherwise it's the gate's own reason.
+  return {
+    emitted: [],
+    skipped: [
+      {
+        text: wholeText,
+        file: ctx.file,
+        lineStart: offsetToLine(ctx.lineOffsets, contentStart),
+        lineEnd: offsetToLine(ctx.lineOffsets, contentEnd - 1),
+        reason: heading.antiContext || "confidence" in g ? "section" : g.reject,
+      },
+    ],
+    next: endLine + 1,
+  };
+}
+
+/** Handle a paragraph block at line `i`: under a rule-ish heading, split into
+ * sentences and emit each that gates; otherwise emit nothing. Paragraph prose is
+ * never RECORDED as a skip (too noisy — see `SkippedBullet`), so `skipped` is
+ * always empty; it returns a `BlockResult` only so the dispatcher is uniform. */
+function handleParagraph(
+  ctx: ScanCtx,
+  i: number,
+  heading: HeadingState,
+): BlockResult {
+  const endLine = gatherParagraph(ctx.lines, i);
+  const emitted: SegmentedRule[] = [];
+  if (heading.ruleish) {
+    const paraStart = ctx.lineOffsets[i];
+    const paraText = ctx.src.slice(
+      paraStart,
+      ctx.lineOffsets[endLine] + ctx.lines[endLine].length,
+    );
+    const re = /[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(paraText)) !== null) {
+      const s = trimSpan(ctx.src, {
+        start: paraStart + m.index,
+        end: paraStart + m.index + m[0].length,
+      });
+      if (s.start >= s.end) continue;
+      const c = confidenceOf(
+        gate(normalize(ctx.src.slice(s.start, s.end)), false, true),
+      );
+      if (c !== null) emitted.push(emitFromSpan(ctx, s, c));
+    }
+  }
+  return { emitted, skipped: [], next: endLine + 1 };
+}
+
+/** Read a heading line into the rule-ish / anti-context state the gate keys on.
+ * Anti-context wins only when NOT also rule-ish, so an accept word wins a tie
+ * (`## Testing conventions` keeps its bullets; `## Testing` drops them). */
+function headingStateFrom(headingText: string): HeadingState {
+  const ruleish = RULE_HEADING.test(headingText);
+  return { ruleish, antiContext: ANTI_HEADING.test(headingText) && !ruleish };
+}
+
 /**
  * Split a CLAUDE.md / AGENTS.md into atomic candidate rules with provenance.
  *
  * Deterministic Tier-A heuristic. Code fences and tables are excluded from
  * candidacy. Candidate units are (a) list items with attached continuation
- * lines and (b) sentences of paragraphs under a rule-ish heading.
+ * lines and (b) sentences of paragraphs under a rule-ish heading. This function
+ * is a thin DISPATCHER — each block type is handled by its own pure helper
+ * (`handleListItem` / `handleParagraph`); the state it threads is the fence
+ * toggle and the current `HeadingState`.
  */
 export function segmentInstructions(
   markdown: string,
@@ -543,19 +712,18 @@ export function segmentInstructions(
   skipLines?: ReadonlySet<number>,
 ): SegmentResult {
   const lines = markdown.split("\n");
-  const lineOffsets = computeLineOffsets(lines);
+  const ctx: ScanCtx = {
+    src: markdown,
+    lines,
+    lineOffsets: computeLineOffsets(lines),
+    file,
+  };
   const out: SegmentedRule[] = [];
   const skipped: SkippedBullet[] = [];
 
   let inFence = false;
-  let currentHeadingIsRuleish = false;
-  let currentHeadingIsAntiContext = false;
+  let heading: HeadingState = { ruleish: false, antiContext: false };
   let i = 0;
-
-  const lineSpan = (a: number, b: number): Span => ({
-    start: lineOffsets[a],
-    end: lineOffsets[b] + lines[b].length,
-  });
 
   while (i < lines.length) {
     const line = lines[i];
@@ -571,151 +739,36 @@ export function segmentInstructions(
       continue;
     }
 
-    // Headings: update rule-ish context, not a candidate.
+    // Headings update rule-ish context; not a candidate themselves.
     const h = HEADING.exec(line);
     if (h) {
-      currentHeadingIsRuleish = RULE_HEADING.test(h[2]);
-      // Anti-context only when it is NOT also rule-ish, so an accept word wins a
-      // tie (`## Testing conventions` keeps its bullets; `## Testing` drops them).
-      currentHeadingIsAntiContext =
-        ANTI_HEADING.test(h[2]) && !currentHeadingIsRuleish;
+      heading = headingStateFrom(h[2]);
       i++;
       continue;
     }
 
-    // Tables: excluded from candidacy.
-    if (TABLE_LINE.test(line)) {
+    // Tables are excluded; so is a line already CONSUMED by the marker pre-pass
+    // (a marked section's body) — the span-consumption that stops a marked rule
+    // being double-counted by the heuristic (1-based).
+    if (TABLE_LINE.test(line) || skipLines?.has(i + 1)) {
       i++;
       continue;
     }
 
-    // A line already CONSUMED by the structured-marker pre-pass (a marked
-    // section's body) is not re-segmented — this is the span-consumption that
-    // stops a marked rule being double-counted by the heuristic. (1-based.)
-    if (skipLines?.has(i + 1)) {
-      i++;
-      continue;
-    }
-
-    // List items (with attached continuation lines).
     const li = LIST_ITEM.exec(line);
     if (li) {
-      const markerIndent = li[1].length;
-      const contentCol = li[1].length + li[2].length + li[3].length;
-      const startLine = i;
-
-      // Gather continuation lines: deeper-indented, non-blank, not a new
-      // list marker, not a heading, not a fence.
-      let endLine = i;
-      let j = i + 1;
-      while (j < lines.length) {
-        const cand = lines[j];
-        if (cand.trim() === "") break;
-        if (FENCE.test(cand)) break;
-        if (HEADING.test(cand)) break;
-        const indent = cand.length - cand.trimStart().length;
-        if (indent <= markerIndent) break;
-        if (LIST_ITEM.test(cand)) break; // nested/sibling bullet => separate candidate
-        endLine = j;
-        j++;
-      }
-
-      const multiLine = endLine > startLine;
-      const contentStart = lineOffsets[startLine] + contentCol;
-      const contentEnd = lineOffsets[endLine] + lines[endLine].length;
-      const contentSpan: Span = { start: contentStart, end: contentEnd };
-
-      const wholeText = normalize(markdown.slice(contentStart, contentEnd));
-      const g = gate(wholeText, true, currentHeadingIsRuleish);
-      const conf = confidenceOf(g);
-
-      // Reject bullets under an anti-context heading (Commands/Setup/Key Files/
-      // Architecture/…) — the corpus's dominant false-positive locus.
-      if (conf !== null && !currentHeadingIsAntiContext) {
-        // Only attempt splitting for single-line items (keeps offsets exact).
-        const spans = multiLine
-          ? [trimSpan(markdown, contentSpan)]
-          : atomize(markdown, contentSpan, true, currentHeadingIsRuleish);
-
-        if (spans.length === 1) {
-          // Emit whole item; exactQuote is the full source span incl. marker.
-          out.push(
-            emitFromSpan(
-              markdown,
-              lineOffsets,
-              file,
-              lineSpan(startLine, endLine),
-              conf,
-            ),
-          );
-        } else {
-          for (const s of spans) {
-            const text = normalize(markdown.slice(s.start, s.end));
-            const c = confidenceOf(gate(text, true, currentHeadingIsRuleish));
-            if (c !== null)
-              out.push(emitFromSpan(markdown, lineOffsets, file, s, c));
-          }
-        }
-      } else {
-        // This bullet was NOT treated as a rule — record it + why, so the audit
-        // report can be honest about what it set aside (transparency, §3). A
-        // rejection under an anti-context heading is a "section" skip; otherwise
-        // it's the gate's own reason.
-        skipped.push({
-          text: wholeText,
-          file,
-          lineStart: offsetToLine(lineOffsets, contentStart),
-          lineEnd: offsetToLine(lineOffsets, contentEnd - 1),
-          reason:
-            currentHeadingIsAntiContext || "confidence" in g
-              ? "section"
-              : g.reject,
-        });
-      }
-
-      i = endLine + 1;
+      const r = handleListItem(ctx, i, li, heading);
+      out.push(...r.emitted);
+      skipped.push(...r.skipped);
+      i = r.next;
       continue;
     }
 
-    // Paragraph block: accumulate until blank / heading / list / fence / table.
     if (line.trim() !== "") {
-      const startLine = i;
-      let endLine = i;
-      let j = i + 1;
-      while (j < lines.length) {
-        const cand = lines[j];
-        if (cand.trim() === "") break;
-        if (FENCE.test(cand)) break;
-        if (HEADING.test(cand)) break;
-        if (LIST_ITEM.test(cand)) break;
-        if (TABLE_LINE.test(cand)) break;
-        endLine = j;
-        j++;
-      }
-
-      // Prose is only a candidate under a rule-ish heading.
-      if (currentHeadingIsRuleish) {
-        const paraStart = lineOffsets[startLine];
-        const paraEnd = lineOffsets[endLine] + lines[endLine].length;
-        const paraText = markdown.slice(paraStart, paraEnd);
-
-        // Sentence spans preserving absolute offsets.
-        const re = /[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g;
-        let m: RegExpExecArray | null;
-        while ((m = re.exec(paraText)) !== null) {
-          const s = trimSpan(markdown, {
-            start: paraStart + m.index,
-            end: paraStart + m.index + m[0].length,
-          });
-          if (s.start >= s.end) continue;
-          const text = normalize(markdown.slice(s.start, s.end));
-          const c = confidenceOf(gate(text, false, true));
-          if (c !== null)
-            out.push(emitFromSpan(markdown, lineOffsets, file, s, c));
-        }
-      }
-
-      i = endLine + 1;
+      const r = handleParagraph(ctx, i, heading);
+      out.push(...r.emitted);
+      skipped.push(...r.skipped);
+      i = r.next;
       continue;
     }
 
