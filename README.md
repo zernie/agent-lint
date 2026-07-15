@@ -186,11 +186,11 @@ That's the whole idea: it checks your harness against **reality, not style**. Ev
 | `test`  | Does the harness behave?       | No — a scripted stand-in | Every commit             |
 | `eval`  | Does a skill actually help?    | Yes — your subscription  | On demand                |
 
-**One engine, two doors.** `audit` is the local report; **`lint` is the CI gate** that fails the build on the same deterministic checks — broken refs, bad tool contracts, dead hooks, skill collisions (Proofs 1–2). `test` and `eval` go further: past _does it exist_ to _does it work_. (`init` / `compile` / `eject` manage the spec layer underneath — you rarely run them by hand.)
+**One engine, two doors.** `audit` is the local report; **`lint` is the CI gate** that fails the build on the same deterministic checks — broken refs, bad tool contracts, dead hooks, skill collisions (Proofs 1–2). `test` and `eval` go further: past _does it exist_ to _does it work_. (`init` / `compile` / `eject` manage the optional typed-spec layer for the structural rules no linter can express — a graduation step you rarely run by hand.)
 
 ### 🔎 Lint — your instructions stop lying
 
-Every path, script, symbol, and rule verified against reality — plus tool contracts, skill collisions, and dead hooks (the catches above). You don't write the checks. `npx vigiles init` writes a `CLAUDE.md.spec.ts` beside your file: the same rules, each reference now wrapped so vigiles can confirm it exists. `compile` turns that back into the `CLAUDE.md` (or `AGENTS.md`) your agent already reads. Your agent edits the spec in plain English; `eject` deletes it and leaves your original untouched.
+Every path, script, symbol, and rule verified against reality — plus tool contracts, skill collisions, and dead hooks (the catches above). You don't write the checks. `lint` reads the `CLAUDE.md` or `AGENTS.md` you already hand-edit — that file stays the source of truth — and verifies every path, script, symbol, tool contract, hook, and skill against reality. Where a prose rule maps to a linter rule, enforcement lands in your repo's own config (ESLint, Ruff, …), not a shadow layer. The structural checks no linter can express get an optional typed spec (`init` sets one up, `eject` reverses it) — a graduation, never a requirement.
 **[How →](docs/verifying-instruction-files.md)**
 
 ### 🧪 Test — does the harness actually do its job?
@@ -223,15 +223,15 @@ npx vigiles audit
 
 ```text
 Set up vigiles in this repo: run `npx vigiles init` and accept the defaults. If I
-already have a CLAUDE.md or AGENTS.md, adopt it into a spec and show me which
-references are stale. Then compile and write + run one harness test for a hook or
-skill of mine. Don't run a real-model eval without asking me first.
+already have a CLAUDE.md or AGENTS.md, audit it and show me which references are
+stale and which of my rules aren't enforced. Then write + run one harness test for
+a hook or skill of mine. Don't run a real-model eval without asking me first.
 ```
 
 Or run it yourself:
 
 ```bash
-npx vigiles init   # adopts your files (non-destructive — eject reverses), adds CI,
+npx vigiles init   # sets up the typed spec for structural rules (non-destructive — eject reverses), adds CI,
                    # installs vigiles's skills + hooks as a Claude Code plugin (in
                    # ~/.claude/, not your repo). On Codex, skills install globally too.
 ```
@@ -250,7 +250,7 @@ The **hooks** keep it honest in-loop — nudging the agent to tag a linter-rule 
 <summary>What <code>init</code> sets up</summary>
 
 - **Both lint and test** by default; scope with `--lint` / `--test`.
-- **Already have a CLAUDE.md / AGENTS.md, skills, or subagents? `init` adopts them all** into specs faithfully and **non-destructively** — untouched until you `compile` (and `eject` undoes it).
+- **Already have a CLAUDE.md / AGENTS.md, skills, or subagents? `audit` and `lint` read them as-is** — nothing is moved or rewritten. For the structural rules that want a typed spec, `init` sets one up **non-destructively** (`eject` undoes it).
 - Adds `vigiles` to `devDependencies`; installs the Claude Code plugin (skills + hooks) via the marketplace — globally, never vendored.
 - Wires CI as a `zernie/vigiles@v1` workflow (needs only read + PR-comment permissions) that posts a sticky PR comment + a `valid` output.
 
@@ -262,7 +262,7 @@ Targets Claude Code and Codex out of the box, or [your own harness](docs/authori
 
 - **Is this a framework I have to build around?** No. It's a tool you run — like ESLint, Lighthouse, or `npm audit`. One command, a report, an optional CI gate. There's a library API for automation, but you never touch it to get value.
 - **Isn't this just a markdown linter?** No — it checks whether your instruction file is _true_ (every path/script/symbol/rule exists and is enabled), then tests and measures your harness. A style linter can't do any of that.
-- **Do I have to write TypeScript?** No — your agent writes the spec (`init` adopts your CLAUDE.md or AGENTS.md into one), or plain markdown lints with zero new files. Compiler-grade guarantees are opt-in, like TS's `strict` ([why?](docs/faq.md#why-are-the-strongest-guarantees-opt-in-not-the-default)).
+- **Do I have to write TypeScript?** No — plain markdown lints with zero new files, and enforcement lands in your repo's own linter config. The typed spec is an opt-in authoring layer for the structural rules no linter can express — like TS's `strict` ([why?](docs/faq.md#why-are-the-strongest-guarantees-opt-in-not-the-default)).
 - **Is it stable enough to adopt?** The CLI you run is small and rarely changes; the library API still moves between releases. The high version number is release automation (a new major per breaking change), not age — see [Stability](STABILITY.md).
 - **Non-JS repo?** `npx vigiles lint` verifies your CLAUDE.md or AGENTS.md with no install (Ruff/Clippy/Pylint/… too).
 
