@@ -103,15 +103,26 @@ prose rules (CLAUDE.md / AGENTS.md)          your project's linters
 - Enabled-state (`✓ on` / `⛔ off`) comes from running the real linter, so it's an
   **own-repo + consent** capability; a foreign repo gets the textual match only.
 
-### DECISION (2026-07-15): the map supports exactly TWO linters — ESLint + Pylint — and that is FROZEN for now.
+### DECISION (2026-07-15): map linters — ESLint + Pylint, and (UPDATED same day) + Ruff.
 
-Ruff, RuboCop, Clippy, Stylelint are **deliberately out of scope** for the rule map.
-A prose rule that would map to (say) a Ruff rule simply won't resolve to reuse — it
-falls to "custom" or "judgment". This is a scope line, not a bug, and the report +
-docs must **say so plainly** rather than imply broad coverage. Effort goes to
-detection reliability + the report contract (below), not linter breadth. Ruff (which
-is foreign-safe — static rule set, TOML config is data) remains the cheapest _future_
-add if we lift the freeze, but we are not building it now.
+> **UPDATE (2026-07-15, later same day): the freeze was lifted for RUFF.** Real Python repos
+> use ruff, not pylint (measured: Python AGENTS.md matched pylint checks their toolchain doesn't
+> run). Ruff was added **route-only** for the NET-NEW intents pylint lacks (PLC0415, E402,
+> ANN001/201, TRY400, T201, I001), keyword-disjoint from pylint, every code verified against
+> ruff 0.15.8. Config-state stays eslint-only (ruff `select`/`ignore` ConfigProbe pending).
+> So the map now supports **ESLint + Pylint + Ruff (route-only)**. See
+> `rule-enforceability.md` (the current linter-support table) and `src/rule-inventory.ts`.
+> **CLIPPY (Rust) is still the open GAP** — Rust AGENTS.md route ~0% purely from that; it is the
+> next ruff-like win. RuboCop/Stylelint remain out of scope for routing (verification-only via
+> `enforce()`). The original frozen-at-2 text below is kept as the historical decision.
+
+Original decision (superseded for ruff): Ruff, RuboCop, Clippy, Stylelint are **deliberately out
+of scope** for the rule map. A prose rule that would map to (say) a Ruff rule simply won't resolve
+to reuse — it falls to "custom" or "judgment". This is a scope line, not a bug, and the report +
+docs must **say so plainly** rather than imply broad coverage. Effort goes to detection reliability
++ the report contract (below), not linter breadth. Ruff (which is foreign-safe — static rule set,
+TOML config is data) remains the cheapest _future_ add if we lift the freeze, but we are not
+building it now.
 
 ## 2. Separating rules from non-rules — the undecidable core
 
