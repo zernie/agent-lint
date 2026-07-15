@@ -299,7 +299,7 @@ case-law (Google v. Oracle, Sega/Connectix, substantial-similarity) is the chat 
   relocating the runners to the composition root. Grounds the pillar-2 relayout.
 - `research/codex-prototype-findings.md` — an internal, non-shipped Codex adapter
   (`src/adapters/codex/`) built to **validate** this architecture: it passes the
-  conformance kit + drives the real rule-compiler/loader against Codex fixtures (format
+  conformance kit + drives the real rule-enforcer/loader against Codex fixtures (format
   - layout axes proven, zero core changes), and the gaps it exposed.
 - `research/harness-landscape.md` — the mid-2026 research backing the Codex
   recipe: confirmed Codex facts (TOML config, AGENTS.md, SKILL.md, hooks **with

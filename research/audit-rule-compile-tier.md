@@ -136,4 +136,4 @@ deployment (the gate powering LLM-authored rules against production code inside 
 
 Two Fable red-team passes + the founder's refinements (difficulty score, hook handling,
 model-on-sub, "audit should be incredibly useful"). Engine: `zernie/agent-rules-compiler`
-(`skills/compile-rules/`, `rule-compiler/gate.js`, `rule-compiler/catalog/rule-map.json`).
+(`skills/compile-rules/`, `rule-enforcer/gate.js`, `rule-enforcer/catalog/rule-map.json`).

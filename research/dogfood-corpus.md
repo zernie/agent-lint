@@ -22,7 +22,7 @@ is "the dogfood corpus" this doc governs:
 | --------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------ |
 | `test/dogfood/`             | **THE dogfood corpus** — vendored real plugins as test fixtures | ✅ yes                                                       |
 | `examples/harness/dogfood/` | **examples** that eval vigiles's OWN skills (trigger/quality)   | no — examples                                                |
-| `rule-compiler/gold/`            | the `@vigiles/rule-compiler` package's OWN internal gold sets        | no — package-internal                                        |
+| `rule-enforcer/gold/`            | the `@vigiles/rule-enforcer` package's OWN internal gold sets        | no — package-internal                                        |
 | `research/audit-captures/`  | captured audit OUTPUT (`.txt`/`.html`/`.json`) — NOT tests      | no — output, renamed from the misleading `research/dogfood/` |
 
 ## The policy (the rules every dogfood artifact follows)
@@ -55,7 +55,7 @@ is "the dogfood corpus" this doc governs:
 | `test/dogfood/instruction-files/*.AGENTS.md`                                           | Vendored langchain / browser-use / mcp-python-sdk AGENTS.md — rule-routing (foreign-safe, no catalog) | ✅ yes                                    | `src/rule-routing-oss.test.ts`                                                                                                                                    |
 | Pylint catalog + enabled-state (real `pylint` binary, authored config)                 | Own-repo `enumeratePylintCatalog` + "documented but OFF" routing dogfood                              | ✅ yes (pylint-gated; CI installs pylint) | `src/rule-catalog-oss.test.ts` — config authored (real MIT+pylint repos are rare; the pylint binary + enumeration is the real system)                             |
 | `examples/harness/*.harness.mjs`                                                       | Canonical harness examples                                                                            | ✅ yes                                    | `node dist/cli.js test` (job: harness)                                                                                                                            |
-| `rule-compiler/` (`@vigiles/rule-compiler`: gate.js, gold/, rules/corpus.json)                   | Rule-synthesis trust-gate soundness dogfood                                                           | ✅ yes                                    | **CI step "Compiler trust gate"** (job: check) → `npm ci --prefix compiler && node rule-compiler/gate.js` (asserts the kept/abstain verdicts, exits non-zero on drift) |
+| `rule-enforcer/` (`@vigiles/rule-enforcer`: gate.js, gold/, rules/corpus.json)                   | Rule-synthesis trust-gate soundness dogfood                                                           | ✅ yes                                    | **CI step "Compiler trust gate"** (job: check) → `npm ci --prefix rule-enforcer && node rule-enforcer/gate.js` (asserts the kept/abstain verdicts, exits non-zero on drift) |
 | `bench/corpus/{coding-tasks,headroom-tasks}.mjs` + `verify*.mjs`                       | Task corpus + its correctness-oracle self-checks                                                      | ✅ yes                                    | **CI step "Dogfood corpus guards"** (job: check) → `node bench/corpus/verify.mjs && node bench/corpus/verify-headroom.mjs`                                        |
 | `bench/ecosystem/**`, `bench/leaderboard/**`, `bench/{refs,tasks,tdd}/`                | Real-model A/B benchmark + fixtures                                                                   | ⚠️ MANUAL                                 | real-model, costs money — run by hand (`node bench/ecosystem/benchmark.mjs`). The FREE self-checks (row above) are the CI floor.                                  |
 | `examples/harness/dogfood/*.eval.mjs`                                                  | Model-invocable skill trigger/quality evals                                                           | ⚠️ MANUAL                                 | need `claude` + model auth — `npm run test:eval`, never in a workflow (write-don't-run policy). Syntax-gated by `src/examples-syntax.test.ts` (job: test).        |
@@ -86,22 +86,22 @@ ADAPTERS)`), so registering an adapter auto-subjects it to every port contract. 
   its skill target RESOLVES" structural floor. Until then a broken eval is caught only
   when someone spends model quota.
 - **Codex corpus parity** (see above) — roadmap.
-- **`no-orphan-docs` scope — WON'T widen (decided).** Sweeping `rule-compiler/**`/`bench/**`
-  is a NET-NEGATIVE: `rule-compiler/` has 130+ `.md` (mostly `node_modules`) and `bench/` has
+- **`no-orphan-docs` scope — WON'T widen (decided).** Sweeping `rule-enforcer/**`/`bench/**`
+  is a NET-NEGATIVE: `rule-enforcer/` has 130+ `.md` (mostly `node_modules`) and `bench/` has
   fixture `SKILL.md`/`CLAUDE.md` that aren't docs, so the glob would flag noise. The
   anti-rot mechanism is instead this index's cross-links (below) — the key READMEs get an
   inbound reference here, so they're not orphaned. Not a gap; a deliberate scoping.
-- **`rule-compiler/` lint/format — accepted (separate package).** `rule-compiler/` is prettier-
+- **`rule-enforcer/` lint/format — accepted (separate package).** `rule-enforcer/` is prettier-
   ignored + outside `eslint src/` because it is a SEPARATE CJS package + a reproducible
   paper artifact with machine-generated code under `generated/`/`selftest/`. The root
   `eslint src/` correctly scopes to the shipped library. If it ever needs linting it gets
-  its OWN `rule-compiler/package.json` script, not inclusion in the root sweep.
+  its OWN `rule-enforcer/package.json` script, not inclusion in the root sweep.
 
 ## Key corpus READMEs (linked so they're not orphaned)
 
 - `test/dogfood/README.md` — the canonical per-slice provenance table + sweep manifest.
-- `rule-compiler/README.md` — the `@vigiles/rule-compiler` pipeline + the two-stage trust gate.
-- `rule-compiler/gold/SOUNDNESS.md` — the failure taxonomy the gold set is built on.
+- `rule-enforcer/README.md` — the `@vigiles/rule-enforcer` pipeline + the two-stage trust gate.
+- `rule-enforcer/gold/SOUNDNESS.md` — the failure taxonomy the gold set is built on.
 - `bench/ecosystem/README.md` + `bench/ecosystem/SOURCES.md` — the real-model A/B benchmark.
 
 ## Related

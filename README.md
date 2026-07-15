@@ -67,7 +67,7 @@
   vigiles-audit.png is a REPRESENTATIVE report ("my-plugin", C 77) — the verdict-
   led header + category strip + ranked fixes + broken references. The "Your rules →
   enforced" preview is DEMOTED low + badged EXPERIMENTAL (the rule map is alpha —
-  research/rule-compiler-design.md §8). Re-render if the UI changes: `npm run build`
+  research/rule-enforcer-design.md §8). Re-render if the UI changes: `npm run build`
   (rebuilds report/dist/index.html from the SAMPLE fixture), then headless Chromium
   (puppeteer-core, executablePath /opt/pw-browsers/chromium) with
   prefers-color-scheme:dark emulated + a fullPage screenshot at deviceScaleFactor 2

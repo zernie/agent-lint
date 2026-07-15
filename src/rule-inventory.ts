@@ -62,7 +62,7 @@ export interface IntentMapping {
 // the DYNAMIC available-rule catalog — enumerate the rules the repo's linter
 // ACTUALLY has (spike: 702 for this repo vs ~23 here) and match prose against
 // THAT, own-repo/consented since it executes the linter. Do NOT keep growing this
-// by hand. See research/rule-compiler-multilang-design.md §0.
+// by hand. See research/rule-enforcer-multilang-design.md §0.
 export const INTENT_MAP: readonly IntentMapping[] = [
   {
     intent: "no console.log / use the logger",
@@ -263,7 +263,7 @@ export const INTENT_MAP: readonly IntentMapping[] = [
   // ON-BY-DEFAULT (deny-list), so the eslint-shaped config-state check would
   // MISLABEL it (a symbol in `disable=` reads as "in-config", an absent one as
   // "enable it"). Accurate pylint enabled-state needs the inverted-polarity
-  // ConfigProbe (research/rule-compiler-multilang-design.md §3), deferred —
+  // ConfigProbe (research/rule-enforcer-multilang-design.md §3), deferred —
   // classify() needs NO enabled-state, so pylint prose still routes honestly.
   // Keywords are code-shaped symbols + Python-UNAMBIGUOUS compounds (singular AND
   // plural, since matchesWholeToken is boundary-exact); bare ambiguous words

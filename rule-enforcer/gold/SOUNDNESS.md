@@ -2,7 +2,7 @@
 title: "Soundness чекеров на gold-наборе — FP/FN (task 2, 2026-07-09)"
 created: 2026-07-09
 updated: 2026-07-09
-tags: [soundness, gold, rule-compiler, precision-recall]
+tags: [soundness, gold, rule-enforcer, precision-recall]
 lang: ru
 ---
 

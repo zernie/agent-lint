@@ -3,9 +3,9 @@ status: active
 topic: compiler
 ---
 
-# Rule-compiler: multi-language design (Ruff + Pylint) + segmentation, grounded in a 20-repo corpus
+# Rule-enforcer: multi-language design (Ruff + Pylint) + segmentation, grounded in a 20-repo corpus
 
-> **The crisp design-of-record is now `research/rule-compiler-design.md` — read that
+> **The crisp design-of-record is now `research/rule-enforcer-design.md` — read that
 > first.** This doc is the detailed BUILD-LOG (segmentation model + the multi-language
 > reasoning + the OSS corpus). Note: the design-of-record FROZE the rule map at 2
 > linters (ESLint + Pylint) for now, so the Ruff-routing plans below are future/parked,
@@ -13,7 +13,7 @@ topic: compiler
 > see the design-of-record §2/§3.
 
 > Build-log (2026-07-14). The `audit` rule-compile tier (`src/rule-inventory.ts` and
-> `src/rule-routing.ts`, backed by `@vigiles/rule-compiler`) reads prose rules in a repo's
+> `src/rule-routing.ts`, backed by `@vigiles/rule-enforcer`) reads prose rules in a repo's
 > convention docs and reports which map to off-the-shelf lint rules and whether they're
 > enforced. It is **ESLint-only in its data** today. This doc designs the expansion to
 > **Python (Ruff + Pylint)** and — the harder half — a robust **segmentation** model for
@@ -56,7 +56,7 @@ pylint plugin's `W9xxx` message is in the listing). Each rule is matchable by it
 numeric code (`missing-function-docstring` or `C0116`). The "inverted-polarity ConfigProbe" the design
 called for (§3/§5b) turned out **unnecessary** — `--list-msgs-enabled` resolves enabled-state directly, so
 there is no polarity to reason about. `mergeCatalogs` unions ESLint + Pylint for a polyglot repo. The ONE
-remaining ESLint-only capability is **custom-rule SYNTHESIS** (the `@vigiles/rule-compiler` engine emits ESLint
+remaining ESLint-only capability is **custom-rule SYNTHESIS** (the `@vigiles/rule-enforcer` engine emits ESLint
 rules only; a Python target — a pylint/astroid checker or, cheaper, an ast-grep YAML rule — is unbuilt).
 
 **The four lanes** (`RuleCategory` in `src/rule-routing.ts`):
@@ -127,7 +127,7 @@ are NOT yet in the 100% coverage `include` list (behavior is gated; line-coverag
    modern Python. Closes the public "ESLint/Ruff/…" discrepancy.
 2. ~~**Pylint enabled-state**~~ — **DONE 2026-07-15** (`enumeratePylintCatalog` + `--list-msgs-enabled`; the
    inverted-polarity ConfigProbe proved unnecessary). A Python repo now gets "documented but OFF".
-3. **Python custom-rule SYNTHESIS** — the ONLY remaining ESLint-vs-Pylint asymmetry: the `@vigiles/rule-compiler`
+3. **Python custom-rule SYNTHESIS** — the ONLY remaining ESLint-vs-Pylint asymmetry: the `@vigiles/rule-enforcer`
    engine (the "custom rule ⚙" lane's hand-off) emits ESLint rules + a JS self-test only. A Python target
    would be a new synthesis backend — a pylint/astroid checker, or (cheaper, and ast-grep already does Python)
    an ast-grep YAML rule + a Python self-test harness, re-pointing the trust gate. Larger than the catalog fix.
@@ -158,7 +158,7 @@ The three-column scope, marked honestly (this section supersedes the INTENT_MAP-
 - ENABLED-rule discovery (`generate-types`) for the `.d.ts` autocomplete.
 - The available-rule enumeration PRIMITIVES exist (`core/linters.ts` `builtinRules` +
   `resolveEslintPluginRules`) — just not wired into the compile tier.
-- Custom-rule SYNTHESIS + adversarial gate (`rule-compiler/`) — the model-tier engine for the residue.
+- Custom-rule SYNTHESIS + adversarial gate (`rule-enforcer/`) — the model-tier engine for the residue.
 - `boundaries/dependencies` dogfooded (architecture rules are real + enforced).
 - **DYNAMIC available-rule catalog is LIVE (`src/core/rule-catalog.ts` + wired into `vigiles audit`).**
   `enumerateEslintCatalog` runs ESLint once (702 rules, 141 enabled here) and `routeRules({availableRules})`
@@ -231,7 +231,7 @@ design review: mirror double-count (a symlinked/byte-identical `CLAUDE.md`⇄`AG
 
 - Fuzzy SEMANTIC prose→catalog mapping ("keep functions small" → `max-lines-per-function`) — needs
   the model tier (the deterministic tier only catches prose that NAMES a rule/token).
-- Custom-rule synthesis for the residue (`rule-compiler/` has it, gated; ship as the `pr-to-lint-rule` skill).
+- Custom-rule synthesis for the residue (`rule-enforcer/` has it, gated; ship as the `pr-to-lint-rule` skill).
 - PYLINT enabled-state ("documented but OFF") via the §3 inverted-polarity ConfigProbe — the deferred half
   of the pylint work (routing is done; the State-A inventory config-state is not).
 - RUFF (foreign-safe catalog — static to the binary, TOML config is data, no consent gate) + Clippy/RuboCop.
@@ -424,7 +424,7 @@ import-sorting (`I001`), assert-in-prod (`S101`), hardcoded-secrets (`S1xx`), do
 naming, no-unused, require-curly (`curly`), consistent-type-imports, no-only-tests, node:-protocol.
 Deprioritized (rare in the wild): no-print, mutable-default-arg, eqeqeq, wildcard-import.
 
-## 4. The catalog (`rule-compiler/catalog/rule-map.json`)
+## 4. The catalog (`rule-enforcer/catalog/rule-map.json`)
 
 Leave it ESLint-shaped — it's the **model-tier** routing superset with a different precision
 contract (bare-word keywords the deterministic tier bans). Add only a stable `intent-id` **join key**

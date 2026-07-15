@@ -4,11 +4,11 @@ topic: compiler
 updated: 2026-07-14
 ---
 
-# The rule-compiler, end to end — prose rule → enforced, at scale
+# The rule-enforcer, end to end — prose rule → enforced, at scale
 
 > Whole-flow design (2026-07-14). Supersedes the stage-at-a-time view. Ties together
-> the pieces already built (`src/rule-inventory.ts`, `rule-compiler/extract-existing.js`,
-> `rule-compiler/gate.js`, `rule-compiler/catalog/rule-map.json`) into one pipeline, and fixes the
+> the pieces already built (`src/rule-inventory.ts`, `rule-enforcer/extract-existing.js`,
+> `rule-enforcer/gate.js`, `rule-enforcer/catalog/rule-map.json`) into one pipeline, and fixes the
 > two decisions that were open: how existing violations are handled, and how the corpus
 > is grown. The thesis is unchanged: **NL rules are followed unreliably; compile the
 > mechanizable ones to deterministic checks.** The model runs ONCE at compile time; CI
@@ -48,7 +48,7 @@ already have:
 
 - `src/rule-inventory.ts` — deterministic, exec-free: does the prose name/intent map to a
   known off-the-shelf rule, and does a textual config grep show it? (Safe on any repo.)
-- `rule-compiler/extract-existing.js` — opt-in, exec-based: resolves the repo's REAL enabled
+- `rule-enforcer/extract-existing.js` — opt-in, exec-based: resolves the repo's REAL enabled
   rules (`eslint --print-config`) + installed plugins, with base↔`@typescript-eslint/`
   variant unification. (Own-repo/consented only — it runs the config.)
 
@@ -61,7 +61,7 @@ Four route classes:
 | **HOOK**       | action rule (git push, file edits, shell)       | generate a `PreToolUse` / pre-commit hook, not a lint rule                                                                                                                                                                                                         |
 | **SEMANTIC**   | judgment-only ("clear names", "keep it simple") | keep as labeled prose — honestly un-enforceable                                                                                                                                                                                                                    |
 
-### Stage 3 — Synthesize + gate (built: `rule-compiler/gate.js`)
+### Stage 3 — Synthesize + gate (built: `rule-enforcer/gate.js`)
 
 Synthesized rule + independent self-test → two-stage blind gold-set gate. Pass → kept
 (safe to enforce). Fail → **abstain** (advisory, never a faked green check). This is the

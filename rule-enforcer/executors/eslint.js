@@ -6,7 +6,7 @@
 //
 // This is the extraction of the original inline gate logic into the injected
 // executor interface (one gate, N engines — see gate.js). Behaviour is verbatim;
-// only the artifact paths gained a `..` (executors/ is one level under rule-compiler/).
+// only the artifact paths gained a `..` (executors/ is one level under rule-enforcer/).
 
 const { RuleTester, Linter } = require("eslint");
 const fs = require("fs");

@@ -14,5 +14,5 @@
     "description-overlap": "error"
   },
   "orphans": { "include": ["docs/**/*.md", "research/**/*.md"] },
-  "exclude": ["bench/**", "startup/**", "rule-compiler/**"]
+  "exclude": ["bench/**", "startup/**", "rule-enforcer/**"]
 }

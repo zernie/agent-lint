@@ -27,7 +27,7 @@ export interface SegmentedRule {
 }
 
 /** Why the segmenter decided a bullet is NOT a rule (the transparency signal —
- * see `research/rule-compiler-design.md` §3). `index`/`description`/`no-signal`
+ * see `research/rule-enforcer-design.md` §3). `index`/`description`/`no-signal`
  * come from the gate; `section` means it sits under a non-rule heading
  * (Setup / Commands / Key Files / Architecture …). */
 export type RejectReason = "index" | "description" | "no-signal" | "section";
