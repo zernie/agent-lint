@@ -55,8 +55,16 @@ topic: roadmap
 2. **AST-not-regex + gate-ABSTAIN** — the measured soundness law: every checker that leaked (2/13)
    was regex or a context-blind selector. Make the `compile-rules` synth prefer the target-language
    AST; make the gate ABSTAIN a checker that can't be proven sound. The cry-wolf guard.
-3. **Clippy support (Rust routing)** — Rust rulebooks (codex, ghostty) route ~0% purely from the
-   missing clippy map — a clean ruff-like win.
+3. **Clippy support (Rust routing)** — ✅ **shipped 2026-07-15** (`src/rule-inventory.ts`). 7 real
+   clippy restriction lints mapped from the corpus's actual Rust prose (`.unwrap()`→unwrap_used,
+   `.expect()`→expect_used, `panic!`, `unreachable!`, `todo!`, `dbg!`, wildcard-match-arm→
+   wildcard_enum_match_arm). Rust-unambiguous keywords (macro `!` / `.method` / `clippy::` forms +
+   "wildcard arm(s)" NOT bare "wildcard"), guarded by the cross-language-FP test. Route-only (like
+   ruff/pylint — config-state stays eslint-gated; the Cargo.toml `[lints.clippy]` ConfigProbe is #4).
+   Measured: codex/ghostty were **0%**; now the corpus routes clippy (codex→wildcard, ruff-repo→
+   unwrap) — modest absolute count (these rulebooks are short/project-specific), but Rust is no longer
+   a blind spot and it scales with any Rust-heavy rulebook. Tests added (positive Rust-routing +
+   Python-doc-never-clippy guard).
 4. **Ruff config-state (ConfigProbe)** — ruff is route-only; wire `select`/`ignore` detection → the
    "disabled → one-flip" / "✓ enforced" states for Python (currently eslint-only).
 5. **5-homes routing surfaced in `audit`** — route each rule to its home explicitly (off-the-shelf /

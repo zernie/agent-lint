@@ -473,6 +473,82 @@ export const INTENT_MAP: readonly IntentMapping[] = [
     configFix:
       "pylint enables unused-import (W0611) by default; keep it out of the disable list",
   },
+
+  // --- Clippy (Rust) — routing basics (backlog #3: the 0%→ win for Rust
+  // rulebooks; codex/ghostty routed 0% purely because clippy was unmapped, yet
+  // codex literally says "avoid patterns that require `panic!`, `unreachable!`,
+  // or `.unwrap()`" and "make `match` exhaustive … avoid wildcard arms"). Every
+  // lint is a real clippy restriction lint. Route-only, like ruff/pylint —
+  // config-state stays eslint-gated (L639) because clippy's lint levels live in
+  // Cargo.toml `[lints.clippy]` / crate attrs, a different shape (accurate
+  // enabled-state is the ConfigProbe follow-up, rule-enforcer-multilang-design
+  // §3). Keywords are Rust-UNAMBIGUOUS — macro `!` forms, `.method` call forms,
+  // `clippy::` symbols, and Rust-only compounds ("wildcard arm(s)", NOT bare
+  // "wildcard" which collides with pylint `wildcard-import`) — so a Python/JS
+  // doc never mis-attributes clippy (the cross-language-FP test guards this).
+  {
+    intent: "no .unwrap() (Rust)",
+    linter: "clippy",
+    keywords: ["clippy::unwrap_used", "unwrap_used", ".unwrap"],
+    rule: "clippy::unwrap_used",
+    configFix:
+      'set unwrap_used = "warn" in [lints.clippy] (Cargo.toml), or #![warn(clippy::unwrap_used)]',
+  },
+  {
+    intent: "no .expect() (Rust)",
+    linter: "clippy",
+    keywords: ["clippy::expect_used", "expect_used", ".expect"],
+    rule: "clippy::expect_used",
+    configFix:
+      'set expect_used = "warn" in [lints.clippy] (Cargo.toml), or #![warn(clippy::expect_used)]',
+  },
+  {
+    intent: "no panic! (Rust)",
+    linter: "clippy",
+    keywords: ["clippy::panic", "panic!"],
+    rule: "clippy::panic",
+    configFix:
+      'set panic = "warn" in [lints.clippy] (Cargo.toml), or #![warn(clippy::panic)]',
+  },
+  {
+    intent: "no unreachable! (Rust)",
+    linter: "clippy",
+    keywords: ["clippy::unreachable", "unreachable!"],
+    rule: "clippy::unreachable",
+    configFix:
+      'set unreachable = "warn" in [lints.clippy] (Cargo.toml), or #![warn(clippy::unreachable)]',
+  },
+  {
+    intent: "no todo! (Rust)",
+    linter: "clippy",
+    keywords: ["clippy::todo", "todo!"],
+    rule: "clippy::todo",
+    configFix:
+      'set todo = "warn" in [lints.clippy] (Cargo.toml), or #![warn(clippy::todo)]',
+  },
+  {
+    intent: "no dbg! (Rust)",
+    linter: "clippy",
+    keywords: ["clippy::dbg_macro", "dbg!"],
+    rule: "clippy::dbg_macro",
+    configFix:
+      'set dbg_macro = "warn" in [lints.clippy] (Cargo.toml), or #![warn(clippy::dbg_macro)]',
+  },
+  {
+    intent: "exhaustive match — no wildcard enum arm (Rust)",
+    linter: "clippy",
+    keywords: [
+      "clippy::wildcard_enum_match_arm",
+      "wildcard_enum_match_arm",
+      "wildcard match arm",
+      "wildcard match arms",
+      "wildcard arm",
+      "wildcard arms",
+    ],
+    rule: "clippy::wildcard_enum_match_arm",
+    configFix:
+      'set wildcard_enum_match_arm = "warn" in [lints.clippy] (Cargo.toml), or #![warn(clippy::wildcard_enum_match_arm)]',
+  },
 ];
 
 /**

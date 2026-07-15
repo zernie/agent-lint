@@ -157,7 +157,7 @@ ships. Never claim a rule is enforceable off a checker that hasn't passed the ga
 | ESLint (+TS) | ✅ | ✅ | mature; `no-restricted-syntax` covers many custom rules |
 | Ruff (Python) | ✅ net-new intents (2026-07-15) | ⏳ route-only (ConfigProbe pending) | the modern Python default |
 | Pylint (Python) | ✅ route-only | ⏳ (on-by-default polarity) | shared Python intents |
-| Clippy (Rust) | ❌ GAP | ❌ | Rust AGENTS.md route 0% purely from this — a ruff-like win when added |
+| Clippy (Rust) | ✅ route-only (2026-07-15, 7 restriction lints) | ⏳ (Cargo.toml `[lints.clippy]` ConfigProbe pending) | closed the Rust 0% blind spot (`.unwrap`/`panic!`/`unreachable!`/`todo!`/`dbg!`/wildcard-arm); Rust-unambiguous keywords |
 | Stylelint / RuboCop / Cedar | verification only (`enforce()`) | — | cross-reference, not prose-routing |
 
 ## The naming (a repeat confusion)
