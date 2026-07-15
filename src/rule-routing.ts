@@ -552,12 +552,15 @@ export function routeRules(
   // A segment is CONFIDENT if it's high, rescued by the catalog/pattern/intent, or
   // the caller opted into medium. Everything else the segmenter emitted is a
   // POSSIBLE rule (medium, unrescued) — surfaced for review, not routed as fact.
+  // A RESCUE — the text NAMES/matches a real rule (catalog / restricted-syntax /
+  // intent). This promotes even a gate-rejected bullet to confident, because it
+  // provably maps to an off-the-shelf rule; independent of the medium opt-in.
+  const isRescued = (text: string): boolean =>
+    namesCatalogRule(text) ||
+    matchesPatternRule(text) ||
+    matchesIntentMap(text);
   const isConfident = (s: { text: string; confidence: "high" | "medium" }) =>
-    minConfidence === "medium" ||
-    s.confidence === "high" ||
-    namesCatalogRule(s.text) ||
-    matchesPatternRule(s.text) ||
-    matchesIntentMap(s.text);
+    minConfidence === "medium" || s.confidence === "high" || isRescued(s.text);
 
   const toRouted = (s: {
     text: string;
@@ -607,15 +610,23 @@ export function routeRules(
     lineEnd: s.lineEnd,
     confidence: "medium" as const,
   });
-  // Fold ALL `no-signal` rejects back in as candidates (so a rule-naming one is
-  // still rescued to confident), then decide the tiers:
+  // Real SEGMENTS route by the full confident check (incl. the medium opt-in).
+  // Gate-rejected `no-signal` bullets are folded back in as candidates, but they
+  // are promoted to confident ONLY by a real RESCUE — NEVER by the blanket medium
+  // opt-in, which must not resurrect bullets the gate explicitly rejected.
   const noSignal = rawSkipped.filter((s) => s.reason === "no-signal");
-  const candidates = [...segments, ...noSignal.map(asCandidate)];
-  const heuristicRules = candidates.filter(isConfident).map(toRouted);
+  const folds = noSignal.map(asCandidate);
+  const heuristicRules = [
+    ...segments.filter(isConfident),
+    ...folds.filter((s) => isRescued(s.text)),
+  ].map(toRouted);
   // The non-confident leftovers split by the norm signal: a rule-ish bullet
   // (carries a deontic modal) is a genuine recall-miss → POSSIBLE (review); the
   // rest is prose → SKIPPED with a `no-signal` reason (visible, not dropped).
-  const leftover = candidates.filter((s) => !isConfident(s));
+  const leftover = [
+    ...segments.filter((s) => !isConfident(s)),
+    ...folds.filter((s) => !isRescued(s.text)),
+  ];
   const possible = leftover
     .filter((s) => NORM_SIGNAL.test(s.text))
     .map(toRouted);

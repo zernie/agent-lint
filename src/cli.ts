@@ -2315,12 +2315,17 @@ function formatRuleMapSummary(routing: RuleRouting | undefined): string {
   if (!routing) return "";
   const { counts, possible, skipped } = routing;
   const confident =
-    counts.reuse + counts.hook + counts.unrouted + counts.semantic;
+    counts.reuse +
+    counts.hook +
+    counts.unrouted +
+    counts.semantic +
+    counts.meta;
   if (confident === 0 && possible.length === 0 && skipped.length === 0)
     return "";
   const lines = [
     "Rule map — how your prose rules could be enforced (heuristic, precision-first):",
-    `  ✓ ${String(counts.reuse)} enforceable · ⛓ ${String(counts.hook)} hook · ⚙ ${String(counts.unrouted)} custom · ✎ ${String(counts.semantic)} judgment`,
+    `  ✓ ${String(counts.reuse)} enforceable · ⛓ ${String(counts.hook)} hook · ⚙ ${String(counts.unrouted)} custom · ✎ ${String(counts.semantic)} judgment` +
+      (counts.meta > 0 ? ` · ☰ ${String(counts.meta)} agent-note` : ""),
   ];
   if (possible.length > 0)
     lines.push(

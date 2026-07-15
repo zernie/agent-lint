@@ -461,6 +461,25 @@ describe("routeRules", () => {
     expect(r.rules.some((x) => x.category === "reuse")).toBe(true);
   });
 
+  it("minConfidence:'medium' does NOT promote a gate-rejected no-signal bullet", () => {
+    // A bullet the segmenter rejects as `no-signal` (context only, no rule/norm
+    // signal) is folded back in for a possible RESCUE — but the medium opt-in must
+    // NOT resurrect it as a confident rule (that would inflate `rules`/counts).
+    const md = "## Notes\n\n- The team meets weekly to sync.\n";
+    const med = routeRules(md, "CLAUDE.md", { minConfidence: "medium" });
+    expect(med.rules).toHaveLength(0);
+    expect(med.skipped.some((s) => s.reason === "no-signal")).toBe(true);
+    // a REAL medium segment is still promoted in medium mode (unchanged behaviour)
+    const seg = routeRules(
+      "## Notes\n\n- `README.md` documents the v2 API.\n",
+      "f",
+      {
+        minConfidence: "medium",
+      },
+    );
+    expect(seg.rules.length).toBeGreaterThan(0);
+  });
+
   it("a MARKED reuse rule carries its catalog linter (polyglot provenance)", () => {
     const availableRules = {
       linter: "pylint" as const,
