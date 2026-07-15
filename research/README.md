@@ -94,6 +94,7 @@ one click away.
 
 ## Adoption, distribution & ideas
 
+- [`adoption-direction.md`](adoption-direction.md) — **THE committed adoption direction (2026-07-15).** Supersedes the spec-first framing: `audit` is the front door, the hand-edited markdown is the source of truth, code-quality rules are enforced in the repo's **native** linter config (spec = optional authoring layer for harness-structure only), and **audit-as-score** is the adoption vehicle. Includes the reconciliation ledger of every doc still asserting the old framing. Read this before building any adoption/spec/adopt feature.
 - [`adoption-strategy.md`](adoption-strategy.md) — zero-config setup, progressive enforcement, agent workflows.
 - [`adoption-gateway-preview.md`](adoption-gateway-preview.md) — **"what would vigiles catch in YOUR repo?"** — the `audit` adoption preview. Why deterministic spec-creation fails (extraction is semantic), and the architecture that works: **LLM proposes, deterministic disposes** — the model drafts the spec, the moat verifies the refs, so the "M broken right now" number is trustworthy though extraction is probabilistic. A model-gated tier behind the existing consent.
 - [`feature-ideas.md`](feature-ideas.md) — the parked-ideas list (custom-rule plugin API, reverse coverage, sandboxed exec §13, …).

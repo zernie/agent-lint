@@ -32,6 +32,7 @@ export default claude({
     "research/opencode-prototype-findings.md": `[shipped] OpenCode adapter prototype validates the AdapterCapabilities tier (mockable, no shell hooks)`,
 
     // ── audit ──
+    "research/adoption-direction.md": `[active] THE committed adoption direction (2026-07-15, supersedes spec-first): audit is the front door; markdown is source of truth; code-quality rules enforced in NATIVE linter config, typed spec = optional authoring layer for harness-structure only; audit-as-score is the vehicle. Includes the reconciliation ledger of docs still asserting the old framing.`,
     "research/adoption-gateway-preview.md": `[idea] Proposes an audit preview showing newcomers what vigiles would catch; extraction=LLM, verification=deterministic moat`,
     "research/audit-rule-compile-tier.md": `[shipped] Design spec for the audit rule-compile tier: the deterministic rule-inventory teaser (prose→off-the-shelf-rule + config-state) and the opt-in model-gated compile path — makes CLAUDE.md rules real from the report`,
     "research/audit-adoption-ux.md": `[shipped] Design record for how audit report drives spec creation (init flow); default creates specs, no browser file writes`,

@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:c564b282762a2f7c compiled from research/CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:612a4ab84e7090b1 compiled from research/CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -15,6 +15,7 @@ The `research/` corpus is the INTERNAL record (design rationale, competitive ana
 - `research/harness-landscape.md` — [active] Mid-2026 research into Codex internals unblocking the hook-protocol and model-mock adapter ports for the Codex adapter
 - `research/multi-harness-compile.md` — [active] How vigiles compiles/verifies a repo targeting multiple harnesses (CC+Codex) per-surface
 - `research/opencode-prototype-findings.md` — [shipped] OpenCode adapter prototype validates the AdapterCapabilities tier (mockable, no shell hooks)
+- `research/adoption-direction.md` — [active] THE committed adoption direction (2026-07-15, supersedes spec-first): audit is the front door; markdown is source of truth; code-quality rules enforced in NATIVE linter config, typed spec = optional authoring layer for harness-structure only; audit-as-score is the vehicle. Includes the reconciliation ledger of docs still asserting the old framing.
 - `research/adoption-gateway-preview.md` — [idea] Proposes an audit preview showing newcomers what vigiles would catch; extraction=LLM, verification=deterministic moat
 - `research/audit-rule-compile-tier.md` — [shipped] Design spec for the audit rule-compile tier: the deterministic rule-inventory teaser (prose→off-the-shelf-rule + config-state) and the opt-in model-gated compile path — makes CLAUDE.md rules real from the report
 - `research/audit-adoption-ux.md` — [shipped] Design record for how audit report drives spec creation (init flow); default creates specs, no browser file writes
