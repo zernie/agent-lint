@@ -273,6 +273,39 @@ describe("mergeCatalogs (pure)", () => {
     expect(hit?.linter).toBe("pylint"); // provenance follows the enforcer
     expect(hit?.code).toBe("R1705"); // the numeric alias is preserved
   });
+
+  it("drops the code alias when the OTHER linter is the enforcing provenance", () => {
+    // ESLint enforces `no-else-return`; Pylint's `R1705` is OFF. The combined
+    // row is eslint/ON, so it must NOT carry `R1705` — else a doc naming the
+    // Pylint code would resolve to eslint/enabled instead of the disabled rule.
+    const eslintOn: RuleCatalog = {
+      linter: "eslint",
+      available: 1,
+      enabled: 1,
+      rules: [
+        { id: "no-else-return", linter: "eslint", plugin: null, enabled: true },
+      ],
+    };
+    const pylintOff: RuleCatalog = {
+      linter: "pylint",
+      available: 1,
+      enabled: 0,
+      rules: [
+        {
+          id: "no-else-return",
+          linter: "pylint",
+          plugin: null,
+          code: "R1705",
+          enabled: false,
+        },
+      ],
+    };
+    const merged = mergeCatalogs(eslintOn, pylintOff);
+    const hit = merged?.rules[0];
+    expect(hit?.linter).toBe("eslint");
+    expect(hit?.enabled).toBe(true);
+    expect(hit?.code).toBeUndefined(); // the Pylint alias is not leaked
+  });
 });
 
 describe("enumeratePylintCatalog (integration, executes pylint)", () => {

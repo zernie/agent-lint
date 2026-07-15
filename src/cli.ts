@@ -6890,13 +6890,13 @@ async function main(): Promise<void> {
         // Read the local flight recorder ONCE — feeds both the JSON report
         // (structured summary, the product boundary) and the terminal render.
         const ledgerRecords = readObservations(root);
-        // Route the prose rules ONCE — feeds the JSON report + the terminal
-        // rule-map summary (confident / possible / skipped tiers).
-        const ruleRouting = computeRuleRouting(
-          root,
-          adapter.layout.instructionFile,
-        );
-        const auditReport = buildAuditReport(report, {
+        // The report scaffold WITHOUT the rule map — the map's catalog
+        // enrichment (enabled-state / "documented but OFF") enumerates the repo's
+        // linter, which is gated on the SAME audit.measure consent as the
+        // executing checks. So the map is routed AFTER consent (resolved below)
+        // and folded into the report there, so a first-time "yes" enriches THIS
+        // run — not the next one.
+        const auditReportBase = buildAuditReport(report, {
           harness: adapter.name,
           vigilesVersion: getVersion(),
           adoptableSurfaces,
@@ -6905,22 +6905,18 @@ async function main(): Promise<void> {
             root,
             adapter.layout.instructionFile,
           ),
-          ruleRouting,
         });
-        const sc = auditReport.score;
+        const sc = auditReportBase.score;
         const plan = optimize(report);
+        // The deterministic READ leads: rings + report + fixes + nudges print
+        // BEFORE the consent prompt, so a plain `audit` shows its findings first.
+        // (JSON stays silent until the single blob below, after consent.)
         if (!json) {
           // The Lighthouse rings: per-category 0–100 + the weighted overall,
           // shown before the detailed report so the headline signal leads.
           console.log(formatAuditScore(sc));
           console.log("");
-        }
-        console.log(
-          json
-            ? JSON.stringify(auditReport, null, 2)
-            : formatScanReport(report),
-        );
-        if (!json) {
+          console.log(formatScanReport(report));
           // Fold each finding's fix inline (replaces the former --fix-plan/--explain
           // flags): the deterministic, free recommendation list under the report.
           const fixes = formatRecommendations(plan);
@@ -6937,20 +6933,14 @@ async function main(): Promise<void> {
               .length,
           );
           if (fireNudge) console.log("\n" + fireNudge);
-          // The rule map — what audit detected in your instruction file and how
-          // each rule could be enforced (confident / possible / skipped tiers).
-          const ruleMap = formatRuleMapSummary(ruleRouting);
-          if (ruleMap) console.log("\n" + ruleMap);
-          // The flight recorder: a compact summary of what the harness actually
-          // DID in real sessions (hook/agent decisions), read off the local
-          // agent-readable ledger. Empty (skipped) until something is recorded.
-          const ledgerSummary = formatLedgerSummary(ledgerRecords);
-          if (ledgerSummary) console.log("\n" + ledgerSummary);
         }
         // ONE read-vs-run decision for the EXECUTING checks (live MCP + skill
-        // firing). A plain `audit` is a deterministic READ; these run only on
-        // consent — ASK once at a TTY (remembered); headless stays a read + a
-        // nudge (no execution flag — automation uses the vigiles/testing API).
+        // firing) AND the rule map's catalog enrichment (enumerating the repo's
+        // linter also executes it). A plain `audit` is a deterministic READ;
+        // these run only on consent — ASK once at a TTY (remembered); headless
+        // stays a read + a nudge (no execution flag — automation uses the
+        // vigiles/testing API). Resolved AFTER the report (so the read leads) but
+        // BEFORE the rule map is routed, so a first-time "yes" enriches THIS run.
         // (The safety battery is NOT here — it needs cross-platform confinement
         // that isn't shipped, so it lives in the vigiles/testing API.)
         const isForeign = root !== process.cwd();
@@ -6970,6 +6960,30 @@ async function main(): Promise<void> {
           args,
           adapter.name,
         );
+        // Consent is now settled (and remembered via .vigilesrc.json, which
+        // computeRuleRouting re-reads) — route the prose rules, enumerating the
+        // live catalog when consented + own-repo. Feeds the JSON report, the
+        // written artifacts, and the terminal rule-map summary.
+        const ruleRouting = computeRuleRouting(
+          root,
+          adapter.layout.instructionFile,
+        );
+        const auditReport: AuditReport = ruleRouting
+          ? { ...auditReportBase, ruleRouting }
+          : auditReportBase;
+        if (json) {
+          console.log(JSON.stringify(auditReport, null, 2));
+        } else {
+          // The rule map — what audit detected in your instruction file and how
+          // each rule could be enforced (confident / possible / skipped tiers).
+          const ruleMap = formatRuleMapSummary(ruleRouting);
+          if (ruleMap) console.log("\n" + ruleMap);
+          // The flight recorder: a compact summary of what the harness actually
+          // DID in real sessions (hook/agent decisions), read off the local
+          // agent-readable ledger. Empty (skipped) until something is recorded.
+          const ledgerSummary = formatLedgerSummary(ledgerRecords);
+          if (ledgerSummary) console.log("\n" + ledgerSummary);
+        }
         // LIVE MCP tool resolution STARTS each declared MCP server — a server is
         // exactly what connects to a real Postgres / authenticates a real API on
         // boot. So it runs only under consent (`execute`) AND own-repo (never

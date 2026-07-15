@@ -248,7 +248,13 @@ function combineRules(prev: AvailableRule, next: AvailableRule): AvailableRule {
   // Provenance follows the linter that actually enforces the rule; if neither
   // (or both) enforces it, keep the first-seen.
   const enforcing = !prev.enabled && next.enabled ? next : prev;
-  const code = prev.code ?? next.code;
+  // The numeric `code` alias (Pylint's `R1705`) is linter-specific, so it must
+  // travel with the ENFORCING entry only — never carried over onto the other
+  // linter's provenance. Otherwise a doc naming `R1705` would resolve to the
+  // combined row's `{linter, enabled}` (e.g. `eslint`/ON) instead of the Pylint
+  // rule it actually names. If the enforcing entry has no code, the alias is
+  // dropped (a doc naming it is left unrouted — safe — rather than mis-routed).
+  const code = enforcing.code;
   return {
     ...prev,
     enabled: prev.enabled || next.enabled,
