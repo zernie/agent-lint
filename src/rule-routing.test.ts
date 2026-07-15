@@ -430,6 +430,26 @@ describe("routeRules", () => {
     expect(setup?.reason).toBe("section");
   });
 
+  it("POSSIBLE keeps only norm-ish bullets; prose without a norm signal is skipped", () => {
+    const md = [
+      "## Notes",
+      "",
+      "- Every public API should stay backwards compatible.", // norm (should) → possible
+      "- `README.md` documents the v2 API.", // prose, no norm → skipped
+    ].join("\n");
+    const r = routeRules(md, "CLAUDE.md");
+    expect(
+      r.possible.some((x) => x.text.includes("backwards compatible")),
+    ).toBe(true);
+    expect(r.possible.some((x) => x.text.includes("documents"))).toBe(false);
+    // the descriptive bullet is set aside (visible) with a no-signal reason
+    expect(
+      r.skipped.some(
+        (s) => s.text.includes("documents") && s.reason === "no-signal",
+      ),
+    ).toBe(true);
+  });
+
   it("rescues a declarative rule that NAMES/matches a real rule to CONFIDENT (recall)", () => {
     // "Every function must have a docstring" fails the imperative gate (declarative
     // subject) but matches the docstring pattern rule — so it's rescued to reuse,

@@ -119,6 +119,16 @@ export interface RouteOptions {
 }
 
 /**
+ * A deontic/norm signal ANYWHERE in a bullet — the marker of a rule the imperative
+ * gate missed because the norm isn't at the head ("every function MUST have a
+ * docstring", "public APIs SHOULD stay stable"). Used to keep the POSSIBLE review
+ * tier to genuine rule-candidates instead of arbitrary unparsed prose. Deliberately
+ * narrow (modal verbs only) so it doesn't re-admit the noise it exists to exclude.
+ */
+const NORM_SIGNAL =
+  /\b(?:must(?:n't)?|should(?:n't)?|shall|never|always|avoids?|require[sd]?|forbidden|disallow(?:ed)?|prohibited|banned?|prefers?|do not|don't)\b/i;
+
+/**
  * ACTION-rule cues — things a linter never sees (git, filesystem, shell,
  * process). A hook is the right gate, not a lint rule. Widened to the article's
  * measured surfaces (vcs / process / shell / redirect) — the narrow original
@@ -577,11 +587,13 @@ export function routeRules(
     file,
     marked.skip,
   );
-  // A bullet the gate rejected as `no-signal` (a declarative norm it couldn't
-  // parse, e.g. "Every function must have a docstring") is a rule CANDIDATE, not
-  // obviously-not-a-rule — fold it back in: if it NAMES/matches a real rule it's
-  // rescued to CONFIDENT, otherwise it joins the POSSIBLE review tier. Only
-  // index/description/section rejects stay SKIPPED (confidently not rules).
+  // A bullet the gate rejected as `no-signal` is a rule CANDIDATE only if it
+  // carries a deontic/norm signal (a modal like must/should/never/avoid) — that
+  // keeps the POSSIBLE review tier to genuine recall-misses ("every function must
+  // have a docstring") instead of flooding it with prose ("README.md documents
+  // v2"). A no-signal bullet WITHOUT a norm signal is confidently not a rule, so
+  // it stays SKIPPED alongside the index/description/section rejects. A folded
+  // candidate that NAMES/matches a real rule is still rescued to CONFIDENT.
   const asCandidate = (s: SkippedBullet) => ({
     text: s.text,
     exactQuote: s.text,
@@ -590,13 +602,30 @@ export function routeRules(
     lineEnd: s.lineEnd,
     confidence: "medium" as const,
   });
-  const candidates = [
-    ...segments,
-    ...rawSkipped.filter((s) => s.reason === "no-signal").map(asCandidate),
-  ];
-  const skipped = rawSkipped.filter((s) => s.reason !== "no-signal");
+  // Fold ALL `no-signal` rejects back in as candidates (so a rule-naming one is
+  // still rescued to confident), then decide the tiers:
+  const noSignal = rawSkipped.filter((s) => s.reason === "no-signal");
+  const candidates = [...segments, ...noSignal.map(asCandidate)];
   const heuristicRules = candidates.filter(isConfident).map(toRouted);
-  const possible = candidates.filter((s) => !isConfident(s)).map(toRouted);
+  // The non-confident leftovers split by the norm signal: a rule-ish bullet
+  // (carries a deontic modal) is a genuine recall-miss → POSSIBLE (review); the
+  // rest is prose → SKIPPED with a `no-signal` reason (visible, not dropped).
+  const leftover = candidates.filter((s) => !isConfident(s));
+  const possible = leftover
+    .filter((s) => NORM_SIGNAL.test(s.text))
+    .map(toRouted);
+  const skipped: SkippedBullet[] = [
+    ...rawSkipped.filter((s) => s.reason !== "no-signal"),
+    ...leftover
+      .filter((s) => !NORM_SIGNAL.test(s.text))
+      .map((s) => ({
+        text: s.text,
+        file: s.file,
+        lineStart: s.lineStart,
+        lineEnd: s.lineEnd,
+        reason: "no-signal" as const,
+      })),
+  ];
 
   // Marker rules first (definitive), then the heuristic residue.
   const rules: RoutedRule[] = [...marked.rules, ...heuristicRules];

@@ -2306,7 +2306,7 @@ function formatRuleMapSummary(routing: RuleRouting | undefined): string {
     );
   if (skipped.length > 0)
     lines.push(
-      `  ⊘ ${String(skipped.length)} skipped — not treated as rules (setup steps, descriptions, index entries)`,
+      `  ⊘ ${String(skipped.length)} skipped — not treated as rules (setup steps, descriptions, index entries, no norm signal)`,
     );
   lines.push(
     "  Detection is a best-effort filter — it won't catch every rule. Full map + skipped list in the report (or --json).",
