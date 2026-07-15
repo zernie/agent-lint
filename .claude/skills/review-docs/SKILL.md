@@ -59,7 +59,7 @@ doc — these are the default readers of vigiles's front door.
 2. **Claude Code power user** — lives in CC, skimming on a phone between tasks. Wants
    the WOW in the first screen and a copy-paste install in seconds; allergic to fluff.
 3. **Plugin / skill author** — mid-level dev, comfortable with TS but not a
-   compiler/types nerd. Found this because it claims to test their skills. Cares about
+   rule-compiler/types nerd. Found this because it claims to test their skills. Cares about
    "does it work on MY repo without learning a new theory?"
 4. **Skeptical senior / staff engineer** — scans for substance in ~20s, mentally
    compares to promptfoo / ESLint / ast-grep. Anything hand-wavy or overclaimed costs

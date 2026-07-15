@@ -866,8 +866,8 @@ assertRates`) is the recommended path for testing one skill, but
   so a checkbox-styled rule is skipped. Fix: strip the `[ ]`/`[x]` checkbox token
   before parsing the bullet. Codex review on #72. · **LOW**
 - ~~**Python custom-rule SYNTHESIS**~~ — **DONE 2026-07-15.** Added an `astgrep-py`
-  engine to `@vigiles/compiler`: one gate, injected per-engine executors
-  (`compiler/executors/{eslint,astgrep-py}.js`), corpus entries carry an `engine` field.
+  engine to `@vigiles/rule-compiler`: one gate, injected per-engine executors
+  (`rule-compiler/executors/{eslint,astgrep-py}.js`), corpus entries carry an `engine` field.
   Python rules are synthesized as ast-grep rule OBJECTS (JSON — data, not code) run
   in-process via `@ast-grep/napi` + `@ast-grep/lang-python`. 3 dogfood rules
   (py-no-bare-except/py-no-print/py-no-eval); the naive `print($A)` ABSTAINS on the gold

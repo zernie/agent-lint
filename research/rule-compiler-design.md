@@ -15,7 +15,7 @@ topic: compiler
 > how does it behave with several linters / freeform prose?" The two companion docs
 > are BUILD-LOGS with the blow-by-blow: `rule-compiler-multilang-design.md`
 > (segmentation + the multi-language reasoning) and `compiler-end-to-end-flow.md`
-> (the `@vigiles/compiler` synthesis pipeline). THIS doc is the front door — read it
+> (the `@vigiles/rule-compiler` synthesis pipeline). THIS doc is the front door — read it
 > first, then drop into those for detail. Records the 2026-07-15 design decisions.
 
 ## 0. What it is (and isn't)
@@ -28,9 +28,9 @@ turned into an enforced check?_:
    each one into a lane (enforceable / hook / custom / judgment). No model, nothing
    executes (except the own-repo linter-catalog read, gated). Code:
    `src/segment.ts`, `src/rule-routing.ts`, and `src/core/rule-catalog.ts`.
-2. **The SYNTHESIS tier** (`@vigiles/compiler`, opt-in, model-gated) — for the
+2. **The SYNTHESIS tier** (`@vigiles/rule-compiler`, opt-in, model-gated) — for the
    "custom rule" residue, writes an actual checker + proves it sound on a blind gold
-   set or abstains. `compiler/`.
+   set or abstains. `rule-compiler/`.
 
 It is **NOT** the `enforce()` cross-reference engine (`src/core/linters.ts`). That
 engine _verifies a rule you already named_ across 7 catalogs; the rule map _discovers_
@@ -64,7 +64,7 @@ which prose _could_ become a rule across 2. See §4 — do not conflate them.
         ▼                                     ▼
    audit-report.ts → AuditReport      report/RuleInventory.tsx (HTML)
         │
-        └── ⚙ "unrouted" lane hands off to  @vigiles/compiler (§5) — a SEPARATE
+        └── ⚙ "unrouted" lane hands off to  @vigiles/rule-compiler (§5) — a SEPARATE
             package; proves a synthesized checker on a blind gold set or abstains.
 ```
 
@@ -239,12 +239,12 @@ the single source the terminal + report read):
 
 ## 5. The synthesis tier (the ⚙ lane's hand-off)
 
-`@vigiles/compiler`, opt-in + model-gated. Decision order **REUSE > SYNTHESIZE**: only
+`@vigiles/rule-compiler`, opt-in + model-gated. Decision order **REUSE > SYNTHESIZE**: only
 the residue no off-the-shelf rule covers is synthesized. A synthesized checker must
 pass its own self-test AND an independent blind gold set (precision = recall = 1.0) or
 it **abstains** — never ships a checker it can't prove sound. One gate, per-engine
 executors: **ESLint** rules (JS module) and **Python** (an ast-grep rule object —
-data, not code). **Built** (both engines; `compiler/gate.js`, `compiler/executors/`).
+data, not code). **Built** (both engines; `rule-compiler/gate.js`, `rule-compiler/executors/`).
 
 ## 6. What's realistically doable
 
@@ -270,7 +270,7 @@ per-rule provenance, enabled-state, the 5-category / 4-lane routing, the two-tie
 detection (confident + possible + skipped-with-reason), the rescue ladder + no-signal
 fold (§2), and synthesis for both engines — all CI-dogfooded
 (`src/rule-routing-oss.test.ts`, `src/rule-catalog-oss.test.ts`, `src/segment.test.ts`,
-`compiler/gate.js`).
+`rule-compiler/gate.js`).
 
 ## 8. Status: ALPHA — the scope-freeze + backlog (READ THIS before "improving" it)
 
@@ -368,7 +368,7 @@ on real projects when it uses an LLM?": **the part that would need an LLM is not
   - `src/segment.test.ts` + the routing suites cover the detector logic.
     So the deterministic OSS e2e is already there — the honest gap is BREADTH (few repos),
     not the ability to run it. (Broadening it is backlog #1, and needs no model.)
-- **The synthesis trust GATE is deterministic** — `compiler/gate.js` runs in CI on a
+- **The synthesis trust GATE is deterministic** — `rule-compiler/gate.js` runs in CI on a
   FIXED gold corpus (proves a synthesized checker is sound on a blind set or abstains).
   No model at CI time; the verdicts are pinned.
 - **What genuinely CAN'T go in CI** is the LLM SYNTHESIS of a NEW rule from a user's
@@ -388,6 +388,6 @@ deterministic OSS corpus (backlog #1) — no model required.
 
 - `research/rule-compiler-multilang-design.md` — segmentation model + multi-language
   build-log (the detailed §0/§0.0 record).
-- `research/compiler-end-to-end-flow.md` — the `@vigiles/compiler` synthesis pipeline.
+- `research/compiler-end-to-end-flow.md` — the `@vigiles/rule-compiler` synthesis pipeline.
 - `research/reference-verification-limits.md` — the general proxy-vs-judgment /
   undecidability boundary this doc's §2 is a specific instance of.

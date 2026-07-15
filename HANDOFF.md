@@ -63,7 +63,7 @@ checkbox markers (`- [ ] enforce(...)`); probe a real linted file (not hardcoded
 - **`research/dogfood-corpus.md`** — the dogfood map + policy (read before touching any
   dogfood artifact). The word "dogfood" covers FOUR different things — only
   `test/dogfood/` is the SHA-pinned vendored corpus; `examples/harness/dogfood/`=skill
-  examples (model-gated MANUAL), `compiler/gold/`=package-internal, `research/audit-captures/`
+  examples (model-gated MANUAL), `rule-compiler/gold/`=package-internal, `research/audit-captures/`
   =captured audit OUTPUT (not tests).
 
 ## Gotchas (still live)

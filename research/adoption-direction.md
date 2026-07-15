@@ -63,7 +63,7 @@ The dissolving insight: **the typed spec is the AUTHORING layer; the native lint
 RUNTIME.** Every spec pro (compile-time contracts, railway composition, purity typing) is an
 authoring-time property — the spec *produces* enforcement (native config lines for code-quality;
 a generated eslint rule file for synthesized rules), it is not replaced by it. Same architecture
-as `@vigiles/compiler`: model 1× at compile-time, CI = clean native linter, $0. This is the Rule
+as `@vigiles/rule-compiler`: model 1× at compile-time, CI = clean native linter, $0. This is the Rule
 of Least Power applied to enforcement homes.
 
 ## The command surface — why each verb exists, and how they cohere
@@ -139,5 +139,5 @@ canonical stance is HERE):
 
 - `zernie/mine` `vigiles/s49.md` — full design record (A–F) + private strategy/visa framing.
 - `research/audit-lighthouse-design.md` — the audit report design (the vehicle).
-- `compiler/README.md`, `compiler/RESULTS.md` — the compile-1×-run-in-native-CI architecture.
+- `rule-compiler/README.md`, `rule-compiler/RESULTS.md` — the compile-1×-run-in-native-CI architecture.
 - `docs/railway-subagents.md`, `docs/spec-format.md` — the harness-structure power features the spec keeps.

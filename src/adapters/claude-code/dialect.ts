@@ -3,7 +3,7 @@
  * The concrete dialect is DEFINED here, in the adapter, symmetric with the other
  * four ports (`claudeCodeLayout`/`Runtime`/`HookProtocol`/`ModelMock`): the core
  * holds only the `HarnessDialect` interface and never a harness's vocabulary. The
- * compiler/validator receive this by injection (`compileAgent(spec, { dialect })`,
+ * rule-compiler/validator receive this by injection (`compileAgent(spec, { dialect })`,
  * the CLI/composition root supplies it). A second harness defines its own dialect
  * in its adapter (e.g. `src/adapters/codex/dialect.ts` exporting `codexDialect`).
  */
