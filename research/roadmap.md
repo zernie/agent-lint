@@ -858,7 +858,7 @@ assertRates`) is the recommended path for testing one skill, but
   second run sees it. Fix: resolve `decideExecute`/consent before `computeRuleRouting`.
   Codex review on #72. · **LOW**
 - **Segment: don't over-suppress rule bullets under a process heading** — the
-  markdown segmenter (`src/core/segment.ts`) drops list items nested under a
+  markdown segmenter (`src/segment.ts`) drops list items nested under a
   process/section heading to avoid treating steps as rules, but a legitimate rule
   bullet under an H2 like `## Rules` / `## Conventions` gets suppressed too, so it
   never reaches the routing map. Fix: only suppress under genuinely procedural

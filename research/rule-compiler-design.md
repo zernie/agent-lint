@@ -21,7 +21,7 @@ turned into an enforced check?_:
    repo's `CLAUDE.md` / `AGENTS.md`, decides which text is even a rule, and routes
    each one into a lane (enforceable / hook / custom / judgment). No model, nothing
    executes (except the own-repo linter-catalog read, gated). Code:
-   `src/rule-routing.ts` and `src/core/rule-catalog.ts`.
+   `src/segment.ts`, `src/rule-routing.ts`, and `src/core/rule-catalog.ts`.
 2. **The SYNTHESIS tier** (`@vigiles/compiler`, opt-in, model-gated) — for the
    "custom rule" residue, writes an actual checker + proves it sound on a blind gold
    set or abstains. `compiler/`.
@@ -29,6 +29,50 @@ turned into an enforced check?_:
 It is **NOT** the `enforce()` cross-reference engine (`src/core/linters.ts`). That
 engine _verifies a rule you already named_ across 7 catalogs; the rule map _discovers_
 which prose _could_ become a rule across 2. See §4 — do not conflate them.
+
+### The pipeline at a glance
+
+```
+ CLAUDE.md / AGENTS.md                         repo's linters (own-repo + consent)
+        │                                       ┌ enumerateEslintCatalog ─┐
+        │  computeRuleRouting (cli.ts)          ├ enumeratePylintCatalog ─┤
+        │  gatherInstructionFiles ──────────────┤     mergeCatalogs       │→ RuleCatalog
+        ▼                                       └─────────────────────────┘  (concat; each
+   ┌─────────────────────────────────────────────┐          │                rule keeps its
+   │ segmentInstructions  (src/segment.ts)        │          │                linter + code)
+   │  prose → atomic bullets, each passed to      │          ▼
+   │  gate() → { confidence: high | medium }      │   buildCatalogLookup (rule-routing.ts)
+   │        or { reject: index | description |    │   token → { linter, enabled }
+   │                 section | no-signal }        │   (id collision → combine; a numeric
+   └─────────────────────────────────────────────┘   code keeps its own linter's hit)
+        │  segments[] + skipped[]                            │
+        ▼                                                    ▼
+   ┌───────────────────────────────────────────────────────────────────┐
+   │ routeRules  (src/rule-routing.ts)                                  │
+   │  1. extractMarkedRules — **Enforced by:** / **Guard:** (definitive) │
+   │  2. RESCUE ladder (catalog / pattern / intent) → confident (§2)     │
+   │  3. partitionCandidates → confident | possible | skipped(reason)    │
+   │     classify() each confident bullet → a lane                       │
+   └───────────────────────────────────────────────────────────────────┘
+        │  RuleRouting { rules[], possible[], skipped[], counts }
+        ▼                                     ▼
+   audit-report.ts → AuditReport      report/RuleInventory.tsx (HTML)
+        │
+        └── ⚙ "unrouted" lane hands off to  @vigiles/compiler (§5) — a SEPARATE
+            package; proves a synthesized checker on a blind gold set or abstains.
+```
+
+The **rule-vs-not** decision is `gate()` in `segment.ts` (§2); the **which-lane**
+decision is `routeRules` in `rule-routing.ts` (§4). The deontic/imperative vocabulary
+both stages key on lives in ONE module, `src/rule-signals.ts`, so the segment gate's
+`RULE_PREDICATE` and the routing tier's `NORM_SIGNAL` can't drift.
+
+**Why the three pure-domain modules (`segment.ts`, `rule-routing.ts`,
+`rule-inventory.ts`) sit at `src/` root, not `src/core/`** (where their sibling
+`rule-catalog.ts` lives): they are the audit-detector layer that composes the
+domain; keeping them at root avoids a `core → root` import (`rule-routing` depends on
+`rule-inventory`'s `INTENT_MAP`). Moving all three into `core/` is a viable cleanup
+but a cosmetic ~15-file churn, deliberately deferred.
 
 ## 1. Multiple linters in one project
 
@@ -76,7 +120,7 @@ line is a rule":
 | "This project is a monorepo"           | ❌    | context / description                           |
 | "Run `npm install` to set up"          | ❌    | setup step, not a norm                          |
 
-What we actually run is a **heuristic segmenter** (`src/core/segment.ts`) biased for
+What we actually run is a **heuristic segmenter** (`src/segment.ts`) biased for
 **precision over recall**:
 
 - **Signals it treats as a rule:** imperative / deontic heads (never, always, avoid,
@@ -104,8 +148,28 @@ Rather than one drop-or-keep verdict, detection reports two sets:
   lane or the lane counts.
 
 This gives the user the recall they'd otherwise lose, as a review list, while keeping
-the confident set trustworthy. **Status: TARGET — today detection is single-tier
-(confident only); the "possible" tier is designed here, not yet built.**
+the confident set trustworthy. **Status: BUILT** (`RuleRouting.possible`, populated by
+`partitionCandidates` in `src/rule-routing.ts`; rendered by the terminal summary + the
+HTML report).
+
+### The rescue ladder + the no-signal fold (the two subtle, load-bearing bits)
+
+Two mechanisms recover recall WITHOUT lowering precision — document them because they
+live mostly in code and are easy to get wrong:
+
+- **The RESCUE ladder** (`RESCUE_SOURCES` in `rule-routing.ts`). A `medium`-confidence
+  bullet (or a `no-signal` reject) is PROMOTED to confident if it provably maps to a
+  real off-the-shelf rule via any of three sources: **catalog** (the text names a rule
+  the repo's live catalog has), **pattern** (a construct-prohibition like "No default
+  exports" → `no-restricted-syntax`), or **intent** (an `INTENT_MAP` keyword). The
+  catalog/pattern/intent match is a higher-precision signal than the segmenter's
+  imperative-head cue, so it overrides the medium drop.
+- **The no-signal fold ASYMMETRY** (`partitionCandidates`). A bullet the gate rejected
+  as `no-signal` is folded back as a review candidate, but it is promoted to confident
+  ONLY by a RESCUE — **never** by the blanket `minConfidence: "medium"` opt-in. The
+  opt-in widens the confident tier for genuine `medium` SEGMENTS, but must not
+  resurrect bullets the gate explicitly rejected. Getting this wrong floods the
+  confident tier with prose (the exact regression a reviewer caught pre-merge).
 
 ## 3. The report contract — "be clear about what you detected"
 
@@ -126,10 +190,10 @@ The audit rule-map section reports, in order:
 4. A one-line honesty caveat: _detection is a heuristic, precision-first filter — it
    won't catch every rule._
 
-**Status: TARGET — today only (1) is shown. (2)+(3)+(4) are designed here, not built.**
-(Open sub-question for build time: keep the terminal/HTML lean and put the full
-skipped list in `--json`, vs show a trimmed skipped list inline. Lean toward: inline
-counts + caveat, full list in `--json`.)
+**Status: BUILT.** All four are shown: the terminal summary + HTML report render the
+confident lane counts, a `possible (review)` list, and a `skipped` list with reasons,
+under the precision-first caveat. `audit --json` carries the full `ruleRouting`
+(`rules` / `possible` / `skipped` / `counts`) for a machine reader.
 
 ## 4. Compilability — the four lanes ARE the "compilable or not" answer
 
@@ -141,6 +205,23 @@ Once a bullet is a (confident) rule, "can it be compiled?" _is_ the routing:
 | ⛓ **Hook**                | enforceable, but by a git hook not a linter                 | n/a                                           |
 | ⚙ **Custom rule**         | no off-the-shelf rule, but a synthesizable checker can (§5) | n/a                                           |
 | ✎ **Judgment**            | undecidable — stays prose ("keep it readable")              | n/a                                           |
+
+**Lane label ↔ code `RuleCategory` ↔ glyph** — the one mapping, because the code
+name and the user-facing lane label differ (and `LANE_META` in `rule-routing.ts` is
+the single source the terminal + report read):
+
+| `RuleCategory` (code) | Lane label (UI) | Glyph | Mechanism     | Meaning                                                            |
+| --------------------- | --------------- | ----- | ------------- | ------------------------------------------------------------------ |
+| `reuse`               | enforceable     | ✓     | `config-line` | an off-the-shelf lint rule already does it                         |
+| `hook`                | hook            | ⛓     | `hook`        | an action a linter can't see (git / shell) → a git/PreToolUse hook |
+| `unrouted`            | **custom**      | ⚙     | `synthesize`  | no off-the-shelf rule; the §5 synthesis tier MIGHT write one       |
+| `semantic`            | judgment        | ✎     | `prose`       | undecidable — stays prose                                          |
+| `meta`                | agent-note      | ☰    | `prose`       | an agent-instruction, not a code rule ("read X first")             |
+
+> ⚠️ `unrouted` is a **wire value** (it appears in the versioned `AuditReport`
+> JSON `counts`), which is why the code name isn't renamed to its lane label
+> `custom`. A rename would be an `AuditReport` schema bump. `LANE_META` resolves the
+> human-facing name; don't hardcode a glyph/label anywhere else.
 
 **The two "which linters?" answers — never conflate:**
 
@@ -164,7 +245,7 @@ data, not code). **Built** (both engines; `compiler/gate.js`, `compiler/executor
 | Capability                                   | Doable?                                                 |
 | -------------------------------------------- | ------------------------------------------------------- |
 | Reliable rule detection (rules vs not)       | ❌ NO — undecidable; heuristic ceiling, precision-first |
-| Two-tier detection (confident + possible)    | ✅ yes — the honest way to recover recall (designed)    |
+| Two-tier detection (confident + possible)    | ✅ **built** — the honest way to recover recall         |
 | Multi-linter merge + per-linter provenance   | ✅ yes — **built** for 2 linters                        |
 | Reuse match when prose NAMES a rule          | ✅ reliable (own-repo, incl. enabled-state)             |
 | Reuse match when prose only DESCRIBES a rule | ⚠️ ~0% on foreign docs — needs the catalog (own-repo)   |
@@ -178,10 +259,12 @@ data, not code). **Built** (both engines; `compiler/gate.js`, `compiler/executor
 2. **Detection is two-tier: confident + possible-review.** Recovers recall honestly.
 3. **The report shows skipped bullets + a best-effort caveat.** No invisible misses.
 
-Decisions 2 + 3 are TARGET state — designed here, not yet built. What's built today:
-the 2-linter merge + per-rule provenance, enabled-state, the 4-lane routing, and
-synthesis for both engines, all CI-dogfooded (`src/rule-routing-oss.test.ts`,
-`src/rule-catalog-oss.test.ts`, `compiler/gate.js`).
+**All three are BUILT** (2 + 3 shipped 2026-07-15). Built today: the 2-linter merge +
+per-rule provenance, enabled-state, the 5-category / 4-lane routing, the two-tier
+detection (confident + possible + skipped-with-reason), the rescue ladder + no-signal
+fold (§2), and synthesis for both engines — all CI-dogfooded
+(`src/rule-routing-oss.test.ts`, `src/rule-catalog-oss.test.ts`, `src/segment.test.ts`,
+`compiler/gate.js`).
 
 ## See also
 
