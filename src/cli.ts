@@ -143,7 +143,13 @@ import {
   buildRuleInventory,
   type RuleInventoryItem,
 } from "./rule-inventory.js";
-import { routeRules, mergeRoutings, type RuleRouting } from "./rule-routing.js";
+import {
+  routeRules,
+  mergeRoutings,
+  LANE_META,
+  type RuleRouting,
+  type RuleCategory,
+} from "./rule-routing.js";
 import {
   isFixturePath,
   dedupeInstructionFiles,
@@ -2329,10 +2335,13 @@ function formatRuleMapSummary(routing: RuleRouting | undefined): string {
     counts.meta;
   if (confident === 0 && possible.length === 0 && skipped.length === 0)
     return "";
+  // Lane counts, rendered from the single-source LANE_META (glyph + label).
+  const lane = (c: RuleCategory): string =>
+    `${LANE_META[c].glyph} ${String(counts[c])} ${LANE_META[c].label}`;
   const lines = [
     "Rule map — how your prose rules could be enforced (heuristic, precision-first):",
-    `  ✓ ${String(counts.reuse)} enforceable · ⛓ ${String(counts.hook)} hook · ⚙ ${String(counts.unrouted)} custom · ✎ ${String(counts.semantic)} judgment` +
-      (counts.meta > 0 ? ` · ☰ ${String(counts.meta)} agent-note` : ""),
+    `  ${lane("reuse")} · ${lane("hook")} · ${lane("unrouted")} · ${lane("semantic")}` +
+      (counts.meta > 0 ? ` · ${lane("meta")}` : ""),
   ];
   if (possible.length > 0)
     lines.push(
