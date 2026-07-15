@@ -221,7 +221,8 @@ describe("mergeCatalogs (pure)", () => {
     ]);
   });
 
-  it("de-dupes a colliding id, keeping the first", () => {
+  it("combines a colliding id conservatively — enabled OR-s, one entry", () => {
+    // `no-else-return` is both an ESLint core rule and a Pylint symbol.
     const dup: RuleCatalog = {
       linter: "pylint",
       available: 1,
@@ -232,7 +233,45 @@ describe("mergeCatalogs (pure)", () => {
     };
     const merged = mergeCatalogs(eslint, dup);
     expect(merged?.rules).toHaveLength(1);
-    expect(merged?.rules[0].enabled).toBe(true); // eslint's entry won
+    expect(merged?.rules[0].enabled).toBe(true); // ON in ESLint ⇒ enforced
+  });
+
+  it("a collision ON in only the SECOND linter reads enabled, with its provenance", () => {
+    // The case that broke before: an ESLint-first order let a Python doc's rule
+    // inherit ESLint's OFF state, a false "documented but OFF".
+    const eslintOff: RuleCatalog = {
+      linter: "eslint",
+      available: 1,
+      enabled: 0,
+      rules: [
+        {
+          id: "no-else-return",
+          linter: "eslint",
+          plugin: null,
+          enabled: false,
+        },
+      ],
+    };
+    const pylintOn: RuleCatalog = {
+      linter: "pylint",
+      available: 1,
+      enabled: 1,
+      rules: [
+        {
+          id: "no-else-return",
+          linter: "pylint",
+          plugin: null,
+          code: "R1705",
+          enabled: true,
+        },
+      ],
+    };
+    const merged = mergeCatalogs(eslintOff, pylintOn);
+    expect(merged?.rules).toHaveLength(1);
+    const hit = merged?.rules[0];
+    expect(hit?.enabled).toBe(true); // Pylint enforces it → not "OFF"
+    expect(hit?.linter).toBe("pylint"); // provenance follows the enforcer
+    expect(hit?.code).toBe("R1705"); // the numeric alias is preserved
   });
 });
 

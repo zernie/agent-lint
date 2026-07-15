@@ -207,10 +207,15 @@ export function parsePylintCatalog(
 /**
  * Merge the catalogs of every linter a repo has into ONE catalog for routing.
  *
- * Routing consumes only `.rules` (as a `Map<id, enabled>`), so the merged
- * `linter` field is cosmetic — it names the first present catalog's linter. Rule
- * ids across linters don't collide (ESLint slash-ids vs Pylint symbols), so the
- * concatenation is de-dupe-safe; a repeated id keeps its first entry. Returns
+ * Routing looks up a doc's rule id in `.rules` (as a `Map<id, hit>`). Rule ids
+ * CAN collide across linters — `no-else-return` is both an ESLint core rule and
+ * a Pylint symbol — and a bare id in an instruction file carries no linter, so a
+ * collision is genuinely ambiguous. We combine it CONSERVATIVELY rather than
+ * dropping one linter arbitrarily: `enabled = OR` (a "**Enforced by:** X" claim
+ * is satisfied if ANY linter has X on, so we never cry "documented but OFF" when
+ * one linter enforces it), and provenance follows the linter that actually
+ * enforces it (the enabled one; else the first seen). Each rule's own `code`
+ * (Pylint's numeric alias) is preserved so a doc naming either resolves. Returns
  * undefined when nothing was enumerated (so a non-JS-non-Python repo is byte-
  * identical to before this existed).
  */
@@ -220,21 +225,36 @@ export function mergeCatalogs(
   const present = cats.filter((c): c is RuleCatalog => c != null);
   if (present.length === 0) return undefined;
   if (present.length === 1) return present[0];
-  const rules: AvailableRule[] = [];
-  const seen = new Set<string>();
+  const byId = new Map<string, AvailableRule>();
   for (const cat of present) {
     for (const r of cat.rules) {
-      if (seen.has(r.id)) continue;
-      seen.add(r.id);
-      rules.push(r);
+      const prev = byId.get(r.id);
+      byId.set(r.id, prev ? combineRules(prev, r) : r);
     }
   }
+  const rules = [...byId.values()];
   const enabled = rules.reduce((n, r) => (r.enabled ? n + 1 : n), 0);
   return {
     linter: present[0].linter,
     available: rules.length,
     enabled,
     rules,
+  };
+}
+
+/** Combine two same-id rules from different linters (see `mergeCatalogs`):
+ * enabled OR-s, provenance follows the enforcing linter, code is preserved. */
+function combineRules(prev: AvailableRule, next: AvailableRule): AvailableRule {
+  // Provenance follows the linter that actually enforces the rule; if neither
+  // (or both) enforces it, keep the first-seen.
+  const enforcing = !prev.enabled && next.enabled ? next : prev;
+  const code = prev.code ?? next.code;
+  return {
+    ...prev,
+    enabled: prev.enabled || next.enabled,
+    linter: enforcing.linter,
+    plugin: enforcing.plugin,
+    ...(code !== undefined ? { code } : {}),
   };
 }
 
