@@ -41,27 +41,34 @@ things in one:
   section = a desc per every root dir. **Verdict from the investigation: 8/10 hexagonal,
   CI-enforced; adapters symmetric via the adapter-contract registry loop.**
 
-## LATEST (2026-07-15) — Pylint dynamic catalog + enabled-state (unpushed until commit)
+## LATEST (2026-07-15) — full ESLint↔Pylint parity in the rule map (2 commits, unpushed→pushed)
 
-Closed the ESLint-vs-Pylint asymmetry in the audit rule map (was "Pylint routing-only"):
+Closed the ESLint-vs-Pylint asymmetry end to end. Two pieces:
 
-- **`enumeratePylintCatalog`** (`src/core/rule-catalog.ts`) — shells `pylint --list-msgs`
-  plus `--list-msgs-enabled` (SECTION-AWARE — the `Disabled:`/`Non-emittable:` sections are
-  not misread as enabled), so a Python repo now gets the SAME dynamic catalog + "documented
-  but OFF" nudge as ESLint, **plugins included** (W9xxx). Rules matchable by symbol OR code
-  (`missing-function-docstring` / `C0116`). The deferred "inverted-polarity ConfigProbe" is
-  UNNECESSARY — `--list-msgs-enabled` gives the enabled set directly.
-- **`mergeCatalogs`** unions ESLint + Pylint for a polyglot repo; `computeRuleRouting`
-  (cli.ts) enumerates both under the SAME own-repo + `audit.measure` consent, pylint gated
-  on `hasPythonSurface` (a `.pylintrc`/`pyproject.toml`/`setup.cfg`) so a pure-JS repo never
-  spawns pylint. `AvailableRule.code` alias + the `routeRules` map-build tweak (flatMap).
-- Proven end-to-end on a real Python fixture: `invalid-name`→config-line+enabled:true,
-  `C0116` (disabled in config)→enabled:false. Unit-tested (parse/merge/section-aware/dedup);
-  live pylint+eslint integration tests pass; rule-catalog.ts 100% covered.
-- **ONE gap remains** (roadmapped MEDIUM): Python custom-rule SYNTHESIS — `@vigiles/compiler`
-  emits ESLint rules only; a Python target (ast-grep YAML rule is the cheap path) is unbuilt.
-- Docs updated: `research/rule-compiler-multilang-design.md` §0.0 (+ per-linter + What's next),
-  `docs/verifying-instruction-files.md` linter-coverage line, roadmap (+2 items).
+**(A) Pylint dynamic catalog + enabled-state** (`src/core/rule-catalog.ts`) — `enumeratePylintCatalog`
+shells `pylint --list-msgs` + `--list-msgs-enabled` (SECTION-AWARE — `Disabled:`/`Non-emittable:`
+sections not misread as enabled), so a Python repo gets the SAME dynamic catalog + "documented but
+OFF" nudge as ESLint, **plugins included** (W9xxx); rules matchable by symbol OR code. The deferred
+"inverted-polarity ConfigProbe" proved UNNECESSARY. `mergeCatalogs` unions both for polyglot;
+`computeRuleRouting` enumerates both under the same own-repo + `audit.measure` consent, pylint gated
+on `hasPythonSurface`. `AvailableRule.code` alias + `routeRules` flatMap. Unit + live-integration
+tested, rule-catalog.ts 100% covered. (commit b9a26d9)
+
+**(B) Python custom-rule SYNTHESIS** (`@vigiles/compiler`, Fable-designed) — added an `astgrep-py`
+engine to the trust gate. ONE gate, injected per-engine executors (`compiler/executors/{eslint,
+astgrep-py}.js`); corpus entries carry `engine` (absent ⇒ eslint). Python rules synthesized as
+ast-grep rule OBJECTS (JSON — data not code) run in-process via `@ast-grep/napi`+`lang-python`
+(added to `compiler/package.json`+lockfile for the isolated `npm ci --prefix compiler` CI step).
+3 dogfood rules: P1 py-no-bare-except (kept), P3 py-no-eval `$$$A` (kept), P2 py-no-print naive `$A`
+→ **abstain-gold** (recall leak — misses `print()`/`print(a,b)`; passes single-arg self-test) = the
+cross-engine leak-catch proof. Added a provenance guard (gold reused in self-test → abstain-
+contaminated, engine-agnostic; verified fires). `run-demo.js` filtered to ESLint rules. EXPECTED
+extended P1/P2/P3, CI-enforced via the existing gate step. compiler/ is prettier-IGNORED.
+Fable SCOPE (NOT built): no pylint/astroid, no Python REUSE tier (that's core/linters.ts), no
+plugin arch (rule-of-three), no auto-synthesize seam, no audit-lane wiring (separate consent story).
+
+Docs: rule-compiler-multilang-design §0.0, docs/verifying-instruction-files linter-coverage line,
+compiler/README engines section, roadmap (both marked shipped).
 
 ## NEXT — the fast-follow (4 Codex P2s, all roadmapped as LOW)
 

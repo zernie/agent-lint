@@ -856,15 +856,17 @@ assertRates`) is the recommended path for testing one skill, but
   when the bullet is a GitHub task-list checkbox (`- [ ] enforce(...)` / `- [x] ...`),
   so a checkbox-styled rule is skipped. Fix: strip the `[ ]`/`[x]` checkbox token
   before parsing the bullet. Codex review on #72. · **LOW**
-- **Python custom-rule SYNTHESIS** — with the Pylint dynamic catalog + enabled-state
-  now shipped (2026-07-15, `enumeratePylintCatalog`), the ONLY remaining ESLint-vs-Pylint
-  asymmetry in the rule map is the "custom rule ⚙" lane's hand-off: `@vigiles/compiler`
-  synthesizes an ESLint rule + a JS self-test + the trust gate, but has NO Python target.
-  Build a Python synthesis backend — cheapest path is an ast-grep YAML rule (ast-grep
-  already does Python, vigiles already references it) + a Python self-test harness, re-
-  pointing the same blind-gold trust gate; alternative is a pylint/astroid checker. Larger
-  than the catalog fix was. See `research/rule-compiler-multilang-design.md` §0.0 + "What's
-  next" #3. · **MEDIUM**
+- ~~**Python custom-rule SYNTHESIS**~~ — **DONE 2026-07-15.** Added an `astgrep-py`
+  engine to `@vigiles/compiler`: one gate, injected per-engine executors
+  (`compiler/executors/{eslint,astgrep-py}.js`), corpus entries carry an `engine` field.
+  Python rules are synthesized as ast-grep rule OBJECTS (JSON — data, not code) run
+  in-process via `@ast-grep/napi` + `@ast-grep/lang-python`. 3 dogfood rules
+  (py-no-bare-except/py-no-print/py-no-eval); the naive `print($A)` ABSTAINS on the gold
+  (recall leak — misses zero/multi-arg) proving the gate still catches leaks cross-engine.
+  Added a provenance guard (gold reused in a self-test → abstain-contaminated, engine-
+  agnostic). CI-enforced via the existing compiler-gate step (EXPECTED extended P1/P2/P3).
+  Fable-designed. FOLLOW-UP (not built): wiring the audit "custom rule ⚙" lane to actually
+  invoke this synthesis lane is a separate change with its own consent story. · shipped
 - **Ruff routing** — extend the dynamic catalog approach to Ruff (`ruff rule --all` is
   static to the binary, `ruff.toml`/`pyproject` is data → FOREIGN-SAFE, no consent gate
   needed, unlike ESLint/Pylint). Highest-value next linter for modern Python; closes the

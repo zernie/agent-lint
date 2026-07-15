@@ -73,5 +73,32 @@
     "category": "meta",
     "mechanizable": true,
     "note": "comment-scanning rule (torus-ts declares it)"
+  },
+  {
+    "id": "P1",
+    "slug": "py-no-bare-except",
+    "prose": "Never use a bare `except:`; always catch a specific exception type.",
+    "category": "forbidden-syntax",
+    "mechanizable": true,
+    "engine": "astgrep-py",
+    "note": "Python (ast-grep). AST rule `except:` stays clean on typed/tuple forms + string/comment embeddings a regex leaks on."
+  },
+  {
+    "id": "P2",
+    "slug": "py-no-print",
+    "prose": "Never use print(); use the project logger.",
+    "category": "forbidden-api",
+    "mechanizable": true,
+    "engine": "astgrep-py",
+    "note": "Python (ast-grep). NAIVE `print($A)` on purpose — passes self-test (single-arg) but under-flags zero/multi-arg on gold -> abstain-gold (recall leak). Sound form is `print($$$A)`."
+  },
+  {
+    "id": "P3",
+    "slug": "py-no-eval",
+    "prose": "Never use eval().",
+    "category": "forbidden-api",
+    "mechanizable": true,
+    "engine": "astgrep-py",
+    "note": "Python (ast-grep). `eval($$$A)` — variadic (the fix for P2's arity bug); AST-anchored so `model.eval()` (attribute) and `ast.literal_eval` don't match."
   }
 ]
