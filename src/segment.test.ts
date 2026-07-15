@@ -1,5 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { segmentInstructions, type SegmentedRule } from "./segment.js";
+import {
+  segmentInstructions as segmentInstructionsFull,
+  type SegmentedRule,
+} from "./segment.js";
+
+// These tests assert on the candidate rules; wrap to the `.segments` array (the
+// skipped-bullets tier is covered separately in segment-skip.test.ts).
+const segmentInstructions = (
+  md: string,
+  file?: string,
+  skip?: ReadonlySet<number>,
+): SegmentedRule[] => segmentInstructionsFull(md, file, skip).segments;
 
 function texts(rules: readonly SegmentedRule[]): string[] {
   return rules.map((r) => r.text);

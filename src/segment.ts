@@ -24,6 +24,31 @@ export interface SegmentedRule {
   confidence: "high" | "medium";
 }
 
+/** Why the segmenter decided a bullet is NOT a rule (the transparency signal —
+ * see `research/rule-compiler-design.md` §3). `index`/`description`/`no-signal`
+ * come from the gate; `section` means it sits under a non-rule heading
+ * (Setup / Commands / Key Files / Architecture …). */
+export type RejectReason = "index" | "description" | "no-signal" | "section";
+
+/** A BULLET the segmenter saw but did NOT treat as a rule, with the reason — so
+ * the audit report can be honest about what it set aside (a heuristic misses
+ * declarative rules; showing skips lets a human eyeball a wrong drop). Bounded to
+ * list items on purpose; rejected paragraph prose is not reported (too noisy). */
+export interface SkippedBullet {
+  readonly text: string;
+  readonly file: string | undefined;
+  readonly lineStart: number;
+  readonly lineEnd: number;
+  readonly reason: RejectReason;
+}
+
+/** The segmenter's full output: the confident/medium candidate rules PLUS the
+ * bullets it rejected (with reasons), so nothing is silently dropped. */
+export interface SegmentResult {
+  readonly segments: SegmentedRule[];
+  readonly skipped: SkippedBullet[];
+}
+
 // --- Heuristic vocabulary --------------------------------------------------
 
 /** Imperative/prohibitive head the candidate must START with (form cue). The
@@ -348,8 +373,18 @@ function isLinkOnly(text: string): boolean {
   return URL_ONLY.test(t) || LINK_ONLY.test(t);
 }
 
+/** A gate verdict: an accepted candidate (with confidence) or a rejection (with
+ * the reason, for the skipped-transparency report). */
+type GateResult = { confidence: Confidence } | { reject: RejectReason };
+
+/** The accept/reject view of a gate result, for sites that only need the split
+ * (atomize, the sub-span loop) and don't care about the reason. */
+function confidenceOf(g: GateResult): Confidence | null {
+  return "confidence" in g ? g.confidence : null;
+}
+
 /**
- * Score the 3 cues. Returns confidence or null (reject).
+ * Score the 3 cues. Returns a confidence OR a reject reason.
  * - form: starts with an imperative/prohibitive head (or "No X").
  * - context: is a bullet OR sits under a rule-ish heading.
  * - shape: 15–300 chars, has a verb-ish token, not link-only, not a declaration.
@@ -358,16 +393,16 @@ function gate(
   text: string,
   isBullet: boolean,
   underRuleHeading: boolean,
-): Confidence | null {
+): GateResult {
   const t = text.trim();
 
   // Reject an index/command/reference entry outright (`` `path` — description ``,
   // `a.ts → b.ts`, `dir/x — …`, `Label: path`) — the corpus's dominant false
   // positive. No cue count can rescue it.
-  if (looksLikeIndexEntry(t)) return null;
+  if (looksLikeIndexEntry(t)) return { reject: "index" };
   // Reject a DESCRIPTION-led sentence (`` `Foo` class in `x` executes … ``) — an
   // architecture/index sentence, not a rule (the dogfood's #1 false positive).
-  if (looksLikeDescription(t)) return null;
+  if (looksLikeDescription(t)) return { reject: "description" };
 
   const context = isBullet || underRuleHeading;
 
@@ -375,7 +410,7 @@ function gate(
   // strong signal it's enforceable, even without an imperative verb — promote it
   // to high so the high-only default doesn't drop it (recovers rule-naming
   // bullets like "No floating promises (`@ts.../no-floating-promises`)").
-  if (context && RULE_NAME_IN_CODE.test(t)) return "high";
+  if (context && RULE_NAME_IN_CODE.test(t)) return { confidence: "high" };
 
   // The form/declaration cues see the text with leading decoration stripped, so
   // `- **Never** …` reads as imperative and `**We** …` still reads declarative.
@@ -389,9 +424,9 @@ function gate(
     !DECLARATION.test(head);
 
   const cues = (form ? 1 : 0) + (context ? 1 : 0) + (shape ? 1 : 0);
-  if (cues >= 3) return "high";
-  if (cues === 2) return "medium";
-  return null;
+  if (cues >= 3) return { confidence: "high" };
+  if (cues === 2) return { confidence: "medium" };
+  return { reject: "no-signal" };
 }
 
 // --- Atomicity split -------------------------------------------------------
@@ -460,7 +495,8 @@ function atomize(
   // Both/all halves must independently pass the gate, else keep whole.
   for (const p of pieces) {
     const text = normalize(src.slice(p.start, p.end));
-    if (gate(text, isBullet, underRuleHeading) === null) return [whole];
+    if (confidenceOf(gate(text, isBullet, underRuleHeading)) === null)
+      return [whole];
   }
   return pieces.length > 1 ? pieces : [whole];
 }
@@ -505,10 +541,11 @@ export function segmentInstructions(
   markdown: string,
   file?: string,
   skipLines?: ReadonlySet<number>,
-): SegmentedRule[] {
+): SegmentResult {
   const lines = markdown.split("\n");
   const lineOffsets = computeLineOffsets(lines);
   const out: SegmentedRule[] = [];
+  const skipped: SkippedBullet[] = [];
 
   let inFence = false;
   let currentHeadingIsRuleish = false;
@@ -589,7 +626,8 @@ export function segmentInstructions(
       const contentSpan: Span = { start: contentStart, end: contentEnd };
 
       const wholeText = normalize(markdown.slice(contentStart, contentEnd));
-      const conf = gate(wholeText, true, currentHeadingIsRuleish);
+      const g = gate(wholeText, true, currentHeadingIsRuleish);
+      const conf = confidenceOf(g);
 
       // Reject bullets under an anti-context heading (Commands/Setup/Key Files/
       // Architecture/…) — the corpus's dominant false-positive locus.
@@ -613,11 +651,26 @@ export function segmentInstructions(
         } else {
           for (const s of spans) {
             const text = normalize(markdown.slice(s.start, s.end));
-            const c = gate(text, true, currentHeadingIsRuleish);
+            const c = confidenceOf(gate(text, true, currentHeadingIsRuleish));
             if (c !== null)
               out.push(emitFromSpan(markdown, lineOffsets, file, s, c));
           }
         }
+      } else {
+        // This bullet was NOT treated as a rule — record it + why, so the audit
+        // report can be honest about what it set aside (transparency, §3). A
+        // rejection under an anti-context heading is a "section" skip; otherwise
+        // it's the gate's own reason.
+        skipped.push({
+          text: wholeText,
+          file,
+          lineStart: offsetToLine(lineOffsets, contentStart),
+          lineEnd: offsetToLine(lineOffsets, contentEnd - 1),
+          reason:
+            currentHeadingIsAntiContext || "confidence" in g
+              ? "section"
+              : g.reject,
+        });
       }
 
       i = endLine + 1;
@@ -656,7 +709,7 @@ export function segmentInstructions(
           });
           if (s.start >= s.end) continue;
           const text = normalize(markdown.slice(s.start, s.end));
-          const c = gate(text, false, true);
+          const c = confidenceOf(gate(text, false, true));
           if (c !== null)
             out.push(emitFromSpan(markdown, lineOffsets, file, s, c));
         }
@@ -669,5 +722,5 @@ export function segmentInstructions(
     i++;
   }
 
-  return out;
+  return { segments: out, skipped };
 }

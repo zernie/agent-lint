@@ -2243,7 +2243,14 @@ function computeRuleRouting(
     const routing = mergeRoutings(
       files.map((f) => routeRules(f.text, f.path, { availableRules })),
     );
-    return routing.segmented > 0 ? routing : undefined;
+    // Keep the routing if it found ANY confident rule, possible rule, or skipped
+    // bullet — so the two-tier + skipped report surfaces even a doc with 0
+    // confident rules (all its bullets landed in possible/skipped).
+    return routing.segmented > 0 ||
+      routing.possible.length > 0 ||
+      routing.skipped.length > 0
+      ? routing
+      : undefined;
   } catch {
     return undefined;
   }
@@ -2275,6 +2282,36 @@ function formatTriggerNudge(triggerableSkills: number): string {
     `ℹ Do your ${String(n)} skill${n === 1 ? "" : "s"} actually fire? The deterministic read can't tell — ` +
     `run \`audit\` interactively to measure, or test with \`measureTriggerRate\` (vigiles/testing).`
   );
+}
+
+/** A terminal summary of the rule map: the CONFIDENT lane counts + the POSSIBLE
+ * (review) and SKIPPED tiers, with the honest caveat that detection is a
+ * heuristic filter. The full per-rule map + skipped list live in the HTML/JSON
+ * report; this is the "be clear about what was detected" headline. "" when there
+ * is nothing to show. */
+function formatRuleMapSummary(routing: RuleRouting | undefined): string {
+  if (!routing) return "";
+  const { counts, possible, skipped } = routing;
+  const confident =
+    counts.reuse + counts.hook + counts.unrouted + counts.semantic;
+  if (confident === 0 && possible.length === 0 && skipped.length === 0)
+    return "";
+  const lines = [
+    "Rule map — how your prose rules could be enforced (heuristic, precision-first):",
+    `  ✓ ${String(counts.reuse)} enforceable · ⛓ ${String(counts.hook)} hook · ⚙ ${String(counts.unrouted)} custom · ✎ ${String(counts.semantic)} judgment`,
+  ];
+  if (possible.length > 0)
+    lines.push(
+      `  ? ${String(possible.length)} possible — rule-ish, but below the confidence bar (review these)`,
+    );
+  if (skipped.length > 0)
+    lines.push(
+      `  ⊘ ${String(skipped.length)} skipped — not treated as rules (setup steps, descriptions, index entries)`,
+    );
+  lines.push(
+    "  Detection is a best-effort filter — it won't catch every rule. Full map + skipped list in the report (or --json).",
+  );
+  return lines.join("\n");
 }
 
 function scaffoldSpec(args: string[]): void {
@@ -6783,6 +6820,12 @@ async function main(): Promise<void> {
         // Read the local flight recorder ONCE — feeds both the JSON report
         // (structured summary, the product boundary) and the terminal render.
         const ledgerRecords = readObservations(root);
+        // Route the prose rules ONCE — feeds the JSON report + the terminal
+        // rule-map summary (confident / possible / skipped tiers).
+        const ruleRouting = computeRuleRouting(
+          root,
+          adapter.layout.instructionFile,
+        );
         const auditReport = buildAuditReport(report, {
           harness: adapter.name,
           vigilesVersion: getVersion(),
@@ -6792,7 +6835,7 @@ async function main(): Promise<void> {
             root,
             adapter.layout.instructionFile,
           ),
-          ruleRouting: computeRuleRouting(root, adapter.layout.instructionFile),
+          ruleRouting,
         });
         const sc = auditReport.score;
         const plan = optimize(report);
@@ -6824,6 +6867,10 @@ async function main(): Promise<void> {
               .length,
           );
           if (fireNudge) console.log("\n" + fireNudge);
+          // The rule map — what audit detected in your instruction file and how
+          // each rule could be enforced (confident / possible / skipped tiers).
+          const ruleMap = formatRuleMapSummary(ruleRouting);
+          if (ruleMap) console.log("\n" + ruleMap);
           // The flight recorder: a compact summary of what the harness actually
           // DID in real sessions (hook/agent decisions), read off the local
           // agent-readable ledger. Empty (skipped) until something is recorded.

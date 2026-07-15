@@ -35,7 +35,7 @@
  * Pure, deterministic, dependency-free. Reuses `rule-inventory`'s hardened
  * whole-token matcher + `INTENT_MAP`, and `segment`'s Tier-A segmenter.
  */
-import { segmentInstructions } from "./segment.js";
+import { segmentInstructions, type SkippedBullet } from "./segment.js";
 import {
   INTENT_MAP,
   matchesWholeToken,
@@ -83,10 +83,19 @@ export interface RoutedRule {
 }
 
 export interface RuleRouting {
-  /** How many atomic rules were routed (after the confidence filter). */
+  /** How many CONFIDENT atomic rules were routed (high or rescued). */
   readonly segmented: number;
   readonly counts: Record<RuleCategory, number>;
+  /** The CONFIDENT tier — cleared the precision bar; these are the routed rules. */
   readonly rules: readonly RoutedRule[];
+  /** The POSSIBLE tier — rule-ish bullets (medium confidence) that did NOT clear
+   * the bar, still classified so a human can review + promote them. Detection is
+   * precision-first, so this is where a declarative rule ("Every X must Y") that
+   * the confident tier misses shows up. See `research/rule-compiler-design.md` §2. */
+  readonly possible: readonly RoutedRule[];
+  /** Bullets the segmenter decided were NOT rules, each with a reason — so the
+   * report is honest about what it set aside (§3). */
+  readonly skipped: readonly SkippedBullet[];
 }
 
 export interface RouteOptions {
@@ -525,22 +534,24 @@ export function routeRules(
     INTENT_MAP.some((m) =>
       m.keywords.some((kw) => matchesWholeToken(text, kw)),
     );
-  // S0/S1 pre-pass: explicit markers are definitive and are CONSUMED (their body
-  // lines are skipped) so the heuristic segmenter can't double-count them.
-  const marked = extractMarkedRules(instructionText, file, catalog);
-  const segments = segmentInstructions(
-    instructionText,
-    file,
-    marked.skip,
-  ).filter(
-    (s) =>
-      minConfidence === "medium" ||
-      s.confidence === "high" ||
-      namesCatalogRule(s.text) ||
-      matchesPatternRule(s.text) ||
-      matchesIntentMap(s.text),
-  );
-  const heuristicRules: RoutedRule[] = segments.map((s) => {
+  // A segment is CONFIDENT if it's high, rescued by the catalog/pattern/intent, or
+  // the caller opted into medium. Everything else the segmenter emitted is a
+  // POSSIBLE rule (medium, unrescued) — surfaced for review, not routed as fact.
+  const isConfident = (s: { text: string; confidence: "high" | "medium" }) =>
+    minConfidence === "medium" ||
+    s.confidence === "high" ||
+    namesCatalogRule(s.text) ||
+    matchesPatternRule(s.text) ||
+    matchesIntentMap(s.text);
+
+  const toRouted = (s: {
+    text: string;
+    exactQuote: string;
+    file: string | undefined;
+    lineStart: number;
+    lineEnd: number;
+    confidence: "high" | "medium";
+  }): RoutedRule => {
     const c = classify(s.text, catalog);
     return {
       text: s.text,
@@ -556,7 +567,37 @@ export function routeRules(
       ...(c.linter ? { linter: c.linter } : {}),
       ...(c.enabled !== undefined ? { enabled: c.enabled } : {}),
     };
+  };
+
+  // S0/S1 pre-pass: explicit markers are definitive and are CONSUMED (their body
+  // lines are skipped) so the heuristic segmenter can't double-count them.
+  const marked = extractMarkedRules(instructionText, file, catalog);
+  const { segments, skipped: rawSkipped } = segmentInstructions(
+    instructionText,
+    file,
+    marked.skip,
+  );
+  // A bullet the gate rejected as `no-signal` (a declarative norm it couldn't
+  // parse, e.g. "Every function must have a docstring") is a rule CANDIDATE, not
+  // obviously-not-a-rule — fold it back in: if it NAMES/matches a real rule it's
+  // rescued to CONFIDENT, otherwise it joins the POSSIBLE review tier. Only
+  // index/description/section rejects stay SKIPPED (confidently not rules).
+  const asCandidate = (s: SkippedBullet) => ({
+    text: s.text,
+    exactQuote: s.text,
+    file: s.file,
+    lineStart: s.lineStart,
+    lineEnd: s.lineEnd,
+    confidence: "medium" as const,
   });
+  const candidates = [
+    ...segments,
+    ...rawSkipped.filter((s) => s.reason === "no-signal").map(asCandidate),
+  ];
+  const skipped = rawSkipped.filter((s) => s.reason !== "no-signal");
+  const heuristicRules = candidates.filter(isConfident).map(toRouted);
+  const possible = candidates.filter((s) => !isConfident(s)).map(toRouted);
+
   // Marker rules first (definitive), then the heuristic residue.
   const rules: RoutedRule[] = [...marked.rules, ...heuristicRules];
   const counts: Record<RuleCategory, number> = {
@@ -567,7 +608,7 @@ export function routeRules(
     unrouted: 0,
   };
   for (const r of rules) counts[r.category]++;
-  return { segmented: rules.length, counts, rules };
+  return { segmented: rules.length, counts, rules, possible, skipped };
 }
 
 /**
@@ -585,12 +626,16 @@ export function mergeRoutings(routings: readonly RuleRouting[]): RuleRouting {
     unrouted: 0,
   };
   const rules: RoutedRule[] = [];
+  const possible: RoutedRule[] = [];
+  const skipped: SkippedBullet[] = [];
   let segmented = 0;
   for (const r of routings) {
     segmented += r.segmented;
     rules.push(...r.rules);
+    possible.push(...r.possible);
+    skipped.push(...r.skipped);
     for (const k of Object.keys(counts) as RuleCategory[])
       counts[k] += r.counts[k];
   }
-  return { segmented, counts, rules };
+  return { segmented, counts, rules, possible, skipped };
 }

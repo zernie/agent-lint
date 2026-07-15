@@ -401,9 +401,50 @@ describe("routeRules", () => {
     expect(py?.enabled).toBe(false); // documented but OFF
   });
 
+  it("splits detection into CONFIDENT / POSSIBLE / SKIPPED tiers", () => {
+    const md = [
+      "# Rules",
+      "",
+      "## Conventions",
+      "",
+      "- Never use `eval()`.", // imperative → confident
+      "- Every public API should stay backwards compatible.", // declarative norm, no rule → possible
+      "",
+      "## Setup", // anti-context heading
+      "",
+      "- Run `npm install` to get started.", // → skipped (section)
+    ].join("\n");
+    const r = routeRules(md, "CLAUDE.md");
+
+    // CONFIDENT: the imperative rule is routed.
+    expect(r.rules.some((x) => x.text.includes("eval()"))).toBe(true);
+    // POSSIBLE: the declarative norm is surfaced for review, NOT routed as fact.
+    expect(
+      r.possible.some((x) => x.text.includes("backwards compatible")),
+    ).toBe(true);
+    expect(r.rules.some((x) => x.text.includes("backwards compatible"))).toBe(
+      false,
+    );
+    // SKIPPED: the setup bullet is set aside WITH a reason, not silently dropped.
+    const setup = r.skipped.find((s) => s.text.includes("npm install"));
+    expect(setup?.reason).toBe("section");
+  });
+
+  it("rescues a declarative rule that NAMES/matches a real rule to CONFIDENT (recall)", () => {
+    // "Every function must have a docstring" fails the imperative gate (declarative
+    // subject) but matches the docstring pattern rule — so it's rescued to reuse,
+    // not lost. The two-tier fold recovers this recall.
+    const r = routeRules(
+      "## Docstrings\n\n- Every function must have a docstring.",
+      "CLAUDE.md",
+    );
+    expect(r.rules.some((x) => x.category === "reuse")).toBe(true);
+  });
+
   it("returns an empty routing for prose with no rules", () => {
     const r = routeRules("This project is a knowledge base. It has notes.");
     expect(r.segmented).toBe(0);
     expect(r.rules).toEqual([]);
+    expect(r.possible).toEqual([]);
   });
 });
