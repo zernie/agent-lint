@@ -221,64 +221,26 @@ describe("mergeCatalogs (pure)", () => {
     ]);
   });
 
-  it("combines a colliding id conservatively — enabled OR-s, one entry", () => {
-    // `no-else-return` is both an ESLint core rule and a Pylint symbol.
-    const dup: RuleCatalog = {
+  it("KEEPS both entries on a cross-linter id collision (never drops one)", () => {
+    // `no-else-return` is both an ESLint core rule and a Pylint symbol. Dropping
+    // one by id was the bug that let a Python doc inherit ESLint's state; each is
+    // a real rule in its own linter, so both survive with their own provenance.
+    // (Collision routing is resolved at the lookup — see rule-routing.test.ts.)
+    const pylintDup: RuleCatalog = {
       linter: "pylint",
       available: 1,
       enabled: 0,
-      rules: [
-        { id: "no-console", linter: "pylint", plugin: null, enabled: false },
-      ],
-    };
-    const merged = mergeCatalogs(eslint, dup);
-    expect(merged?.rules).toHaveLength(1);
-    expect(merged?.rules[0].enabled).toBe(true); // ON in ESLint ⇒ enforced
-  });
-
-  it("a collision ON in only the SECOND linter reads enabled, with its provenance", () => {
-    // The case that broke before: an ESLint-first order let a Python doc's rule
-    // inherit ESLint's OFF state, a false "documented but OFF".
-    const eslintOff: RuleCatalog = {
-      linter: "eslint",
-      available: 1,
-      enabled: 0,
-      rules: [
-        {
-          id: "no-else-return",
-          linter: "eslint",
-          plugin: null,
-          enabled: false,
-        },
-      ],
-    };
-    const pylintOn: RuleCatalog = {
-      linter: "pylint",
-      available: 1,
-      enabled: 1,
       rules: [
         {
           id: "no-else-return",
           linter: "pylint",
           plugin: null,
           code: "R1705",
-          enabled: true,
+          enabled: false,
         },
       ],
     };
-    const merged = mergeCatalogs(eslintOff, pylintOn);
-    expect(merged?.rules).toHaveLength(1);
-    const hit = merged?.rules[0];
-    expect(hit?.enabled).toBe(true); // Pylint enforces it → not "OFF"
-    expect(hit?.linter).toBe("pylint"); // provenance follows the enforcer
-    expect(hit?.code).toBe("R1705"); // the numeric alias is preserved
-  });
-
-  it("drops the code alias when the OTHER linter is the enforcing provenance", () => {
-    // ESLint enforces `no-else-return`; Pylint's `R1705` is OFF. The combined
-    // row is eslint/ON, so it must NOT carry `R1705` — else a doc naming the
-    // Pylint code would resolve to eslint/enabled instead of the disabled rule.
-    const eslintOn: RuleCatalog = {
+    const eslintDup: RuleCatalog = {
       linter: "eslint",
       available: 1,
       enabled: 1,
@@ -286,25 +248,13 @@ describe("mergeCatalogs (pure)", () => {
         { id: "no-else-return", linter: "eslint", plugin: null, enabled: true },
       ],
     };
-    const pylintOff: RuleCatalog = {
-      linter: "pylint",
-      available: 1,
-      enabled: 0,
-      rules: [
-        {
-          id: "no-else-return",
-          linter: "pylint",
-          plugin: null,
-          code: "R1705",
-          enabled: false,
-        },
-      ],
-    };
-    const merged = mergeCatalogs(eslintOn, pylintOff);
-    const hit = merged?.rules[0];
-    expect(hit?.linter).toBe("eslint");
-    expect(hit?.enabled).toBe(true);
-    expect(hit?.code).toBeUndefined(); // the Pylint alias is not leaked
+    const merged = mergeCatalogs(eslintDup, pylintDup);
+    expect(merged?.rules).toHaveLength(2);
+    expect(merged?.available).toBe(2);
+    expect(merged?.enabled).toBe(1); // ESLint's is on, Pylint's is off
+    const pyHit = merged?.rules.find((r) => r.linter === "pylint");
+    expect(pyHit?.code).toBe("R1705"); // the Pylint code alias survives the merge
+    expect(pyHit?.enabled).toBe(false);
   });
 });
 

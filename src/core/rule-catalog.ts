@@ -207,17 +207,15 @@ export function parsePylintCatalog(
 /**
  * Merge the catalogs of every linter a repo has into ONE catalog for routing.
  *
- * Routing looks up a doc's rule id in `.rules` (as a `Map<id, hit>`). Rule ids
- * CAN collide across linters — `no-else-return` is both an ESLint core rule and
- * a Pylint symbol — and a bare id in an instruction file carries no linter, so a
- * collision is genuinely ambiguous. We combine it CONSERVATIVELY rather than
- * dropping one linter arbitrarily: `enabled = OR` (a "**Enforced by:** X" claim
- * is satisfied if ANY linter has X on, so we never cry "documented but OFF" when
- * one linter enforces it), and provenance follows the linter that actually
- * enforces it (the enabled one; else the first seen). Each rule's own `code`
- * (Pylint's numeric alias) is preserved so a doc naming either resolves. Returns
- * undefined when nothing was enumerated (so a non-JS-non-Python repo is byte-
- * identical to before this existed).
+ * KEEPS EVERY entry — a polyglot repo genuinely has a rule in each linter, so an
+ * id shared across ESLint and Pylint (`no-else-return`) is two real rules and
+ * both are retained (never dropped by id, the bug that let a Python doc inherit
+ * ESLint's state). Collision handling belongs at the ROUTING lookup, not here: a
+ * bare id that resolves to two hits is combined conservatively there, while a
+ * numeric code (unique to its linter) keeps its own hit — see `buildCatalogLookup`
+ * in rule-routing.ts. So the merge is a plain concatenation; each rule carries its
+ * own `linter`/`enabled`/`code` provenance. Returns undefined when nothing was
+ * enumerated (so a non-JS-non-Python repo is byte-identical to before this existed).
  */
 export function mergeCatalogs(
   ...cats: (RuleCatalog | null | undefined)[]
@@ -225,42 +223,13 @@ export function mergeCatalogs(
   const present = cats.filter((c): c is RuleCatalog => c != null);
   if (present.length === 0) return undefined;
   if (present.length === 1) return present[0];
-  const byId = new Map<string, AvailableRule>();
-  for (const cat of present) {
-    for (const r of cat.rules) {
-      const prev = byId.get(r.id);
-      byId.set(r.id, prev ? combineRules(prev, r) : r);
-    }
-  }
-  const rules = [...byId.values()];
+  const rules = present.flatMap((c) => c.rules);
   const enabled = rules.reduce((n, r) => (r.enabled ? n + 1 : n), 0);
   return {
     linter: present[0].linter,
     available: rules.length,
     enabled,
     rules,
-  };
-}
-
-/** Combine two same-id rules from different linters (see `mergeCatalogs`):
- * enabled OR-s, provenance follows the enforcing linter, code is preserved. */
-function combineRules(prev: AvailableRule, next: AvailableRule): AvailableRule {
-  // Provenance follows the linter that actually enforces the rule; if neither
-  // (or both) enforces it, keep the first-seen.
-  const enforcing = !prev.enabled && next.enabled ? next : prev;
-  // The numeric `code` alias (Pylint's `R1705`) is linter-specific, so it must
-  // travel with the ENFORCING entry only — never carried over onto the other
-  // linter's provenance. Otherwise a doc naming `R1705` would resolve to the
-  // combined row's `{linter, enabled}` (e.g. `eslint`/ON) instead of the Pylint
-  // rule it actually names. If the enforcing entry has no code, the alias is
-  // dropped (a doc naming it is left unrouted — safe — rather than mis-routed).
-  const code = enforcing.code;
-  return {
-    ...prev,
-    enabled: prev.enabled || next.enabled,
-    linter: enforcing.linter,
-    plugin: enforcing.plugin,
-    ...(code !== undefined ? { code } : {}),
   };
 }
 

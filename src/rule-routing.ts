@@ -41,7 +41,7 @@ import {
   matchesWholeToken,
   type LinterName,
 } from "./rule-inventory.js";
-import type { RuleCatalog } from "./core/rule-catalog.js";
+import type { RuleCatalog, AvailableRule } from "./core/rule-catalog.js";
 
 /** How a routed rule would be enforced (a MECHANISM ladder, not a 1-10 score). */
 export type RuleCategory = "reuse" | "hook" | "meta" | "semantic" | "unrouted";
@@ -354,6 +354,37 @@ function namedRuleTokens(text: string): string[] {
  * lets a polyglot repo's map say `pylint:invalid-name` vs `eslint:no-console`. */
 type CatalogHit = { enabled: boolean; linter: "eslint" | "pylint" };
 
+/** Combine two hits that a doc-token resolves to (a cross-linter id collision).
+ * enabled OR-s — a "**Enforced by:** X" claim is satisfied if ANY linter has X
+ * on, so we never cry "documented but OFF" when one linter enforces it — and
+ * provenance follows the enforcing linter. */
+function combineHits(a: CatalogHit, b: CatalogHit): CatalogHit {
+  if (a.enabled === b.enabled) return { enabled: a.enabled, linter: a.linter };
+  return a.enabled ? a : b; // exactly one is on → it wins (enabled OR-s to true)
+}
+
+/** Build the doc-token → hit lookup from a (possibly polyglot) rule list. A rule
+ * is matchable by its id AND, for Pylint, its numeric code. A bare id CAN collide
+ * across linters (`no-else-return` is in both ESLint and Pylint) → combine
+ * conservatively. A numeric code is unique to its linter, so it never collides
+ * and KEEPS its own (linter, enabled) — a doc naming the Pylint code `R1705`
+ * still surfaces "documented but OFF" even when the symbol is enabled in ESLint. */
+function buildCatalogLookup(
+  rules: readonly AvailableRule[],
+): Map<string, CatalogHit> {
+  const map = new Map<string, CatalogHit>();
+  const put = (key: string, hit: CatalogHit): void => {
+    const prev = map.get(key);
+    map.set(key, prev ? combineHits(prev, hit) : hit);
+  };
+  for (const r of rules) {
+    const hit: CatalogHit = { enabled: r.enabled, linter: r.linter };
+    put(r.id, hit);
+    if (r.code) put(r.code, hit);
+  }
+  return map;
+}
+
 function classify(
   text: string,
   catalog?: ReadonlyMap<string, CatalogHit>,
@@ -510,20 +541,7 @@ export function routeRules(
 ): RuleRouting {
   const minConfidence = options.minConfidence ?? "high";
   const catalog = options.availableRules
-    ? new Map<string, CatalogHit>(
-        options.availableRules.rules.flatMap((r) => {
-          // A rule is matchable by its id AND, for Pylint, its numeric code
-          // (`C0116`) — a doc may name either the symbol or the code. Both keys
-          // carry the linter so a merged polyglot catalog keeps provenance.
-          const hit: CatalogHit = { enabled: r.enabled, linter: r.linter };
-          return r.code
-            ? [
-                [r.id, hit],
-                [r.code, hit],
-              ]
-            : [[r.id, hit]];
-        }),
-      )
+    ? buildCatalogLookup(options.availableRules.rules)
     : undefined;
   // A MEDIUM segment that NAMES a rule the repo's catalog actually has is
   // enforceable — the catalog is ground truth, so it's higher-precision than the

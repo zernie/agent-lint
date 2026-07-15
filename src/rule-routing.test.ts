@@ -173,6 +173,49 @@ describe("routeRules", () => {
     expect(arch?.enabled).toBe(true);
   });
 
+  it("polyglot collision: the symbol routes conservatively, the Pylint code stays OFF", () => {
+    // `no-else-return` is in BOTH linters — ESLint ON, Pylint OFF (code R1705).
+    // A doc naming the SYMBOL must not read "OFF" (ESLint enforces it); a doc
+    // naming the Pylint CODE must still surface the documented-but-OFF Pylint rule.
+    const availableRules = {
+      linter: "eslint" as const,
+      available: 2,
+      enabled: 1,
+      rules: [
+        {
+          id: "no-else-return",
+          linter: "eslint" as const,
+          plugin: null,
+          enabled: true,
+        },
+        {
+          id: "no-else-return",
+          linter: "pylint" as const,
+          plugin: null,
+          code: "R1705",
+          enabled: false,
+        },
+      ],
+    };
+    const md = [
+      "## Rules",
+      "",
+      "- Prefer a guard clause over else-after-return (`no-else-return`)",
+      "- No else after return (`R1705`)",
+    ].join("\n");
+    const r = routeRules(md, undefined, { availableRules });
+
+    const sym = r.rules.find((x) => x.rule === "no-else-return");
+    expect(sym?.category).toBe("reuse");
+    expect(sym?.enabled).toBe(true); // ESLint enforces it → not "documented but OFF"
+    expect(sym?.linter).toBe("eslint");
+
+    const code = r.rules.find((x) => x.rule === "R1705");
+    expect(code?.category).toBe("reuse");
+    expect(code?.enabled).toBe(false); // the disabled Pylint rule surfaces
+    expect(code?.linter).toBe("pylint");
+  });
+
   it("dynamic catalog rescues a MEDIUM declarative bullet that names a real repo rule", () => {
     const availableRules = {
       linter: "eslint" as const,
