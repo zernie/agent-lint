@@ -57,7 +57,35 @@ mcp-python-sdk (Python), cloudflare/workers-sdk (TS). 125 segmented rules.
 of a real file gets some vigiles surface, and only ~10% is pure semantic prose (home 5).** NOT the
 "~10% niche" an off-the-shelf-only reading implies.
 
-## Synthesis success — measured (benchmark, 2026-07-15)
+## Breadth benchmark — 21 real rulebooks, Fable-audited (2026-07-15)
+
+The 85%-figure below is of a favorable **code-quality-only** subset. A **broad** run (21 real OSS
+rulebooks — codex/sentry/airflow/cloudflare/prisma/vercel/opencode/cal.com/…, 327 segmented items)
+gives the honest, less-rosy picture, and it's the one to cite:
+
+- **Off-the-shelf routing: ~4%** (measured; negligible at breadth — the default teaser catches
+  almost nothing on its own).
+- **Sampled breakdown of the 87% "unrouted"** (n=48, actually synth+run with adversarial edges;
+  Wilson CI ≈ ±13pp): **~⅓ compiled into a checker that survived an adversarial probe · ~⅓
+  genuinely semantic · ~⅓ not-even-a-rule** (commands / headings / pointers).
+
+**The honest headline (do NOT overclaim):** *"a third of a rulebook is mechanizable, a third is
+prose, a third isn't a rule."* Fable's audit killed the "~61% / ~45% enforceable" point estimates —
+they stack a **strong-model ceiling** (capable synth-agent, self-judged edges; the production skill
+does less), unexecuted router buckets, and a self-judged "not-a-rule" denominator. So: **31% is a
+CEILING, not a product number; the 2/13 (~15%) leak rate is a FLOOR.** Don't publish 61%.
+
+**The finding that survives the noise (the durable claim):** **verification soundness tracks
+representation depth** — every AST-level checker held its adversarial edge; the only 2 leaks (of 13)
+were a regex checker and a context-blind config-selector. AST-not-regex + the gate-must-abstain,
+measured on 13 independent real rules. This is the paper's spine, not the enforceable-%.
+
+**Product read:** off-the-shelf routing is a rounding error at breadth → the value is (a) ref/command
+verification (home 4, the ~⅓ not-a-rule that's commands/pointers), (b) the opt-in **synthesis tier**
+(home 2, the enforceable ⅓, gated), and (c) honest abstention on the semantic ⅓. The highest-leverage
+product fix is segmenter **precision** (stop extracting headings/commands as "rules").
+
+## Synthesis success — measured (code-quality subset benchmark, 2026-07-15)
 
 **Of 34 real code-quality rules** extracted from the 7-file corpus (Py/TS/Rust), each turned into
 the least-power enforcement and **actually run** against violating + compliant + adversarial-edge
