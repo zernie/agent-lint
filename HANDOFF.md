@@ -15,122 +15,61 @@
 
 ## RESUME HERE
 
-**Branch `claude/rules-compiler-python-3xqhtd`** — **PR #72 MERGED** into `main` as
-`cd61af5` (squash, all 6 CI jobs green). Branch was RESTARTED from `origin/main`
-(now at `cd61af5`) per the merged-branch protocol — a merged PR is finished, so any
-new work is a FRESH change on this same branch name, never stacked on merged history.
+**Branch `claude/rules-compiler-python-3xqhtd`** — **PR #73 OPEN**, `feat: full
+ESLint/Pylint parity in the audit rule map (catalog + Python synthesis)`. HEAD
+`7fa3386`. **Waiting on CI to go green to SQUASH-MERGE** (a self-check-in via
+ScheduleWakeup polls it). After merge: **deliver the Telegram Russian CC prompt**
+the user asked for — the version that runs `vigiles audit`, reads
+`vigiles-report.json` `ruleRouting`, and opens `vigiles-report.html` in the browser.
+(#72 already merged as `cd61af5`; this branch was restarted from main for #73.)
 
-**What #72 shipped (v13):** the merged squash title was `feat(audit)!: prose→lint-rule
-routing map (ESLint + Pylint) + dogfood CI-enforcement + repo-structure pass`. Three
-things in one:
+**Merge protocol reminder:** if #73 is already merged when you resume, it's finished —
+restart this branch from `origin/main` for any follow-up, never stack on merged history.
 
-- **Rule-routing map** — `vigiles audit` previews which prose rules can be codified as
-  lint rules (ESLint full incl. dynamic catalog under own-repo+consent; Pylint
-  routing-only). 4 lanes: reuse (⚙ config-line) / hook / **custom rule (⚙, doable/opt-in)**
-  / **judgment call (✎, undecidable)**. The `pr-to-lint-rule` gated-synthesis skill
-  (REUSE-first → intent+codebase → synth rule + independent intent-test → TRUST GATE
-  P=R=1.0 else ABSTAIN) is the hand-off target. `AUDIT_SCHEMA_VERSION` bumped 1→2.
-- **Dogfood CI-enforcement** — `research/dogfood-corpus.md` is the index (every
-  artifact → is-it-CI-enforced → by-what) + policy; the `dogfood-vendoring-policy`
-  CLAUDE rule points at it. `compiler/gate.js` now ASSERTS its kept/abstain verdicts
-  (was print-only) + 2 new `check`-job CI steps run it and `bench/corpus/verify*.mjs`.
-- **Repo-structure pass** — `dev/`→`.claude/skills/` (contributor skills, unshipped);
-  `schemas/`→`src/schemas/`+DEPRECATED.md; `fixtures/`→`test/fixtures/`; `etc/`→
-  **`api-surface/`** (API-contract dir, lockfile-class); human scripts→`tools/` (+README);
-  `research/dogfood/`→`research/audit-captures/`. Root `CLAUDE.md` gained a `## Layout`
-  section = a desc per every root dir. **Verdict from the investigation: 8/10 hexagonal,
-  CI-enforced; adapters symmetric via the adapter-contract registry loop.**
+### What PR #73 contains (all built + green locally)
 
-## LATEST (2026-07-15) — rule-compiler DESIGN-OF-RECORD + two-tier detection (PR #73)
+- **Pylint dynamic catalog + enabled-state** (`src/core/rule-catalog.ts`) —
+  `enumeratePylintCatalog` shells `pylint --list-msgs` + `--list-msgs-enabled`
+  (SECTION-AWARE), so a Python repo gets the SAME dynamic catalog + "documented but
+  OFF" nudge as ESLint, plugins included; matchable by symbol OR numeric code.
+  `mergeCatalogs` unions ESLint+Pylint for polyglot. `AvailableRule.linter`/`code`.
+- **Python custom-rule synthesis** (`@vigiles/compiler`, Fable-designed) — `astgrep-py`
+  engine on the trust gate; ONE gate, injected per-engine executors; rules are ast-grep
+  JSON objects (data-not-code) via `@ast-grep/napi`+`lang-python`. Cross-engine leak
+  proof (P2 py-no-print `$A` → abstain-gold) + provenance guard.
+- **Two-tier detection** (`segment.ts`/`rule-routing.ts`/`cli.ts`/`audit-report.ts`) —
+  CONFIDENT / POSSIBLE (rule-ish, below the bar) / SKIPPED (index/description/section/
+  no-signal, each with a reason). POSSIBLE calibrated to NORM_SIGNAL bullets only; a
+  no-signal reject is RESCUED to confident only via catalog/pattern/intent match.
+- **OSS dogfood, CI-run** — `rule-routing-oss.test.ts` (3 vendored MIT Python AGENTS.md)
+  - `rule-catalog-oss.test.ts` (drives the REAL pylint binary; authored config).
+- **DX** — audit auto-gitignores `vigiles-report.{json,html}`, `--out=<dir>`, `--no-open`.
+- **Design-of-record** — `research/rule-compiler-design.md` (crisp front door). 3
+  frozen decisions: 2 linters (ESLint+Pylint), two-tier detection, show skipped.
 
-**PR #73 is OPEN** (`feat: full ESLint/Pylint parity in the audit rule map`) — all the
-rule-compiler work below is on it. NOT merged yet.
+### Codex review — ALL 11 threads addressed (don't re-fix)
 
-**Design-of-record + 3 decisions** (`research/rule-compiler-design.md`, the new crisp front
-door; multilang doc demoted to build-log). The founder pushed back on eager implementation +
-wanted the multi-linter / rule-detection design written down. Decisions (AskUserQuestion):
-(1) rule map FROZEN at 2 linters (ESLint+Pylint); (2) detection TWO-TIER (confident + possible-
-review); (3) report shows SKIPPED bullets + a best-effort caveat.
+Codex left 11 P2s across successive commits; every one is fixed on `7fa3386`:
+per-linter provenance on marked rules; numeric-code markers (`C0116`) accepted;
+report renders possible/skipped-only maps; ast-grep self-test try/catch; meta rules
+counted in the terminal summary; medium-mode no-signal folds rescued-only;
+`hasPythonSurface` requires a REAL pylint config (rc/section, all config filenames);
+**mergeCatalogs combines colliding ids conservatively** (enabled OR-s, provenance
+follows the enforcer, code alias tied to the enforcing entry — `no-else-return` is in
+both linters); **consent resolved BEFORE routing the rule map** so a first interactive
+`audit` enriches its own run (report still prints before the prompt — read leads).
+Last two fixes = commit `7fa3386`; collision fix = `618c84e`.
 
-**Two-tier detection BUILT** (segment.ts + rule-routing.ts + cli.ts + audit-report.ts):
+### Roadmapped LOW (not in #73; need user go-ahead for a fast-follow)
 
-- The segmenter gate returns a REJECT REASON; `segmentInstructions` → `{ segments, skipped }`.
-- `RuleRouting` gains `possible` + `skipped` (additive, no schema bump). routeRules splits:
-  CONFIDENT (routed) / POSSIBLE (rule-ish, below the bar — review) / SKIPPED (index/description/
-  section/no-signal, each with a reason). A `no-signal` reject is folded back in so a rule-NAMING
-  bullet is RESCUED to confident (recall win: "Every function must have a docstring" → reuse).
-- POSSIBLE calibrated to NORM_SIGNAL bullets only (must/should/never/avoid/FORBIDDEN/required…) —
-  on the real MCP AGENTS.md that's 7 genuine recall-misses, not 25 noisy ones; prose → skipped.
-- The audit TERMINAL now prints a rule-map summary (confident lane counts + possible/skipped +
-  "best-effort filter" caveat) — the "be clear about what you detected" ask.
-- MULTI-LINTER provenance fix: a merged polyglot catalog now tags each rule's linter
-  (`eslint:no-console` vs `pylint:invalid-name`, was `undefined:`). `AvailableRule.linter`.
-- Commits: b9a26d9 (Pylint catalog) · 04f8e7f (Python synthesis) · fed01d1 (OSS dogfood) ·
-  1a138d5 (provenance + design doc) · 4aa529b (two-tier) · b69f6a1 (norm-signal calibration).
-- Roadmapped (designed, partially built): the SKIPPED-inline-vs-json presentation is open.
-
-## EARLIER 2026-07-15 — full ESLint↔Pylint parity in the rule map
-
-Closed the ESLint-vs-Pylint asymmetry end to end. Two pieces:
-
-**(A) Pylint dynamic catalog + enabled-state** (`src/core/rule-catalog.ts`) — `enumeratePylintCatalog`
-shells `pylint --list-msgs` + `--list-msgs-enabled` (SECTION-AWARE — `Disabled:`/`Non-emittable:`
-sections not misread as enabled), so a Python repo gets the SAME dynamic catalog + "documented but
-OFF" nudge as ESLint, **plugins included** (W9xxx); rules matchable by symbol OR code. The deferred
-"inverted-polarity ConfigProbe" proved UNNECESSARY. `mergeCatalogs` unions both for polyglot;
-`computeRuleRouting` enumerates both under the same own-repo + `audit.measure` consent, pylint gated
-on `hasPythonSurface`. `AvailableRule.code` alias + `routeRules` flatMap. Unit + live-integration
-tested, rule-catalog.ts 100% covered. (commit b9a26d9)
-
-**(B) Python custom-rule SYNTHESIS** (`@vigiles/compiler`, Fable-designed) — added an `astgrep-py`
-engine to the trust gate. ONE gate, injected per-engine executors (`compiler/executors/{eslint,
-astgrep-py}.js`); corpus entries carry `engine` (absent ⇒ eslint). Python rules synthesized as
-ast-grep rule OBJECTS (JSON — data not code) run in-process via `@ast-grep/napi`+`lang-python`
-(added to `compiler/package.json`+lockfile for the isolated `npm ci --prefix compiler` CI step).
-3 dogfood rules: P1 py-no-bare-except (kept), P3 py-no-eval `$$$A` (kept), P2 py-no-print naive `$A`
-→ **abstain-gold** (recall leak — misses `print()`/`print(a,b)`; passes single-arg self-test) = the
-cross-engine leak-catch proof. Added a provenance guard (gold reused in self-test → abstain-
-contaminated, engine-agnostic; verified fires). `run-demo.js` filtered to ESLint rules. EXPECTED
-extended P1/P2/P3, CI-enforced via the existing gate step. compiler/ is prettier-IGNORED.
-Fable SCOPE (NOT built): no pylint/astroid, no Python REUSE tier (that's core/linters.ts), no
-plugin arch (rule-of-three), no auto-synthesize seam, no audit-lane wiring (separate consent story).
-
-Docs: rule-compiler-multilang-design §0.0, docs/verifying-instruction-files linter-coverage line,
-compiler/README engines section, roadmap (both marked shipped).
-
-**(C) OSS dogfood, CI-run** — expanded the real-OSS audit dogfood: `rule-routing-oss.test.ts` now
-covers 3 vendored MIT Python `AGENTS.md` (added `mcp-python-sdk`, © Anthropic; langchain + browser-use
-already there) with stable routing invariants; NEW `src/rule-catalog-oss.test.ts` drives the REAL
-pylint binary (CI installs it) — enumerates the catalog, asserts enabled-state from a real config
-(disabled rule OFF, default ON), and the "documented but OFF" routing. Config is AUTHORED (real
-MIT+pylint repos are rare — sqlalchemy/poetry/rich have none; the pylint binary is the real system).
-Corpus index (`research/dogfood-corpus.md`) + PROVENANCE updated per dogfood-vendoring-policy.
-
-## NEXT — the fast-follow (4 Codex P2s, all roadmapped as LOW)
-
-Codex review on #72 surfaced 4 small correctness nits, now captured in
-`research/roadmap.md` (right after the probe-file item, ~line 832). All LOW, none
-block anything; the map still routes correctly, these sharpen edges:
-
-- **X** — `rule-routing.ts`: strip a leading `<linter>/` prefix (`eslint/no-var`)
-  before the catalog lookup, else a prefixed marked ref misses reuse → falls to synth.
-- **W** — `cli.ts`: resolve the measure-consent BEFORE `computeRuleRouting`, else the
-  FIRST interactive `audit` misses the dynamic catalog (only the 2nd run sees it).
-- **Z** — `segment.ts`: don't over-suppress a legit rule bullet under an H2 like
-  `## Rules`; only suppress under genuinely procedural headings.
-- **Y** — `rule-routing.ts`: honor checkbox rule markers (`- [ ] enforce(...)`) in the
-  reuse pre-pass — strip the `[ ]`/`[x]` token before parsing.
-
-**User has NOT confirmed scope/timing for a fast-follow PR** — I offered "fix X+W now,
-roadmap Z+Y" vs "leave all four as roadmap notes." Do NOT open a fast-follow PR without
-the user's explicit go-ahead. If they say go: fresh work on this branch, `fix:` commits
-(NOT `feat!` — these are internal correctness fixes, no API change).
-
-**Also roadmapped LOW (pre-existing, from #72):** probe a real linted file not hardcoded
-`src/index.ts` (`enumerateEslintCatalog`); wrap the FP/dogfood sweeps as contributor
-skills; Codex corpus parity (vendored corpus is CC-only, Codex synthetic-fixtures only);
-EvalDriver→core-port; no-model floor for the 9 skill evals (eval-lock wired but green
-no-op, no committed locks); make `no-internal-links-in-public-docs` a real lint rule (P1).
+- **X** — `rule-routing.ts`: strip a leading `<linter>/` prefix (`eslint/no-var`) before
+  the catalog lookup, else a prefixed marked ref misses reuse. (W = consent-before-routing
+  is now DONE in #73; X is still open — verified no prefix-strip in rule-routing.ts.)
+- **Z** — `segment.ts`: don't over-suppress a rule bullet under an H2 like `## Rules`.
+- **Y** — `rule-routing.ts`: honor checkbox markers (`- [ ] enforce(...)`).
+- SKIPPED-inline-vs-json presentation; probe a real linted file (not hardcoded
+  `src/index.ts`); Codex corpus parity (vendored corpus is CC-only); EvalDriver→core-port;
+  no-model floor for the 9 skill evals; `no-internal-links-in-public-docs` as a lint rule.
 
 ## Design-of-record
 
