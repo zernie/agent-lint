@@ -193,7 +193,7 @@ That's the whole idea: it checks your harness against **reality, not style**. Ev
 
 ### 🔎 Lint — your instructions stop lying
 
-Every path, script, symbol, and rule verified against reality — plus tool contracts, skill collisions, and dead hooks (the catches above). You don't write the checks. `lint` reads the `CLAUDE.md` or `AGENTS.md` you already hand-edit — that file stays the source of truth — and verifies every path, script, symbol, tool contract, hook, and skill against reality. Where a prose rule maps to a linter rule, enforcement lands in your repo's own config (ESLint, Ruff, …), not a shadow layer. The structural checks no linter can express get an optional typed spec (`init` sets one up, `eject` reverses it) — a graduation, never a requirement.
+Every path, script, symbol, and rule verified against reality — plus tool contracts, skill collisions, and dead hooks (the catches above). You don't write the checks, and you don't port anything into a spec: `lint` reads the `CLAUDE.md` or `AGENTS.md` you already hand-edit and checks it as-is. Rules that map to a real linter rule run in your own config (ESLint, Ruff), not a shadow layer.
 **[How →](docs/verifying-instruction-files.md)**
 
 ### 🧪 Test — does the harness actually do its job?
@@ -265,7 +265,7 @@ Targets Claude Code and Codex out of the box, or [your own harness](docs/authori
 
 - **Is this a framework I have to build around?** No. It's a tool you run — like ESLint, Lighthouse, or `npm audit`. One command, a report, an optional CI gate. There's a library API for automation, but you never touch it to get value.
 - **Isn't this just a markdown linter?** No — it checks whether your instruction file is _true_ (every path/script/symbol/rule exists and is enabled), then tests and measures your harness. A style linter can't do any of that.
-- **Do I have to write TypeScript?** No — plain markdown lints with zero new files, and enforcement lands in your repo's own linter config. The typed spec is an opt-in authoring layer for the structural rules no linter can express — like TS's `strict` ([why?](docs/faq.md#why-are-the-strongest-guarantees-opt-in-not-the-default)).
+- **Do I have to write TypeScript?** No — plain markdown works with zero new files, and rules run in your own linter config. The typed spec is opt-in, only for the structural checks a linter can't do — like TS's `strict` ([why?](docs/faq.md#why-are-the-strongest-guarantees-opt-in-not-the-default)).
 - **Is it stable enough to adopt?** The CLI you run is small and rarely changes; the library API still moves between releases. The high version number is release automation (a new major per breaking change), not age — see [Stability](STABILITY.md).
 - **Non-JS repo?** `npx vigiles lint` verifies your CLAUDE.md or AGENTS.md with no install (Ruff/Clippy/Pylint/… too).
 
