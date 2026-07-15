@@ -856,6 +856,19 @@ assertRates`) is the recommended path for testing one skill, but
   when the bullet is a GitHub task-list checkbox (`- [ ] enforce(...)` / `- [x] ...`),
   so a checkbox-styled rule is skipped. Fix: strip the `[ ]`/`[x]` checkbox token
   before parsing the bullet. Codex review on #72. · **LOW**
+- **Python custom-rule SYNTHESIS** — with the Pylint dynamic catalog + enabled-state
+  now shipped (2026-07-15, `enumeratePylintCatalog`), the ONLY remaining ESLint-vs-Pylint
+  asymmetry in the rule map is the "custom rule ⚙" lane's hand-off: `@vigiles/compiler`
+  synthesizes an ESLint rule + a JS self-test + the trust gate, but has NO Python target.
+  Build a Python synthesis backend — cheapest path is an ast-grep YAML rule (ast-grep
+  already does Python, vigiles already references it) + a Python self-test harness, re-
+  pointing the same blind-gold trust gate; alternative is a pylint/astroid checker. Larger
+  than the catalog fix was. See `research/rule-compiler-multilang-design.md` §0.0 + "What's
+  next" #3. · **MEDIUM**
+- **Ruff routing** — extend the dynamic catalog approach to Ruff (`ruff rule --all` is
+  static to the binary, `ruff.toml`/`pyproject` is data → FOREIGN-SAFE, no consent gate
+  needed, unlike ESLint/Pylint). Highest-value next linter for modern Python; closes the
+  public "ESLint/Ruff/…" wording discrepancy. See the design doc "What's next" #1. · **LOW**
 - **Wrap the FP / dogfood sweeps as contributor skills** — `tools/fp-sweep.sh` +
   `tools/dogfood-sweep.sh` have real model-judgment on their output (which flags are
   true false positives / which detectors regressed). At launch, wrap each as a

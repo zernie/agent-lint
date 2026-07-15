@@ -41,6 +41,28 @@ things in one:
   section = a desc per every root dir. **Verdict from the investigation: 8/10 hexagonal,
   CI-enforced; adapters symmetric via the adapter-contract registry loop.**
 
+## LATEST (2026-07-15) — Pylint dynamic catalog + enabled-state (unpushed until commit)
+
+Closed the ESLint-vs-Pylint asymmetry in the audit rule map (was "Pylint routing-only"):
+
+- **`enumeratePylintCatalog`** (`src/core/rule-catalog.ts`) — shells `pylint --list-msgs`
+  plus `--list-msgs-enabled` (SECTION-AWARE — the `Disabled:`/`Non-emittable:` sections are
+  not misread as enabled), so a Python repo now gets the SAME dynamic catalog + "documented
+  but OFF" nudge as ESLint, **plugins included** (W9xxx). Rules matchable by symbol OR code
+  (`missing-function-docstring` / `C0116`). The deferred "inverted-polarity ConfigProbe" is
+  UNNECESSARY — `--list-msgs-enabled` gives the enabled set directly.
+- **`mergeCatalogs`** unions ESLint + Pylint for a polyglot repo; `computeRuleRouting`
+  (cli.ts) enumerates both under the SAME own-repo + `audit.measure` consent, pylint gated
+  on `hasPythonSurface` (a `.pylintrc`/`pyproject.toml`/`setup.cfg`) so a pure-JS repo never
+  spawns pylint. `AvailableRule.code` alias + the `routeRules` map-build tweak (flatMap).
+- Proven end-to-end on a real Python fixture: `invalid-name`→config-line+enabled:true,
+  `C0116` (disabled in config)→enabled:false. Unit-tested (parse/merge/section-aware/dedup);
+  live pylint+eslint integration tests pass; rule-catalog.ts 100% covered.
+- **ONE gap remains** (roadmapped MEDIUM): Python custom-rule SYNTHESIS — `@vigiles/compiler`
+  emits ESLint rules only; a Python target (ast-grep YAML rule is the cheap path) is unbuilt.
+- Docs updated: `research/rule-compiler-multilang-design.md` §0.0 (+ per-linter + What's next),
+  `docs/verifying-instruction-files.md` linter-coverage line, roadmap (+2 items).
+
 ## NEXT — the fast-follow (4 Codex P2s, all roadmapped as LOW)
 
 Codex review on #72 surfaced 4 small correctness nits, now captured in
@@ -70,8 +92,9 @@ no-op, no committed locks); make `no-internal-links-in-public-docs` a real lint 
 ## Design-of-record
 
 - **`research/rule-compiler-multilang-design.md` §0.0** — the authoritative rule-map
-  snapshot: TWO linters only (ESLint full, Pylint routing-only, Ruff NOT yet), the 4
-  reuse mechanisms, enabled-state=ESLint-only, ranked next steps. READ FIRST for that tier.
+  snapshot: TWO linters (ESLint + Pylint both full — catalog + enabled-state as of
+  2026-07-15; Ruff NOT yet), the 4 reuse mechanisms, ranked next steps. READ FIRST for that
+  tier. The remaining ESLint-only capability is custom-rule SYNTHESIS (Python target unbuilt).
 - **`research/dogfood-corpus.md`** — the dogfood map + policy (read before touching any
   dogfood artifact). The word "dogfood" covers FOUR different things — only
   `test/dogfood/` is the SHA-pinned vendored corpus; `examples/harness/dogfood/`=skill

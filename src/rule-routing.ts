@@ -474,7 +474,18 @@ export function routeRules(
 ): RuleRouting {
   const minConfidence = options.minConfidence ?? "high";
   const catalog = options.availableRules
-    ? new Map(options.availableRules.rules.map((r) => [r.id, r.enabled]))
+    ? new Map<string, boolean>(
+        options.availableRules.rules.flatMap((r) =>
+          // A rule is matchable by its id AND, for Pylint, its numeric code
+          // (`C0116`) — a doc may name either the symbol or the code.
+          r.code
+            ? [
+                [r.id, r.enabled],
+                [r.code, r.enabled],
+              ]
+            : [[r.id, r.enabled]],
+        ),
+      )
     : undefined;
   // A MEDIUM segment that NAMES a rule the repo's catalog actually has is
   // enforceable — the catalog is ground truth, so it's higher-precision than the

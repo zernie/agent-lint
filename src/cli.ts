@@ -142,7 +142,11 @@ import {
   dedupeInstructionFiles,
   type RawInstructionFile,
 } from "./instruction-sources.js";
-import { enumerateEslintCatalog } from "./core/rule-catalog.js";
+import {
+  enumerateEslintCatalog,
+  enumeratePylintCatalog,
+  mergeCatalogs,
+} from "./core/rule-catalog.js";
 import {
   runAdoptabilityTier,
   formatAdoptability,
@@ -2196,6 +2200,16 @@ function gatherInstructionFiles(
  * sticky `audit.measure` consent as the other executing checks AND on own-repo
  * (never a stranger's toolchain). The textual routing is the foreign-safe default;
  * the catalog only ADDS enabled-state nudges and matches named-but-`/`-broken rules. */
+/** Does the repo have a Python surface worth running pylint against? A pylint
+ * config file (`.pylintrc` / `pyproject.toml` / `setup.cfg`) is the strong
+ * signal; we don't glob for `*.py` (slow) — a Python repo that wants rule
+ * routing carries one of these. Keeps a pure-JS repo from spawning pylint. */
+function hasPythonSurface(root: string): boolean {
+  return [".pylintrc", "pyproject.toml", "setup.cfg"].some((f) =>
+    existsSync(resolve(root, f)),
+  );
+}
+
 function computeRuleRouting(
   root: string,
   instructionFile: string,
@@ -2203,18 +2217,25 @@ function computeRuleRouting(
   try {
     const files = gatherInstructionFiles(root, instructionFile);
     if (files.every((f) => !f.text.trim())) return undefined;
-    // Own-repo + consented → enumerate the live ESLint catalog. NOT gated on the
-    // agent harness: the catalog is a property of the repo's LINTER (its ESLint
-    // config on disk), not of Claude-Code-vs-Codex, so a Codex JS/TS repo gets the
-    // same catalog match + enabled-state (adapter-aware-lint-rules: never gate a
-    // harness-agnostic capability on CC). enumerateEslintCatalog returns null when
-    // no ESLint config resolves (e.g. a pure-Python repo) → undefined, so a non-JS
-    // repo simply falls back to the foreign-safe textual routing regardless.
+    // Own-repo + consented → enumerate the live rule catalog of whichever
+    // linter(s) the repo has: ESLint (JS/TS) and/or Pylint (Python), merged so a
+    // polyglot repo matches against both. NOT gated on the agent harness — a
+    // catalog is a property of the repo's LINTER (its config on disk), not of
+    // Claude-Code-vs-Codex (adapter-aware-lint-rules: never gate a harness-
+    // agnostic capability on CC). Each enumerate returns null when its linter
+    // doesn't apply, so a repo with neither falls back to the foreign-safe textual
+    // routing. Enumerating EXECUTES the linter (plugin code loads), hence own-repo
+    // + consent — same posture for both.
     const ownRepo = resolve(root) === resolve(process.cwd());
     const consented = loadConfig().audit?.measure === true;
     const availableRules =
       ownRepo && consented
-        ? (enumerateEslintCatalog(root) ?? undefined)
+        ? mergeCatalogs(
+            enumerateEslintCatalog(root),
+            // Only spawn pylint when the repo actually has a Python surface —
+            // avoids a needless (and possibly noisy) pylint run on a pure-JS repo.
+            hasPythonSurface(root) ? enumeratePylintCatalog(root) : null,
+          )
         : undefined;
     // Route each source SEPARATELY (each rule keeps its own file + line numbers),
     // then merge — so a CLAUDE.md rule and an AGENTS.md rule carry correct
