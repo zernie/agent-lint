@@ -70,6 +70,14 @@ plugin arch (rule-of-three), no auto-synthesize seam, no audit-lane wiring (sepa
 Docs: rule-compiler-multilang-design §0.0, docs/verifying-instruction-files linter-coverage line,
 compiler/README engines section, roadmap (both marked shipped).
 
+**(C) OSS dogfood, CI-run** — expanded the real-OSS audit dogfood: `rule-routing-oss.test.ts` now
+covers 3 vendored MIT Python `AGENTS.md` (added `mcp-python-sdk`, © Anthropic; langchain + browser-use
+already there) with stable routing invariants; NEW `src/rule-catalog-oss.test.ts` drives the REAL
+pylint binary (CI installs it) — enumerates the catalog, asserts enabled-state from a real config
+(disabled rule OFF, default ON), and the "documented but OFF" routing. Config is AUTHORED (real
+MIT+pylint repos are rare — sqlalchemy/poetry/rich have none; the pylint binary is the real system).
+Corpus index (`research/dogfood-corpus.md`) + PROVENANCE updated per dogfood-vendoring-policy.
+
 ## NEXT — the fast-follow (4 Codex P2s, all roadmapped as LOW)
 
 Codex review on #72 surfaced 4 small correctness nits, now captured in

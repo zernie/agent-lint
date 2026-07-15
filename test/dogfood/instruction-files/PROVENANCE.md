@@ -9,6 +9,7 @@ Only MIT-licensed upstreams are vendored, matching this repo's dogfood policy.
 | --- | --- | --- | --- |
 | `langchain.AGENTS.md` | github.com/langchain-ai/langchain `master:AGENTS.md` | MIT | 2026-07-14 |
 | `browser-use.AGENTS.md` | github.com/browser-use/browser-use `main:AGENTS.md` | MIT | 2026-07-14 |
+| `mcp-python-sdk.AGENTS.md` | github.com/modelcontextprotocol/python-sdk `main:AGENTS.md` (© 2024 Anthropic, PBC) | MIT | 2026-07-15 |
 
 Each is the upstream file unmodified. The routing test asserts stable INVARIANTS
 (a real docstring rule routes to `pylint:missing-function-docstring`, no
