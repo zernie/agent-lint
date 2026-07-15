@@ -584,41 +584,29 @@ function extractMarkedRules(
 
 // --- Rescue ladder + tiering ----------------------------------------------
 
-/** A source that can RESCUE a medium/rejected bullet to CONFIDENT because it
- * provably maps to an off-the-shelf rule — independent of the medium opt-in. */
-interface RescueSource {
-  readonly name: string;
-  readonly test: (
-    text: string,
-    catalog: ReadonlyMap<string, CatalogHit> | undefined,
-  ) => boolean;
-}
+/** A predicate that RESCUES a medium/rejected bullet to CONFIDENT because the
+ * text provably maps to an off-the-shelf rule — independent of the medium
+ * opt-in. */
+type RescueSource = (
+  text: string,
+  catalog: ReadonlyMap<string, CatalogHit> | undefined,
+) => boolean;
 
-/** The rescue sources, OR-ed (any one promotes a bullet to confident):
- *  - `catalog` — the text NAMES a rule the repo's live catalog actually has
- *    (ground truth, own-repo); rescues a declarative-subject bullet like
- *    "The core layer must not import X (`boundaries/dependencies`)".
- *  - `pattern` — a construct-prohibition ("No default exports") matching a
- *    PATTERN_RULE_MAP entry (a real `no-restricted-syntax` rule).
- *  - `intent` — an INTENT_MAP keyword match ("No bare except clauses"): a
- *    code-shaped, high-precision reuse rule with no imperative verb.
- * They are the higher-precision override of the segmenter's imperative-head cue,
- * which alone would drop these medium-scoring bullets. */
+/** The rescue sources, OR-ed (any one promotes a bullet to confident). They are
+ * the higher-precision override of the segmenter's imperative-head cue, which
+ * alone would drop these medium-scoring bullets. */
 const RESCUE_SOURCES: readonly RescueSource[] = [
-  {
-    name: "catalog",
-    test: (t, cat) =>
-      cat !== undefined && namedRuleTokens(t).some((tok) => cat.has(tok)),
-  },
-  {
-    name: "pattern",
-    test: (t) => PATTERN_RULE_MAP.some((r) => r.pattern.test(t)),
-  },
-  {
-    name: "intent",
-    test: (t) =>
-      INTENT_MAP.some((m) => m.keywords.some((kw) => matchesWholeToken(t, kw))),
-  },
+  // catalog — the text NAMES a rule the repo's live catalog actually has (ground
+  // truth, own-repo): rescues "The core layer must not import X (`boundaries/…`)".
+  (t, cat) =>
+    cat !== undefined && namedRuleTokens(t).some((tok) => cat.has(tok)),
+  // pattern — a construct-prohibition ("No default exports") → a real
+  // `no-restricted-syntax` rule.
+  (t) => PATTERN_RULE_MAP.some((r) => r.pattern.test(t)),
+  // intent — an INTENT_MAP keyword match ("No bare except clauses"): a
+  // code-shaped, high-precision reuse rule with no imperative verb.
+  (t) =>
+    INTENT_MAP.some((m) => m.keywords.some((kw) => matchesWholeToken(t, kw))),
 ];
 
 /** A bullet is RESCUED — promoted to confident — if any rescue source maps it to
@@ -627,7 +615,7 @@ function isRescued(
   text: string,
   catalog: ReadonlyMap<string, CatalogHit> | undefined,
 ): boolean {
-  return RESCUE_SOURCES.some((r) => r.test(text, catalog));
+  return RESCUE_SOURCES.some((rescue) => rescue(text, catalog));
 }
 
 /** The shared shape of a real segment and a folded-back `no-signal` reject, so

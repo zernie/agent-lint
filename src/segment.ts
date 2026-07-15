@@ -581,22 +581,14 @@ function gatherParagraph(lines: readonly string[], start: number): number {
   return end;
 }
 
-/** The whole-item span + its confidence — passed to `emitListSpans` so a
- * one-span item emits at its own gate result, not a re-gated piece. */
-interface WholeItem {
-  readonly span: Span;
-  readonly conf: Confidence;
-}
-
-/** Emit a gated list item: the whole item at its own confidence when it stays
- * one span, else each atomized piece re-gated independently. */
-function emitListSpans(
+/** Emit each atomized PIECE of a split bullet, re-gated independently (the
+ * whole-item case is handled by the caller, which emits the marker-inclusive
+ * span at its own gate result — so this only runs when `atomize` split). */
+function emitSplitSpans(
   ctx: ScanCtx,
   spans: readonly Span[],
-  whole: WholeItem,
   ruleish: boolean,
 ): SegmentedRule[] {
-  if (spans.length === 1) return [emitFromSpan(ctx, whole.span, whole.conf)];
   const out: SegmentedRule[] = [];
   for (const s of spans) {
     const text = normalize(ctx.src.slice(s.start, s.end));
@@ -627,19 +619,19 @@ function handleListItem(
 
   // Reject bullets under an anti-context heading (Commands/Setup/Key Files/…).
   if (conf !== null && !heading.antiContext) {
-    const fullSpan: Span = { start: ctx.lineOffsets[i], end: contentEnd };
-    // Only single-line items are split (keeps offsets exact).
+    // Only single-line items are split (keeps offsets exact). A single span
+    // emits the MARKER-INCLUSIVE full line at the whole-item confidence; a real
+    // split emits each piece re-gated at its own confidence.
     const spans =
       endLine > i
         ? [trimSpan(ctx.src, contentSpan)]
         : atomize(ctx.src, contentSpan, true, heading.ruleish);
+    const fullSpan: Span = { start: ctx.lineOffsets[i], end: contentEnd };
     return {
-      emitted: emitListSpans(
-        ctx,
-        spans,
-        { span: fullSpan, conf },
-        heading.ruleish,
-      ),
+      emitted:
+        spans.length === 1
+          ? [emitFromSpan(ctx, fullSpan, conf)]
+          : emitSplitSpans(ctx, spans, heading.ruleish),
       skipped: [],
       next: endLine + 1,
     };
@@ -663,12 +655,14 @@ function handleListItem(
 }
 
 /** Handle a paragraph block at line `i`: under a rule-ish heading, split into
- * sentences and emit each that gates; otherwise emit nothing. */
+ * sentences and emit each that gates; otherwise emit nothing. Paragraph prose is
+ * never RECORDED as a skip (too noisy — see `SkippedBullet`), so `skipped` is
+ * always empty; it returns a `BlockResult` only so the dispatcher is uniform. */
 function handleParagraph(
   ctx: ScanCtx,
   i: number,
   heading: HeadingState,
-): { emitted: SegmentedRule[]; next: number } {
+): BlockResult {
   const endLine = gatherParagraph(ctx.lines, i);
   const emitted: SegmentedRule[] = [];
   if (heading.ruleish) {
@@ -691,7 +685,7 @@ function handleParagraph(
       if (c !== null) emitted.push(emitFromSpan(ctx, s, c));
     }
   }
-  return { emitted, next: endLine + 1 };
+  return { emitted, skipped: [], next: endLine + 1 };
 }
 
 /** Read a heading line into the rule-ish / anti-context state the gate keys on.
@@ -773,6 +767,7 @@ export function segmentInstructions(
     if (line.trim() !== "") {
       const r = handleParagraph(ctx, i, heading);
       out.push(...r.emitted);
+      skipped.push(...r.skipped);
       i = r.next;
       continue;
     }
