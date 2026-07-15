@@ -92,6 +92,7 @@ export default claude({
     "research/ai-native-linting.md": `[active] Surveys the 2026 AI-code-review wave (CodeRabbit etc.) and proposes extending enforce() to AI-linter catalogs plus a judge() rule kind`,
     "research/deterministic-rule-ideas.md": `[idea] Backlog of next cross-reference lint rules from the OSS plugin sweep`,
     "research/enforcement-model.md": `[active] Why rule severity follows a gradient bounded by decidability`,
+    "research/rule-enforceability.md": `[active] THE cohesive answer to "how much of a real user CLAUDE.md/AGENTS.md can vigiles enforce, and how" — the 4 enforcement homes (off-the-shelf config / synthesized custom / ref-verification / prose), the measured real-OSS distribution (~65% mechanizable, off-the-shelf ≠ enforceable-ceiling), how synthesis works (opt-in copy-prompt → user's sub → deterministic gate, $0 to vigiles), the AST-not-regex soundness rule, and linter support (eslint/ruff/pylint/clippy-gap). Read this to stop re-deriving it. Distinct from enforcement-model.md (severity gradient of vigiles's OWN checks).`,
 
     // ── misc ──
     "research/code-search-for-agents.md": `[active] Compares grep/AST/embeddings/LSP/graph-DB code search approaches for AI coding agents`,

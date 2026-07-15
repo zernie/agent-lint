@@ -82,7 +82,8 @@ one click away.
 
 ## Runtime enforcement & agent integration
 
-- [`enforcement-model.md`](enforcement-model.md) — **why each rule's severity is what it is** (and why "make it all impossible by construction" is unachievable): prevention is a gradient bounded by decidability; the three buckets (structural-closed / external-decidable / heuristic-behavioral) that set each rule's ceiling. The model behind `src/core/rule-meta.ts` + the `lint-rule-calibration` rule.
+- [`rule-enforceability.md`](rule-enforceability.md) — **THE cohesive answer to "how much of a real user CLAUDE.md/AGENTS.md can vigiles enforce, and how."** The 4 enforcement homes (off-the-shelf config / synthesized custom / ref-verification / prose); the measured real-OSS distribution (~65% mechanizable — "no off-the-shelf rule" ≠ "not enforceable"); how synthesis works (opt-in copy-prompt → the user's own sub → deterministic gate, $0 to vigiles); the AST-not-regex soundness rule; linter support incl. the clippy gap. Read this to stop re-deriving it.
+- [`enforcement-model.md`](enforcement-model.md) — **why each rule's severity is what it is** (and why "make it all impossible by construction" is unachievable): prevention is a gradient bounded by decidability; the three buckets (structural-closed / external-decidable / heuristic-behavioral) that set each rule's ceiling. The model behind `src/core/rule-meta.ts` + the `lint-rule-calibration` rule. (Companion to `rule-enforceability.md`, which is about a USER's prose rules; this is about vigiles's OWN checks.)
 - [`runtime-enforcement.md`](runtime-enforcement.md) — spec-derived runtime enforcement via hooks, skill contracts, session audit.
 - [`agent-integration.md`](agent-integration.md) — the deterministic backstop for AI agents: hooks, proofs, static checks anchored at the spec.
 - [`dynamic-workflows-and-scope.md`](dynamic-workflows-and-scope.md) — dynamic workflows and scope boundaries.

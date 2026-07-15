@@ -49,6 +49,10 @@ applied to adoption.
 4. **`eject` anytime** → plain hand-owned markdown / remove the added config lines. Never a
    one-way door.
 
+> **How much of a real instruction file is actually enforceable, and by what mechanism** (the 4
+> enforcement homes + the measured ~65% ceiling + how synthesis works, $0 to vigiles) →
+> `rule-enforceability.md`. Read it before claiming a coverage number.
+
 ## Rule-class routing (why the typed spec loses nothing)
 
 Two classes of rule, two homes:
