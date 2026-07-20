@@ -126,6 +126,34 @@ test("probePluginTriggersWith probes only model-invocable described skills", asy
   cleanupTmpDir(dir);
 });
 
+test("probePluginTriggersWith carries the driver's EXPERIMENTAL caveat (Codex); formatter shows it", async () => {
+  const dir = plugin();
+  const codexish: HarnessProbe = {
+    ...fakeProbe,
+    evalDriver: {
+      runner: fakeRunner,
+      parse: parseClaudeRun,
+      experimental: "Codex trigger-rate is experimental — no skill event.",
+    },
+  };
+  const report = await probePluginTriggersWith(
+    dir,
+    { foo: { prompts: ["fire one", "fire two", "fire three"] } },
+    codexish,
+    { minPrompts: 1, minDistance: 0 },
+  );
+  assert.match(report.experimental ?? "", /experimental/i);
+  const out = formatBehavioralReport(report);
+  assert.match(out, /⚠ EXPERIMENTAL — Codex trigger-rate is experimental/);
+  // A supported (Claude) report with results shows no caveat.
+  const supported = formatBehavioralReport({
+    available: true,
+    results: [{ skill: "x", measured: true, recall: 1, n: 2 }],
+  });
+  assert.ok(!supported.includes("EXPERIMENTAL"));
+  cleanupTmpDir(dir);
+});
+
 test("probePluginTriggersWith reports a thin prompt set per-skill, not a crash", async () => {
   const dir = plugin();
   // Only 1 prompt but minPrompts defaults to 10 → the diversity gate throws;

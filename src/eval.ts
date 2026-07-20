@@ -2065,6 +2065,13 @@ export interface TriggerRateReport {
   readonly errored?: number;
   /** Cost / tokens SPENT across all runs (relevant + irrelevant) — feeds the cost summary. */
   readonly usage: ArmUsage;
+  /**
+   * Present when the driver's harness measures trigger-rate on an EXPERIMENTAL
+   * basis (copied from {@link EvalDriver.experimental}) — the number is not
+   * validated and can be wrong. `formatTriggerRateReport` prints it as a loud
+   * caveat. Absent = a supported, trustworthy measurement (Claude Code).
+   */
+  readonly experimental?: string;
 }
 
 /**
@@ -2087,6 +2094,16 @@ export interface EvalDriver {
    * `"claude-code"`, so an existing single-harness lock is unaffected.
    */
   readonly harness?: string;
+  /**
+   * When set, this driver's trigger-rate number is EXPERIMENTAL and not
+   * validated — the string is the human caveat explaining why (e.g. Codex has no
+   * skill-selection event, so firing is inferred from a SKILL.md read, which can
+   * be wrong in both directions). Absent = supported/trustworthy (the default,
+   * Claude Code). `measureTriggerRate` copies it onto the report and warns; the
+   * formatter prints it. Precision-first: never let a possibly-wrong number read
+   * as a measurement.
+   */
+  readonly experimental?: string;
 }
 
 /**
@@ -2703,13 +2720,24 @@ export async function measureTriggerRate(
   opts: { evalDriver?: EvalDriver } = {},
 ): Promise<TriggerRateReport> {
   const d = opts.evalDriver ?? claudeEvalDriver;
-  const report = await measureTriggerRateWith(
+  const measured = await measureTriggerRateWith(
     spec,
     d.runner,
     d.parse,
     d.runError,
     d.harness ?? "claude-code",
   );
+  // Precision-first: if the driver flags its trigger-rate EXPERIMENTAL (Codex),
+  // carry the caveat onto the report and warn loudly, so the number is never
+  // mistaken for a validated measurement.
+  const report = d.experimental
+    ? { ...measured, experimental: d.experimental }
+    : measured;
+  if (d.experimental) {
+    process.stderr.write(
+      `⚠ EXPERIMENTAL trigger-rate on ${d.harness ?? "?"}: ${d.experimental}\n`,
+    );
+  }
   // Surface what the run spent (tokens + API-equivalent $ + metered warning).
   emitCostSummary(costFromArm(report.usage));
   // Feed the flight recorder: recall (+ precision when measured) for this skill.
@@ -2735,7 +2763,11 @@ export async function measureTriggerRate(
 /** Format a trigger-rate report: overall %, then each prompt's rate. */
 export function formatTriggerRateReport(report: TriggerRateReport): string {
   const pct = (report.rate * 100).toFixed(0);
-  const lines = [`trigger-rate: ${pct}% (${String(report.n)} runs)`];
+  const lines: string[] = [];
+  if (report.experimental) {
+    lines.push(`⚠ EXPERIMENTAL — ${report.experimental}`);
+  }
+  lines.push(`trigger-rate: ${pct}% (${String(report.n)} runs)`);
   for (const p of report.perPrompt) {
     lines.push(`  ${p.rate.toFixed(2)}  ${p.prompt.slice(0, 60)}`);
   }

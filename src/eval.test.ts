@@ -284,6 +284,27 @@ test("measureTriggerRateWith aggregates per-prompt and overall trigger rate", as
   assert.ok(formatTriggerRateReport(report).includes("trigger-rate: 67%"));
 });
 
+test("formatTriggerRateReport prints an EXPERIMENTAL caveat only when flagged", () => {
+  const base = {
+    rate: 0.5,
+    n: 4,
+    perPrompt: [],
+    competitors: 0,
+    usage: zeroUsage,
+  };
+  // Supported (Claude Code) → no caveat.
+  assert.ok(!formatTriggerRateReport(base).includes("EXPERIMENTAL"));
+  // Experimental (Codex) → a loud caveat above the number.
+  const exp = formatTriggerRateReport({
+    ...base,
+    experimental: "Codex trigger-rate is experimental — no skill event.",
+  });
+  assert.ok(
+    exp.includes("⚠ EXPERIMENTAL — Codex trigger-rate is experimental"),
+  );
+  assert.ok(exp.includes("trigger-rate: 50%"));
+});
+
 test("measureTriggerRateWith accepts a custom ModelOutputParser (non-Claude trace)", async () => {
   // Prove the trace-parser seam: a runner emitting a NON-Claude format + a custom
   // parser that understands it → firing is detected without any Claude stream-json.

@@ -86,15 +86,38 @@ All **record-only** unless noted — acknowledged, deliberately out of vigiles s
 
 Recorded for symmetry; vigiles's CC support already covers the verify/test-relevant ones.
 
-| Claude Code capability            | Notes                                                    | vigiles stance                            |
-| --------------------------------- | -------------------------------------------------------- | ----------------------------------------- |
-| `disable-model-invocation` skills | user-invoked-only skills (the 7/9 vigiles ships)         | **Verify** (load gate) — covered          |
-| `argument-hint` / `$ARGUMENTS`    | command arg surface                                      | **Verify** — covered                      |
-| Subagent dispatch via `Task`      | the PreToolUse tool-contract rail (declared-vs-enforced) | **Test** (agent-runtime rail) — covered   |
-| `--plugin-dir` install            | install a real pinned plugin for trigger-rate evals      | **Test** — covered (pillar 2)             |
-| Bedrock / Vertex providers        | enterprise model routing                                 | **Record-only** — not a test axis         |
-| Output styles / statusline        | TUI presentation                                         | **N/A** — presentation, nothing to verify |
-| Plan mode                         | a planning phase                                         | **Record-only**                           |
+| Claude Code capability            | Notes                                                    | vigiles stance                                             |
+| --------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------- |
+| `disable-model-invocation` skills | user-invoked-only skills (the 7/9 vigiles ships)         | **Verify** (load gate) — covered                           |
+| `argument-hint` / `$ARGUMENTS`    | command arg surface                                      | **Verify** — covered                                       |
+| Subagent dispatch via `Task`      | the PreToolUse tool-contract rail (declared-vs-enforced) | **Test** (agent-runtime rail) — covered                    |
+| `--plugin-dir` install            | install a real pinned plugin for trigger-rate evals      | **Test** — covered (pillar 2)                              |
+| **Skill-selection event**         | a discrete "skill fired" signal → a PRECISE trigger-rate | **Test on CC; EXPERIMENTAL on Codex** — see the note below |
+| Bedrock / Vertex providers        | enterprise model routing                                 | **Record-only** — not a test axis                          |
+| Output styles / statusline        | TUI presentation                                         | **N/A** — presentation, nothing to verify                  |
+| Plan mode                         | a planning phase                                         | **Record-only**                                            |
+
+### Decision (2026-07-20) — Codex trigger-rate is EXPERIMENTAL, not "supported"
+
+The **deterministic** `vigiles audit` is FULL parity on Codex (proven live +
+`scan-cli.test.ts`). Only the model-gated **trigger-rate** ("does a skill fire?") is
+scoped down, and **Codex-only** — on Claude Code it stays a supported measurement.
+
+Why not just "unvalidated": Claude Code emits a discrete skill-selection event, so
+firing is a fact. Codex emits **none**, so `codexSkillFired` infers firing from a
+`SKILL.md` read — which is **wrong in both directions** (cache → false negative;
+exploratory read → false positive). A number that can be off either way is not a
+measurement, and shipping it as one violates the precision / don't-cry-wolf premise
+(a wrong number is worse than no number). So the code makes it loud, not silent:
+`codexEvalDriver.experimental` carries the caveat, `measureTriggerRate` warns on
+stderr + stamps `report.experimental`, and the formatters print `⚠ EXPERIMENTAL`
+above the numbers (`audit --harness=codex` included).
+
+**Promotion gate:** a live run that MEASURES the oracle's own accuracy — drive real
+`codex exec --json` over skills with known ground-truth firing and score
+`codexSkillFired` against it. That decides: promote to supported, keep experimental,
+or drop Codex to deterministic-only. Gated on `codex` on PATH + Codex quota. Full
+user-facing writeup: [`docs/harness-testing-codex.md`](../docs/harness-testing-codex.md#trigger-rate-on-codex-is-experimental).
 
 ## How to use this doc
 
