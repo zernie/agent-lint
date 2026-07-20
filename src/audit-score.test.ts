@@ -193,7 +193,7 @@ describe("auditScore", () => {
     expect(s.overall).toBe(100);
   });
 
-  it("a HARD trifecta finding grades Safety AND drops the overall by W_TRIFECTA (20)", () => {
+  it("a HARD trifecta finding grades Safety AND drops the overall by W_TRIFECTA (10)", () => {
     const s = auditScore(
       makeReport({
         agents: [
@@ -217,12 +217,40 @@ describe("auditScore", () => {
         ] as unknown as ScanReport["trifectaFindings"],
       }),
     );
-    expect(cat(s, "Safety")?.score).toBe(80); // 100 - 20
+    expect(cat(s, "Safety")?.score).toBe(90); // 100 - 10 (half the old 20 — a ding, not a fail)
     expect(cat(s, "Safety")?.findings.length).toBe(1);
     // Safety is GRADED into the overall (the summed model) — a clean repo would be
     // 100, this drops by exactly W_TRIFECTA.
-    expect(s.overall).toBe(80);
-    expect(s.grade).toBe("B");
+    expect(s.overall).toBe(90);
+    expect(s.grade).toBe("A");
+  });
+
+  it("three HARD trifecta units (the feature-dev shape) → C, not F — a ding not a catastrophe", () => {
+    // Mirrors the official `feature-dev` plugin: 3 subagents each holding all three
+    // legs → 3 × −10 = −30 → 70 → C. A ding that surfaces the risk in the grade,
+    // NOT the old catastrophic F(40) at weight 20.
+    const agents = [1, 2, 3].map((i) => ({
+      name: `agent-${i}`,
+      path: `agents/agent-${i}.md`,
+      tools: ["Read", "WebFetch", "WebSearch"],
+      toolIssues: [],
+      mcpToolIssues: [],
+      disallowedToolIssues: [],
+      trifecta: { severity: "hard" },
+    })) as unknown as ScanReport["agents"];
+    const trifectaFindings = [1, 2, 3].map((i) => ({
+      path: `agents/agent-${i}.md`,
+      kind: "subagent",
+      name: `agent-${i}`,
+      finding: { severity: "hard" },
+    })) as unknown as ScanReport["trifectaFindings"];
+    const s = auditScore(makeReport({ agents, trifectaFindings }));
+    expect(cat(s, "Safety")?.score).toBe(70); // 100 - 3×10
+    // One summary finding line with the count embedded ("3 unit(s) …").
+    expect(cat(s, "Safety")?.findings.length).toBe(1);
+    expect(cat(s, "Safety")?.findings[0]).toContain("3");
+    expect(s.overall).toBe(70);
+    expect(s.grade).toBe("C"); // NOT F — the whole point of halving the weight
   });
 
   it("an ADVISORY (inherits-all) trifecta is SHOWN on Safety but NOT graded", () => {

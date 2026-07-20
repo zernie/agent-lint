@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+/*
+  Theme echoes zernie.com (the author's dark, warm, typographic developer
+  aesthetic): a warm near-black ground + warm off-white ink, a single purple
+  accent, and one signal red that means "a violated invariant / the failure".
+  Dark-only, like zernie.com — no light palette. Band colors (good/warn/bad)
+  are borrowed from @vigiles/report for the four Lighthouse rings.
+
+  Tailwind v4: raw HSL/hex tokens on :root, mapped to `--color-*` via @theme
+  inline so `bg-background`, `text-muted-foreground`, `border-border`,
+  `text-accent`, `text-signal`, `text-good`… are all first-class utilities.
+*/
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-border: hsl(var(--border));
+
+  --color-signal: var(--signal);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --color-na: var(--na);
+
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+
+  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-serif:
+    "Iowan Old Style", "Palatino Linotype", Palatino, Charter, Georgia,
+    "Times New Roman", serif;
+  --font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+    monospace;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Warm near-black ground + warm off-white ink (zernie.com dark tokens). */
+  --background: 30 8% 7%;
+  --foreground: 40 12% 90%;
+  --card: 30 8% 11%;
+  --card-foreground: 40 12% 90%;
+  --muted: 34 8% 17%;
+  --muted-foreground: 36 8% 64%;
+  --accent: 263 83% 70%;
+  --accent-foreground: 30 8% 8%;
+  --border: 34 9% 22%;
+
+  /* The one signal color — a warm, softened red: a failure, a broken reference. */
+  --signal: #f0776a;
+  --signal-soft: rgba(240, 119, 106, 0.14);
+
+  /* Lighthouse-ring band colors (from @vigiles/report, dark treatment). */
+  --good: #16c784;
+  --warn: #ffb020;
+  --bad: #ff5c5c;
+  --na: #6b7280;
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+  }
+}
+
+/* A quiet radial glow behind the hero, warm-amber like the vigiles flame mark. */
+.hero-glow {
+  background:
+    radial-gradient(
+      60rem 40rem at 50% -10%,
+      rgba(240, 150, 90, 0.09),
+      transparent 60%
+    ),
+    radial-gradient(
+      40rem 30rem at 80% 10%,
+      rgba(150, 110, 245, 0.08),
+      transparent 60%
+    );
+}
+
+/* Subtle scroll-reveal, honoring reduced-motion. */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(1.25rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.reveal {
+  animation: fade-in-up 0.6s ease-out both;
+  animation-timeline: view();
+  animation-range: entry 0% cover 22%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}

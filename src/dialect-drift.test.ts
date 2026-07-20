@@ -11,6 +11,8 @@ import { join } from "node:path";
 import {
   ACKNOWLEDGED_TOOL_INPUT_TYPES,
   parseToolInputTypes,
+  parseClaudeVersion,
+  onPathClaudeVersion,
   eventsMissingFromBundle,
   findClaudeCodePackage,
   findClaudeCodeBundle,
@@ -40,11 +42,19 @@ describe("dialect-drift parsers (pure)", () => {
     ]);
   });
 
+  it("parseClaudeVersion: extracts semver core, null when absent", () => {
+    expect(parseClaudeVersion("2.1.211 (Claude Code)")).toBe("2.1.211");
+    expect(parseClaudeVersion("2.1.42")).toBe("2.1.42");
+    expect(parseClaudeVersion("Claude Code (no version)")).toBeNull();
+    expect(parseClaudeVersion("")).toBeNull();
+  });
+
   it("formatDialectDrift: null when no drift (or no report)", () => {
     expect(formatDialectDrift(null)).toBeNull();
     expect(
       formatDialectDrift({
         installedVersion: "2.1.99",
+        runningVersion: null,
         validatedVersion: "2.1.42",
         newToolTypes: [],
         removedToolTypes: [],
@@ -55,6 +65,7 @@ describe("dialect-drift parsers (pure)", () => {
   it("formatDialectDrift: warns with added/removed tools + both versions", () => {
     const msg = formatDialectDrift({
       installedVersion: "2.2.0",
+      runningVersion: "2.2.0", // located package IS the running CC → trust its types
       validatedVersion: "2.1.42",
       newToolTypes: ["NewTool"],
       removedToolTypes: ["Bash"],
@@ -64,15 +75,50 @@ describe("dialect-drift parsers (pure)", () => {
     expect(msg).toMatch(/NewTool/);
     expect(msg).toMatch(/removed: Bash/);
   });
+
+  it("formatDialectDrift: SUPPRESSES when the located package isn't the running CC", () => {
+    // The exact leftover-package footgun: a stale 2.1.42 npm package sits beside a
+    // newer native-binary CC (2.1.211). Its tool set differs from ACKNOWLEDGED, but
+    // it's NOT what's running — so a warning would be a false alarm.
+    expect(
+      formatDialectDrift({
+        installedVersion: "2.1.42",
+        runningVersion: "2.1.211",
+        validatedVersion: "2.1.187",
+        newToolTypes: ["Config"],
+        removedToolTypes: ["TaskCreate", "Workflow"],
+      }),
+    ).toBeNull();
+  });
 });
 
 describe("dialect freshness vs the INSTALLED claude-code (read-local, ToS-clean)", () => {
   const pkg = findClaudeCodePackage();
-  const gate = pkg ? it : it.skip;
+  // The located package must be the CC actually RUNNING. In the native-binary era a
+  // box can carry a stale leftover npm package (readable sdk-tools.d.ts, months old)
+  // beside a newer native binary — asserting its tool set against ACKNOWLEDGED would
+  // fail against a version nobody's on. Reconcile with `claude --version` and SKIP
+  // LOUDLY on a mismatch (no-silent-skips), rather than a false failure. CI pins CC,
+  // so there the package IS the running one and the gate runs for real.
+  const pkgVersion =
+    pkg &&
+    (
+      JSON.parse(readFileSync(join(pkg, "package.json"), "utf-8")) as {
+        version?: string;
+      }
+    ).version;
+  const running = onPathClaudeVersion();
+  const packageIsRunningCC =
+    !!pkg && (running == null || running === pkgVersion);
+  const gate = packageIsRunningCC ? it : it.skip;
 
   if (!pkg) {
     // Loud skip (no-silent-skips): the alarm only runs where CC is installed.
     it.skip("freshness checks skipped — @anthropic-ai/claude-code not installed", () => {
+      /* gated above */
+    });
+  } else if (!packageIsRunningCC) {
+    it.skip(`freshness checks skipped — located package ${String(pkgVersion)} is a stale leftover, not the running CC ${String(running)}`, () => {
       /* gated above */
     });
   }

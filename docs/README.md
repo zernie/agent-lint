@@ -55,7 +55,7 @@ The docs are grouped by what you're trying to do:
   - `vigiles/testing`, `vigiles/unit` — the harness-test tiers + the `check` vocabulary + runner-agnostic assertions.
   - `vigiles/claude-code`, `vigiles/codex` — the per-harness adapters.
   - `vigiles/adapter` — the adapter-authoring kit.
-- **[API reference (generated) →](https://zernie.github.io/vigiles/)** — every exported symbol across all entry points, generated from the source. The hand-written guides here are the human-facing layer; this is the exhaustive symbol-level reference.
+- **[API reference (generated) →](https://zernie.github.io/vigiles/api/)** — every exported symbol across all entry points, generated from the source. The hand-written guides here are the human-facing layer; this is the exhaustive symbol-level reference.
 
 ## Explanation — "why it's built this way"
 

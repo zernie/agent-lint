@@ -45,6 +45,32 @@ only when all three legs are non-empty.
   because it inherits everything — a maximal blast radius. Reported with `⚠`,
   aligned with the codebase's existing "inherits-all is advisory" stance.
 
+## In `vigiles audit`: graded, but a **ding — not a fail**
+
+A trifecta finding is a **capability PATTERN with no exploit code**, not a
+demonstrated vulnerability — attacker content _could_ be exfiltrated, but nothing
+proves it will be. It's a **real risk worth surfacing in the grade**, yet
+Anthropic's own official plugins ship the pattern on their cleanest surfaces (e.g.
+the `feature-dev` plugin's `code-reviewer` subagent lists `Read, WebFetch,
+WebSearch`), so fail-grading such a plugin to **F** would cry wolf. `vigiles audit`
+threads that needle by grading a **HARD** trifecta at a **reduced weight**:
+
+- **SHOWS** every trifecta unit (hard _and_ inherits-all) in the **Safety** ring
+  and the report — a real, useful heads-up.
+- **DEDUCTS a reduced −10 per HARD unit** — **half** the original −20, so a
+  trifecta dents the score without a catastrophic F. The **Safety** ring is a
+  **graded** ring again: it scores `100 − 10 × (hard units)`, is `n/a` only when
+  there's no tool-bearing surface to assess (never a false 0), and is a clean 100
+  when surfaces exist but no trifecta. The `feature-dev` plugin's 3 hard units →
+  `−30` → **C (70/100)**, not F and not A.
+- An **inherits-all (`"advisory"`)** unit is still **SHOWN but NOT graded** —
+  aligned with the codebase's existing "inherits-all is advisory" stance.
+
+The deduction lives on the single shared `reportDeductions` → `computeIntegrityScore`
+path, so the audit overall and the plugin-health leaderboard read the SAME number.
+This is a **separate axis from the lint rule below** — under `vigiles lint` you can
+still raise `lethal-trifecta` to `"error"` to gate CI on it independently.
+
 ## High-precision (FP-safe)
 
 Only **well-known, high-signal tools** map to a leg — an unknown tool maps to

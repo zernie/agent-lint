@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:4d4ad18caab1e03d compiled from research/CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:6bba84de339e36d2 compiled from research/CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -95,6 +95,7 @@ The `research/` corpus is the INTERNAL record (design rationale, competitive ana
 - `research/self-evolving-specs.md` — [shipped] Design for self-evolving specs: LLM proposes mutations, deterministic proof suite (monotonicity, NCD, fixed-point) disposes
 - `research/architecture-platform.md` — [rejected] Vision for vigiles-as-architecture-platform (FSD/DDD presets); superseded/rejected direction vs current scope
 - `research/feature-ideas.md` — [active] Detailed catalog of 14 pillar-1 verification feature ideas mapping FP/CS techniques to product features; status tracked in roadmap.md
+- `research/feature-index.md` — [active] The CAPABILITY map (what vigiles can DO, per feature) vs the root keyFiles CODE map: every feature → one-line what-it-does → status (✅shipped/🟡partial/🧪experimental/⬜unbuilt) → entry point (CLI verb/API/skill/file), grouped by the four instruments (VERIFY/GATE/MEASURE/OBSERVE) + cross-cutting layers (typed-spec authoring, multi-harness, skills, CLI/GHA). The internal feature index that was missing
 - `research/handoff-pr40.md` — [active] Handoff record for open PR #40 shipping the OSS-bug-adoption deterministic rule suite (tool-contract, mcp, frontmatter rules) and scanner
 - `research/harness-state-space.md` — [active] States the "minimize harness state-space" organizing thesis (construct/verify/gate/test) and ranks moat-hunting bets via analogical transfer
 - `research/pre-release-focus.md` — [active] Pre-launch triage: freeze VERIFY+MEASURE as the two public pillars, park/polish the rest

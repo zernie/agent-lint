@@ -1,0 +1,54 @@
+import { Github } from "lucide-react";
+
+const REPO = "https://github.com/zernie/vigiles";
+
+export function Footer() {
+  return (
+    <footer className="border-t border-border">
+      <div className="mx-auto w-full max-w-6xl px-6 py-12">
+        <div className="flex flex-col items-start justify-between gap-8 sm:flex-row">
+          <div className="max-w-xl">
+            <div className="flex items-center gap-2.5">
+              <img
+                src="./logo.png"
+                alt=""
+                className="h-7 w-7 rounded-md"
+                width={28}
+                height={28}
+              />
+              <span className="text-base font-semibold tracking-tight">
+                vigiles
+              </span>
+            </div>
+            <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+              vigiles is free &amp; open source. It verifies the references in
+              your agent instruction files — that each rule exists and is
+              enabled, that paths and scripts are real, that your skills
+              actually trigger.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 text-sm">
+            <a
+              href={REPO}
+              className="inline-flex items-center gap-2 text-muted-foreground no-underline transition-colors hover:text-foreground"
+            >
+              <Github className="h-4 w-4" aria-hidden />
+              github.com/zernie/vigiles
+            </a>
+            <a
+              href="https://vigiles.sh"
+              className="text-muted-foreground no-underline transition-colors hover:text-foreground"
+            >
+              vigiles.sh
+            </a>
+          </div>
+        </div>
+        <div className="mt-10 border-t border-border pt-6 text-xs text-muted-foreground">
+          Similar in spirit to Lighthouse and{" "}
+          <code className="font-mono">npm audit</code> — a tool you run, not a
+          framework you adopt.
+        </div>
+      </div>
+    </footer>
+  );
+}
