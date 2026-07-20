@@ -115,15 +115,15 @@ drives real `codex exec` against it.
 
 ## What maps, and what doesn't
 
-| Surface                  | Codex                                                                                                                                                                                                                                                                                                                    |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Instructions             | `AGENTS.md` (plain markdown) — Lint compiles + verifies it; CC output byte-identical                                                                                                                                                                                                                                     |
-| Skills                   | minimal `SKILL.md` (`name`/`description`, via `dialect.skillFrontmatter`)                                                                                                                                                                                                                                                |
-| Deterministic harness    | ✅ `runHarnessTest({ adapter: codexAdapter })` against real `codex exec` (keyless)                                                                                                                                                                                                                                       |
-| Hook veto                | ✅ same wire level as CC — block via exit 2                                                                                                                                                                                                                                                                              |
-| Plugin/MCP manifest      | TOML (`config.toml` + `[mcp_servers]`), read format-aware by the loader                                                                                                                                                                                                                                                  |
-| Subagents                | ⛔ **deliberate non-goal** — a Codex subagent is a TOML concurrency table, not a contract                                                                                                                                                                                                                                |
-| `runEval` / trigger-rate | 🚧 **built, live-validation pending** — runner + JSONL parser + skill-firing predicate confirmed against the binary, and `{ evalDriver }` dispatch (`audit --harness=codex`, and `measureTriggerRate({ evalDriver: codexEvalDriver })`) is wired + fake-tested; a live native eval run is the one remaining step (below) |
+| Surface                  | Codex                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Instructions             | `AGENTS.md` (plain markdown) — Lint compiles + verifies it; CC output byte-identical                                                                                                                                                                                                                                                                                                                                   |
+| Skills                   | minimal `SKILL.md` (`name`/`description`, via `dialect.skillFrontmatter`)                                                                                                                                                                                                                                                                                                                                              |
+| Deterministic harness    | ✅ `runHarnessTest({ adapter: codexAdapter })` against real `codex exec` (keyless)                                                                                                                                                                                                                                                                                                                                     |
+| Hook veto                | ✅ same wire level as CC — block via exit 2                                                                                                                                                                                                                                                                                                                                                                            |
+| Plugin/MCP manifest      | TOML (`config.toml` + `[mcp_servers]`), read format-aware by the loader                                                                                                                                                                                                                                                                                                                                                |
+| Subagents                | ⛔ **deliberate non-goal** — a Codex subagent is a TOML concurrency table, not a contract                                                                                                                                                                                                                                                                                                                              |
+| `runEval` / trigger-rate | 🧪 **EXPERIMENTAL — the number can be wrong** (Codex has no skill-selection event, so "did it fire?" is inferred from a `SKILL.md` read). Built + wired (`audit --harness=codex`, `measureTriggerRate({ evalDriver: codexEvalDriver })`) and it prints a loud caveat, but do **not** treat the number as a measurement. Deterministic `audit` is fully supported. See [below](#trigger-rate-on-codex-is-experimental). |
 
 **Subagents are a boundary, not a gap.** A Codex subagent is an `[agents.<name>]`
 TOML concurrency table (`max_threads` / `max_depth`), not a tool-contract file —
@@ -136,17 +136,41 @@ vigiles's `agent()` builder doesn't map onto it, so it isn't compiled to Codex
 reads `codex exec`'s plain text into `output` only. The **eval** tier reads
 `codex exec --json` and parses tool calls + usage via `parseCodexEvalRun`.
 
-**`runEval` / trigger-rate for Codex is built; one live run remains.** The parser,
-runner, and skill-firing predicate (`parseCodexEvalRun` / `codexEvalAgentRunner` /
-`codexSkillFired`) are validated against the real binary, and the public dispatch
-is wired: `measureTriggerRate(spec, { evalDriver: codexEvalDriver })` and, through
-the CLI, `vigiles audit --harness=codex` (interactively). It's fake-tested end-to-end
-(an injected driver, no binary); the one remaining step is a live native eval run,
-gated on Codex quota. One thing worth knowing as a user: **Codex has no "skill
-selected" event** the way Claude does, so a skill trigger is detected by the model
-reading the skill's `SKILL.md` (`codexSkillFired`) — best-effort, so pair it with
-a judged check. **Pin codex 0.139.0** (0.141 regressed the keyless mock), and real
-eval turns need auth + network egress.
+### Trigger-rate on Codex is EXPERIMENTAL
+
+**The deterministic `vigiles audit` is fully supported on Codex** — refs, rings,
+tool contracts, MCP, hooks. This section is only about the **behavioral
+trigger-rate** tier ("does this skill actually fire?"), which is **experimental on
+Codex — and Codex only.** On Claude Code it's a supported measurement.
+
+**Why — the number can be wrong in both directions.** Claude Code emits a discrete
+skill-selection event, so "did the skill fire?" is a fact. **Codex emits no such
+event.** So `codexSkillFired` infers firing from whether the model _read_ the
+skill's `SKILL.md` (a `command_execution`). That heuristic fails two ways:
+
+- **False negative** — the skill's content is already in context (cached), so the
+  model doesn't re-read `SKILL.md` → counted as "didn't fire" when it did → recall
+  reads **too low**.
+- **False positive** — the model reads `SKILL.md` while just listing/exploring,
+  without using the skill → counted as "fired" → recall reads **too high**.
+
+Because the number can be off either way, presenting it as a measurement would
+violate vigiles's whole precision premise (_a wrong number is worse than no
+number_). So we don't. Concretely:
+
+- `codexEvalDriver.experimental` carries the caveat; `measureTriggerRate` **warns
+  on stderr** and stamps `report.experimental`, and `formatTriggerRateReport` /
+  `formatBehavioralReport` print a loud `⚠ EXPERIMENTAL` line above the numbers.
+  So `vigiles audit --harness=codex`'s behavioral column always says so.
+- Treat any Codex trigger-rate as **directional only**, and pair it with a judged
+  check rather than gating on the rate.
+
+**What would promote it to supported:** a **live run that measures the oracle's
+own accuracy** — drive real `codex exec --json` over skills with known
+ground-truth firing, and compare `codexSkillFired` against it. That result decides:
+promote to supported, keep experimental, or drop Codex to deterministic-only. It's
+gated on having `codex` on `PATH` + Codex quota (**pin codex 0.139.0** — 0.141
+regressed the keyless mock; real eval turns need auth + egress).
 
 (Matches the [`docs/harnesses.md`](harnesses.md) matrix footnote ².)
 

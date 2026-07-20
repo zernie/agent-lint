@@ -24,6 +24,7 @@ import {
   codexRunError,
   installCodexSkills,
   codexEvalDriver,
+  CODEX_TRIGGER_RATE_EXPERIMENTAL,
 } from "./eval.js";
 
 // Real plain turn.
@@ -139,6 +140,15 @@ test("codexEvalDriver wires the codex parser + rate-limit detector", () => {
   assert.equal(codexEvalDriver.parse, parseCodexEvalRun);
   assert.equal(codexEvalDriver.runError, codexRunError);
   assert.equal(typeof codexEvalDriver.runner, "function");
+});
+
+test("codexEvalDriver flags trigger-rate EXPERIMENTAL (Codex-only, not supported)", () => {
+  assert.equal(codexEvalDriver.harness, "codex");
+  // The caveat is present and explains the no-skill-event heuristic (both failure
+  // directions), so the number never reads as a validated measurement.
+  assert.equal(codexEvalDriver.experimental, CODEX_TRIGGER_RATE_EXPERIMENTAL);
+  assert.match(codexEvalDriver.experimental ?? "", /experimental/i);
+  assert.match(codexEvalDriver.experimental ?? "", /SKILL\.md|skill-selection/);
 });
 
 test("parseCodexEvalRun is tolerant + returns the Claude-shaped contract", () => {
