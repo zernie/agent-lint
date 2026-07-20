@@ -15,44 +15,45 @@
 
 ## RESUME HERE
 
-**Branch `claude/rules-compiler-python-3xqhtd`** — **PR #74 OPEN**, `refactor(audit):
-decompose the rule-map pipeline + design-of-record docs`. HEAD `8616589`. Contains a
-pipeline REFACTOR + the ALPHA/experimental pass (below). **Not yet merged** — offered
-to watch CI + merge; user may want to review first. (#72 merged `cd61af5`; #73 merged
-`2a86291` = full ESLint/Pylint parity; branch restarted from main for #74.)
+**Branch `claude/os-audit-adoption-3m528s`** — audit CALIBRATION + adoption research + a
+landing page. **6 commits, pushed, tree clean, NO PR opened** (task was investigation +
+fixes, not a PR). If any already merged, restart from `origin/main`, don't stack.
 
-**Merge protocol:** if #74 is already merged when you resume, it's finished — restart
-this branch from `origin/main` for any follow-up, never stack on merged history.
+### What this branch contains (all built + green locally)
 
-### What PR #74 contains (all built + green locally; full suite passes bar the known env-only `dialect-drift`)
+- **fix(dialect-drift)** `a85228b` — the freshness alarm read a STALE leftover claude-code
+  npm package (2.1.42) instead of the running native binary (2.1.211) and cried wolf; now
+  reconciles with `claude --version` + suppresses on mismatch. (This FIXES the old
+  "dialect-drift fails locally" gotcha → now a LOUD SKIP, not a failure.)
+- **fix(skill-resources)** `5c761db` — skill-resource-resolves flagged example paths in a
+  skill's TEACHING PROSE as missing resources → graded official `skill-development` F(0).
+  Tightened to high-precision (act-on-it refs only) → A(100). Don't-cry-wolf, in code.
+- **fix(audit) trifecta** `1d0f93b`→`c1141aa` — lethal-trifecta was fail-grading official
+  plugins to F; now GRADED at HALF weight (W_TRIFECTA 20→10, a ding not a fail:
+  feature-dev F40→C70). Inherits-all stays advisory. Spec keyFile + rule doc updated.
+- **docs(research)** `89a5818` — new `research/feature-index.md` = the CAPABILITY map (what
+  vigiles can DO per feature, status + entry point) — the internal feature index that was missing.
+- **docs(site)** `e8b5ad5` — landing page as an isolated `@vigiles/site` Vite+React+shadcn
+  package (dark, zernie.com-styled), NOT wired into the CLI. `.github/workflows/site.yml` is
+  build-only/manual so it can't race the TypeDoc Pages deploy.
 
-- **Pipeline REFACTOR (behavior-preserving)** — `segmentInstructions` (CC 108) → a thin
-  dispatcher over pure per-block helpers; `extractMarkedRules` (CC 39) → `markerFor`/
-  `markerRuleFrom`; the rescue ladder → a module-level `RESCUE_SOURCES`; the tier split →
-  a pure `partitionCandidates`; new `src/rule-signals.ts` (FORM_HEAD/RULE_PREDICATE/
-  NORM_SIGNAL in ONE home); exported `LANE_META` (category→glyph+label, CLI reads it).
-  `segment.ts` + `rule-routing.ts` went ~27 lint warnings → 0. **Fable differential-fuzz
-  reviewed** (3.6k output comparisons, real+adversarial+fuzz): zero divergence.
-- **Rule map marked ALPHA/experimental** — HTML report: rule section DEMOTED below the
-  deterministic sections + an `experimental` badge; CLI header `Rule map [experimental]`.
-  Public docs (`verifying-instruction-files.md`, `what-vigiles-catches.md`) frame it as a
-  preview + document the confident/possible/skipped tiers.
-- **`research/rule-enforcer-design.md` §8 = the SCOPE-FREEZE (load-bearing).** The map's
-  SHAPE is FROZEN (`segment→merge→route→LANE_META`); changing it needs a MEASURED
-  precision/recall win, not a vibe. Marked backlog (broaden dogfood #1, Ruff, recall
-  tuning, …) — default answer to "improve the map?" is NO unless #1 or measured. §9 =
-  the OSS-e2e/LLM-in-CI answer: the MAP is model-free → already CI-dogfooded on real OSS
-  (`rule-routing-oss`/`rule-catalog-oss`); only synthesis/behavioral tiers are model-gated
-  → on-sub + manual, never CI. **Read §8 before touching the rule map.**
+### OPEN DECISIONS (user, not yet answered — ASK before more work)
 
-### Rule map = ALPHA + FROZEN. Backlog is MARKED, not chased (design doc §8)
+- **Landing STACK**: user EXPECTED Next.js (like zernie.com); I built Vite (matches `report/`).
+  Pending: keep Vite (lighter) OR redo as Next.js lifting zernie.com's theme/components. Don't
+  build more landing until decided.
+- **GH-Pages routing**: one Pages site per repo — landing on a separate host (`vigiles.dev`,
+  recommended) vs at root with docs moved to `/api`. Undecided; nothing clobbered yet.
+- **Direction lean (from this session)**: LEAD the pitch with skill-TESTING (`measureTriggerRate`
+  "does your skill fire?") for skill authors — audit stays the zero-config front door. Aligned
+  with s46/s47.
 
-Do NOT sink effort here — the detection problem is undecidable, tuning is infinite.
-Pre-approved only: broaden the deterministic dogfood corpus (#1, no model needed), or a
-MEASURED win. Still-open LOW bugs (roadmap): strip a leading `<linter>/` prefix before
-the catalog lookup; don't over-suppress a rule bullet under an H2 like `## Rules`; honor
-checkbox markers (`- [ ] enforce(...)`); probe a real linted file (not hardcoded
-`src/index.ts`); Codex corpus parity (vendored corpus is CC-only).
+### Off-repo work this session (pointers only)
+
+- Adoption strategy (8-agent research + this session's calibration rationale) captured PRIVATELY
+  in `zernie/mine` → `vigiles/s49.md` + a visa-doc pointer (branch `claude/adoption-playbook-s49`,
+  pushed, needs squash-merge). **Contents are STRATEGY → private only; do not restate here.**
+- Cloned this session: `zernie/zernie.github.com` (the zernie.com blog, Next.js) + `zernie/mine`.
 
 ## Design-of-record
 
@@ -85,7 +86,8 @@ checkbox markers (`- [ ] enforce(...)`); probe a real linted file (not hardcoded
 - `CLAUDE.md` (root + `src/` + `research/`) is COMPILED from `.spec.ts` — edit the spec +
   recompile (`node dist/cli.js compile <spec>`), NEVER hand-edit (a PostToolUse hook does).
 - **COMMIT SIGNING is BROKEN in-container** (0-byte pubkey) → "Unverified"; email correct.
-- `dialect-drift.test.ts` fails LOCALLY (installed vs pinned claude-code); CI pins it. Env-only.
+- `dialect-drift.test.ts` now SKIPS LOUDLY (not fails) when the located claude-code package ≠
+  the running `claude --version` (the stale-leftover case) — fixed this session (`a85228b`). CI pins CC so it gates for real there.
 - **`add_repo` is same-owner only** — fetch external files via
   `curl https://raw.githubusercontent.com/OWNER/REPO/BRANCH/PATH` (through the proxy).
 - Commits/PR: NO session links / NO raw model-id strings. Conventional-Commit titles;
