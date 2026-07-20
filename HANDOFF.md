@@ -42,6 +42,7 @@ merged, restart from `origin/main`, don't stack.
   api-docs.yml + site.yml). Doc links repointed to `/api`. Domain placeholder → `vigiles.sh`.
 
 ### KEY ARCHITECTURE DECISION — the interactive demo needs NO server
+
 The "input your repo → grade it" demo is STATIC if it uses the deeplink: the site builds a
 `claude-cli://` URL and the user's OWN local Claude Code runs everything on their sub (secure —
 code never leaves their machine). A server is ONLY for rendering a grade IN-BROWSER
@@ -50,12 +51,14 @@ Claude Code WEB has NO deeplink (#19023 not-planned); `claude-cli://` (CLI/Deskt
 — verify the exact format at code.claude.com/docs/en/deep-links before relying on it.
 
 ### RESOLVED this session
+
 - Landing STACK = **Vite** (user chose keep-vite, not Next.js). GH-Pages = **combined deploy**
   (landing `/`, docs `/api`), done in pages.yml. Domain = **vigiles.sh** ($22/yr; .dev/.io TAKEN).
 
 ### STILL OPEN
+
 - **One-time (repo admin, not code):** Settings → Pages → Source "GitHub Actions"; BUY `vigiles.sh`
-  + set it as the Pages custom domain (GH writes the CNAME).
+  - set it as the Pages custom domain (GH writes the CNAME).
 - **`mine` branch `claude/adoption-playbook-s49`** (adoption strategy s49 + visa pointer) — pushed,
   needs squash-merge. STRATEGY → private only; do not restate here.
 - **No PR opened** on this branch. Direction lean: LEAD the pitch with skill-TESTING
