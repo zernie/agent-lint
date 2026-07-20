@@ -62,15 +62,17 @@ export function AuditWidget({ className }: { className?: string }) {
       <div className="mt-4 flex flex-col items-center gap-2">
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <span className="hidden h-px w-8 bg-border sm:block" aria-hidden />
-          <span>no Claude Code? run anywhere</span>
+          <span>or run it in any terminal</span>
           <span className="hidden h-px w-8 bg-border sm:block" aria-hidden />
         </div>
         <CommandBlock command="npx vigiles audit" />
       </div>
 
       <p className="mt-4 text-center text-sm text-muted-foreground">
-        Opens your own Claude Code — runs on your subscription, nothing
-        uploaded.{" "}
+        <span className="font-medium text-foreground/80">Grade it</span> opens
+        your own Claude Code (your subscription, nothing uploaded);{" "}
+        <span className="font-mono text-foreground/80">audit</span> runs
+        anywhere and auto-detects Claude Code or Codex.{" "}
         <a
           href="#try"
           className="whitespace-nowrap font-medium text-foreground/80 underline-offset-4 hover:text-foreground hover:underline"
