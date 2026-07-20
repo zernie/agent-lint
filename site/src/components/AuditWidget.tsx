@@ -1,12 +1,7 @@
 import { useState } from "react";
-import { ArrowRight, ShieldCheck, Terminal } from "lucide-react";
+import { ArrowRight, Github, ShieldCheck, Terminal } from "lucide-react";
 import { CommandBlock } from "@/components/CommandBlock";
-import {
-  FALLBACK_COMMAND,
-  deeplink,
-  normalizeSlug,
-  openDeeplink,
-} from "@/lib/deeplink";
+import { deeplink, normalizeSlug, openDeeplink } from "@/lib/deeplink";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -29,12 +24,12 @@ export function AuditWidget({ className }: { className?: string }) {
     e.preventDefault();
     if (slug === null) return;
     openDeeplink(slug, () => {
-      // Claude Code never opened (mobile, or no CLI installed). Do the useful
-      // thing anyway: copy the universal command and tell the user.
-      void navigator.clipboard?.writeText(FALLBACK_COMMAND).catch(() => {});
+      // Claude Code never opened (mobile, or no CLI installed). Point the user
+      // at the terminal command below — no auto-clipboard write (it triggers a
+      // scary "wants to see your clipboard" permission prompt on mobile).
       setFellBack(true);
       toast(
-        "Claude Code didn’t open on this device. Copied “npx vigiles audit” — paste it in your terminal.",
+        "Claude Code runs on your computer, not the browser. Run npx vigiles audit in a terminal — the command’s just below.",
       );
     });
   }
@@ -87,9 +82,9 @@ export function AuditWidget({ className }: { className?: string }) {
       {fellBack && (
         <p className="mt-3 rounded-xl border border-accent/30 bg-accent/[0.07] px-4 py-3 text-sm text-foreground">
           Claude Code isn’t available on this device — it runs on your computer,
-          not the browser. We copied{" "}
+          not the browser. Copy{" "}
           <span className="font-mono text-foreground">npx vigiles audit</span>{" "}
-          for you; run it in your terminal, or see it below.
+          below and run it in your terminal.
         </p>
       )}
 
@@ -120,14 +115,18 @@ export function AuditWidget({ className }: { className?: string }) {
 
       <p className="mt-4 text-center text-sm text-muted-foreground">
         <span className="font-mono text-foreground/80">audit</span> runs
-        anywhere and auto-detects Claude Code or Codex.{" "}
-        <a
-          href="#try"
-          className="whitespace-nowrap font-medium text-foreground/80 underline-offset-4 hover:text-foreground hover:underline"
-        >
-          browse my repos →
-        </a>
+        anywhere and auto-detects Claude Code or Codex.
       </p>
+
+      {/* Secondary path — list your public repos and pick one (the RepoPicker). */}
+      <a
+        href="#try"
+        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card/60 px-4 py-3 text-sm font-medium text-foreground no-underline transition-colors hover:border-accent/50 hover:bg-card"
+      >
+        <Github className="h-4 w-4" aria-hidden />
+        Browse my public repos
+        <ArrowRight className="h-4 w-4" aria-hidden />
+      </a>
     </div>
   );
 }
