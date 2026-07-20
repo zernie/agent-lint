@@ -353,6 +353,7 @@ export function evalChecks<T>(target: T, checks: readonly Check<T>[]): CheckResu
 
 // @public
 export interface EvalDriver {
+    readonly experimental?: string;
     readonly harness?: string;
     // (undocumented)
     readonly parse: ModelOutputParser;
@@ -872,6 +873,7 @@ export interface Trace {
 export interface TriggerRateReport {
     readonly competitors: number;
     readonly errored?: number;
+    readonly experimental?: string;
     readonly falsePositiveRate?: number;
     readonly n: number;
     readonly perIrrelevant?: readonly PromptTriggerStat[];
