@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CommandBlock } from "@/components/CommandBlock";
+import { deeplink, normalizeSlug } from "@/lib/deeplink";
 import { cn } from "@/lib/utils";
 
 /** A single public repo as returned by the GitHub REST API (fields we use). */
@@ -29,35 +30,6 @@ type FetchState =
   | { kind: "loading" }
   | { kind: "loaded"; repos: Repo[] }
   | { kind: "error"; message: string };
-
-/** The prompt handed to the user's own Claude Code via the deeplink. */
-const PROMPT = [
-  "Grade this agent harness with vigiles: run `npx vigiles audit`. Then, to",
-  "measure whether my skills actually fire, run `npx vigiles init` and use the",
-  "test-harness skill (measureTriggerRate).",
-].join("\n");
-
-const SLUG_RE = /^[\w.-]+\/[\w.-]+$/;
-
-/**
- * Normalize any repo reference the user pastes into a bare `owner/name` slug:
- * a full GitHub URL, a `.git` suffix, or stray slashes all collapse to the slug.
- * Returns null when the result isn't a valid `owner/name`.
- */
-function normalizeSlug(raw: string): string | null {
-  let s = raw.trim();
-  s = s.replace(/^https?:\/\/(www\.)?github\.com\//i, "");
-  s = s.replace(/\.git$/i, "");
-  s = s.replace(/^\/+|\/+$/g, "");
-  return SLUG_RE.test(s) ? s : null;
-}
-
-/** Build the Claude Code deeplink for a normalized `owner/name` slug. */
-function deeplink(slug: string): string {
-  return `claude-cli://open?repo=${encodeURIComponent(
-    slug,
-  )}&q=${encodeURIComponent(PROMPT)}`;
-}
 
 function timeAgo(iso: string): string {
   const then = new Date(iso).getTime();

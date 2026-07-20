@@ -210,6 +210,22 @@ export function codexEvalAgentRunner(args: AgentRunArgs): Promise<RunOut> {
 }
 
 /**
+ * Why Codex trigger-rate is EXPERIMENTAL (not a supported measurement). Codex
+ * has NO skill-selection event, so `codexSkillFired` infers firing from whether
+ * the model READ `skills/<name>/SKILL.md` — which is wrong in BOTH directions: a
+ * cached/already-in-context skill isn't re-read (false NEGATIVE), and an
+ * exploratory read while listing isn't a real fire (false POSITIVE). So the
+ * number can be off either way. Deterministic `vigiles audit` is fully supported
+ * on Codex; only this behavioral tier is experimental until a live run measures
+ * the oracle's accuracy vs ground truth. See docs/harness-testing-codex.md.
+ */
+export const CODEX_TRIGGER_RATE_EXPERIMENTAL =
+  "Codex trigger-rate is experimental — Codex has no skill-selection event, so " +
+  "firing is inferred from a SKILL.md read (cache → false negative, exploratory " +
+  "read → false positive). Treat as directional, not a measurement. Deterministic " +
+  "`vigiles audit` is fully supported on Codex.";
+
+/**
  * The Codex eval driver — pass to `measureTriggerRate(spec, { evalDriver:
  * codexEvalDriver })` to run a trigger-rate eval natively on `codex exec`. Pair
  * the spec's `fired` with `codexSkillFired` (Codex has no Skill-tool event).
@@ -221,6 +237,8 @@ export const codexEvalDriver: EvalDriver = {
   // The harness identity → folded into the trigger-rate lock hash, so a report
   // recorded on Claude Code is STALE if the eval is switched to Codex (and v.v.).
   harness: "codex",
+  // Codex-only: the trigger-rate number is not validated (see the constant above).
+  experimental: CODEX_TRIGGER_RATE_EXPERIMENTAL,
 };
 
 /**

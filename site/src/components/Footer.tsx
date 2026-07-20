@@ -51,9 +51,7 @@ export function Footer() {
           </div>
         </div>
         <div className="mt-10 border-t border-border pt-6 text-xs text-muted-foreground">
-          Similar in spirit to Lighthouse and{" "}
-          <code className="font-mono">npm audit</code> — a tool you run, not a
-          framework you adopt.
+          MIT licensed.
         </div>
       </div>
     </footer>

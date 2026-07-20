@@ -65,6 +65,13 @@ export interface BehavioralReport {
   /** False when the `claude` CLI / auth is absent — the column couldn't run. */
   readonly available: boolean;
   readonly results: readonly SkillTriggerResult[];
+  /**
+   * Set when the driving harness measures trigger-rate on an EXPERIMENTAL basis
+   * (copied from {@link EvalDriver.experimental}) — Codex, whose firing is
+   * inferred from a SKILL.md read and can be wrong. {@link formatBehavioralReport}
+   * prints it as a loud caveat above the numbers. Absent = supported (Claude Code).
+   */
+  readonly experimental?: string;
 }
 
 export interface ProbeOptions {
@@ -245,6 +252,7 @@ export async function probePluginTriggersWith(
   return {
     available: true,
     results: relabelTriggerArtifact(dir, probe, results),
+    experimental: probe.evalDriver.experimental,
   };
 }
 
@@ -289,6 +297,11 @@ export function formatBehavioralReport(b: BehavioralReport): string {
     return "Behavioral (trigger-rate): no model-invocable skills to probe";
   }
   const lines = ["Behavioral (trigger-rate):"];
+  // Codex-only: the trigger-rate number is not validated (no skill-selection
+  // event → firing inferred from a SKILL.md read). Say so loudly, above the numbers.
+  if (b.experimental) {
+    lines.push(`  ⚠ EXPERIMENTAL — ${b.experimental}`);
+  }
   for (const r of b.results) {
     if (!r.measured) {
       lines.push(`  · ${r.skill} — unmeasured (${r.note ?? "skipped"})`);

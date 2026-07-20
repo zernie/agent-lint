@@ -1,5 +1,5 @@
+import { StickyCTA } from "@/components/StickyCTA";
 import { Hero } from "@/components/sections/Hero";
-import { OutputPreview } from "@/components/sections/OutputPreview";
 import { Rings } from "@/components/sections/Rings";
 import { Wedge } from "@/components/sections/Wedge";
 import { Debunk } from "@/components/sections/Debunk";
@@ -9,15 +9,17 @@ import { Footer } from "@/components/Footer";
 
 export function App() {
   return (
-    <main className="min-h-screen">
-      <Hero />
-      <OutputPreview />
-      <Rings />
-      <Wedge />
-      <Debunk />
-      <RepoPicker />
-      <CTA />
-      <Footer />
-    </main>
+    <>
+      <StickyCTA />
+      <main className="min-h-screen">
+        <Hero />
+        <Rings />
+        <Wedge />
+        <Debunk />
+        <RepoPicker />
+        <CTA />
+        <Footer />
+      </main>
+    </>
   );
 }
