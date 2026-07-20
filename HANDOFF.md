@@ -16,44 +16,51 @@
 ## RESUME HERE
 
 **Branch `claude/os-audit-adoption-3m528s`** — audit CALIBRATION + adoption research + a
-landing page. **6 commits, pushed, tree clean, NO PR opened** (task was investigation +
-fixes, not a PR). If any already merged, restart from `origin/main`, don't stack.
+LANDING SITE (`site/`). **12 commits, pushed, tree clean, NO PR opened.** If any already
+merged, restart from `origin/main`, don't stack.
 
 ### What this branch contains (all built + green locally)
 
-- **fix(dialect-drift)** `a85228b` — the freshness alarm read a STALE leftover claude-code
-  npm package (2.1.42) instead of the running native binary (2.1.211) and cried wolf; now
-  reconciles with `claude --version` + suppresses on mismatch. (This FIXES the old
-  "dialect-drift fails locally" gotcha → now a LOUD SKIP, not a failure.)
-- **fix(skill-resources)** `5c761db` — skill-resource-resolves flagged example paths in a
-  skill's TEACHING PROSE as missing resources → graded official `skill-development` F(0).
-  Tightened to high-precision (act-on-it refs only) → A(100). Don't-cry-wolf, in code.
-- **fix(audit) trifecta** `1d0f93b`→`c1141aa` — lethal-trifecta was fail-grading official
-  plugins to F; now GRADED at HALF weight (W_TRIFECTA 20→10, a ding not a fail:
-  feature-dev F40→C70). Inherits-all stays advisory. Spec keyFile + rule doc updated.
-- **docs(research)** `89a5818` — new `research/feature-index.md` = the CAPABILITY map (what
-  vigiles can DO per feature, status + entry point) — the internal feature index that was missing.
-- **docs(site)** `e8b5ad5` — landing page as an isolated `@vigiles/site` Vite+React+shadcn
-  package (dark, zernie.com-styled), NOT wired into the CLI. `.github/workflows/site.yml` is
-  build-only/manual so it can't race the TypeDoc Pages deploy.
+- **Audit calibration (don't-cry-wolf, in code), 3 fixes:** `dialect-drift` reconciles the
+  freshness alarm with the running `claude --version` (stops crying wolf on a stale leftover
+  npm pkg — the old "fails locally" gotcha is now a LOUD SKIP); `skill-resource-resolves` no
+  longer flags example paths in a skill's teaching PROSE (official `skill-development` F0→A100);
+  `lethal-trifecta` GRADED at HALF weight (W_TRIFECTA 20→10) not fail-to-F (feature-dev F40→C70,
+  inherits-all stays advisory).
+- **`research/feature-index.md`** — the CAPABILITY map (what vigiles DOES per feature, status +
+  entry point), grouped by the 4 instruments. The internal feature index that was missing.
+- **Landing site `site/`** — isolated `@vigiles/site` (Vite + React + shadcn, dark, zernie.com-
+  styled), NOT wired into the CLI. Flow: hero → OUTPUT PREVIEW (real `vigiles-audit.png`, README
+  parity) → rings → wedge → debunk (links the published zernie.com token-savings post) → REPO
+  PICKER → CTA. The picker = the interactive demo: type a GH username → your PUBLIC repos
+  (client-side GitHub API, no backend/OAuth) + a manual `owner/name` field for private → a
+  `claude-cli://open?repo=…&q=…` deeplink that runs vigiles in the user's OWN local Claude Code
+  (their sub, nothing uploaded), `npx vigiles audit` fallback.
+- **`.claude/skills/screenshot/`** — dev skill to render+screenshot a local page (pre-installed
+  Chromium, playwright-core, scroll-through for reveal animations).
+- **`pages.yml`** — ONE combined GitHub Pages deploy (landing `/`, TypeDoc docs `/api`; replaced
+  api-docs.yml + site.yml). Doc links repointed to `/api`. Domain placeholder → `vigiles.sh`.
 
-### OPEN DECISIONS (user, not yet answered — ASK before more work)
+### KEY ARCHITECTURE DECISION — the interactive demo needs NO server
+The "input your repo → grade it" demo is STATIC if it uses the deeplink: the site builds a
+`claude-cli://` URL and the user's OWN local Claude Code runs everything on their sub (secure —
+code never leaves their machine). A server is ONLY for rendering a grade IN-BROWSER
+(deterministic-only, cold visitors, shareable URLs) — a later "hosted dashboard", NOT the MVP.
+Claude Code WEB has NO deeplink (#19023 not-planned); `claude-cli://` (CLI/Desktop) IS supported
+— verify the exact format at code.claude.com/docs/en/deep-links before relying on it.
 
-- **Landing STACK**: user EXPECTED Next.js (like zernie.com); I built Vite (matches `report/`).
-  Pending: keep Vite (lighter) OR redo as Next.js lifting zernie.com's theme/components. Don't
-  build more landing until decided.
-- **GH-Pages routing**: one Pages site per repo — landing on a separate host (`vigiles.dev`,
-  recommended) vs at root with docs moved to `/api`. Undecided; nothing clobbered yet.
-- **Direction lean (from this session)**: LEAD the pitch with skill-TESTING (`measureTriggerRate`
-  "does your skill fire?") for skill authors — audit stays the zero-config front door. Aligned
-  with s46/s47.
+### RESOLVED this session
+- Landing STACK = **Vite** (user chose keep-vite, not Next.js). GH-Pages = **combined deploy**
+  (landing `/`, docs `/api`), done in pages.yml. Domain = **vigiles.sh** ($22/yr; .dev/.io TAKEN).
 
-### Off-repo work this session (pointers only)
-
-- Adoption strategy (8-agent research + this session's calibration rationale) captured PRIVATELY
-  in `zernie/mine` → `vigiles/s49.md` + a visa-doc pointer (branch `claude/adoption-playbook-s49`,
-  pushed, needs squash-merge). **Contents are STRATEGY → private only; do not restate here.**
-- Cloned this session: `zernie/zernie.github.com` (the zernie.com blog, Next.js) + `zernie/mine`.
+### STILL OPEN
+- **One-time (repo admin, not code):** Settings → Pages → Source "GitHub Actions"; BUY `vigiles.sh`
+  + set it as the Pages custom domain (GH writes the CNAME).
+- **`mine` branch `claude/adoption-playbook-s49`** (adoption strategy s49 + visa pointer) — pushed,
+  needs squash-merge. STRATEGY → private only; do not restate here.
+- **No PR opened** on this branch. Direction lean: LEAD the pitch with skill-TESTING
+  (`measureTriggerRate` "does your skill fire?"); audit stays the zero-config front door (s46/s47).
+- Cloned this session: `zernie/zernie.github.com` (blog) + `zernie/mine` (private strategy KB).
 
 ## Design-of-record
 
