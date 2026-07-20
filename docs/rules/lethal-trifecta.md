@@ -45,6 +45,26 @@ only when all three legs are non-empty.
   because it inherits everything — a maximal blast radius. Reported with `⚠`,
   aligned with the codebase's existing "inherits-all is advisory" stance.
 
+## In `vigiles audit`: shown, **not graded** (advisory)
+
+A trifecta finding is a **capability PATTERN with no exploit code**, not a
+demonstrated vulnerability — attacker content _could_ be exfiltrated, but nothing
+proves it will be. Anthropic's own official plugins ship the pattern on their
+cleanest surfaces (e.g. the `feature-dev` plugin's `code-reviewer` subagent lists
+`Read, WebFetch, WebSearch`). Grading such a plugin **F** on an accepted design
+pattern would cry wolf, so `vigiles audit`:
+
+- **SHOWS** every trifecta unit (hard _and_ inherits-all) in the **Safety** ring
+  and the report — a real, useful heads-up.
+- **does NOT deduct points** for it. The Safety ring is therefore an **advisory,
+  not-graded** ring (`score: n/a · advisory`, never a false 100 nor a false 0), and
+  a trifecta never lowers the health score or letter grade on either the audit
+  overall or the plugin-health leaderboard.
+
+This mirrors how the executing "do your hooks actually block?" disaster-battery
+also stays out of the graded rings. **The lint rule below is separate** — under
+`vigiles lint` you can still raise `lethal-trifecta` to `"error"` to gate CI on it.
+
 ## High-precision (FP-safe)
 
 Only **well-known, high-signal tools** map to a leg — an unknown tool maps to

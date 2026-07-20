@@ -197,8 +197,10 @@ test("the NEW non-advisory detectors are scored (not ranked A/100 while printing
   assert.ok(skillRes < 100, "a broken bundled resource must drag the score");
 });
 
-test("a HARD lethal-trifecta finding deducts W_TRIFECTA (-20); advisory does not", () => {
-  // A hard (explicit all-three) trifecta is a declared exfil path → graded -20.
+test("a lethal-trifecta finding (hard OR advisory) is NOT graded — score stays 100", () => {
+  // A trifecta is a capability PATTERN with no exploit code, not a demonstrated
+  // vuln (official plugins ship it), so it never lowers the health score — hard and
+  // inherits-all alike are advisory-only, surfaced by the Safety ring.
   const hard = scoreReport(
     report({
       agents: [
@@ -224,11 +226,13 @@ test("a HARD lethal-trifecta finding deducts W_TRIFECTA (-20); advisory does not
       ] as unknown as ScanReport["trifectaFindings"],
     }),
   );
-  assert.equal(hard.score, 80); // 100 - 20
-  assert.ok(hard.issues.some((i) => i.includes("lethal-trifecta")));
+  assert.equal(hard.score, 100); // NOT graded down
+  assert.ok(
+    !hard.issues.some((i) => i.includes("lethal-trifecta")),
+    "trifecta is not a graded leaderboard issue",
+  );
 
-  // An advisory (inherits-all) trifecta is NOT graded — it's surfaced elsewhere
-  // (the Safety ring) as an advisory, never a leaderboard penalty.
+  // An advisory (inherits-all) trifecta is likewise NOT graded.
   const advisory = scoreReport(
     report({
       agents: [
@@ -257,9 +261,9 @@ test("a HARD lethal-trifecta finding deducts W_TRIFECTA (-20); advisory does not
   assert.equal(advisory.score, 100); // inherits-all advisory not graded
 });
 
-test("the audit overall == leaderboard health, even with a HARD trifecta", () => {
+test("the audit overall == leaderboard health, even with a HARD trifecta (both ungraded)", () => {
   // The invariant: both surfaces read the SAME shared computeIntegrityScore over
-  // reportDeductions — Safety being a graded ring must not break that.
+  // reportDeductions — trifecta being advisory (not graded) must not break that.
   const r = report({
     commands: 1, // a surface (so neither is the empty machine)
     agents: [
@@ -287,7 +291,7 @@ test("the audit overall == leaderboard health, even with a HARD trifecta", () =>
   });
   const health = computeIntegrityScore(reportDeductions(r)).score;
   const audit = auditScore(r);
-  assert.equal(health, 80);
+  assert.equal(health, 100); // trifecta not graded
   assert.equal(audit.overall, health); // the two surfaces never disagree
 });
 

@@ -3,8 +3,9 @@
  * — each finding buckets into the right deterministic category, the overall
  * excludes n/a categories, an empty machine is empty (but an instruction-only
  * repo is NOT), and the formatter renders rings + the overall. The five rings are
- * all deterministic; Safety is fed by the STATIC lethal-trifecta check (the
- * EXECUTING disaster-battery is still not an `audit` ring).
+ * all deterministic; Safety is an ADVISORY (not-graded) ring fed by the STATIC
+ * lethal-trifecta check — it SHOWS trifecta units but never scores them into the
+ * overall (a capability pattern isn't a demonstrated vuln).
  */
 import { describe, it, expect } from "vitest";
 import { auditScore, formatAuditScore } from "./audit-score.js";
@@ -173,7 +174,7 @@ describe("auditScore", () => {
     expect(s.grade).toBe("A");
   });
 
-  it("Safety is clean (100) when there IS a tool-bearing surface but no trifecta", () => {
+  it("Safety is an advisory (not-graded) ring — never a false 100 — when a surface has no trifecta", () => {
     const s = auditScore(
       makeReport({
         agents: [
@@ -189,11 +190,15 @@ describe("auditScore", () => {
         ] as unknown as ScanReport["agents"],
       }),
     );
-    expect(cat(s, "Safety")?.score).toBe(100);
+    // Advisory, not graded — score is n/a (null), not a false 100 that would imply
+    // "verified safe". A clean-but-trifecta-free repo still scores 100 overall.
+    expect(cat(s, "Safety")?.score).toBeNull();
+    expect(cat(s, "Safety")?.advisory).toBe(true);
+    expect(cat(s, "Safety")?.findings).toEqual([]);
     expect(s.overall).toBe(100);
   });
 
-  it("a HARD trifecta finding grades Safety AND drops the overall by W_TRIFECTA (20)", () => {
+  it("a HARD trifecta finding is SHOWN on Safety but NOT graded (advisory) — overall unchanged", () => {
     const s = auditScore(
       makeReport({
         agents: [
@@ -217,12 +222,19 @@ describe("auditScore", () => {
         ] as unknown as ScanReport["trifectaFindings"],
       }),
     );
-    expect(cat(s, "Safety")?.score).toBe(80); // 100 - 20
+    // The unit is SHOWN (a heads-up), the ring is advisory/not-graded (score n/a),
+    // and the overall is NOT dropped — a capability pattern isn't a demonstrated vuln.
+    expect(cat(s, "Safety")?.score).toBeNull();
+    expect(cat(s, "Safety")?.advisory).toBe(true);
     expect(cat(s, "Safety")?.findings.length).toBe(1);
-    // Safety is GRADED into the overall (the summed model) — a clean repo would be
-    // 100, this drops by exactly W_TRIFECTA.
-    expect(s.overall).toBe(80);
-    expect(s.grade).toBe("B");
+    expect(
+      cat(s, "Safety")?.findings.some(
+        (f) =>
+          f.includes("exfil-bot") && f.includes("three lethal-trifecta legs"),
+      ),
+    ).toBe(true);
+    expect(s.overall).toBe(100); // NOT graded down
+    expect(s.grade).toBe("A");
   });
 
   it("an ADVISORY (inherits-all) trifecta is SHOWN on Safety but NOT graded", () => {
@@ -249,7 +261,8 @@ describe("auditScore", () => {
         ] as unknown as ScanReport["trifectaFindings"],
       }),
     );
-    expect(cat(s, "Safety")?.score).toBe(100); // advisory not graded
+    expect(cat(s, "Safety")?.score).toBeNull(); // advisory ring, not graded
+    expect(cat(s, "Safety")?.advisory).toBe(true);
     expect(
       cat(s, "Safety")?.findings.some(
         (f) => f.includes("inherits all tools") && f.includes("advisory"),
@@ -258,7 +271,7 @@ describe("auditScore", () => {
     expect(s.overall).toBe(100);
   });
 
-  it("Safety is n/a when there's no tool-bearing surface (no agents, no model-invocable skills)", () => {
+  it("Safety is n/a (no assessable surface) when there's no agent / model-invocable skill", () => {
     // A user-invoked skill carries no model-driven trifecta risk → not assessable.
     const s = auditScore(
       makeReport({
@@ -273,9 +286,13 @@ describe("auditScore", () => {
       }),
     );
     expect(cat(s, "Safety")?.score).toBeNull();
+    expect(cat(s, "Safety")?.advisory).toBe(true);
+    expect(cat(s, "Safety")?.findings).toEqual([
+      "no tool-bearing surface to assess",
+    ]);
   });
 
-  it("a model-invocable skill IS an assessable Safety surface (clean → 100)", () => {
+  it("a model-invocable skill IS an assessable Safety surface (advisory, clean → no findings)", () => {
     const s = auditScore(
       makeReport({
         skills: [
@@ -288,7 +305,9 @@ describe("auditScore", () => {
         ] as unknown as ScanReport["skills"],
       }),
     );
-    expect(cat(s, "Safety")?.score).toBe(100);
+    expect(cat(s, "Safety")?.score).toBeNull();
+    expect(cat(s, "Safety")?.advisory).toBe(true);
+    expect(cat(s, "Safety")?.findings).toEqual([]);
   });
 
   it("an empty machine (no surface, no instructions) is empty — overall 0, all n/a", () => {
