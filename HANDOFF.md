@@ -15,55 +15,44 @@
 
 ## RESUME HERE
 
-**Branch `claude/os-audit-adoption-3m528s`** — audit CALIBRATION + adoption research + a
-LANDING SITE (`site/`). **12 commits, pushed, tree clean, NO PR opened.** If any already
-merged, restart from `origin/main`, don't stack.
+**`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS cert. The landing
+site (`site/`) + combined `pages.yml` deploy + audit calibration are all **merged to `main`**
+(#76/#77/#78). DNS (A → GitHub Pages) + Pages custom domain done. Site auto-deploys on push to main.
 
-### What this branch contains (all built + green locally)
+**Branch `claude/os-audit-adoption-3m528s`** now carries a **HERO REDESIGN (UNMERGED, ~6 commits,
+pushed, tree clean, NO PR)** — this is the live task. If already merged, restart from `origin/main`.
 
-- **Audit calibration (don't-cry-wolf, in code), 3 fixes:** `dialect-drift` reconciles the
-  freshness alarm with the running `claude --version` (stops crying wolf on a stale leftover
-  npm pkg — the old "fails locally" gotcha is now a LOUD SKIP); `skill-resource-resolves` no
-  longer flags example paths in a skill's teaching PROSE (official `skill-development` F0→A100);
-  `lethal-trifecta` GRADED at HALF weight (W_TRIFECTA 20→10) not fail-to-F (feature-dev F40→C70,
-  inherits-all stays advisory).
-- **`research/feature-index.md`** — the CAPABILITY map (what vigiles DOES per feature, status +
-  entry point), grouped by the 4 instruments. The internal feature index that was missing.
-- **Landing site `site/`** — isolated `@vigiles/site` (Vite + React + shadcn, dark, zernie.com-
-  styled), NOT wired into the CLI. Flow: hero → OUTPUT PREVIEW (real `vigiles-audit.png`, README
-  parity) → rings → wedge → debunk (links the published zernie.com token-savings post) → REPO
-  PICKER → CTA. The picker = the interactive demo: type a GH username → your PUBLIC repos
-  (client-side GitHub API, no backend/OAuth) + a manual `owner/name` field for private → a
-  `claude-cli://open?repo=…&q=…` deeplink that runs vigiles in the user's OWN local Claude Code
-  (their sub, nothing uploaded), `npx vigiles audit` fallback.
-- **`.claude/skills/screenshot/`** — dev skill to render+screenshot a local page (pre-installed
-  Chromium, playwright-core, scroll-through for reveal animations).
-- **`pages.yml`** — ONE combined GitHub Pages deploy (landing `/`, TypeDoc docs `/api`; replaced
-  api-docs.yml + site.yml). Doc links repointed to `/api`. Domain placeholder → `vigiles.sh`.
+### What the unmerged branch contains (built + green locally, screenshots shown to user)
 
-### KEY ARCHITECTURE DECISION — the interactive demo needs NO server
+- **Hero redesign** — killed the whitespace + buried-CTA problem: pulled the real audit-report
+  screenshot onto the fold (folded away the old `OutputPreview` section), and collapsed the four
+  competing CTAs to ONE. The CTA is a **merged "audit widget"** (`site/src/components/AuditWidget.tsx`):
+  type `owner/repo` → **"Grade it"** = the `claude-cli://` deeplink (runs vigiles in the user's OWN
+  Claude Code, their sub, nothing uploaded — a shield-marked security line says so) + **`npx vigiles
+audit`** as the always-visible universal fallback + "browse my repos →" to the full RepoPicker.
+- **`StickyCTA.tsx`** — sticky header reveals the `npx` copy command once the hero scrolls out (the
+  always-reachable-action conversion lever). **`lib/deeplink.ts`** — shared `normalizeSlug`/`deeplink`
+  (one source, reused by RepoPicker). Footer's redundant Lighthouse/npm-audit tagline cut.
 
-The "input your repo → grade it" demo is STATIC if it uses the deeplink: the site builds a
-`claude-cli://` URL and the user's OWN local Claude Code runs everything on their sub (secure —
-code never leaves their machine). A server is ONLY for rendering a grade IN-BROWSER
-(deterministic-only, cold visitors, shareable URLs) — a later "hosted dashboard", NOT the MVP.
-Claude Code WEB has NO deeplink (#19023 not-planned); `claude-cli://` (CLI/Desktop) IS supported
-— verify the exact format at code.claude.com/docs/en/deep-links before relying on it.
+### Codex behavioral tier is EXPERIMENTAL, not "supported" (SHIPPED this session)
 
-### RESOLVED this session
-
-- Landing STACK = **Vite** (user chose keep-vite, not Next.js). GH-Pages = **combined deploy**
-  (landing `/`, docs `/api`), done in pages.yml. Domain = **vigiles.sh** ($22/yr; .dev/.io TAKEN).
+Deterministic `vigiles audit` on Codex is **full parity** (proven live + `scan-cli.test.ts`) — KEEP it.
+But the real-model **trigger-rate** on Codex is NOT trustworthy: Codex has no skill-fire event, so
+`codexSkillFired` infers firing from whether the model READ `SKILL.md` — cache → false-negative,
+exploration-read → false-positive, so the NUMBER can be wrong either way. A wrong measurement violates
+the precision/don't-cry-wolf brand, so we don't claim Codex trigger-rate. DONE:
+`EvalDriver.experimental` caveat on `codexEvalDriver` (CC stays supported) → copied onto
+`TriggerRateReport`/`BehavioralReport`; `measureTriggerRate` warns on stderr + the formatters print
+`⚠ EXPERIMENTAL` (audit --harness=codex too); documented in `docs/harness-testing-codex.md` +
+`research/harness-capabilities.md`; tests added. REMAINING gate to promote it: a LIVE Codex run that
+MEASURES the oracle's accuracy vs ground truth (needs `codex` on PATH + quota; not installed here).
 
 ### STILL OPEN
 
-- **One-time (repo admin, not code):** Settings → Pages → Source "GitHub Actions"; BUY `vigiles.sh`
-  - set it as the Pages custom domain (GH writes the CNAME).
-- **`mine` branch `claude/adoption-playbook-s49`** (adoption strategy s49 + visa pointer) — pushed,
-  needs squash-merge. STRATEGY → private only; do not restate here.
-- **No PR opened** on this branch. Direction lean: LEAD the pitch with skill-TESTING
-  (`measureTriggerRate` "does your skill fire?"); audit stays the zero-config front door (s46/s47).
-- Cloned this session: `zernie/zernie.github.com` (blog) + `zernie/mine` (private strategy KB).
+- **Codex trigger-rate promotion** — the live oracle-accuracy run above (blocked on codex + quota).
+- Personal/launch/calendar follow-ups → PRIVATE `zernie/mine` only (branch `claude/adoption-playbook-s49`,
+  pushed, needs squash-merge). Do not restate here.
+- Cloned this session: `zernie/zernie.github.com` (blog) + `zernie/mine` (private KB).
 
 ## Design-of-record
 
