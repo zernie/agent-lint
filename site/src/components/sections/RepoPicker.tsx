@@ -12,7 +12,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CommandBlock } from "@/components/CommandBlock";
-import { deeplink, normalizeSlug } from "@/lib/deeplink";
+import {
+  FALLBACK_COMMAND,
+  deeplink,
+  normalizeSlug,
+  openDeeplink,
+} from "@/lib/deeplink";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 /** A single public repo as returned by the GitHub REST API (fields we use). */
@@ -109,6 +115,17 @@ export function RepoPicker() {
   const manualSlug = normalizeSlug(manual);
   // The active handoff target: an explicit manual entry wins over a list pick.
   const targetSlug = manualSlug ?? selected;
+
+  function handoff(e: React.MouseEvent) {
+    e.preventDefault();
+    if (targetSlug === null) return;
+    openDeeplink(targetSlug, () => {
+      void navigator.clipboard?.writeText(FALLBACK_COMMAND).catch(() => {});
+      toast(
+        "Claude Code didn’t open on this device. Copied “npx vigiles audit” — paste it in your terminal.",
+      );
+    });
+  }
 
   return (
     <section id="try" className="scroll-mt-8 border-t border-border bg-card/30">
@@ -331,6 +348,7 @@ export function RepoPicker() {
                 </p>
                 <Button
                   href={deeplink(targetSlug)}
+                  onClick={handoff}
                   variant="primary"
                   size="lg"
                   className="mt-3 w-full"
