@@ -42,7 +42,7 @@ export function Wedge() {
       <div className="mx-auto w-full max-w-6xl px-6 py-20 sm:py-28">
         <div className="mx-auto max-w-2xl text-center">
           <Badge variant="signal" className="mb-5">
-            The wedge
+            The problem
           </Badge>
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
             &ldquo;Valid&rdquo; is not &ldquo;true.&rdquo;

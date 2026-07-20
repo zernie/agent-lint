@@ -1,4 +1,5 @@
 import { StickyCTA } from "@/components/StickyCTA";
+import { Toaster } from "@/components/ui/toaster";
 import { Hero } from "@/components/sections/Hero";
 import { Rings } from "@/components/sections/Rings";
 import { Wedge } from "@/components/sections/Wedge";
@@ -20,6 +21,7 @@ export function App() {
         <CTA />
         <Footer />
       </main>
+      <Toaster />
     </>
   );
 }
