@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, Terminal } from "lucide-react";
+import { ArrowRight, ShieldCheck, Terminal } from "lucide-react";
 import { CommandBlock } from "@/components/CommandBlock";
 import { deeplink, normalizeSlug } from "@/lib/deeplink";
 import { cn } from "@/lib/utils";
@@ -58,8 +58,20 @@ export function AuditWidget({ className }: { className?: string }) {
         )}
       </form>
 
+      {/* Security reassurance — the deeplink runs in the user's OWN Claude Code. */}
+      <p className="mt-3 flex items-center justify-center gap-2 text-center text-sm text-muted-foreground">
+        <ShieldCheck className="h-4 w-4 shrink-0 text-good" aria-hidden />
+        <span>
+          Runs in <span className="font-medium text-foreground">your own</span>{" "}
+          Claude Code — your machine, your subscription.{" "}
+          <span className="text-foreground/70">
+            Nothing is uploaded; no server ever sees your code.
+          </span>
+        </span>
+      </p>
+
       {/* Fallback — the universal copy-command, always visible */}
-      <div className="mt-4 flex flex-col items-center gap-2">
+      <div className="mt-5 flex flex-col items-center gap-2">
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <span className="hidden h-px w-8 bg-border sm:block" aria-hidden />
           <span>or run it in any terminal</span>
@@ -69,8 +81,6 @@ export function AuditWidget({ className }: { className?: string }) {
       </div>
 
       <p className="mt-4 text-center text-sm text-muted-foreground">
-        <span className="font-medium text-foreground/80">Grade it</span> opens
-        your own Claude Code (your subscription, nothing uploaded);{" "}
         <span className="font-mono text-foreground/80">audit</span> runs
         anywhere and auto-detects Claude Code or Codex.{" "}
         <a
