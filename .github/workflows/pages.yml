@@ -10,9 +10,10 @@ name: Pages (landing + API docs)
 # REQUIRED ONE-TIME SETUP (repo admin, can't be done from code):
 #   Settings → Pages → Build and deployment → Source: "GitHub Actions".
 # Publishes at https://zernie.github.io/vigiles/ (landing) + /vigiles/api/ (docs).
-# For the vigiles.sh custom domain: buy it, set it in Settings → Pages (GitHub
-# writes the CNAME), and it serves at https://vigiles.sh/ + /api/ — the landing's
-# relative asset base ("./") and TypeDoc's relative links both work at either path.
+# For the vigiles.sh custom domain: the artifact ships a CNAME file (step 3), so
+# once the DNS A records point at GitHub Pages and Settings → Pages shows the
+# domain, it serves at https://vigiles.sh/ + /api/ — the landing's relative asset
+# base ("./") and TypeDoc's relative links both work at either path.
 
 on:
   push:
@@ -62,6 +63,10 @@ jobs:
           cp -r site/dist/. _pages/
           cp -r api-reference/. _pages/api/
           touch _pages/.nojekyll
+          # Pin the custom domain in the artifact so an Actions-based deploy keeps
+          # it across runs (a domain set only in Settings → Pages can be dropped on
+          # redeploy; the CNAME file is the durable source). Serves at https://vigiles.sh/.
+          echo 'vigiles.sh' > _pages/CNAME
 
       - uses: actions/configure-pages@v5
 
