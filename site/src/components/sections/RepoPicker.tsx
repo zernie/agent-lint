@@ -12,12 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CommandBlock } from "@/components/CommandBlock";
-import {
-  FALLBACK_COMMAND,
-  deeplink,
-  normalizeSlug,
-  openDeeplink,
-} from "@/lib/deeplink";
+import { deeplink, normalizeSlug, openDeeplink } from "@/lib/deeplink";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -120,9 +115,8 @@ export function RepoPicker() {
     e.preventDefault();
     if (targetSlug === null) return;
     openDeeplink(targetSlug, () => {
-      void navigator.clipboard?.writeText(FALLBACK_COMMAND).catch(() => {});
       toast(
-        "Claude Code didn’t open on this device. Copied “npx vigiles audit” — paste it in your terminal.",
+        "Claude Code runs on your computer, not the browser. Run npx vigiles audit in a terminal — the command’s just below.",
       );
     });
   }
