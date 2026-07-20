@@ -14,8 +14,10 @@
  * (`lethalTrifectaIssues` → `report.trifectaFindings`): a unit holding all three
  * capability legs is a prompt-injection exfil path detectable from the tool-SET
  * alone — nothing executes, so it sidesteps the confinement blocker. A `"hard"`
- * (explicit all-three) finding is GRADED into the overall; a `"advisory"`
- * (inherits-all) finding is SHOWN in the ring but not graded. NB the EXECUTING
+ * (explicit all-three) finding is GRADED into the overall at a REDUCED weight
+ * (`W_TRIFECTA=10`, HALF the old 20 — a DING, not a fail: it dents the grade
+ * without a catastrophic F for a pattern official plugins ship by design); a
+ * `"advisory"` (inherits-all) finding is SHOWN in the ring but not graded. NB the EXECUTING
  * "do your hooks actually block?" disaster-battery is STILL not an `audit` ring:
  * running arbitrary hooks safely needs cross-platform confinement that isn't
  * shipped yet, so the battery lives in the `vigiles/testing` API via
@@ -223,9 +225,10 @@ function structure(r: ScanReport): CategoryScore {
 }
 
 /**
- * SAFETY — fed by the STATIC lethal-trifecta check (`report.trifectaFindings`).
- * A `"hard"` finding (an explicit contract naming all three capability legs) is a
- * declared prompt-injection exfil path and is GRADED (`W_TRIFECTA` each, the same
+ * SAFETY — fed by the STATIC lethal-trifecta check (`report.trifectaFindings`), a
+ * GRADED ring. A `"hard"` finding (an explicit contract naming all three
+ * capability legs) is a prompt-injection exfil path and is GRADED at a REDUCED
+ * weight (`W_TRIFECTA=10` each — HALF the old 20, a DING not a fail; the same
  * weight `reportDeductions` sums into the overall, so the ring and the headline
  * agree). A `"advisory"` finding (inherits-all) is SHOWN in the ring's findings
  * but NOT graded — aligned with the inherits-all-is-advisory stance.

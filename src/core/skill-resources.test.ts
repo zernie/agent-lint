@@ -89,6 +89,61 @@ describe("skillResourceIssues", () => {
     expect(run(body, existsOnly("assets/template.json"))).toEqual([]);
   });
 
+  it("does NOT flag illustrative inline bundle paths on a teaching skill (cry-wolf regression)", () => {
+    // The prose patterns from the official `skill-development` skill: bundle
+    // paths mentioned as EXAMPLES of what a skill could ship, not files it uses.
+    // None of these carry a use-directive, and most carry an illustrative cue —
+    // flagging them graded a clean skill an F. All must stay silent.
+    const body = [
+      "2. A `scripts/rotate_pdf.py` script would be helpful to store in the skill",
+      "2. A `references/schema.md` file documenting the table schemas would be helpful",
+      "**Example**: `scripts/rotate_pdf.py` for PDF rotation tasks",
+      "**Examples**: `references/finance.md` for financial schemas, `references/mnda.md` for the NDA template",
+      "**Examples**: `assets/logo.png` for brand assets, `assets/slides.pptx`, `assets/font.ttf` for typography",
+      "- Detailed patterns → `references/patterns.md`",
+      "- **`references/patterns.md`** - Common patterns",
+      "`references/patterns.md` for detailed hook patterns to avoid bloating SKILL.md",
+    ].join("\n");
+    expect(run(body, existsOnly())).toEqual([]);
+  });
+
+  it("skips an inline bundle path with a use-directive but an illustrative cue", () => {
+    // Even WITH a use-directive, an explicit illustrative cue means the path is
+    // a demonstration, not a real reference — the negative gate wins.
+    const body = "For example, run `scripts/demo.sh` to see how it works.";
+    expect(run(body, existsOnly())).toEqual([]);
+  });
+
+  it("skips an inline bundle path with no use-directive (bare mention)", () => {
+    // A path stated as a fact with no imperative to act on it is undecidable
+    // prose — biased toward precision, we don't flag it.
+    const body = "The schema lives at `references/schema.md` in the repo.";
+    expect(run(body, existsOnly())).toEqual([]);
+  });
+
+  it("STILL flags a missing inline bundle path the skill is told to use (true positive)", () => {
+    // The genuine dead-ref: an imperative directing the agent at a missing file.
+    const body =
+      "First read `references/setup.md`, then run `scripts/install.sh`.";
+    const found = run(body, existsOnly());
+    expect(found.map((f) => f.resolved).sort()).toEqual([
+      "references/setup.md",
+      "scripts/install.sh",
+    ]);
+  });
+
+  it("STILL flags a missing bundled resource behind a markdown link (unchanged)", () => {
+    // Markdown links are a high-confidence reference regardless of prose — a
+    // link to a missing bundled file always fires (the direction we must keep).
+    const body = "For example, see [the schema](references/schema.md).";
+    const found = run(body, existsOnly());
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({
+      resolved: "references/schema.md",
+      kind: "link",
+    });
+  });
+
   it("skips a bare word inline mention (no extension, no bundle prefix)", () => {
     const body = "Use the `runHook` helper and the `scripts` directory.";
     expect(run(body, existsOnly())).toEqual([]);

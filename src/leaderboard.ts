@@ -51,10 +51,12 @@ export const W_NO_DESCRIPTION = 10; // a skill with no usable description → ca
 export const W_DANGLING_REF = 8; // a referenced intra-plugin file that's missing → broken path
 export const W_OVERLAP = 8; // a description collision → the wrong skill fires
 export const W_NO_CONTRACT = 5; // generic small-footgun weight (disallowedTools typo, invalid model/color)
-export const W_TRIFECTA = 20; // a HARD lethal-trifecta contract (all three legs, explicit) → a declared prompt-injection exfil path
+export const W_TRIFECTA = 10; // a HARD lethal-trifecta contract (all three legs, explicit) → a prompt-injection exfil path. HALF the old 20: a DING, not a fail — a trifecta is a real risk worth surfacing in the grade, but official plugins ship the pattern by design, so it dents the score (e.g. feature-dev's 3 hard units → −30 → C) without a catastrophic F.
 // Two things are advisory, NOT graded penalties (shown, never scored — see scoreReport):
 //   - untested surfaces — a hardening gap, not breakage.
 //   - an agent that inherits all tools (no `tools:` line) — see reportDeductions for why.
+//   - an inherits-all (severity "advisory") trifecta finding — shown by the Safety
+//     ring but never scored; only the HARD, explicit all-three-legs finding grades.
 
 /** Map a 0–100 structural-health score to its letter grade (A ≥90 … F <60). */
 export function gradeFor(score: number): PluginScore["grade"] {
@@ -89,9 +91,11 @@ export function reportDeductions(r: ScanReport): Deduction[] {
     0,
   );
   // HARD lethal-trifecta findings only — an EXPLICIT contract naming all three
-  // legs (a declared exfil path). Advisory (inherits-all) trifecta findings are
-  // surfaced but NEVER graded (aligned with the inherits-all stance), so they're
-  // excluded here.
+  // legs (a prompt-injection exfil path). Graded at W_TRIFECTA=10 (HALF the old
+  // 20): a DING that surfaces a real risk in the grade without a catastrophic F
+  // for an accepted design pattern official plugins ship. Advisory (inherits-all)
+  // trifecta findings are surfaced but NEVER graded (aligned with the inherits-all
+  // stance), so they're excluded here.
   const hardTrifecta = r.trifectaFindings.filter(
     (f) => f.finding.severity === "hard",
   ).length;
@@ -319,19 +323,19 @@ export function formatLeaderboard(scores: readonly PluginScore[]): string {
   });
   out.push(
     "",
-    "Structural health only (no model). Weights: lethal-trifecta unit -20, missing",
-    "hook -15, no-description skill -10, broken intra-plugin ref -8, dead tool/MCP",
-    "ref -8. Inherit-all subagents and untested surfaces are advisory — shown, not",
-    "scored.",
+    "Structural health only (no model). Weights: missing hook -15, hard lethal-",
+    "trifecta unit -10, no-description skill -10, broken intra-plugin ref -8, dead",
+    "tool/MCP ref -8. Inherit-all subagents, inherits-all trifecta and untested",
+    "surfaces are advisory — shown, not scored.",
   );
   return out.join("\n");
 }
 
 const LEADERBOARD_METHOD =
-  "_Structural health only (deterministic, no model): lethal-trifecta unit −20, " +
-  "missing hook −15, no-description skill −10, broken intra-plugin / dead-tool ref −8. " +
-  "Inherit-all subagents and untested surfaces are advisory (shown, not " +
-  "scored). Behavioural columns (trigger-rate, collisions, egress) stack on top._";
+  "_Structural health only (deterministic, no model): missing hook −15, hard " +
+  "lethal-trifecta unit −10, no-description skill −10, broken intra-plugin / dead-tool ref −8. " +
+  "Inherit-all subagents, inherits-all trifecta and untested surfaces are advisory " +
+  "(shown, not scored). Behavioural columns (trigger-rate, collisions, egress) stack on top._";
 
 /**
  * Format a ranked leaderboard as a Markdown table — the PUBLISHABLE form (a README,

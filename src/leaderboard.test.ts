@@ -197,8 +197,9 @@ test("the NEW non-advisory detectors are scored (not ranked A/100 while printing
   assert.ok(skillRes < 100, "a broken bundled resource must drag the score");
 });
 
-test("a HARD lethal-trifecta finding deducts W_TRIFECTA (-20); advisory does not", () => {
-  // A hard (explicit all-three) trifecta is a declared exfil path → graded -20.
+test("a HARD lethal-trifecta finding deducts W_TRIFECTA (-10); advisory does not", () => {
+  // A hard (explicit all-three) trifecta is an exfil path → graded -10 (half the
+  // old 20 — a ding, not a fail).
   const hard = scoreReport(
     report({
       agents: [
@@ -224,7 +225,7 @@ test("a HARD lethal-trifecta finding deducts W_TRIFECTA (-20); advisory does not
       ] as unknown as ScanReport["trifectaFindings"],
     }),
   );
-  assert.equal(hard.score, 80); // 100 - 20
+  assert.equal(hard.score, 90); // 100 - 10
   assert.ok(hard.issues.some((i) => i.includes("lethal-trifecta")));
 
   // An advisory (inherits-all) trifecta is NOT graded — it's surfaced elsewhere
@@ -287,7 +288,7 @@ test("the audit overall == leaderboard health, even with a HARD trifecta", () =>
   });
   const health = computeIntegrityScore(reportDeductions(r)).score;
   const audit = auditScore(r);
-  assert.equal(health, 80);
+  assert.equal(health, 90); // 100 - 10
   assert.equal(audit.overall, health); // the two surfaces never disagree
 });
 

@@ -185,14 +185,20 @@ describe("computeVerdict", () => {
   });
 
   it("leads with the dominant finding when the fix list can't close the gap", () => {
-    // A hard lethal-trifecta contract is a −20 graded penalty with NO recommendation
-    // (it's not in explainScore). 100 − 20 = 80 (B); nothing in the fix list can
-    // reach A, so fixesToNextGrade is null and the verdict is issue-forward.
+    // A hard lethal-trifecta contract is a −10 graded penalty with NO recommendation
+    // (it's not in explainScore). Two units → 100 − 20 = 80 (B); nothing in the fix
+    // list can reach A, so fixesToNextGrade is null and the verdict is issue-forward.
     const trifectaFindings = [
       {
         path: "agents/exfil-bot.md",
         kind: "subagent",
         name: "exfil-bot",
+        finding: { severity: "hard" },
+      },
+      {
+        path: "agents/exfil-bot-2.md",
+        kind: "subagent",
+        name: "exfil-bot-2",
         finding: { severity: "hard" },
       },
     ] as unknown as ScanReport["trifectaFindings"];
@@ -205,7 +211,7 @@ describe("computeVerdict", () => {
     expect(v.pointsToNextGrade).toBe(10);
     expect(v.fixesToNextGrade).toBeNull();
     expect(v.perRecommendation).toEqual([]);
-    expect(v.sentence).toMatch(/^B — 1 unit holding all three/);
+    expect(v.sentence).toMatch(/^B — 2 units holding all three/);
     expect(v.sentence).toMatch(/still lands below an A\.$/);
   });
 

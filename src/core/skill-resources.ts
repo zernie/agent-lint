@@ -22,6 +22,15 @@
  * MISSING a real ref over emitting a false positive — a noisy resource check
  * would teach users to ignore it.
  *
+ * The INLINE-CODE path form is weaker than a link, so it carries an extra prose
+ * gate: a skill that TEACHES how to build skills mentions bundle paths
+ * constantly as EXAMPLES of what a skill *could* ship ("a `scripts/rotate.py`
+ * would be helpful to store", "**Examples**: `references/finance.md`"). An
+ * inline path is treated as a real reference ONLY when the line DIRECTS the
+ * agent to use the file (read/run/see/…) and carries no illustrative cue
+ * (example / e.g. / such as / would be / template / →). Markdown links are
+ * unchanged — a link is already an act-on-it reference. See `inlinePathIsUsed`.
+ *
  * Pure: the only IO is an injectable `existsSync` (default node:fs), mirroring
  * core/refs.ts and the loader so the detector is testable with a fake.
  */
@@ -161,6 +170,52 @@ function isInlineBundlePath(token: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Inline-path prose gate (don't-cry-wolf on TEACHING / illustrative skills)
+// ---------------------------------------------------------------------------
+//
+// An inline-code bundle path (`` `scripts/foo.py` ``) is a much WEAKER signal
+// than a markdown link — skills that TEACH how to build skills (e.g. the
+// official `skill-development` skill) are full of bundle paths used as
+// EXAMPLES of what a skill *could* contain, not as references to a file the
+// skill actually ships: "a `scripts/rotate_pdf.py` would be helpful to store",
+// "**Examples**: `references/finance.md` …", "- **`references/patterns.md`** —
+// Common patterns". Flagging those as "bundled resource not found" cries wolf
+// and graded a clean, correct skill an F.
+//
+// So an inline path is only treated as a real reference when the surrounding
+// prose DIRECTS the agent to ACT on the file (read/run/see/…) AND carries no
+// illustrative/hypothetical cue. Markdown links (`[text](path)`) are unchanged
+// — a link is already a high-confidence, follow-me reference. We bias HARD
+// toward precision here: missing a real dead-ref is far better than a false
+// positive on a teaching skill (the same don't-cry-wolf discipline as the
+// loader's `danglingRefs`).
+
+// Verbs that direct the agent to CONSUME an existing file. Deliberately EXCLUDES
+// authoring verbs (store/create/add/move/write) — "a `scripts/x.py` would be
+// helpful to STORE in the skill" is describing a resource to CREATE, exactly
+// what a teaching skill illustrates, not a file the skill already ships.
+const USE_DIRECTIVE =
+  /\b(run|runs|execute|executes|read|reads|load|loads|open|opens|source|sources|import|imports|see|view|refer|follow|call|invoke|apply|consult|check)\b/i;
+
+// Illustrative / hypothetical prose cues — a line carrying one is describing
+// what a skill MIGHT contain (an example, a suggestion, a template), not
+// pointing at a shipped file. Includes the `→`/`->` arrow used in "move detail
+// → `references/x.md`" authoring lists.
+const ILLUSTRATIVE_CUE =
+  /\b(example|examples|e\.g\.?|i\.e\.?|such as|for instance|would be|helpful|useful|template|boilerplate)\b|→|->/i;
+
+/**
+ * Whether an inline bundle-path on this line reads as a REAL reference (the
+ * agent is told to use the file) rather than an illustrative mention. Requires
+ * a positive use-directive and the absence of an illustrative cue — both
+ * evaluated over the whole line for simplicity (a tight, precise rule over a
+ * clever one). Only the inline-path branch consults this; markdown links do not.
+ */
+function inlinePathIsUsed(line: string): boolean {
+  return USE_DIRECTIVE.test(line) && !ILLUSTRATIVE_CUE.test(line);
+}
+
+// ---------------------------------------------------------------------------
 // Detector
 // ---------------------------------------------------------------------------
 
@@ -181,13 +236,17 @@ function candidatesInLine(line: string, lineNo: number): Candidate[] {
       out.push({ ref: m[1].trim(), resolved, kind: "link", line: lineNo });
     }
   }
-  // Inline-code path mentions: only the high-confidence bundle-dir-prefixed form.
-  for (const m of line.matchAll(INLINE_SPAN)) {
-    const token = m[1].trim();
-    if (!isInlineBundlePath(token)) continue;
-    const resolved = localResourceTarget(token);
-    if (resolved !== null) {
-      out.push({ ref: token, resolved, kind: "path", line: lineNo });
+  // Inline-code path mentions: only the high-confidence bundle-dir-prefixed
+  // form, AND only when the surrounding prose USES the file (not an illustrative
+  // mention on a teaching skill — see `inlinePathIsUsed`).
+  if (inlinePathIsUsed(line)) {
+    for (const m of line.matchAll(INLINE_SPAN)) {
+      const token = m[1].trim();
+      if (!isInlineBundlePath(token)) continue;
+      const resolved = localResourceTarget(token);
+      if (resolved !== null) {
+        out.push({ ref: token, resolved, kind: "path", line: lineNo });
+      }
     }
   }
   return out;
