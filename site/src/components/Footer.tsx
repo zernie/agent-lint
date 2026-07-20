@@ -1,4 +1,4 @@
-import { Github } from "lucide-react";
+import { Github, BookText } from "lucide-react";
 
 const REPO = "https://github.com/zernie/vigiles";
 
@@ -34,6 +34,13 @@ export function Footer() {
             >
               <Github className="h-4 w-4" aria-hidden />
               github.com/zernie/vigiles
+            </a>
+            <a
+              href="./api/"
+              className="inline-flex items-center gap-2 text-muted-foreground no-underline transition-colors hover:text-foreground"
+            >
+              <BookText className="h-4 w-4" aria-hidden />
+              API reference
             </a>
             <a
               href="https://vigiles.sh"
