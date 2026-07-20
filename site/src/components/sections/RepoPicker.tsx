@@ -32,9 +32,9 @@ type FetchState =
 
 /** The prompt handed to the user's own Claude Code via the deeplink. */
 const PROMPT = [
-  "Set up vigiles and check this agent harness: run `npx vigiles init`, then",
-  "audit it (`npx vigiles audit`) and measure whether my skills actually fire",
-  "(the test-harness skill / measureTriggerRate).",
+  "Grade this agent harness with vigiles: run `npx vigiles audit`. Then, to",
+  "measure whether my skills actually fire, run `npx vigiles init` and use the",
+  "test-harness skill (measureTriggerRate).",
 ].join("\n");
 
 const SLUG_RE = /^[\w.-]+\/[\w.-]+$/;
@@ -372,7 +372,11 @@ export function RepoPicker() {
                 </Button>
                 <p className="mt-2.5 text-center text-xs text-muted-foreground">
                   Opens your local Claude Code (the repo must be cloned
-                  locally); runs on your own subscription.
+                  locally); runs on your own subscription.{" "}
+                  <span className="text-foreground/70">
+                    Your code never leaves your machine — no server ever sees
+                    your repo.
+                  </span>
                 </p>
               </>
             ) : (
@@ -383,9 +387,9 @@ export function RepoPicker() {
             )}
 
             <div className="mt-6 flex flex-col items-center gap-2 border-t border-border pt-6">
-              <CommandBlock command="npx vigiles init" />
+              <CommandBlock command="npx vigiles audit" />
               <p className="text-xs text-muted-foreground">
-                No Claude Code CLI? Run this in your terminal.
+                No Claude Code CLI? Run this in your terminal — zero install.
               </p>
             </div>
           </div>
