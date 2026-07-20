@@ -59,8 +59,11 @@ export function AuditWidget({ className }: { className?: string }) {
       </form>
 
       {/* Security reassurance — the deeplink runs in the user's OWN Claude Code. */}
-      <p className="mt-3 flex items-center justify-center gap-2 text-center text-sm text-muted-foreground">
-        <ShieldCheck className="h-4 w-4 shrink-0 text-good" aria-hidden />
+      <p className="mt-3 flex items-start justify-center gap-2 text-left text-sm text-muted-foreground">
+        <ShieldCheck
+          className="mt-0.5 h-4 w-4 shrink-0 text-good"
+          aria-hidden
+        />
         <span>
           Runs in <span className="font-medium text-foreground">your own</span>{" "}
           Claude Code — your machine, your subscription.{" "}
