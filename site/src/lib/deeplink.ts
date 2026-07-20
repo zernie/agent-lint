@@ -37,3 +37,38 @@ export function deeplink(slug: string): string {
     slug,
   )}&q=${encodeURIComponent(PROMPT)}`;
 }
+
+/** The universal fallback command anyone can run without Claude Code. */
+export const FALLBACK_COMMAND = "npx vigiles audit";
+
+/**
+ * Open the Claude Code deeplink for `slug`, with a fallback for the (common)
+ * case where nothing handles the `claude-cli://` scheme.
+ *
+ * Custom URL schemes fail SILENTLY when unregistered — every mobile browser,
+ * Claude Code Web (#19023), and any desktop without Claude Code installed — so
+ * the tap looks completely dead (the "click doesn't do anything" report). We
+ * arm a detector: when the OS hands off to the app the page hides / loses
+ * focus, so if we're still visible a beat later the app never launched and we
+ * call `onUnhandled` (copy the command, toast, reveal the fallback).
+ */
+export function openDeeplink(slug: string, onUnhandled: () => void): void {
+  let launched = false;
+  const markLaunched = () => {
+    launched = true;
+  };
+  // App launch blurs/hides the page; either signal means the scheme resolved.
+  window.addEventListener("blur", markLaunched, { once: true });
+  window.addEventListener("pagehide", markLaunched, { once: true });
+  document.addEventListener("visibilitychange", markLaunched, { once: true });
+
+  window.setTimeout(() => {
+    window.removeEventListener("blur", markLaunched);
+    window.removeEventListener("pagehide", markLaunched);
+    document.removeEventListener("visibilitychange", markLaunched);
+    if (!launched && document.visibilityState === "visible") onUnhandled();
+  }, 1400);
+
+  // Trigger the scheme. Unhandled schemes no-op here (no throw, no navigation).
+  window.location.href = deeplink(slug);
+}

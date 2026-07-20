@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { ArrowRight, ShieldCheck, Terminal } from "lucide-react";
 import { CommandBlock } from "@/components/CommandBlock";
-import { deeplink, normalizeSlug } from "@/lib/deeplink";
+import {
+  FALLBACK_COMMAND,
+  deeplink,
+  normalizeSlug,
+  openDeeplink,
+} from "@/lib/deeplink";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 /**
@@ -15,8 +21,23 @@ import { cn } from "@/lib/utils";
  */
 export function AuditWidget({ className }: { className?: string }) {
   const [repo, setRepo] = useState("");
+  const [fellBack, setFellBack] = useState(false);
   const slug = normalizeSlug(repo);
   const ready = slug !== null;
+
+  function grade(e: React.MouseEvent) {
+    e.preventDefault();
+    if (slug === null) return;
+    openDeeplink(slug, () => {
+      // Claude Code never opened (mobile, or no CLI installed). Do the useful
+      // thing anyway: copy the universal command and tell the user.
+      void navigator.clipboard?.writeText(FALLBACK_COMMAND).catch(() => {});
+      setFellBack(true);
+      toast(
+        "Claude Code didn’t open on this device. Copied “npx vigiles audit” — paste it in your terminal.",
+      );
+    });
+  }
 
   return (
     <div className={cn("w-full max-w-xl", className)}>
@@ -33,12 +54,16 @@ export function AuditWidget({ className }: { className?: string }) {
           aria-label="Your GitHub repo (owner/name)"
           placeholder="owner/repo"
           value={repo}
-          onChange={(e) => setRepo(e.target.value)}
+          onChange={(e) => {
+            setRepo(e.target.value);
+            setFellBack(false);
+          }}
           className="flex-1 rounded-xl border border-border bg-card px-4 py-3.5 text-center font-mono text-sm text-foreground placeholder:text-muted-foreground/70 transition-colors focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/30 sm:text-left"
         />
         {ready ? (
           <a
             href={deeplink(slug)}
+            onClick={grade}
             className="inline-flex h-[50px] items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-accent px-6 text-sm font-semibold text-accent-foreground no-underline transition-colors hover:bg-accent/90"
           >
             <Terminal className="h-4 w-4" aria-hidden />
@@ -57,6 +82,16 @@ export function AuditWidget({ className }: { className?: string }) {
           </button>
         )}
       </form>
+
+      {/* Fallback notice — shown when the deeplink couldn't open Claude Code. */}
+      {fellBack && (
+        <p className="mt-3 rounded-xl border border-accent/30 bg-accent/[0.07] px-4 py-3 text-sm text-foreground">
+          Claude Code isn’t available on this device — it runs on your computer,
+          not the browser. We copied{" "}
+          <span className="font-mono text-foreground">npx vigiles audit</span>{" "}
+          for you; run it in your terminal, or see it below.
+        </p>
+      )}
 
       {/* Security reassurance — the deeplink runs in the user's OWN Claude Code. */}
       <p className="mt-3 flex items-start justify-center gap-2 text-left text-sm text-muted-foreground">
