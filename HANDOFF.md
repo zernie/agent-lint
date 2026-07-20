@@ -40,11 +40,12 @@ Deterministic `vigiles audit` on Codex is **full parity** (proven live + `scan-c
 But the real-model **trigger-rate** on Codex is NOT trustworthy: Codex has no skill-fire event, so
 `codexSkillFired` infers firing from whether the model READ `SKILL.md` — cache → false-negative,
 exploration-read → false-positive, so the NUMBER can be wrong either way. A wrong measurement violates
-the precision/don't-cry-wolf brand, so: don't claim Codex trigger-rate. TODO (not yet done): add an
-EXPERIMENTAL/not-validated warning on the `measureTriggerRate` Codex path + document the two failure
-modes (`docs/harness-testing-codex.md` + `research/harness-capabilities.md`); the gate to change it is
-a LIVE Codex run that MEASURES the oracle's accuracy vs ground truth (needs `codex` on PATH + quota;
-codex is NOT installed in this container).
+the precision/don't-cry-wolf brand, so we don't claim Codex trigger-rate. DONE this session:
+`EvalDriver.experimental` caveat on `codexEvalDriver` (CC stays supported) → copied onto
+`TriggerRateReport`/`BehavioralReport`; `measureTriggerRate` warns on stderr + the formatters print
+`⚠ EXPERIMENTAL` (audit --harness=codex too); documented in `docs/harness-testing-codex.md` +
+`research/harness-capabilities.md`; tests added. REMAINING gate to promote it: a LIVE Codex run that
+MEASURES the oracle's accuracy vs ground truth (needs `codex` on PATH + quota; not installed here).
 
 ### STILL OPEN
 
