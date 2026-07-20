@@ -7,6 +7,9 @@
 // @public
 export function buildCodexArgs(ctx: HarnessDriverContext): string[];
 
+// @public
+export const CODEX_TRIGGER_RATE_EXPERIMENTAL: string;
+
 // @public (undocumented)
 export const codexAdapter: HarnessAdapter;
 
