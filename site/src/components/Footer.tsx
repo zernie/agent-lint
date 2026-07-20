@@ -36,10 +36,10 @@ export function Footer() {
               github.com/zernie/vigiles
             </a>
             <a
-              href="https://vigiles.dev"
+              href="https://vigiles.sh"
               className="text-muted-foreground no-underline transition-colors hover:text-foreground"
             >
-              vigiles.dev
+              vigiles.sh
             </a>
           </div>
         </div>

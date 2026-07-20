@@ -139,10 +139,7 @@ export function RepoPicker() {
   const targetSlug = manualSlug ?? selected;
 
   return (
-    <section
-      id="try"
-      className="scroll-mt-8 border-t border-border bg-card/30"
-    >
+    <section id="try" className="scroll-mt-8 border-t border-border bg-card/30">
       <div className="mx-auto w-full max-w-3xl px-6 py-20 sm:py-28">
         <div className="mx-auto max-w-2xl text-center">
           <Badge variant="accent" className="mb-5">
@@ -344,8 +341,8 @@ export function RepoPicker() {
             />
             {manual.trim() && !manualSlug && (
               <p className="mt-1.5 text-xs text-signal">
-                Enter a repo as{" "}
-                <span className="font-mono">owner/name</span> or a GitHub URL.
+                Enter a repo as <span className="font-mono">owner/name</span> or
+                a GitHub URL.
               </p>
             )}
           </div>
@@ -381,8 +378,9 @@ export function RepoPicker() {
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Pick a repo above or type <span className="font-mono">owner/name</span>{" "}
-                to get your Claude Code handoff.
+                Pick a repo above or type{" "}
+                <span className="font-mono">owner/name</span> to get your Claude
+                Code handoff.
               </p>
             )}
 

@@ -1,0 +1,73 @@
+name: Pages (landing + API docs)
+
+# ONE GitHub Pages deploy for the whole site, since a repo gets only one Pages
+# site. Layout:
+#   /      → the marketing landing (site/, Vite + React + shadcn)
+#   /api/  → the generated API reference (TypeDoc)
+#
+# Replaces the old separate api-docs.yml (docs at root) + the build-only site.yml.
+#
+# REQUIRED ONE-TIME SETUP (repo admin, can't be done from code):
+#   Settings → Pages → Build and deployment → Source: "GitHub Actions".
+# Publishes at https://zernie.github.io/vigiles/ (landing) + /vigiles/api/ (docs).
+# For the vigiles.sh custom domain: buy it, set it in Settings → Pages (GitHub
+# writes the CNAME), and it serves at https://vigiles.sh/ + /api/ — the landing's
+# relative asset base ("./") and TypeDoc's relative links both work at either path.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      # 1) Landing → the Pages ROOT (Vite base "./" → works at / or a subpath).
+      - name: Build landing (site/)
+        working-directory: site
+        run: |
+          npm ci
+          npm run build
+
+      # 2) API reference (TypeDoc) → self-contained api-reference/ (incl. .nojekyll).
+      - name: Generate API reference (TypeDoc)
+        run: npx typedoc
+
+      # 3) Assemble one artifact: landing at /, docs at /api.
+      - name: Assemble Pages artifact
+        run: |
+          rm -rf _pages && mkdir -p _pages/api
+          cp -r site/dist/. _pages/
+          cp -r api-reference/. _pages/api/
+          touch _pages/.nojekyll
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _pages
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

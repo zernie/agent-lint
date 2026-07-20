@@ -9,7 +9,8 @@
 import { createRequire } from "module";
 import { existsSync } from "fs";
 
-const [, , url = "http://localhost:8899/", outDir = ".", name = "shot"] = process.argv;
+const [, , url = "http://localhost:8899/", outDir = ".", name = "shot"] =
+  process.argv;
 
 // Resolve playwright-core from the repo root (this script may run from a scratchpad path).
 const require = createRequire(process.cwd() + "/package.json");
@@ -40,10 +41,17 @@ const widths = (process.env.SHOT_WIDTHS || "1440x900,390x844")
   .map((s) => s.trim().split("x").map(Number))
   .map(([width, height]) => ({ width, height }));
 
-const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox"] });
+const browser = await chromium.launch({
+  executablePath: exe,
+  args: ["--no-sandbox"],
+});
 for (const vp of widths) {
   const label = vp.width <= 600 ? "mobile" : "desktop";
-  const page = await browser.newPage({ viewport: vp, deviceScaleFactor: 2, reducedMotion: "reduce" });
+  const page = await browser.newPage({
+    viewport: vp,
+    deviceScaleFactor: 2,
+    reducedMotion: "reduce",
+  });
   await page.goto(url, { waitUntil: "networkidle" });
   // Trigger scroll-reveal animations, then return to top before the full-page shot.
   await page.evaluate(async () => {

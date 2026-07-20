@@ -278,7 +278,7 @@ Targets Claude Code and Codex out of the box, or [your own harness](docs/authori
 The **[docs index](docs/README.md)** is the full map, grouped by what you're doing:
 
 - **Guides** — [verify instruction files](docs/verifying-instruction-files.md) · [test your harness](docs/harness-testing.md) · [measure a skill](docs/measuring-skills.md) · [ship a plugin](docs/for-plugin-authors.md) · [Codex & other harnesses](docs/harnesses.md)
-- **Reference** — [CLI](docs/cli.md) · [rules matrix](docs/verifying-instruction-files.md#the-validation-rules--the-full-matrix) · [testing API](docs/testing-api.md) · [full API](https://zernie.github.io/vigiles/)
+- **Reference** — [CLI](docs/cli.md) · [rules matrix](docs/verifying-instruction-files.md#the-validation-rules--the-full-matrix) · [testing API](docs/testing-api.md) · [full API](https://zernie.github.io/vigiles/api/)
 - **Explanation** — [what it catches](docs/what-vigiles-catches.md) · [how it compares](docs/comparison.md) · [FAQ](docs/faq.md)
 
 **Project** — [Stability](STABILITY.md) · [Related tools](docs/comparison.md#what-vigiles-composes-with)
