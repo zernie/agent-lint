@@ -35,3 +35,6 @@ report/dist
 
 # session scratch (OSS dogfood corpus, repro scripts)
 scratchpad/
+
+# local screenshot scratch (screenshot skill output)
+scratch-shots/
