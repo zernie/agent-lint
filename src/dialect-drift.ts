@@ -27,7 +27,13 @@
  * NOT a readable `cli.js` JS bundle. So the old "grep hook-event string literals out
  * of cli.js" check has no bundle to read and degrades to a LOUD SKIP (see
  * `findClaudeCodeBundle`); `sdk-tools.d.ts` is still shipped, so the tool-type drift
- * alarm keeps working.
+ * alarm keeps working. But the native binary means a box can carry a STALE leftover
+ * `@anthropic-ai/claude-code` JS package (readable `sdk-tools.d.ts`, months old) in a
+ * global `node_modules` while the real, newer CC runs from the native binary — so
+ * `findClaudeCodePackage` can locate a package that ISN'T what's running. The runtime
+ * alarm (`checkDialectDrift`/`formatDialectDrift`) reconciles the located package
+ * version against the on-PATH `claude --version` and SUPPRESSES the warning on a
+ * mismatch (the located types don't describe the running CC — crying wolf otherwise).
  *
  * Pure parsers (testable with fixtures) + a local-install locator. TWO consumers:
  * the gated CI test in `dialect-drift.test.ts` (fails loud on tool/event drift), and
@@ -169,9 +175,40 @@ export function findClaudeCodePackage(): string | null {
   return null;
 }
 
+/**
+ * Extract the semver core from a `claude --version` line
+ * (e.g. `"2.1.211 (Claude Code)"` → `"2.1.211"`). Pure; null when absent.
+ */
+export function parseClaudeVersion(raw: string): string | null {
+  const m = raw.match(/\b(\d+\.\d+\.\d+)\b/);
+  return m ? m[1] : null;
+}
+
+/**
+ * The version of the `claude` binary actually on PATH — which can DIFFER from the
+ * package {@link findClaudeCodePackage} locates. In the native-binary era CC ships
+ * as a platform binary with no readable `sdk-tools.d.ts`, so a box can carry a
+ * stale leftover `@anthropic-ai/claude-code` in a global `node_modules` (readable,
+ * but months old and NOT what's running) beside the real, newer CC. Reconciling
+ * against this stops the drift alarm crying wolf on that leftover. Real IO; null
+ * when `claude` isn't runnable.
+ */
+export function onPathClaudeVersion(): string | null {
+  try {
+    return parseClaudeVersion(
+      execSync("claude --version", { encoding: "utf-8" }),
+    );
+  } catch {
+    return null;
+  }
+}
+
 /** A runtime drift report: how the INSTALLED CC's tool surface compares to ours. */
 export interface DialectDriftReport {
+  /** Version of the located `@anthropic-ai/claude-code` package (its types we read). */
   readonly installedVersion: string;
+  /** Version of the `claude` binary on PATH, or null — the actually-running CC. */
+  readonly runningVersion: string | null;
   readonly validatedVersion: string;
   /** Tool-input types present in the install but not in ACKNOWLEDGED (CC added). */
   readonly newToolTypes: string[];
@@ -207,6 +244,7 @@ export function checkDialectDrift(): DialectDriftReport | null {
     }
     return {
       installedVersion,
+      runningVersion: onPathClaudeVersion(),
       validatedVersion: VALIDATED_CC_VERSION,
       newToolTypes: [...installed].filter((t) => !ack.has(t)).sort(),
       removedToolTypes: [...ack].filter((t) => !installed.has(t)).sort(),
@@ -220,7 +258,13 @@ export function checkDialectDrift(): DialectDriftReport | null {
 export function formatDialectDrift(
   r: DialectDriftReport | null,
 ): string | null {
-  if (!r || (r.newToolTypes.length === 0 && r.removedToolTypes.length === 0))
+  if (!r) return null;
+  // The located `sdk-tools.d.ts` belongs to a DIFFERENT install than the CC
+  // actually running (a stale leftover npm package beside a newer native binary),
+  // so its tool set says nothing about the CC you're on — don't cry wolf. The
+  // pinned CI drift TEST is where real drift is gated.
+  if (r.runningVersion && r.runningVersion !== r.installedVersion) return null;
+  if (r.newToolTypes.length === 0 && r.removedToolTypes.length === 0)
     return null;
   const parts: string[] = [];
   if (r.newToolTypes.length > 0)
