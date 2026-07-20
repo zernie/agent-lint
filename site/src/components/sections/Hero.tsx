@@ -1,6 +1,6 @@
-import { ArrowRight, Star } from "lucide-react";
+import { Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { CommandBlock } from "@/components/CommandBlock";
+import { AuditWidget } from "@/components/AuditWidget";
 import auditReport from "@/assets/vigiles-audit.png";
 
 const REPO = "https://github.com/zernie/vigiles";
@@ -46,23 +46,7 @@ export function Hero() {
           and tells you what&apos;s actually broken.
         </p>
 
-        <div className="mt-8 flex flex-col items-center gap-3">
-          <CommandBlock command="npx vigiles audit" />
-          <p className="text-sm text-muted-foreground">
-            No install. No config. No account. Runs on your own Claude
-            subscription.
-          </p>
-          <a
-            href="#wedge"
-            className="group mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground no-underline transition-colors hover:text-foreground"
-          >
-            See what it catches
-            <ArrowRight
-              className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"
-              aria-hidden
-            />
-          </a>
-        </div>
+        <AuditWidget className="mt-8" />
       </div>
 
       {/* Product shot on the fold — the real audit report (README-parity). */}
