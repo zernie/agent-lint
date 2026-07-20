@@ -38,9 +38,6 @@ export function deeplink(slug: string): string {
   )}&q=${encodeURIComponent(PROMPT)}`;
 }
 
-/** The universal fallback command anyone can run without Claude Code. */
-export const FALLBACK_COMMAND = "npx vigiles audit";
-
 /**
  * Open the Claude Code deeplink for `slug`, with a fallback for the (common)
  * case where nothing handles the `claude-cli://` scheme.
