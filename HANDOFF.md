@@ -34,13 +34,13 @@ audit`** as the always-visible universal fallback + "browse my repos →" to the
   always-reachable-action conversion lever). **`lib/deeplink.ts`** — shared `normalizeSlug`/`deeplink`
   (one source, reused by RepoPicker). Footer's redundant Lighthouse/npm-audit tagline cut.
 
-### DECISION PENDING (user leaning yes) — Codex behavioral tier is EXPERIMENTAL, not "supported"
+### Codex behavioral tier is EXPERIMENTAL, not "supported" (SHIPPED this session)
 
 Deterministic `vigiles audit` on Codex is **full parity** (proven live + `scan-cli.test.ts`) — KEEP it.
 But the real-model **trigger-rate** on Codex is NOT trustworthy: Codex has no skill-fire event, so
 `codexSkillFired` infers firing from whether the model READ `SKILL.md` — cache → false-negative,
 exploration-read → false-positive, so the NUMBER can be wrong either way. A wrong measurement violates
-the precision/don't-cry-wolf brand, so we don't claim Codex trigger-rate. DONE this session:
+the precision/don't-cry-wolf brand, so we don't claim Codex trigger-rate. DONE:
 `EvalDriver.experimental` caveat on `codexEvalDriver` (CC stays supported) → copied onto
 `TriggerRateReport`/`BehavioralReport`; `measureTriggerRate` warns on stderr + the formatters print
 `⚠ EXPERIMENTAL` (audit --harness=codex too); documented in `docs/harness-testing-codex.md` +
@@ -49,9 +49,7 @@ MEASURES the oracle's accuracy vs ground truth (needs `codex` on PATH + quota; n
 
 ### STILL OPEN
 
-- **Ship the hero redesign?** — open PR on the branch → merge → auto-deploys to `vigiles.sh`. Awaiting
-  user go. (`docs(site):` commits → no npm release; only a Pages redeploy.)
-- **Codex scoping** — make the experimental-warning + docs changes above (or user may say cut it further).
+- **Codex trigger-rate promotion** — the live oracle-accuracy run above (blocked on codex + quota).
 - Personal/launch/calendar follow-ups → PRIVATE `zernie/mine` only (branch `claude/adoption-playbook-s49`,
   pushed, needs squash-merge). Do not restate here.
 - Cloned this session: `zernie/zernie.github.com` (blog) + `zernie/mine` (private KB).
