@@ -185,17 +185,25 @@ describe("computeVerdict", () => {
   });
 
   it("leads with the dominant finding when the fix list can't close the gap", () => {
-    // Invisible skills (a missing opening `---` fence) are a −10 graded penalty each
-    // with NO recommendation (not in explainScore). Two → 100 − 20 = 80 (B); nothing
-    // in the fix list can reach A, so fixesToNextGrade is null and the verdict is
-    // issue-forward. (A hard lethal-trifecta is deliberately NOT used here — it's
-    // advisory/not-graded now, so it can't drop the grade.)
-    const skillFenceIssues = [
-      { path: "skills/a/SKILL.md", name: "a", finding: {} },
-      { path: "skills/b/SKILL.md", name: "b", finding: {} },
-    ] as unknown as ScanReport["skillFenceIssues"];
+    // A hard lethal-trifecta contract is a −10 graded penalty with NO recommendation
+    // (it's not in explainScore). Two units → 100 − 20 = 80 (B); nothing in the fix
+    // list can reach A, so fixesToNextGrade is null and the verdict is issue-forward.
+    const trifectaFindings = [
+      {
+        path: "agents/exfil-bot.md",
+        kind: "subagent",
+        name: "exfil-bot",
+        finding: { severity: "hard" },
+      },
+      {
+        path: "agents/exfil-bot-2.md",
+        kind: "subagent",
+        name: "exfil-bot-2",
+        finding: { severity: "hard" },
+      },
+    ] as unknown as ScanReport["trifectaFindings"];
 
-    const report = makeReport({ skillFenceIssues });
+    const report = makeReport({ trifectaFindings });
     expect(auditScore(report).overall).toBe(80);
 
     const v = verdictFor(report);
@@ -203,7 +211,7 @@ describe("computeVerdict", () => {
     expect(v.pointsToNextGrade).toBe(10);
     expect(v.fixesToNextGrade).toBeNull();
     expect(v.perRecommendation).toEqual([]);
-    expect(v.sentence).toMatch(/^B — 2 invisible skills/);
+    expect(v.sentence).toMatch(/^B — 2 units holding all three/);
     expect(v.sentence).toMatch(/still lands below an A\.$/);
   });
 

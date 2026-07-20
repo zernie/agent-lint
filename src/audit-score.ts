@@ -12,14 +12,15 @@
  *
  * SAFETY is fed by the STATIC lethal-trifecta capability check
  * (`lethalTrifectaIssues` → `report.trifectaFindings`): a unit holding all three
- * capability legs is a prompt-injection exfil PATTERN detectable from the tool-SET
- * alone. Safety is an ADVISORY ring — it SHOWS every trifecta unit (hard AND
- * inherits-all) as a heads-up but scores NOTHING into the overall: a trifecta is a
- * capability pattern with no exploit code, not a demonstrated vuln, and official
- * plugins ship it, so grading it would cry wolf. NB the EXECUTING "do your hooks
- * actually block?" disaster-battery is likewise NOT an `audit` ring: running
- * arbitrary hooks safely needs cross-platform confinement that isn't shipped yet,
- * so the battery lives in the `vigiles/testing` API via
+ * capability legs is a prompt-injection exfil path detectable from the tool-SET
+ * alone — nothing executes, so it sidesteps the confinement blocker. A `"hard"`
+ * (explicit all-three) finding is GRADED into the overall at a REDUCED weight
+ * (`W_TRIFECTA=10`, HALF the old 20 — a DING, not a fail: it dents the grade
+ * without a catastrophic F for a pattern official plugins ship by design); a
+ * `"advisory"` (inherits-all) finding is SHOWN in the ring but not graded. NB the EXECUTING
+ * "do your hooks actually block?" disaster-battery is STILL not an `audit` ring:
+ * running arbitrary hooks safely needs cross-platform confinement that isn't
+ * shipped yet, so the battery lives in the `vigiles/testing` API via
  * `guardrail-check`/`assertBlocksDisasters`, where you opt in explicitly.
  *
  * A category that can't be assessed scores `null` (n/a) and is EXCLUDED from the
@@ -35,6 +36,7 @@ import {
   W_DANGLING_REF,
   W_OVERLAP,
   W_NO_CONTRACT,
+  W_TRIFECTA,
   type PluginScore,
 } from "./leaderboard.js";
 import type { ScanReport } from "./scan.js";
@@ -223,21 +225,19 @@ function structure(r: ScanReport): CategoryScore {
 }
 
 /**
- * SAFETY — fed by the STATIC lethal-trifecta check (`report.trifectaFindings`),
- * an ADVISORY (not-graded) ring. It SHOWS every trifecta unit as a real, useful
- * heads-up — a `"hard"` finding (an explicit contract naming all three capability
- * legs) and a `"advisory"` finding (inherits-all) alike — but scores NOTHING into
- * the overall. WHY not graded: a lethal trifecta is a capability PATTERN with no
- * exploit code, not a demonstrated vulnerability, and official plugins ship it
- * (feature-dev's code-reviewer lists Read + WebFetch + WebSearch), so grading it
- * would drop the cleanest plugins to F on an accepted design pattern (cries wolf).
+ * SAFETY — fed by the STATIC lethal-trifecta check (`report.trifectaFindings`), a
+ * GRADED ring. A `"hard"` finding (an explicit contract naming all three
+ * capability legs) is a prompt-injection exfil path and is GRADED at a REDUCED
+ * weight (`W_TRIFECTA=10` each — HALF the old 20, a DING not a fail; the same
+ * weight `reportDeductions` sums into the overall, so the ring and the headline
+ * agree). A `"advisory"` finding (inherits-all) is SHOWN in the ring's findings
+ * but NOT graded — aligned with the inherits-all-is-advisory stance.
  *
- * The ring is ALWAYS `score: null` + `advisory: true` — never a false 100 (which
- * would imply "verified safe") nor a false 0 — mirroring how the EXECUTING
- * disaster-battery lives outside the graded rings. It's excluded from the overall
- * by construction (the headline sums {@link reportDeductions}, which no longer
- * carries a trifecta penalty). When there's NO tool-bearing surface at all, the
- * ring says so; when there IS one but no trifecta, findings are simply empty.
+ * Scores `null` (n/a, excluded from the overall) when there's NO tool-bearing
+ * surface to assess at all — no subagents AND no model-invocable skills. A
+ * user-invoked skill carries no model-driven trifecta risk, so it doesn't count
+ * as an assessable surface. When there ARE assessable surfaces but no trifecta,
+ * the ring is a clean 100.
  */
 function safety(r: ScanReport): CategoryScore {
   const modelInvocableSkills = r.skills.filter((s) => !s.userInvoked).length;
@@ -247,18 +247,20 @@ function safety(r: ScanReport): CategoryScore {
       key: "Safety",
       score: null,
       weight: 1,
-      advisory: true,
       findings: ["no tool-bearing surface to assess"],
     };
   }
-  // Hard (explicit all-three) and advisory (inherits-all) trifecta units are both
-  // SHOWN as a heads-up, never graded — a capability pattern isn't broken code.
-  const hard = r.trifectaFindings
-    .filter((f) => f.finding.severity === "hard")
-    .map(
-      (f) =>
-        `${f.name} holds all three lethal-trifecta legs — a prompt-injection exfil pattern (advisory: capability pattern, not a demonstrated vuln)`,
-    );
+  const hard = r.trifectaFindings.filter((f) => f.finding.severity === "hard");
+  const { score, findings } = scoreFrom([
+    {
+      n: hard.length,
+      weight: W_TRIFECTA,
+      label:
+        "unit(s) holding all three lethal-trifecta legs (prompt-injection exfil path)",
+    },
+  ]);
+  // inherits-all trifecta findings are ADVISORY: surfaced as a maximal-blast-radius
+  // note but never graded (mirrors the Structure inherits-all advisory).
   const advisory = r.trifectaFindings
     .filter((f) => f.finding.severity === "advisory")
     .map(
@@ -267,10 +269,9 @@ function safety(r: ScanReport): CategoryScore {
     );
   return {
     key: "Safety",
-    score: null,
+    score,
     weight: 1,
-    advisory: true,
-    findings: [...hard, ...advisory],
+    findings: [...findings, ...advisory],
   };
 }
 

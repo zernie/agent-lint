@@ -27,8 +27,8 @@
  * clock, no model, no mutation of the caller's report.
  *
  * LIMITATION (documented, not fabricated): some graded penalties have NO
- * corresponding recommendation (an MCP server that can't start, a
- * `disallowedTools` typo, an invalid model/color, unresolved
+ * corresponding recommendation (a hard lethal-trifecta contract, an MCP server
+ * that can't start, a `disallowedTools` typo, an invalid model/color, unresolved
  * skill resources, an invisible skill, a misplaced plugin dir, an ineffective /
  * never-firing hook). Those cannot be "fixed" through a recommendation here, so
  * they never contribute to `pointsIfFixed` and can make `fixesToNextGrade` null
