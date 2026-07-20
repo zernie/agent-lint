@@ -1,9 +1,66 @@
 import { Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AuditWidget } from "@/components/AuditWidget";
+import { cn } from "@/lib/utils";
 import auditReport from "@/assets/vigiles-audit.png";
 
 const REPO = "https://github.com/zernie/vigiles";
+
+/** The five categories of the sample report — kept in sync with the screenshot. */
+const CATEGORIES: { name: string; score: number; band: "good" | "warn" }[] = [
+  { name: "Truthfulness", score: 100, band: "good" },
+  { name: "Triggering", score: 92, band: "good" },
+  { name: "Structure", score: 92, band: "good" },
+  { name: "Safety", score: 80, band: "warn" },
+  { name: "Tested", score: 88, band: "warn" },
+];
+
+/**
+ * A native, readable stand-in for the report screenshot on phones — the full
+ * PNG scales to unreadable ~6px text at 390px wide, so mobile gets the grade +
+ * the five category scores rendered at real size instead.
+ */
+function HeroReportCard() {
+  return (
+    <div className="reveal rounded-2xl border border-border bg-card p-5 shadow-2xl sm:hidden">
+      <div className="flex items-center gap-4">
+        <div className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-xl border-2 border-warn text-warn">
+          <span className="text-2xl font-extrabold leading-none">C</span>
+          <span className="mt-0.5 text-[10px] font-medium">77/100</span>
+        </div>
+        <div className="min-w-0">
+          <p className="text-base font-semibold leading-snug">
+            Two one-line fixes away from a B.
+          </p>
+          <p className="mt-1 font-mono text-xs text-muted-foreground">
+            my-plugin · claude-code
+          </p>
+        </div>
+      </div>
+      <ul className="mt-4 space-y-2 border-t border-border pt-4">
+        {CATEGORIES.map((c) => (
+          <li
+            key={c.name}
+            className="flex items-center justify-between text-sm"
+          >
+            <span className="text-muted-foreground">{c.name}</span>
+            <span
+              className={cn(
+                "font-mono font-semibold",
+                c.band === "good" ? "text-good" : "text-warn",
+              )}
+            >
+              {c.score}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-4 text-center text-xs text-muted-foreground">
+        deterministic · no model · nothing leaves your machine
+      </p>
+    </div>
+  );
+}
 
 export function Hero() {
   return (
@@ -51,7 +108,9 @@ export function Hero() {
 
       {/* Product shot on the fold — the real audit report (README-parity). */}
       <div className="mx-auto w-full max-w-5xl px-6 pb-20 sm:pb-28">
-        <div className="reveal overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+        {/* Phones get a native, readable summary; the full screenshot needs width. */}
+        <HeroReportCard />
+        <div className="reveal hidden overflow-hidden rounded-2xl border border-border bg-card shadow-2xl sm:block">
           <img
             src={auditReport}
             alt="A vigiles audit report for 'my-plugin': a verdict header, a C (77/100) grade, a five-category strip (Truthfulness, Triggering, Structure, Safety, Tested), ranked fix cards with '+N pts' impact badges, and broken-reference findings."
