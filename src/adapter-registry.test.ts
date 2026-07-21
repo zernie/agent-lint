@@ -160,15 +160,31 @@ test("resolveHarnessSelection: auto-detect a Codex-only repo (AGENTS.md)", () =>
   }
 });
 
-test("resolveHarnessSelection: ambiguous repo (CLAUDE.md + AGENTS.md) warns", () => {
+test("resolveHarnessSelection: ambiguous repo (CLAUDE.md + a DIFFERENT AGENTS.md) warns", () => {
   const dir = makeTmpDir();
   try {
-    writeFileSync(join(dir, "CLAUDE.md"), "# x\n");
-    writeFileSync(join(dir, "AGENTS.md"), "# x\n");
+    // Genuinely different instruction files (not a mirror) → real ambiguity.
+    writeFileSync(join(dir, "CLAUDE.md"), "# claude rules\n");
+    writeFileSync(join(dir, "AGENTS.md"), "# agents rules — different\n");
     const sel = resolveHarnessSelection({ root: dir });
     const notice = noticeOf(sel);
     assert.match(notice, /matches/);
     assert.match(notice, /harness/);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("resolveHarnessSelection: a CLAUDE.md⇄AGENTS.md MIRROR collapses to Claude Code (no false 'both')", () => {
+  const dir = makeTmpDir();
+  try {
+    // Byte-identical mirror (the Anthropic-sanctioned bridge) — ONE logical config,
+    // not two harnesses; AGENTS.md is a cross-tool standard, not a Codex target.
+    writeFileSync(join(dir, "CLAUDE.md"), "# shared rules\n");
+    writeFileSync(join(dir, "AGENTS.md"), "# shared rules\n");
+    const sel = resolveHarnessSelection({ root: dir });
+    assert.equal(sel.kind, "ok"); // not a "matches both" notice
+    assert.equal(sel.adapter.name, "claude-code");
   } finally {
     cleanupTmpDir(dir);
   }

@@ -81,9 +81,11 @@ Today we only do the structural question, via file markers, and use it for every
   `ln -s AGENTS.md CLAUDE.md` or an `@AGENTS.md` import to bridge the two. So a
   well-configured repo shows BOTH files while being ONE logical config. A detector must
   collapse a mirror (symlink OR byte-identity OR a sync-tool marker) rather than read
-  "two harnesses." We already have `detectInstructionMirror` (symlink / identical
-  content) — but it is NOT wired into `detectAdapterResult`, and it should also key on
-  sync-tool markers (`.ruler/`, `.rulesync/`, a managed-block comment).
+  "two harnesses." **✅ SHIPPED (2026-07-21):** `detectInstructionMirror` (symlink /
+  byte-identical) is now WIRED into `detectAdapterResult` — a `CLAUDE.md`⇄`AGENTS.md`
+  mirror at the weak tie (top===1, no independent `.codex/config.toml`) collapses to
+  Claude Code, no false "matches both." STILL TODO: also key on sync-tool markers
+  (`.ruler/`, `.rulesync/`, a managed-block comment).
 - **Native format wins over the standard, everywhere.** Cursor (`.cursor/rules/` >
   `AGENTS.md`), Gemini (`GEMINI.md` > `AGENTS.md`), OpenCode (`AGENTS.md` > `CLAUDE.md`).
   The generic standard is always the LOWEST-precedence input — the opposite of "the

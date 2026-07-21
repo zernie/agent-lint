@@ -845,9 +845,9 @@ assertRates`) is the recommended path for testing one skill, but
   `--harness=codex` (ships + tested) but isn't the focus. Deferred, thinking preserved in
   `research/audit-harness-dx.md`:
   - **Multi-harness audit DX** — audit ALL detected harnesses (shared-once + per-harness
-    slice), fix the detection (AGENTS.md is an AAIF cross-tool standard, NOT Codex;
-    wire in mirror-collapse for `CLAUDE.md`⇄`AGENTS.md`), read-vs-pick behavior, and a
-    metered-API cost warning. **MED**
+    slice), fix the detection (AGENTS.md is an AAIF cross-tool standard, NOT Codex),
+    read-vs-pick behavior, and a metered-API cost warning. (✅ mirror-collapse for
+    `CLAUDE.md`⇄`AGENTS.md` shipped 2026-07-21 — `detectAdapterResult`; rest deferred.) **MED**
   - **Hosted in-browser audit demo** — deterministic-only rings run in the browser
     (nothing uploaded), with a real progress bar and the model-gated part TEASED
     (blurred/locked → "run locally to unlock"). Needs the shared report components. **MED**
