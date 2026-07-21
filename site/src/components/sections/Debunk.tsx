@@ -41,7 +41,10 @@ export function Debunk() {
                 less than 1% of the tokens you pay for
               </span>
               . Compressing it barely moves the bill. vigiles runs the eval that
-              tells claim from reality — on your own subscription.
+              tells claim from reality. promptfoo and DeepEval bill{" "}
+              <span className="text-foreground">per token, every run</span>;
+              vigiles runs on your own Claude subscription — so you measure on
+              every change, not once.
             </p>
             <a
               href={ARTICLE}

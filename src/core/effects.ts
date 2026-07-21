@@ -31,7 +31,7 @@
  * See `research/side-effect-separation.md` for the full design rationale.
  */
 import type { HarnessDialect } from "./dialect.js";
-import { assertNever } from "./hash.js";
+import { assertNever } from "./assert-never.js";
 import { isReadOnlyBash } from "./bash-effects.js";
 
 /** The effect class of a single tool from a declared `tools:` contract. */

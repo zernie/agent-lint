@@ -26,7 +26,7 @@
  * the ranked fix list + the hand-off to the measured layer. Same findings, the
  * optimization framing. See research/measurement-authority.md (A2) + roadmap §P1.
  */
-import { scoreReport, gradeFor, type PluginScore } from "./leaderboard.js";
+import { scoreReport, gradeFor, type PluginScore } from "./score-core.js";
 import {
   explainScore,
   type ScoreExplanation,

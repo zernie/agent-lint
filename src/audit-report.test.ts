@@ -12,7 +12,7 @@ import {
   AUDIT_SCHEMA_VERSION,
 } from "./audit-report.js";
 import type { ScanReport, MarketplaceInfo } from "./scan.js";
-import type { PluginScore } from "./leaderboard.js";
+import type { PluginScore } from "./score-core.js";
 
 function makeReport(over: Partial<ScanReport> = {}): ScanReport {
   return {

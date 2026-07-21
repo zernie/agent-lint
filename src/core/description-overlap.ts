@@ -13,7 +13,7 @@
  * copy-pasted description with a word or two changed) — never on a parallel but
  * distinct pair. Warn-level, reports the PAIR (not a unilateral defect).
  */
-import { ncd } from "./proofs.js";
+import { ncd } from "./ncd.js";
 
 /** A skill identified by name + its trigger-surface description. */
 export interface DescribedSurface {

@@ -1,0 +1,108 @@
+{
+  "meta": {
+    "schemaVersion": 2,
+    "tool": "vigiles",
+    "kind": "audit",
+    "vigilesVersion": "live",
+    "harness": "claude-code",
+    "dir": "acme/widgets"
+  },
+  "score": {
+    "overall": 61,
+    "grade": "D",
+    "categories": [
+      {
+        "key": "Truthfulness",
+        "score": 77,
+        "weight": 1,
+        "findings": [
+          "1 broken intra-plugin reference",
+          "1 hook script missing (never run)"
+        ]
+      },
+      {
+        "key": "Triggering",
+        "score": 92,
+        "weight": 1,
+        "findings": ["1 near-identical skill description (wrong one fires)"]
+      },
+      {
+        "key": "Structure",
+        "score": 92,
+        "weight": 1,
+        "findings": ["1 unavailable agent tool (typo / never-available)"]
+      },
+      {
+        "key": "Safety",
+        "score": 100,
+        "weight": 1,
+        "findings": [
+          "deploy inherits all tools — the \"lethal trifecta\" (reads data, reaches the web, runs commands), so a prompt injection could exfiltrate secrets (advisory)",
+          "release inherits all tools — the \"lethal trifecta\" (reads data, reaches the web, runs commands), so a prompt injection could exfiltrate secrets (advisory)"
+        ]
+      },
+      {
+        "key": "Tested",
+        "score": 91,
+        "weight": 1,
+        "advisory": true,
+        "findings": ["3 untested surfaces"]
+      }
+    ],
+    "empty": false
+  },
+  "verdict": {
+    "sentence": "One fix away from a C.",
+    "grade": "D",
+    "pointsToNextGrade": 9,
+    "fixesToNextGrade": 1,
+    "perRecommendation": [
+      {
+        "index": 0,
+        "pointsIfFixed": 8
+      },
+      {
+        "index": 1,
+        "pointsIfFixed": 15
+      },
+      {
+        "index": 2,
+        "pointsIfFixed": 8
+      }
+    ]
+  },
+  "recommendations": [
+    {
+      "surface": "reviewer",
+      "action": "fix",
+      "rationale": "Unknown tool \"Grepp\" — use a built-in tool (Read, Write, Edit, MultiEdit, Bash, BashOutput, KillBash, Grep, Glob, LS, WebSearch, WebFetch, NotebookEdit, TodoWrite, Task, Skill) or an MCP tool (mcp__server__tool). Did you mean \"Grep\"?",
+      "fix": "In \"reviewer\", change the tool \"Grepp\" to \"Grep\" — as written it isn't a real tool, so it's dropped and the agent can't use it.",
+      "detector": "subagent-tool-contract",
+      "confidence": "likely"
+    },
+    {
+      "surface": "/__vigiles_repo__/hooks/guard.sh",
+      "action": "fix",
+      "rationale": "hook script \"/__vigiles_repo__/hooks/guard.sh\" does not exist on disk",
+      "fix": "Create \"/__vigiles_repo__/hooks/guard.sh\" or fix its path — the hook references a script that isn't on disk, so it silently never runs.",
+      "detector": "hook-script-exists",
+      "confidence": "likely"
+    },
+    {
+      "surface": "deploy ↔ release",
+      "action": "differentiate",
+      "rationale": "skills \"deploy\" and \"release\" have near-identical descriptions (100% alike) — the model can't reliably tell them apart, so the wrong one may fire. Differentiate their descriptions.",
+      "fix": "Differentiate the descriptions of \"deploy\" and \"release\" (1 similar) — the selector picks by description, so near-identical text makes it fire the wrong one.",
+      "detector": "description-overlap",
+      "confidence": "possible"
+    }
+  ],
+  "inventory": {
+    "skills": 2,
+    "agents": 1,
+    "hooks": 1,
+    "commands": 0,
+    "mcp": false,
+    "untested": 3
+  }
+}

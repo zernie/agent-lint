@@ -41,8 +41,11 @@
  * callers, no drift). See `research/hook-pain-points.md` for the verified corpus
  * and `docs/compiled-hooks.md` for the authoritative fix (compiled hooks make
  * this whole class unrepresentable).
+ *
+ * Node-free: the `readFileSync` IO is REQUIRED (injected by the caller — the disk
+ * scan passes `node:fs`, the browser engine a map-backed read), so this module
+ * never statically imports `node:fs` and bundles clean in a browser.
  */
-import { readFileSync as nodeReadFileSync } from "node:fs";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -94,11 +97,12 @@ export interface HookBlockOptions {
    */
   readonly permissionDecisionEvents: ReadonlySet<string>;
   /**
-   * Injectable file read (default: node:fs `readFileSync(p, "utf8")`).
-   * Returns `""` on any error so a missing / unreadable script doesn't crash
-   * the detector — it simply produces no findings for that entry.
+   * REQUIRED file read (the disk caller injects `node:fs`
+   * `readFileSync(p, "utf8")`; the browser engine a map-backed read). Should
+   * return `""` on any error so a missing / unreadable script doesn't crash the
+   * detector — it simply produces no findings for that entry.
    */
-  readonly readFileSync?: (p: string) => string;
+  readonly readFileSync: (p: string) => string;
 }
 
 // ---------------------------------------------------------------------------
@@ -141,14 +145,6 @@ const PERMISSION_DENY = /"permissionDecision"\s*:\s*"(deny|ask)"/;
 // Detector
 // ---------------------------------------------------------------------------
 
-function defaultReadFile(p: string): string {
-  try {
-    return nodeReadFileSync(p, "utf8");
-  } catch {
-    return "";
-  }
-}
-
 /**
  * Detect false-confidence "blocks" across a set of hook entries.
  *
@@ -157,15 +153,15 @@ function defaultReadFile(p: string): string {
  * (event, kind, scriptPath) pairs are de-duped.
  *
  * @param entries - The hook registrations to inspect (event + command/script).
- * @param opts    - Injected sets of blocking/permission events, and an optional
- *                  `readFileSync` (default: node:fs).
+ * @param opts    - Injected sets of blocking/permission events, and the required
+ *                  `readFileSync` (disk caller: node:fs; browser: map-backed).
  */
 export function hookBlockIssues(
   entries: readonly HookScriptEntry[],
   opts: HookBlockOptions,
 ): HookBlockFinding[] {
   const { noEffectEvents, permissionDecisionEvents } = opts;
-  const readFile = opts.readFileSync ?? defaultReadFile;
+  const readFile = opts.readFileSync;
   const findings: HookBlockFinding[] = [];
   const seen = new Set<string>();
 

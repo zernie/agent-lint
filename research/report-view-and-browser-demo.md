@@ -170,28 +170,91 @@ The three DI-shaped detectors MUST be passed file-map impls (they default to nod
 wholly disk-based → reimplement its globs as in-memory `Object.keys().filter()`.
 `verifyLiveMcpTools` (spawns servers) is NOT called by scanPlugin — exclude.
 
-**Two library refactors so the detector modules import clean in a browser bundle:**
+### Making the engine node-free — module splitting, NOT bundler stubs (the decision)
 
-1. `editDistance` extracted from `core/linters.ts` (which runs a `node:fs`/`glob`
-   side effect at IMPORT time) into a zero-dep leaf `core/edit-distance.ts`;
-   tool-contract + hook-events repointed. **DONE (this PR).**
-2. `ncd` (used by `description-overlap`) still imports `node:zlib` (`gzipSync`) +
-   transitively `core/hash.ts`'s `node:crypto`. TODO: extract a leaf `ncd` using
-   `pako.gzip` directly, OR let the Vite demo bundle polyfill zlib/crypto. (One
-   detector — description-overlap — can also be skipped in-browser as a fallback.)
-   Also `core/effects.ts`→`bash-effects.ts` needs `mvdan-sh` CJS interop (fine under
-   Vite); `agent-runtime.ts`/`leaderboard.ts` import `node:fs`/`node:path` for
-   UNUSED exports → Vite alias `node:path`→`path-browserify`, `node:fs`→a no-op stub.
+The browser bundle must not statically reach `node:fs`/`node:crypto`/`node:child_process`/
+`@ast-grep/napi`/`glob`. Three ways to get there were weighed; the choice is
+load-bearing enough to record, because the obvious two are wrong here:
 
-**The three PRs:**
+- **Bundler stubs (REJECTED — "hacky").** Vite `resolve.alias` mapping `node:fs`→a
+  no-op, `@ast-grep/napi`→empty, etc. Fails on two counts: (1) a stub that gets
+  _called_ silently returns wrong data → the browser grade diverges from the CLI,
+  and the Node-run parity test can't see it; (2) it's build-config spooky-action for
+  what is really an architecture problem. A "throwing" stub is louder but still rests
+  on a fragile "never reached" invariant.
+- **Dynamic-import adapters (REJECTED — wrong tool).** `await import()` selects a
+  node-vs-browser impl for code you _call_ at runtime. But our node deps are
+  **transitive-DEAD** on the `scanFiles` path — never invoked in the browser, only
+  _static sibling imports_ inside modules whose _pure_ functions we reuse. Lazy-loading
+  dead code adds async-coloring to a sync engine for zero benefit **and still requires
+  splitting the module** to make the node part lazy. It doesn't actually solve it.
+- **Module splitting (CHOSEN).** Extract the pure logic into node-free leaf modules
+  that BOTH the disk engine and the browser engine import — the repo's own hexagonal
+  `core ⊄ adapter` rule, and the pattern already used for `editDistance`. This removes
+  the node deps from the static graph entirely: no stub, no dynamic import, no
+  silent-divergence risk.
 
-- **PR 1 (this one):** `editDistance` leaf extraction + capture this plan. Groundwork.
-- **PR 2 — VISIBLE:** `scanFiles` (node-side first, reusing detectors as-is) + a node
-  test asserting PARITY with `scanPlugin` over the same files; then `apps/demo`
-  (Vite React workspace consuming `@vigiles/report-view`) with the full Fable UX,
-  rendering REAL `AuditReport`s baked at build time via `scanFiles` over vendored
-  `test/dogfood/*` plugins. This is where the UX care + Fable pass + screenshots go.
-- **PR 3 — LIVE:** bundle `scanFiles` client-side (the ncd/path/fs handling above) +
-  in-browser GitHub fetch (Trees API + `raw.githubusercontent.com`, harness paths
-  only) → live audit of any typed repo. Wire the demo into `site` / vigiles.sh; this
-  also fixes the mobile `#try` dead-end (a live in-browser audit works on a phone).
+**How the graph was mapped (reusable method):** trace the compiled `dist/` CJS
+require-graph (follow `require()` edges only — `import type` is elided by tsc, so a
+source-level trace over-reports). Finding: **`scan.js` is the single runtime bridge**
+to the whole node-only set (`plugin-loader`→crypto/fs, `core/mcp`→child_process +
+`refs`→`symbols`→`@ast-grep`, `test-coverage`→glob), so one `scan-core` extraction
+removes all of it.
+
+**The splits:**
+
+1. `editDistance` → zero-dep leaf `core/edit-distance.ts`; `scan.ts` repointed off
+   `core/linters.ts` (glob/`node:module`). **DONE (merged / this branch).**
+2. `ncd` (+ its gzip helper) → node-free leaf `core/ncd.ts`; `description-overlap`
+   imports it, so `proofs.ts`→`hash.ts`'s `node:crypto` leaves the graph. Uses
+   `TextEncoder` (not `Buffer`) so the byte input is identical Node/browser. **DONE.**
+3. Pure detectors → node-free `scan-core.ts`; `scan.ts` re-exports them (`export *`)
+   so every existing consumer is unchanged; `scan-files.ts`/`test-coverage-files.ts`
+   import from `scan-core`. Drops `scan.js` (and its whole node subtree) from the
+   browser graph. Plus: `node:fs` defaults made _required-IO_ in
+   `hook-block-ineffective.ts`/`plugin-dir-layout.ts` (only callers are the two
+   engines; browser injects map-backed impls); `mcpContractToolMessage` (pure) → leaf
+   `core/mcp-contract-message.ts` (keeps live `verifyMcpContractTools`'s spawn in
+   `mcp.ts`); `node:path` → a POSIX-only string helper `posix-path.ts`. **DONE (final
+   module list to confirm post-verification).**
+
+**What legitimately remains** (not stubs — real cross-platform implementations):
+
+- `node:zlib` (via `ncd`) → aliased to **`pako`** in the Vite build. Pako _is_ zlib in
+  JS; `TextEncoder` bytes in → same gzip length out. The ONE alias.
+- Pure-JS libs that bundle natively: `@iarna/toml`, `js-yaml`, `mvdan-sh`.
+- The one genuine runtime _difference_ (exists-on-disk vs in-map) is handled by
+  **dependency injection** (the `exists`/`readFileSync`/`existsSync` params) — sync,
+  explicit, the correct adapter; no dynamic import.
+
+**Correctness firewall.** `src/scan-files.test.ts` byte-compares `scanFiles(map)`
+against the CLI's `scanPlugin(dir)` on 4 real vendored plugins — kept green + unchanged
+through every split. Gap it doesn't cover: it runs in **Node** (real zlib), so a
+`pako`-vs-node compressed-length difference in `ncd` wouldn't show. Close it with a
+**Vitest browser-mode parity test** (run `scanFiles` in-browser with pako, assert the
+`AuditReport` equals the Node one on a fixture). In practice `description-overlap` is
+almost always empty on real plugins (cutoff below the most-similar legit pair), so
+divergence is rare and both answers are defensibly-correct proxies — but the
+browser-mode test is what lets us _claim_ byte-identical.
+
+### Site ↔ engine integration
+
+`@vigiles/report-view` is a source-only workspace (extensionless imports, Vite-native).
+The vigiles core uses Node16 `.js`-specifier imports (Vite won't resolve those from
+source), so the site consumes the engine's **built `dist/` (CJS)** instead — which also
+gives the strongest credibility story: the browser runs the _literally-same compiled
+code_ the CLI runs, plus the one `zlib→pako` alias. (Spike the exact wiring against a
+real `cd site && npm run build` before building the UI on top.)
+
+### Status (this branch)
+
+- **Demo with BAKED reports — SHIPPED (#99).** `DemoAudit.tsx` renders real
+  `AuditReport`s (baked via `audit --json` over `test/dogfood/*`) through
+  `@vigiles/report-view` + repo chips + the honest model-gated tease. Fixes the mobile
+  `#try` dead-end.
+- **Node-free engine — IN PROGRESS.** The splits above; `scanFiles` + the byte-identical
+  parity gate landed.
+- **LIVE any-repo — NEXT.** Vite bundle (pako alias) + in-browser GitHub fetch (Trees
+  API + `raw.githubusercontent.com`, harness paths only) + the Fable live-typing UX +
+  the 3 test layers (engine parity ✓, Vitest browser-mode interaction + parity, one
+  Playwright e2e with mocked network).
