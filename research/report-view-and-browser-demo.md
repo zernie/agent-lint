@@ -178,14 +178,14 @@ load-bearing enough to record, because the obvious two are wrong here:
 
 - **Bundler stubs (REJECTED — "hacky").** Vite `resolve.alias` mapping `node:fs`→a
   no-op, `@ast-grep/napi`→empty, etc. Fails on two counts: (1) a stub that gets
-  *called* silently returns wrong data → the browser grade diverges from the CLI,
+  _called_ silently returns wrong data → the browser grade diverges from the CLI,
   and the Node-run parity test can't see it; (2) it's build-config spooky-action for
   what is really an architecture problem. A "throwing" stub is louder but still rests
   on a fragile "never reached" invariant.
 - **Dynamic-import adapters (REJECTED — wrong tool).** `await import()` selects a
-  node-vs-browser impl for code you *call* at runtime. But our node deps are
+  node-vs-browser impl for code you _call_ at runtime. But our node deps are
   **transitive-DEAD** on the `scanFiles` path — never invoked in the browser, only
-  *static sibling imports* inside modules whose *pure* functions we reuse. Lazy-loading
+  _static sibling imports_ inside modules whose _pure_ functions we reuse. Lazy-loading
   dead code adds async-coloring to a sync engine for zero benefit **and still requires
   splitting the module** to make the node part lazy. It doesn't actually solve it.
 - **Module splitting (CHOSEN).** Extract the pure logic into node-free leaf modules
@@ -211,7 +211,7 @@ removes all of it.
 3. Pure detectors → node-free `scan-core.ts`; `scan.ts` re-exports them (`export *`)
    so every existing consumer is unchanged; `scan-files.ts`/`test-coverage-files.ts`
    import from `scan-core`. Drops `scan.js` (and its whole node subtree) from the
-   browser graph. Plus: `node:fs` defaults made *required-IO* in
+   browser graph. Plus: `node:fs` defaults made _required-IO_ in
    `hook-block-ineffective.ts`/`plugin-dir-layout.ts` (only callers are the two
    engines; browser injects map-backed impls); `mcpContractToolMessage` (pure) → leaf
    `core/mcp-contract-message.ts` (keeps live `verifyMcpContractTools`'s spawn in
@@ -219,10 +219,11 @@ removes all of it.
    module list to confirm post-verification).**
 
 **What legitimately remains** (not stubs — real cross-platform implementations):
-- `node:zlib` (via `ncd`) → aliased to **`pako`** in the Vite build. Pako *is* zlib in
+
+- `node:zlib` (via `ncd`) → aliased to **`pako`** in the Vite build. Pako _is_ zlib in
   JS; `TextEncoder` bytes in → same gzip length out. The ONE alias.
 - Pure-JS libs that bundle natively: `@iarna/toml`, `js-yaml`, `mvdan-sh`.
-- The one genuine runtime *difference* (exists-on-disk vs in-map) is handled by
+- The one genuine runtime _difference_ (exists-on-disk vs in-map) is handled by
   **dependency injection** (the `exists`/`readFileSync`/`existsSync` params) — sync,
   explicit, the correct adapter; no dynamic import.
 
@@ -234,15 +235,15 @@ through every split. Gap it doesn't cover: it runs in **Node** (real zlib), so a
 `AuditReport` equals the Node one on a fixture). In practice `description-overlap` is
 almost always empty on real plugins (cutoff below the most-similar legit pair), so
 divergence is rare and both answers are defensibly-correct proxies — but the
-browser-mode test is what lets us *claim* byte-identical.
+browser-mode test is what lets us _claim_ byte-identical.
 
 ### Site ↔ engine integration
 
 `@vigiles/report-view` is a source-only workspace (extensionless imports, Vite-native).
 The vigiles core uses Node16 `.js`-specifier imports (Vite won't resolve those from
 source), so the site consumes the engine's **built `dist/` (CJS)** instead — which also
-gives the strongest credibility story: the browser runs the *literally-same compiled
-code* the CLI runs, plus the one `zlib→pako` alias. (Spike the exact wiring against a
+gives the strongest credibility story: the browser runs the _literally-same compiled
+code_ the CLI runs, plus the one `zlib→pako` alias. (Spike the exact wiring against a
 real `cd site && npm run build` before building the UI on top.)
 
 ### Status (this branch)
