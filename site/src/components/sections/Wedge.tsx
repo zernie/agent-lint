@@ -33,6 +33,27 @@ const FAILURES: {
   },
 ];
 
+/** The four failures above roll up into one graded score across five categories —
+ *  the QUESTION each answers is the practical takeaway. */
+const CATEGORIES: { name: string; question: string }[] = [
+  { name: "Truthfulness", question: "Do your references resolve?" },
+  { name: "Triggering", question: "Do your skills fire — without colliding?" },
+  { name: "Structure", question: "Do tool contracts and frontmatter hold up?" },
+  { name: "Safety", question: "Could your own tools become an exfil path?" },
+  { name: "Tested", question: "Is any of it covered by a test?" },
+];
+
+/** The seven linter catalogs vigiles cross-references a rule against. */
+const CATALOGS = [
+  "ESLint",
+  "Ruff",
+  "Clippy",
+  "Pylint",
+  "RuboCop",
+  "Stylelint",
+  "Cedar",
+];
+
 export function Wedge() {
   return (
     <section
@@ -77,12 +98,47 @@ export function Wedge() {
           ))}
         </div>
 
-        <p className="mx-auto mt-12 max-w-2xl text-center text-base text-muted-foreground">
-          vigiles resolves rule references across{" "}
-          <span className="text-foreground">7 linter catalogs</span>, checks
-          that paths and scripts are real, and measures whether your skills
-          actually trigger. Nobody else does this.
-        </p>
+        {/* The resolution — merged INTO the problem section (no competing
+            heading-beat): the failures roll up into one graded score, and the
+            catalog strip is Truthfulness's detail, not a second ending. */}
+        <div className="mt-16 border-t border-border pt-12">
+          <p className="mx-auto max-w-2xl text-center text-lg leading-relaxed text-muted-foreground">
+            <span className="font-semibold text-foreground">
+              vigiles grades all of it
+            </span>{" "}
+            — one deterministic, model-free score across five categories:
+          </p>
+
+          <div className="mx-auto mt-10 grid max-w-5xl gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-5">
+            {CATEGORIES.map((c) => (
+              <div key={c.name}>
+                <h3 className="text-sm font-semibold tracking-tight">
+                  {c.name}
+                </h3>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                  {c.question}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <p className="mx-auto mt-12 max-w-2xl text-center text-sm leading-relaxed text-muted-foreground">
+            For Truthfulness it goes deepest: every reference is resolved
+            against the real linter — it must exist{" "}
+            <span className="text-foreground">and</span> be enabled — across
+            seven catalogs:
+          </p>
+          <ul className="mt-5 flex flex-wrap items-center justify-center gap-2">
+            {CATALOGS.map((name) => (
+              <li
+                key={name}
+                className="rounded-md bg-muted/50 px-2.5 py-1 font-mono text-xs text-muted-foreground"
+              >
+                {name}
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     </section>
   );
