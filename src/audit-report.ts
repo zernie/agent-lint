@@ -17,7 +17,7 @@ import { computeVerdict, type Verdict } from "./audit-verdict.js";
 import type { LedgerSummary } from "./observe.js";
 import type { AdoptabilityResult } from "./adoptability.js";
 import type { ScanReport, MarketplaceInfo } from "./scan.js";
-import type { PluginScore } from "./leaderboard.js";
+import type { PluginScore } from "./score-core.js";
 import type { RuleInventoryItem } from "./rule-inventory.js";
 import type { RuleRouting } from "./rule-routing.js";
 

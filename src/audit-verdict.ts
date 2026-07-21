@@ -41,7 +41,7 @@
 
 import { auditScore, type AuditScore } from "./audit-score.js";
 import type { Recommendation } from "./optimize.js";
-import { gradeFor, reportDeductions, type PluginScore } from "./leaderboard.js";
+import { gradeFor, reportDeductions, type PluginScore } from "./score-core.js";
 import type { ScanReport, ScanAgent, ScanSkill, ScanHook } from "./scan.js";
 
 /**

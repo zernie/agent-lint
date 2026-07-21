@@ -38,7 +38,7 @@ import {
   W_NO_CONTRACT,
   W_TRIFECTA,
   type PluginScore,
-} from "./leaderboard.js";
+} from "./score-core.js";
 import type { ScanReport } from "./scan.js";
 
 export type CategoryKey =
