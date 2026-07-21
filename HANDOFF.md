@@ -18,7 +18,7 @@
 **`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
 via `pages.yml` on push to main.
 
-**This session (2026-07-21): site polish + the shared `@vigiles/report-view` package — merged #80–#96, deployed.**
+**This session (2026-07-21): site polish + shared `@vigiles/report-view` + the LIVE in-browser demo — merged #80–#99, deployed.**
 
 **TOP GOAL (codified in `.claude/skills/landing-site`): maximize the % of visitors who RUN `npx vigiles audit`.**
 Every site decision serves that ONE conversion; the CTA must be GREAT. HOLD every `site/` change against the
@@ -45,15 +45,26 @@ DROPS — converted to `/* v8 ignore start/stop */` (the reliable form; the `nex
 
 ### 🎯 DO NEXT
 
-- **Stage 2 — the in-browser "Grade a repo" demo** (the big one; UNBLOCKED now that report-view is shared). Full
-  Fable design-of-record in `research/report-view-and-browser-demo.md`: zero-click BAKED report on open (featured
-  repo) + 3 cached chips; a real streaming audit log; grade + truthful "N fixes from a B"; an HONEST gate (real
-  numbers NEVER blurred; the model-gated part shows real skill names with dashed `──%` + "your CLI can, free" —
-  no paywall words); every edge case routes back to `npx vigiles audit`. Deterministic detectors must run
-  IN-BROWSER (scan.ts is node-fs-coupled today → porting the pure detectors is the meat). Render via
-  `@vigiles/report-view` so browser == CLI artifact. Likely a new `apps/demo` (or `packages/*`) workspace +
-  `site` consuming report-view — that adds `site` to the report-view consumer set, the point to reconsider a
-  shared `@vigiles/ui` split (rule-of-three).
+- **#99 SHIPPED the demo (BAKED reports):** `site/src/components/sections/DemoAudit.tsx` renders REAL
+  `AuditReport`s — baked at build time via `vigiles audit --json` on `test/dogfood/*`, stored in
+  `site/src/demo/reports/*.json` — through `@vigiles/report-view` (browser == CLI artifact). Repo chips + an
+  honest ONE-ROW model-gated tease ("skills firing / guidance moving behavior needs a real model; your CLI can,
+  free" — NO fake numbers/blurred names). Fable-reviewed (full report on mobile, opaque nav, chips scroll-row).
+  Real GRAMMAR fixes in the CLI output: audit-verdict "One fix away from an A" (was "One one-line fix" stutter),
+  audit-score/leaderboard "unavailable agent tool(s)" (was "1 tool that don't exist"). `editDistance` extracted
+  to `src/core/edit-distance.ts` (browser-port groundwork — removes linters.ts's import-time fs side effect).
+  Replaced RepoPicker; works desktop + mobile (fixes the old mobile `#try` dead-end).
+- **PR 3 — LIVE audit of any TYPED repo — IN PROGRESS THIS SESSION via subagents** (founder: "go all the way
+  leveraging subagents + Fable"). Two background agents launched: (1) the browser-safe engine `src/scan-files.ts`
+  — `scanFiles(files: Record<string,string>)` reconstructs `LoadedPlugin` from an in-memory file map + REUSES
+  scan.ts's pure per-surface detectors + reimplements ONLY ~6 fs touchpoints (loader, hook-script resolve,
+  mcp-config read, spec-exists, dangling-refs, untested-globs) — GATED by a byte-identical PARITY test vs
+  `scanPlugin` on every `test/dogfood/*` (the correctness firewall: a wrong grade breaks "same as the CLI"); (2)
+  Fable designing the live-typing UX (input → real fetch → real audit; honest loading now that it's real work;
+  edge cases no-config/404/rate-limit/A-grade). THEN (me): the client-side Vite bundle (ncd→pako, crypto shim,
+  node:path shim), in-browser GitHub fetch (Trees API + raw.githubusercontent.com, harness paths only), wire a
+  typed repo → live report, screenshot + Fable review, ship. Full plan: the "Stage 2 build plan — the in-browser
+  audit engine" section of `research/report-view-and-browser-demo.md`.
 - **Analytics — founder decision + NOT built:** instrument the funnel (command copies, chip clicks, repo
   submits). GitHub Pages, NOT Vercel → **Vercel Analytics N/A**. Rec: **GoatCounter** (free, privacy-friendly,
   no cookie banner); Plausible/Fathom paid. Needs the founder's account/site-code, then a script tag + events.
