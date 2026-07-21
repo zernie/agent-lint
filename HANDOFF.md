@@ -39,14 +39,14 @@ consumes it (its `src` is just the app shell). Wired as **npm WORKSPACES** (root
 site]`) — the clean monorepo the founder asked for; deps hoist to root. Kept the published `vigiles` CI green via
 four aligned changes: root lockfile regen, `pages.yml` builds `site` via the workspace, `build-report.mjs`
 install-guard checks root `node_modules`, per-package lockfiles deleted. Design + rationale + the Stage-2 demo
-brief in `research/report-view-and-hosted-demo.md`. Also fixed a PRE-EXISTING latent coverage bug it exposed:
+brief in `research/report-view-and-browser-demo.md`. Also fixed a PRE-EXISTING latent coverage bug it exposed:
 `egress.ts`/`sandbox.ts` used `/* v8 ignore next -- reason */`, a form `@vitest/coverage-v8` 4.1.8 silently
 DROPS — converted to `/* v8 ignore start/stop */` (the reliable form; the `next -- reason` form is the trap).
 
 ### 🎯 DO NEXT
 
-- **Stage 2 — the hosted "Grade a repo" demo** (the big one; UNBLOCKED now that report-view is shared). Full
-  Fable design-of-record in `research/report-view-and-hosted-demo.md`: zero-click BAKED report on open (featured
+- **Stage 2 — the in-browser "Grade a repo" demo** (the big one; UNBLOCKED now that report-view is shared). Full
+  Fable design-of-record in `research/report-view-and-browser-demo.md`: zero-click BAKED report on open (featured
   repo) + 3 cached chips; a real streaming audit log; grade + truthful "N fixes from a B"; an HONEST gate (real
   numbers NEVER blurred; the model-gated part shows real skill names with dashed `──%` + "your CLI can, free" —
   no paywall words); every edge case routes back to `npx vigiles audit`. Deterministic detectors must run
@@ -70,7 +70,7 @@ oracle-accuracy run (needs `codex` + quota).
 ### STILL OPEN
 
 - **Multi-harness audit DX** — DEFERRED (audit is CLAUDE-CODE-FOCUSED); design in `research/audit-harness-dx.md`,
-  scope entry in `roadmap.md` (Later). (The monorepo refactor is DONE — #96; the hosted demo is now DO NEXT.)
+  scope entry in `roadmap.md` (Later). (The monorepo refactor is DONE — #96; the in-browser demo is now DO NEXT.)
 - **Codex trigger-rate promotion** — the live oracle-accuracy run above (blocked on codex + quota).
 - Personal/launch/calendar follow-ups → PRIVATE `zernie/mine` only (branch `claude/adoption-playbook-s49`,
   pushed, needs squash-merge). Do not restate here.
