@@ -3,11 +3,19 @@ status: active
 topic: site
 ---
 
-# Shared report view (`@vigiles/report-view`) + the hosted demo
+# Shared report view (`@vigiles/report-view`) + the in-browser demo
 
-The plan for the "Grade a repo" hosted demo on vigiles.sh and the shared package
-it stands on. Stage 1 (the shared package) is SHIPPED; Stage 2 (the demo) is the
-design of record below.
+The plan for the "Grade a repo" IN-BROWSER demo on vigiles.sh and the shared
+package it stands on. Stage 1 (the shared package) is SHIPPED; Stage 2 (the demo)
+is the design of record below.
+
+**In-browser, not hosted.** The audit compute runs entirely CLIENT-SIDE in the
+visitor's browser — fetch the repo's files via the GitHub API from the browser,
+run the pure deterministic detectors in JS, render via `@vigiles/report-view`. No
+backend does the audit; the only "hosting" is static file serving on vigiles.sh
+(GitHub Pages), exactly like the current site. This is what keeps "nothing leaves
+your machine" literally true and the cost zero. (A cached-serverless fallback is
+explicitly NOT the plan — in-browser is the plan.)
 
 ## Why a shared package (the invariant)
 
@@ -66,7 +74,7 @@ must `@source` the package's src or the components' utility classes get purged.
 `report/src/index.css` does `@source "../../packages/report-view/src"` (the real
 path) and `@import "@vigiles/report-view/theme.css"`.
 
-## Stage 2 — the hosted "Grade a repo" demo (design of record)
+## Stage 2 — the in-browser "Grade a repo" demo (design of record)
 
 North star: every screen makes copying `npx vigiles audit` inevitable — the copy
 event IS the tracked conversion. From Fable's blind design brief:
