@@ -16,12 +16,24 @@ caption, a second button, or a reassurance line is suspect until proven necessar
 
 ## Purpose (what the site is for)
 
+- **TOP GOAL — maximize the % of visitors who actually RUN `npx vigiles audit`.**
+  This is the ONE conversion metric every design decision serves. The CTA must be
+  GREAT (frictionless, obvious, always reachable). If a change doesn't help someone
+  run the command, it's not earning its place.
 - **Audience:** developers who already live in agentic-coding tools (Claude Code,
   Codex, Cursor). They are skeptical and skim on a phone.
-- **The one job:** get them to run `npx vigiles audit` (or adopt vigiles). The
-  _wow_ is the **graded report** — show the result, don't explain the mechanism.
+- **The wow** is the **graded report** — show the result, don't explain the mechanism.
 - **Front-door promise:** "Lighthouse for your agent harness" — a one-command,
   zero-config, nothing-uploaded grade of your skills/hooks/subagents/references.
+- **Lower the friction to try:** offer PREFILLED popular OSS repos (e.g. an official
+  Anthropic plugin) as one-click "grade this" chips, so a visitor can see a real
+  report without typing or having a repo of their own. (Idea — not yet built.)
+- **Instrument conversion:** we need analytics on the funnel (command copies, "Grade
+  it"/deeplink clicks, prefilled-repo tries). The site is on GitHub Pages, NOT Vercel
+  — so **Vercel Analytics does NOT apply**. Use a lightweight, privacy-friendly,
+  script-tag analytics that works on static hosting: **Plausible / Fathom / GoatCounter**
+  (or GTM if a tag manager is wanted). Pick one, add the snippet, define the events.
+  (Not yet built — see the roadmap.)
 
 ## UX requirements
 

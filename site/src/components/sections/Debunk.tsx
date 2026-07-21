@@ -45,6 +45,8 @@ export function Debunk() {
             </p>
             <a
               href={ARTICLE}
+              target="_blank"
+              rel="noopener noreferrer"
               className="mt-6 inline-flex items-center gap-2 text-base font-semibold text-accent no-underline transition-colors hover:text-accent/80"
             >
               Read the measurement
