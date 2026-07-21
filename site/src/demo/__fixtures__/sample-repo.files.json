@@ -1,0 +1,7 @@
+{
+  "CLAUDE.md": "# Acme harness\n\nBe careful with secrets. Never commit credentials.\n",
+  "skills/deploy/SKILL.md": "---\nname: deploy\ndescription: Deploy the application to production when the user asks to deploy or ship the app.\n---\n\nRun the deploy pipeline.\n",
+  "skills/release/SKILL.md": "---\nname: release\ndescription: Deploy the application to production when the user asks to deploy or ship the app.\n---\n\nRun the release pipeline.\n",
+  "agents/reviewer.md": "---\nname: reviewer\ndescription: Reviews code changes for quality and correctness.\ntools: Read, Grepp\n---\n\nReview the diff and report issues.\n",
+  "hooks/hooks.json": "{\n  \"hooks\": {\n    \"PreToolUse\": [\n      {\n        \"matcher\": \"Bash\",\n        \"hooks\": [\n          { \"type\": \"command\", \"command\": \"${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh\" }\n        ]\n      }\n    ]\n  }\n}\n"
+}

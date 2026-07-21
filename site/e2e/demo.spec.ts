@@ -1,0 +1,87 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { test, expect, type Page } from "@playwright/test";
+
+// The same sample harness map the browser-parity test uses — real content, so the
+// e2e renders a real graded report (D) end-to-end through the built engine.
+const sampleFiles = JSON.parse(
+  readFileSync(
+    fileURLToPath(
+      new URL(
+        "../src/demo/__fixtures__/sample-repo.files.json",
+        import.meta.url,
+      ),
+    ),
+    "utf-8",
+  ),
+) as Record<string, string>;
+
+/** Route GitHub for `acme/widgets`: repo meta, a recursive tree, raw contents. */
+async function mockRepo(
+  page: Page,
+  files: Record<string, string>,
+  extraTree: string[] = [],
+): Promise<void> {
+  await page.route("https://api.github.com/repos/acme/widgets", (route) =>
+    route.fulfill({ json: { default_branch: "main" } }),
+  );
+  await page.route(
+    "https://api.github.com/repos/acme/widgets/git/trees/*",
+    (route) =>
+      route.fulfill({
+        json: {
+          tree: [...Object.keys(files), ...extraTree].map((path) => ({
+            path,
+            type: "blob",
+            size: files[path] ? files[path].length : 100,
+          })),
+        },
+      }),
+  );
+  await page.route("https://raw.githubusercontent.com/**", (route) => {
+    const path = new URL(route.request().url()).pathname.replace(
+      "/acme/widgets/main/",
+      "",
+    );
+    route.fulfill({ body: files[path] ?? "", contentType: "text/plain" });
+  });
+}
+
+async function gradeRepo(page: Page): Promise<void> {
+  await page.goto("/");
+  const input = page.getByLabel(/GitHub repo to grade/i);
+  await input.click();
+  await input.fill("acme/widgets");
+  await input.press("Enter");
+}
+
+test("types a repo → the real graded report renders in-frame", async ({
+  page,
+}) => {
+  await mockRepo(page, sampleFiles);
+  await gradeRepo(page);
+
+  // The frame header names their repo; the real <Report> renders its grade badge.
+  await expect(
+    page.getByText("$ vigiles audit acme/widgets", { exact: true }),
+  ).toBeVisible();
+  // The real <Report> rendered its grade badge (the sample map grades D).
+  await expect(page.getByText("D", { exact: true }).first()).toBeVisible();
+  // The model-gated lock row is present for a real report.
+  await expect(
+    page.getByText(/Whether your skills actually fire/i),
+  ).toBeVisible();
+});
+
+test("a repo with no harness shows the in-frame empty state, not an error", async ({
+  page,
+}) => {
+  // A tree with only non-harness files → no-harness (empty) outcome.
+  await mockRepo(page, {}, ["README.md", "src/index.js", "package.json"]);
+  await gradeRepo(page);
+
+  await expect(page.getByText(/No agent harness in/i)).toBeVisible();
+  await expect(
+    page.getByText("$ vigiles audit acme/widgets", { exact: true }),
+  ).toBeVisible();
+});
