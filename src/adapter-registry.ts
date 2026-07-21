@@ -11,6 +11,7 @@
  * wins regardless of order.
  */
 import type { HarnessAdapter } from "./core/adapter.js";
+import { detectInstructionMirror } from "./core/compose.js";
 import { claudeCodeAdapter } from "./adapters/claude-code/adapter.js";
 import { codexAdapter } from "./adapters/codex/adapter.js";
 
@@ -41,11 +42,11 @@ export interface DetectResult {
  *
  * SCOPE (2026-07-21): `vigiles audit` is CLAUDE-CODE-FOCUSED for now. This is
  * file-marker detection (a specificity score); it picks ONE harness (or the CC
- * default) and reports `ambiguousWith` when several match. The known-weak parts —
- * `AGENTS.md` is an AAIF cross-tool standard NOT a Codex signal, and a
- * `CLAUDE.md`⇄`AGENTS.md` mirror should collapse to one harness rather than read as
- * "both" — plus auditing ALL detected harnesses (shared-once + per-harness slice)
- * are DEFERRED. Full design + research: `research/audit-harness-dx.md`.
+ * default) and reports `ambiguousWith` when several genuinely match. Mirror-collapse
+ * (below) is done; the rest — treating a LONE `AGENTS.md` (an AAIF cross-tool
+ * standard, not a Codex signal) as harness-agnostic, and auditing ALL detected
+ * harnesses (shared-once + per-harness slice) — is DEFERRED. Full design + research:
+ * `research/audit-harness-dx.md`.
  */
 export function detectAdapterResult(root: string): DetectResult {
   const scored = ADAPTERS.map((a) => ({ a, score: a.detect(root) })).filter(
@@ -55,7 +56,27 @@ export function detectAdapterResult(root: string): DetectResult {
     return { adapter: defaultAdapter, fallback: true, ambiguousWith: [] };
   }
   const top = Math.max(...scored.map((s) => s.score));
-  const winners = scored.filter((s) => s.score === top).map((s) => s.a);
+  let winners = scored.filter((s) => s.score === top).map((s) => s.a);
+
+  // Mirror-collapse: the only false-"both" tie is at the weak instruction-file level
+  // (top === 1 — Claude Code via CLAUDE.md, Codex via AGENTS.md). When those two files
+  // are a MIRROR (symlink or byte-identical, per detectInstructionMirror), that's ONE
+  // logical config, not two harnesses — `AGENTS.md` is a cross-tool standard bridged to
+  // CLAUDE.md, not an independent Codex target (research/audit-harness-dx.md). Drop codex
+  // so it resolves to Claude Code without a spurious "matches claude-code, codex" notice.
+  // A genuine dual instruction file (different content, or a real .codex/config.toml at
+  // score 3) is NOT a mirror at top 1 → stays ambiguous, exactly as it should.
+  if (
+    winners.length > 1 &&
+    top === 1 &&
+    winners.some((w) => w.name === "codex") &&
+    detectInstructionMirror(root) !== null
+  ) {
+    // At top === 1 with a mirror, both files exist so Claude Code (CLAUDE.md) is
+    // always a co-winner — dropping codex leaves a non-empty set.
+    winners = winners.filter((w) => w.name !== "codex");
+  }
+
   return {
     adapter: winners[0],
     fallback: false,
