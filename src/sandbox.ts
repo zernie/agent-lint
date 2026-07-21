@@ -65,8 +65,9 @@ export function sandboxAvailable(): boolean {
 }
 
 function probeSandbox(): boolean {
-  /* v8 ignore next -- non-Linux has no bwrap; CI/coverage runs on Linux */
+  /* v8 ignore start -- non-Linux has no bwrap; CI/coverage runs on Linux */
   if (process.platform !== "linux") return false;
+  /* v8 ignore stop */
   try {
     // The capability that fails when user namespaces are disabled is the
     // namespace creation itself (`--unshare-all`), so probe exactly that.
@@ -77,8 +78,9 @@ function probeSandbox(): boolean {
       }).status === 0
     );
   } catch {
-    /* v8 ignore next -- defensive: spawnSync only throws on a fork failure */
+    /* v8 ignore start -- defensive: spawnSync only throws on a fork failure */
     return false;
+    /* v8 ignore stop */
   }
 }
 
