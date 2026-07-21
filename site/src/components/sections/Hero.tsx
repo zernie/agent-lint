@@ -28,6 +28,8 @@ export function Hero() {
           </a>
           <a
             href={REPO}
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex items-center gap-2 rounded-full border border-border px-3.5 py-1.5 text-sm font-medium text-muted-foreground no-underline transition-colors hover:border-accent/50 hover:text-foreground"
           >
             <Star className="h-3.5 w-3.5" aria-hidden />

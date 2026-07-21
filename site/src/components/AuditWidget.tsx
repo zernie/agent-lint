@@ -21,10 +21,13 @@ export function AuditWidget({ className }: { className?: string }) {
         className="w-full justify-center py-4 text-base"
       />
 
-      <p className="mt-3 flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
-        <ShieldCheck className="h-4 w-4 shrink-0 text-good" aria-hidden />
+      <p className="mt-3 flex items-start justify-center gap-1.5 text-sm leading-relaxed text-muted-foreground">
+        <ShieldCheck
+          className="mt-0.5 h-4 w-4 shrink-0 text-good"
+          aria-hidden
+        />
         <span>
-          Runs in any terminal — auto-detects Claude Code or Codex.{" "}
+          Auto-detects Claude Code or Codex.{" "}
           <span className="text-foreground/70">Nothing is uploaded.</span>
         </span>
       </p>

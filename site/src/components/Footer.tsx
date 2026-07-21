@@ -30,6 +30,8 @@ export function Footer() {
           <div className="flex flex-col gap-3 text-sm">
             <a
               href={REPO}
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-muted-foreground no-underline transition-colors hover:text-foreground"
             >
               <Github className="h-4 w-4" aria-hidden />
