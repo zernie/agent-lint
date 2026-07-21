@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import {
+  fetchRepo,
   isHarnessPath,
   isHarnessMarker,
   collectReferencedPaths,
@@ -98,5 +99,61 @@ describe("collectReferencedPaths — hook scripts outside harness dirs", () => {
         "See [docs](https://example.com/x.md) and prose about assets.\n",
     });
     expect(refs.size).toBe(0);
+  });
+});
+
+describe("fetchRepo — never grades partial data", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const resp = (body: Partial<Response> & { text?: () => Promise<string> }) =>
+    ({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      text: async () => "content",
+      json: async () => ({}),
+      ...body,
+    }) as unknown as Response;
+
+  /** Route the three GitHub endpoints; `raw` decides the raw.githubusercontent leg. */
+  function stubGitHub(tree: unknown[], raw: () => Response): void {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (u: string) => {
+        if (u.includes("/git/trees/"))
+          return resp({ json: async () => ({ tree }) });
+        if (u.startsWith("https://api.github.com/repos/")) {
+          return resp({ json: async () => ({ default_branch: "main" }) });
+        }
+        return raw(); // raw.githubusercontent.com
+      }),
+    );
+  }
+
+  it("returns too-large when harness surfaces exceed the file cap", async () => {
+    // 301 real skill markers — more than the browser reads fully. Grading a
+    // truncated slice would misreport the inventory, so it must bail.
+    const tree = Array.from({ length: 301 }, (_, i) => ({
+      path: `skills/s${i}/SKILL.md`,
+      type: "blob",
+      size: 10,
+    }));
+    stubGitHub(tree, () => resp({}));
+    expect((await fetchRepo("o/r")).kind).toBe("too-large");
+  });
+
+  it("returns a retryable error when a harness file fetch fails", async () => {
+    // The one surface (root SKILL.md) 500s → grading without it would be partial.
+    stubGitHub([{ path: "SKILL.md", type: "blob", size: 10 }], () =>
+      resp({ ok: false, status: 500 }),
+    );
+    expect((await fetchRepo("o/r")).kind).toBe("error");
+  });
+
+  it("grades normally when every harness file fetches", async () => {
+    stubGitHub([{ path: "SKILL.md", type: "blob", size: 10 }], () =>
+      resp({ text: async () => "Does a thing.\n" }),
+    );
+    expect((await fetchRepo("o/r")).kind).toBe("ok");
   });
 });

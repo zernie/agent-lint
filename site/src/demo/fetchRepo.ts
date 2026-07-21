@@ -242,17 +242,23 @@ export async function fetchRepo(
       return { kind: "marketplace" };
     }
 
-    const harness = blobs
+    const harnessAll = blobs
       .filter((e) => isHarnessPath(e.path))
-      .filter((e) => (e.size ?? 0) <= MAX_FILE_BYTES)
-      .slice(0, MAX_FILES);
+      .filter((e) => (e.size ?? 0) <= MAX_FILE_BYTES);
 
     // The harness GATE: matching harness-SHAPED paths isn't enough — require a
     // definitive marker (isHarnessMarker), so a repo whose only match is a
     // git-hooks `hooks/` or a nested source dir lands in no-harness, not a grade.
-    if (!harness.some((e) => isHarnessMarker(e.path))) {
+    // Checked on the FULL set so a marker BEYOND the file cap isn't sliced away
+    // first (which would falsely report no-harness for a big plugin).
+    if (!harnessAll.some((e) => isHarnessMarker(e.path))) {
       return { kind: "no-harness", treeCount };
     }
+    // More harness surfaces than the browser can read fully → don't grade a
+    // PARTIAL harness (dropped skills/agents/hooks would misreport the inventory
+    // and grade); bail honestly to the CLI, same as a truncated tree.
+    if (harnessAll.length > MAX_FILES) return { kind: "too-large" };
+    const harness = harnessAll;
     onProgress?.({ phase: "tree", treeCount, harnessCount: harness.length });
 
     // (3) Content from raw.githubusercontent.com (NOT rate-limited), pooled.
@@ -260,6 +266,7 @@ export async function fetchRepo(
     const sizeOf = new Map(blobs.map((b) => [b.path, b.size ?? 0]));
     let done = 0;
     let total = harness.length;
+    let failed = 0;
     const fetchBlob = async (entry: TreeEntry): Promise<void> => {
       const url = `${RAW}/${owner}/${repo}/${encodeURIComponent(
         branch,
@@ -267,8 +274,11 @@ export async function fetchRepo(
       try {
         const res = await fetch(url, { signal });
         if (res.ok) files[entry.path] = await res.text();
-      } catch {
-        // A single missing/broken blob is skipped, not fatal.
+        else failed += 1;
+      } catch (e) {
+        // An abort is intentional; any other error is a real fetch failure.
+        if (!(e instanceof DOMException && e.name === "AbortError"))
+          failed += 1;
       }
       done += 1;
       onProgress?.({ phase: "file", done, of: total });
@@ -288,6 +298,14 @@ export async function fetchRepo(
     };
 
     await drain(harness);
+    // A harness SURFACE that failed to fetch (a transient 500 / CORS drop on
+    // SKILL.md, .claude/settings.json, an agent…) would leave the grade computed
+    // over a PARTIAL harness. Return the retryable error state instead of grading
+    // incomplete data. (Second-pass referenced files below are supplementary — a
+    // missing one is a soft advisory, not a reason to fail a valid grade.)
+    if (failed > 0) {
+      return { kind: "error", message: "some files couldn't be fetched" };
+    }
 
     // Second pass (bounded FIXPOINT): fetch what the harness files REFERENCE but the
     // path filter drops — hook scripts via the plugin-root token / relative paths,
