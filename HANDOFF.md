@@ -39,6 +39,16 @@ real IndexedDB), now **WIRED INTO CI** — a new `site` job in `ci.yml` builds r
 `npm run test:browser` (parity + interaction + grade-cache). Jobs are now test/check/harness/site/e2e; `test:e2e`
 (Playwright) stays manual. The former "wire the site test job" loose end is DONE.
 
+**FETCH-TAIL DOCUMENTED — do NOT keep chasing Codex's `fetchRepo` P2s.** The browser demo's `fetchRepo` does a
+BOUNDED, SELECTIVE fetch (harness-shaped paths + their refs, to respect GitHub's 60-req/hr limit), NOT the CLI's
+whole-repo read — so Codex keeps flagging "file X outside the harness dirs isn't fetched." The INVARIANT that
+makes this safe (NEVER GRADE PARTIAL DATA → bail to `too-large`/`error`, advisory-only data best-effort) + the
+closed edge cases + the non-goals (Codex repos, sharedDirs, Windows, extensionless scripts) are now documented in
+the `fetchRepo.ts` MODULE HEADER (Codex-facing) + `research/browser-demo-fetch-limits.md` (canonical, indexed).
+Founder's call (2026-07-21): DOCUMENT the limitation, don't fix piecemeal. Unless a new case is a genuine WRONG
+GRADE not already covered by the bail-outs, it's the accepted cost of the rate-limit-safe approximation — reply
+"documented in research/browser-demo-fetch-limits.md", don't code.
+
 **TOP GOAL (codified in `.claude/skills/landing-site`): maximize the % of visitors who RUN `npx vigiles audit`.**
 Every site decision serves that ONE conversion; the CTA must be GREAT. HOLD every `site/` change against the
 skill; **screenshot desktop AND the FULL mobile page** (390px, global playwright `$(npm root -g)/playwright` +

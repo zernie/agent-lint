@@ -12,6 +12,38 @@
  *
  * The keys of the returned map are repo-relative POSIX paths — exactly what
  * `scanFiles` expects (the shape `src/scan-files.test.ts`'s `readDirToMap` builds).
+ *
+ * ── KNOWN LIMITATION (intentional — do NOT "fix" piecemeal) ──────────────────
+ * This is a BOUNDED, SELECTIVE fetch, NOT the CLI's whole-repo read. To respect
+ * GitHub's anonymous 60-req/hr/IP limit, only harness-shaped paths + the files they
+ * reference are fetched (never the entire tree). So for an arbitrary repo the fetched
+ * map CAN differ from what `vigiles audit` reads on disk.
+ *
+ * The design rule that makes this SAFE — and the INVARIANT any change here must keep
+ * — is: NEVER GRADE PARTIAL DATA. Every incomplete path bails to an honest terminal
+ * state instead of publishing a wrong grade:
+ *   • a truncated GitHub tree, OR > MAX_FILES harness surfaces, OR required
+ *     referenced files that exceed the fetch budget → `too-large` (points at the CLI).
+ *   • any REQUIRED file (a harness surface, a referenced hook/script/config, a
+ *     bundled resource — all feed GRADED findings) that fails to fetch → the
+ *     retryable `error` state (not cached).
+ *   • ADVISORY-only data (coverage test files — the `untested` count is excluded
+ *     from the overall grade) is best-effort: its absence never errors and never
+ *     changes the letter grade.
+ *
+ * Fetched to MATCH the CLI: harness surfaces (skills/agents/commands/hooks + CLAUDE.md
+ * / .mcp.json), token + relative hook-script refs, manifest-declared hook configs
+ * (chained via a bounded fixpoint), SKILL.md bundled resources, and coverage tests
+ * outside the harness dirs. Documented NON-GOALS (not bugs): Codex-only repos
+ * (AGENTS.md/.codex — the demo is Claude-Code-scoped → lands in no-harness → CLI),
+ * `.vigilesrc.json` `sharedDirs` (rare), and Windows disk paths (unsupported OS).
+ *
+ * A review bot will keep surfacing ever-more-obscure "file X outside the harness
+ * dirs isn't fetched" cases. Unless a case produces a WRONG GRADE (not just an
+ * advisory discrepancy) AND isn't already covered by the too-large/error bail-outs
+ * above, it is the ACCEPTED COST of the rate-limit-safe approximation, not a new bug.
+ * Full rationale + the edge-case ledger: research/browser-demo-fetch-limits.md.
+ * ────────────────────────────────────────────────────────────────────────────
  */
 import { normalizeSlug } from "@/lib/deeplink";
 

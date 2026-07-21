@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:d684164d75bb1f76 compiled from research/CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:dcabffbebce80c34 compiled from research/CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -31,6 +31,7 @@ The `research/` corpus is the INTERNAL record (design rationale, competitive ana
 - `research/audit-eval-thickening-and-gate.md` — [shipped] Records audit's behavioral tier expanding to three evals (fire/collide/hold) plus the adversarial-gate eval build
 - `research/audit-lighthouse-design.md` — [shipped] Locked design for vigiles audit as "Lighthouse for your harness" — rings, HTML report, battery, --deep tier
 - `research/report-view-and-browser-demo.md` — [active] The shared @vigiles/report-view package (SHIPPED via npm workspaces — the four CI-critical changes: root lockfile regen, pages.yml site build, build-report install-guard, sub-lockfile deletion; + the Tailwind @source gotcha) + the Stage-2 IN-BROWSER "Grade a repo" demo design of record (client-side compute, NOT hosted/serverless; Fable brief: zero-click baked report, honest gate/tease, edge cases, funnel)
+- `research/browser-demo-fetch-limits.md` — [active] The in-browser demo's BOUNDED-FETCH limitation vs the CLI whole-repo read: the NEVER-GRADE-PARTIAL-DATA invariant (too-large/error bail-outs), the closed edge cases (hook scripts/configs, bundled resources, coverage tests all fetched to match the CLI), the documented NON-GOALS (Codex repos, sharedDirs, Windows, extensionless scripts), and why the fetch-approximation tail isn't a bug — so a review bot's "file X outside the harness dirs isn't fetched" is EXPECTED, not a defect. The record for why we stopped chasing Codex's fetch-tail P2s on PR #100
 - `research/audit-harness-dx.md` — [deferred] Multi-harness audit DX design (detection: AGENTS.md-≠-Codex per the AAIF standard + mirror-collapse; shared-vs-dialect-specific factoring; perf local/browser/LLM; metered-API cost warning) — DEFERRED 2026-07-21: audit is CLAUDE-CODE-FOCUSED for now. The preserved record + research for when we revisit
 - `research/audit-serve-design.md` — [idea] Design for an opt-in audit --serve local server enabling one-click spec creation from the HTML report
 - `research/audit-wow-ideas.md` — [active] Research on what audit findings create genuine "wow" tension beyond saturated markdown-linter checks
