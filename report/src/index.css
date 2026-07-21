@@ -1,48 +1,11 @@
 @import "tailwindcss";
+@import "@vigiles/report-view/theme.css";
 
-/* shadcn-style tokens, mapped to Tailwind utilities (bg-card, text-muted-foreground,
-   border-border, rounded-lg, …). Auto light/dark via prefers-color-scheme — one
-   file, no toggle, so the report adapts to the reader's OS. */
-@theme inline {
-  --color-background: var(--background);
-  --color-card: var(--card);
-  --color-border: var(--border);
-  --color-foreground: var(--foreground);
-  --color-muted-foreground: var(--muted);
-  --color-good: var(--good);
-  --color-warn: var(--warn);
-  --color-bad: var(--bad);
-  --color-na: var(--na);
-  --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-}
-
-:root {
-  --background: #fafafa;
-  --card: #ffffff;
-  --border: #e4e4e7;
-  --foreground: #09090b;
-  --muted: #71717a;
-  --good: #16a34a;
-  --warn: #f59e0b;
-  --bad: #ef4444;
-  --na: #a1a1aa;
-  --radius: 0.75rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0b0f17;
-    --card: #121826;
-    --border: #1e2636;
-    --foreground: #e6e9ef;
-    --muted: #9aa4b2;
-    --good: #16c784;
-    --warn: #ffb020;
-    --bad: #ff5c5c;
-    --na: #6b7280;
-  }
-}
+/* The report view lives in the shared workspace package, so Tailwind must scan
+   its source for the utility classes the components use (Tailwind v4 ignores
+   node_modules by default). Point at the real source path — resolves whether the
+   package is symlinked or not. */
+@source "../../packages/report-view/src";
 
 @layer base {
   body {

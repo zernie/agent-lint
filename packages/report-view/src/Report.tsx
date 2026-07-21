@@ -13,15 +13,15 @@ import type {
   CategoryScore,
   Recommendation,
   Verdict,
-} from "@/schema";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Adoptability } from "@/components/Adoptability";
-import { Adopt } from "@/components/Adopt";
-import { RuleInventory } from "@/components/RuleInventory";
-import { Observations } from "@/components/Observations";
-import { band, type Band, TEXT, BG, BORDER, BORDER_L } from "@/lib/band";
-import { cn } from "@/lib/utils";
+} from "./schema";
+import { Card } from "./components/ui/card";
+import { Badge } from "./components/ui/badge";
+import { Adoptability } from "./components/Adoptability";
+import { Adopt } from "./components/Adopt";
+import { RuleInventory } from "./components/RuleInventory";
+import { Observations } from "./components/Observations";
+import { band, type Band, TEXT, BG, BORDER, BORDER_L } from "./lib/band";
+import { cn } from "./lib/utils";
 
 /** The last path segment — the audited dir reads as a plugin name, not a path. */
 function basename(dir: string): string {

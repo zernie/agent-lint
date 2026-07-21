@@ -27,6 +27,11 @@
     "url": "https://github.com/zernie/vigiles/issues"
   },
   "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "report",
+    "site"
+  ],
   "bin": {
     "vigiles": "dist/cli.js"
   },

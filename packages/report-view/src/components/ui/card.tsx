@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "../../lib/utils";
 
 // shadcn-style Card (plain div, no Radix) — the report's surface primitive.
 export function Card({

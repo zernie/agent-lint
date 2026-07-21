@@ -1,9 +1,9 @@
 import { PlaneTakeoff, XCircle } from "lucide-react";
-import type { LedgerSummary } from "@/schema";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { TEXT, BORDER_L } from "@/lib/band";
-import { cn } from "@/lib/utils";
+import type { LedgerSummary } from "../schema";
+import { Card } from "./ui/card";
+import { Badge } from "./ui/badge";
+import { TEXT, BORDER_L } from "../lib/band";
+import { cn } from "../lib/utils";
 
 /**
  * The flight recorder — what the harness actually DID in real sessions, read off

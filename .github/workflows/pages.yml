@@ -46,11 +46,10 @@ jobs:
       - run: npm ci
 
       # 1) Landing → the Pages ROOT (Vite base "./" → works at / or a subpath).
+      #    site/ is an npm workspace, so its deps come from the root `npm ci`
+      #    above — build it via the workspace (no per-package `npm ci`).
       - name: Build landing (site/)
-        working-directory: site
-        run: |
-          npm ci
-          npm run build
+        run: npm run build --workspace @vigiles/site
 
       # 2) API reference (TypeDoc) → self-contained api-reference/ (incl. .nojekyll).
       - name: Generate API reference (TypeDoc)

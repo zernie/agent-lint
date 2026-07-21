@@ -19,10 +19,14 @@ const built = resolve(reportDir, "dist", "index.html");
 const out = resolve(root, "dist", "audit-report.template.html");
 
 try {
-  if (!existsSync(resolve(reportDir, "node_modules"))) {
-    console.log("[build-report] installing report/ deps…");
+  // npm workspaces hoist deps to the ROOT node_modules, so ensure the workspace
+  // deps are installed (a fresh clone / first local run) at the root before
+  // building the report workspace. In CI, `npm ci` already ran, so this is
+  // skipped. `vite` is a report+site devDep, hoisted — a reliable presence probe.
+  if (!existsSync(resolve(root, "node_modules", "vite"))) {
+    console.log("[build-report] installing workspace deps…");
     execSync("npm install --no-audit --no-fund", {
-      cwd: reportDir,
+      cwd: root,
       stdio: "inherit",
     });
   }

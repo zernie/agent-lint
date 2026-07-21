@@ -142,11 +142,11 @@ describe("buildAuditReport", () => {
     expect(JSON.parse(JSON.stringify(r))).toEqual(r);
   });
 
-  // Contract pin — the report app (report/src/schema.ts) mirrors this shape by
-  // hand and builds independently, so a field added/removed here without updating
-  // the mirror would silently break the report. This pins the wire shape so the
-  // change is CAUGHT; when it fails, update report/src/schema.ts too.
-  it("pins the AuditReport wire shape (mirror report/src/schema.ts on change)", () => {
+  // Contract pin — the shared report view (packages/report-view/src/schema.ts)
+  // mirrors this shape by hand and builds independently, so a field added/removed
+  // here without updating the mirror would silently break the report. This pins
+  // the wire shape so the change is CAUGHT; when it fails, update the mirror too.
+  it("pins the AuditReport wire shape (mirror packages/report-view/src/schema.ts on change)", () => {
     const r = buildAuditReport(
       makeReport({
         agents: [
