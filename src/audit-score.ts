@@ -167,7 +167,7 @@ function structure(r: ScanReport): CategoryScore {
     {
       n: deadTools,
       weight: W_DANGLING_REF,
-      label: "agent tool(s) that don't exist (typo / never-available)",
+      label: "unavailable agent tool(s) (typo / never-available)",
     },
     {
       n: deadMcpTools,

@@ -18,7 +18,7 @@
  * here — doing so against the agent catalog would be a false-positive factory.
  */
 import type { HarnessDialect } from "./dialect.js";
-import { editDistance } from "./linters.js";
+import { editDistance } from "./edit-distance.js";
 
 export type ToolIssueKind = "never-available" | "unknown";
 
