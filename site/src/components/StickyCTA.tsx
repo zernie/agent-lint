@@ -24,7 +24,7 @@ export function StickyCTA() {
   return (
     <div
       className={cn(
-        "fixed inset-x-0 top-0 z-50 border-b border-border bg-background/85 backdrop-blur-md transition-all duration-300",
+        "fixed inset-x-0 top-0 z-50 border-b border-border bg-background transition-all duration-300",
         show
           ? "translate-y-0 opacity-100"
           : "pointer-events-none -translate-y-full opacity-0",

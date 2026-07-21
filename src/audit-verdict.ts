@@ -11,7 +11,7 @@
  *   1. `pointsIfFixed` per recommendation — the exact number of overall points the
  *      grade gains if THAT one fix is applied (so a fix card can show `+N pts` and
  *      sort by it). Computed as `overall(report − thisFinding) − overall(report)`.
- *   2. A verdict `sentence` for the report header — e.g. "Two one-line fixes away
+ *   2. A verdict `sentence` for the report header — e.g. "Two fixes away
  *      from an A." — where the COUNT is the minimal number of fixes whose COMBINED
  *      removal actually crosses the next grade threshold (a real cumulative
  *      re-score), and `pointsToNextGrade` is the real threshold gap.
@@ -337,7 +337,7 @@ function buildSentence(
   const nextGrade = gradeFor(score.overall + pointsToNextGrade);
   // Reachable by the deterministic fix list: fix-count-forward (the actionable framing).
   if (fixesToNextGrade !== null) {
-    return `${capitalize(numberWord(fixesToNextGrade))} one-line ${fixNoun(
+    return `${capitalize(numberWord(fixesToNextGrade))} ${fixNoun(
       fixesToNextGrade,
     )} away from ${article(nextGrade)} ${nextGrade}.`;
   }
