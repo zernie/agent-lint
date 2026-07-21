@@ -99,8 +99,9 @@ export function Hero() {
         </h1>
 
         <p className="mt-5 max-w-2xl text-balance text-lg leading-relaxed text-muted-foreground sm:text-xl">
-          Your skills, hooks, and subagents are code now. vigiles grades them —
-          and tells you what&apos;s actually broken.
+          Your skills, hooks, and subagents are code — and full of references
+          nothing checks. vigiles grades them and shows you what&apos;s silently
+          broken.
         </p>
 
         <AuditWidget className="mt-8" />
