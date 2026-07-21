@@ -88,18 +88,12 @@ export function AuditWidget({ className }: { className?: string }) {
         </p>
       )}
 
-      {/* Security reassurance — the deeplink runs in the user's OWN Claude Code. */}
-      <p className="mt-3 flex items-start justify-center gap-2 text-left text-sm text-muted-foreground">
-        <ShieldCheck
-          className="mt-0.5 h-4 w-4 shrink-0 text-good"
-          aria-hidden
-        />
+      {/* Security reassurance — one line: the deeplink runs in the user's OWN CC. */}
+      <p className="mt-3 flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
+        <ShieldCheck className="h-4 w-4 shrink-0 text-good" aria-hidden />
         <span>
           Runs in <span className="font-medium text-foreground">your own</span>{" "}
-          Claude Code — your machine, your subscription.{" "}
-          <span className="text-foreground/70">
-            Nothing is uploaded; no server ever sees your code.
-          </span>
+          Claude Code — nothing leaves your machine.
         </span>
       </p>
 
@@ -113,20 +107,17 @@ export function AuditWidget({ className }: { className?: string }) {
         <CommandBlock command="npx vigiles audit" />
       </div>
 
-      <p className="mt-4 text-center text-sm text-muted-foreground">
-        <span className="font-mono text-foreground/80">audit</span> runs
-        anywhere and auto-detects Claude Code or Codex.
-      </p>
-
-      {/* Secondary path — list your public repos and pick one (the RepoPicker). */}
-      <a
-        href="#try"
-        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card/60 px-4 py-3 text-sm font-medium text-foreground no-underline transition-colors hover:border-accent/50 hover:bg-card"
-      >
-        <Github className="h-4 w-4" aria-hidden />
-        Browse my public repos
-        <ArrowRight className="h-4 w-4" aria-hidden />
-      </a>
+      {/* Secondary path — a light pill to the public-repo picker (the RepoPicker). */}
+      <div className="mt-4 flex justify-center">
+        <a
+          href="#try"
+          className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-medium text-muted-foreground no-underline transition-colors hover:border-accent/50 hover:text-foreground"
+        >
+          <Github className="h-4 w-4" aria-hidden />
+          Browse my public repos
+          <ArrowRight className="h-4 w-4" aria-hidden />
+        </a>
+      </div>
     </div>
   );
 }
