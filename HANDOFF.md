@@ -37,9 +37,14 @@ source-only shared report components + `AuditReport` schema + `theme.css`, wired
 
 ### 🎯 DO NEXT
 
-- **OPEN THE PR** — the branch carries ~9 commits past #99 (node-free engine + live demo + content). Not opened
-  yet. Conventional-Commit title with `!` (public API: `score-core`/`scan-core` are internal re-exports so NO
-  api drift — but confirm). CI won't auto-run on Claude-authored commits (Approve-and-run in the PR UI).
+- **PR #100 IS OPEN + AUTO-MERGING** (`feat(site): live in-browser "Grade any repo" audit demo + README-parity
+content`, base `main`). Node-free engine + live demo + site content + 4 rounds of Codex-bot review fixes. CI
+  green (validate/describe/harness/e2e/check/test). A `send_later` merge check squash-merges when the last CI
+  run is green, then unsubscribes. **If picking up post-merge:** the branch is finished — new work restarts from
+  `main` (see the merged-PR rule). Review fixes shipped: hook-script fetch (token + relative + manifest-declared)
+  · dir-aware browser `mapExists` · Codex-scoped demo (CC-only) · harness-marker gate (git-hooks/src-hooks FP) ·
+  truncated-tree state · `pages.yml` builds root `dist/` before the site (deploy-blocker). DEFERRED w/ rationale
+  on the PR: `sharedDirs` in-browser (rare; needs a `scanFiles` param) + Windows path-ops (unsupported OS).
 - **WIRE THE SITE TEST JOB INTO CI (only remaining loose end):** `site/` now has `test:browser` (vitest
   browser-mode: parity + interaction), `test:e2e` (playwright), `gen:parity`. `ci.yml` was NOT touched. Rec (from
   the wiring build): `test:browser` in the MAIN gate (fast, deterministic, closes the pako-vs-node gap) after
