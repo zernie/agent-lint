@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* The demo renders the real audit report from the shared @vigiles/report-view
+   package, so Tailwind must scan its source for the utility classes those
+   components use (Tailwind v4 ignores node_modules). The report inherits THIS
+   site's theme tokens (warm dark), so it reads as one aesthetic — we do NOT
+   import the package's own light/dark theme.css. */
+@source "../../packages/report-view/src";
+
 /*
   Theme echoes zernie.com (the author's dark, warm, typographic developer
   aesthetic): a warm near-black ground + warm off-white ink, a single purple
