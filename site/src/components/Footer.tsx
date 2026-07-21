@@ -42,12 +42,6 @@ export function Footer() {
               <BookText className="h-4 w-4" aria-hidden />
               API reference
             </a>
-            <a
-              href="https://vigiles.sh"
-              className="text-muted-foreground no-underline transition-colors hover:text-foreground"
-            >
-              vigiles.sh
-            </a>
           </div>
         </div>
         <div className="mt-10 border-t border-border pt-6 text-xs text-muted-foreground">
