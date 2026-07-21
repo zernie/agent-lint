@@ -15,24 +15,32 @@
 
 ## RESUME HERE
 
-**`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS cert. The landing
-site (`site/`) + combined `pages.yml` deploy + audit calibration are all **merged to `main`**
-(#76/#77/#78). DNS (A → GitHub Pages) + Pages custom domain done. Site auto-deploys on push to main.
+**`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
+via `pages.yml` on push to main.
 
-**Branch `claude/os-audit-adoption-3m528s`** now carries a **HERO REDESIGN (UNMERGED, ~6 commits,
-pushed, tree clean, NO PR)** — this is the live task. If already merged, restart from `origin/main`.
+**This session (2026-07-21): landing-site UX overhaul — all merged to `main` (#80–#84), deployed.**
+The site was built around the Claude Code `claude-cli://` deeplink as the PRIMARY CTA, which
+dead-ends silently on mobile / CC Web / desktop-without-CC ("type repo → tap → nothing"). Reworked
+around the action that works for everyone — the command:
 
-### What the unmerged branch contains (built + green locally, screenshots shown to user)
+- **Command-first hero** (`site/src/components/AuditWidget.tsx`, now much simpler): `npx vigiles
+audit` is the single primary action + one-line "runs in any terminal — auto-detects Claude Code
+  or Codex, nothing uploaded" + a quiet "Have Claude Code? Audit a specific repo →" link to `#try`.
+  No repo input / deeplink / CC-first paragraph on the fold; the report shot reaches the fold.
+- **Deeplink demoted to the RepoPicker (`#try`), DESKTOP-ONLY** (`hidden sm:block`). On mobile that
+  section shows an honest "Claude Code runs on a computer — `cd <repo>` and run the command" note
+  instead of a dead button. Button relabeled **"Audit this repo in Claude Code"** (was the
+  mis-framed "Test my skills…" — audit grades the WHOLE harness, not skills).
+- **Mobile hero** = native readable report card (`HeroReportCard` in `Hero.tsx`) since the full PNG
+  is unreadable at 390px. **Rings section = FIVE** (Truthfulness/Triggering/Structure/Safety/Tested,
+  100/92/92/80/88) matching the report PNG. Wedge badge "The wedge"→"The problem".
+- Removed an earlier auto-clipboard-write on the deeplink fallback — it triggered a scary "wants to
+  see your clipboard" permission prompt on mobile. `lib/toast.ts` + `ui/toaster.tsx` = a tiny toast.
+- **CI fix (#81):** the API-surface gate had been RED on main since #79 (Codex-experimental added
+  public API without regenerating snapshots). Ran `npm run api:report`, committed the additive diff.
 
-- **Hero redesign** — killed the whitespace + buried-CTA problem: pulled the real audit-report
-  screenshot onto the fold (folded away the old `OutputPreview` section), and collapsed the four
-  competing CTAs to ONE. The CTA is a **merged "audit widget"** (`site/src/components/AuditWidget.tsx`):
-  type `owner/repo` → **"Grade it"** = the `claude-cli://` deeplink (runs vigiles in the user's OWN
-  Claude Code, their sub, nothing uploaded — a shield-marked security line says so) + **`npx vigiles
-audit`** as the always-visible universal fallback + "browse my repos →" to the full RepoPicker.
-- **`StickyCTA.tsx`** — sticky header reveals the `npx` copy command once the hero scrolls out (the
-  always-reachable-action conversion lever). **`lib/deeplink.ts`** — shared `normalizeSlug`/`deeplink`
-  (one source, reused by RepoPicker). Footer's redundant Lighthouse/npm-audit tagline cut.
+Deeplink verified via headless Chromium (global playwright at `$(npm root -g)/playwright`, serve
+with `vite preview`, `claude-cli://` never resolves there so the fallback path is exercisable).
 
 ### Codex behavioral tier is EXPERIMENTAL, not "supported" (SHIPPED this session)
 
@@ -49,6 +57,12 @@ MEASURES the oracle's accuracy vs ground truth (needs `codex` on PATH + quota; n
 
 ### STILL OPEN
 
+- **Hosted public-repo audit (mobile "wow", teed up, NOT built)** — user wants it; the LLM part is
+  the blocker (rate limits/quota). RESOLUTION: do the **deterministic-only** rings (Truthfulness/
+  Structure/Safety-via-lethal-trifecta/description-overlap — NO model), skip the model-gated
+  trigger-rate. Plan: serverless fn fetches a public repo's files via the GitHub API (no clone) →
+  runs the existing `scan`→`AuditReport` JSON → renders the EXISTING `report/` UI. Serverless > pure
+  in-browser (CORS + GH rate limits + needs a browser-safe fs shim). Server-side GH token for limits.
 - **Codex trigger-rate promotion** — the live oracle-accuracy run above (blocked on codex + quota).
 - Personal/launch/calendar follow-ups → PRIVATE `zernie/mine` only (branch `claude/adoption-playbook-s49`,
   pushed, needs squash-merge). Do not restate here.
