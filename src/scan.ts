@@ -38,7 +38,7 @@ import {
   hookEventNames,
   type HookRegistration,
 } from "./core/hook-normalize.js";
-import { editDistance } from "./core/linters.js";
+import { editDistance } from "./core/edit-distance.js";
 import { readFrontmatter, frontmatterScalar } from "./core/frontmatter-read.js";
 import {
   findDescriptionOverlaps,
