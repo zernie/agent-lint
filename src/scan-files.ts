@@ -1,0 +1,634 @@
+/**
+ * `scanFiles` — the BROWSER-SAFE deterministic audit engine.
+ *
+ * `scanPlugin` (src/scan.ts) walks a directory on disk. `scanFiles` produces the
+ * SAME {@link ScanReport} over an in-memory `Record<repoRelativePath, content>`
+ * file map — exactly what an in-browser GitHub fetch yields — so the whole
+ * deterministic audit (and the {@link buildAuditReport} it feeds) runs client-side
+ * with NO filesystem, NO `child_process`, NO disk I/O at all.
+ *
+ * It mirrors `scanPlugin`'s body: it (a) reconstructs the `LoadedPlugin` shape
+ * (`{settings.hooks, files, warnings, sources}`) from the map instead of a disk
+ * walk, then (b) runs the SAME pure detectors `scanPlugin` runs (re-exported from
+ * scan.ts — one detector, no drift), then (c) callers hand the result to
+ * `buildAuditReport` unchanged. Every filesystem access in `scanPlugin` maps to a
+ * lookup in the map: `existsSync(p)` → `p in files`, `readFileSync(p)` →
+ * `files[p]`, "is a directory" → `keys.some(k => k.startsWith(p + "/"))`.
+ *
+ * Path model — a SYNTHETIC ROOT ({@link BROWSER_ROOT}): a browser has no real
+ * directory, so we resolve every path against a fixed absolute sentinel. All the
+ * report fields that embed the plugin root on disk (`meta.dir`, a resolved hook
+ * `script`/`command`, a hook-block `scriptPath`) come out rooted at
+ * {@link BROWSER_ROOT} instead of the checkout path. The parity test normalizes
+ * the on-disk report's real absolute root to {@link BROWSER_ROOT} and asserts a
+ * byte-identical {@link buildAuditReport} — the checkout path is the ONE thing that
+ * legitimately differs between the two environments (it names WHERE the repo lives,
+ * not WHAT the harness contains).
+ *
+ * The six filesystem touchpoints in `scanPlugin` are reimplemented here over the
+ * map (never on disk): (1) hook-script resolution — scanHooks/collectHookBlockEntries
+ * take an injected map-backed `exists`; (2) `collectMcpServers`; (3) the `hasSpec`
+ * check; (4) `danglingRefs`; (5) `pluginDirLayoutIssues` (map-backed
+ * existsSync/isDirectory); (6) `findUntestedSurfaces` (its globs → `Object.keys`
+ * filters). `verifyLiveMcpTools` (spawns servers) is NOT part of `scanPlugin` and
+ * is excluded. See research/report-view-and-browser-demo.md.
+ */
+import { basename, dirname, isAbsolute, join, relative } from "node:path";
+
+import { parse as parseToml } from "@iarna/toml";
+
+import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
+import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
+import type { PluginLayout } from "./core/layout.js";
+import type { HarnessDialect } from "./core/dialect.js";
+import type { LoadedPlugin } from "./plugin-loader.js";
+import { normalizeHooks, hookEventNames } from "./core/hook-normalize.js";
+import {
+  verifyHookEvents,
+  confidentHookEventIssues,
+} from "./core/hook-events.js";
+import { verifyMcpServers } from "./core/mcp-config.js";
+import { verifyMcpHookTargets } from "./core/mcp-hook.js";
+import { pluginDirLayoutIssues } from "./core/plugin-dir-layout.js";
+import { hookBlockIssues } from "./core/hook-block-ineffective.js";
+import { hookMatcherIssues } from "./core/hook-matcher.js";
+import { findUntestedSurfacesInFiles } from "./test-coverage-files.js";
+import {
+  makeClassifier,
+  scanAgents,
+  scanSkills,
+  scanHooks,
+  frontmatterIssuesFor,
+  frontmatterValueIssuesFor,
+  skillMetaIssuesFor,
+  malformedFrontmatterFor,
+  descriptionOverlapsFor,
+  descriptionBudgetFor,
+  collectSurfaceFindings,
+  collectDelegationTrifecta,
+  collectHookBlockEntries,
+  collectHookMatchers,
+  summarizePurity,
+  type ScanReport,
+  type ScanInstructions,
+} from "./scan.js";
+
+/**
+ * The synthetic absolute root every path in a browser scan resolves against. A
+ * pure, deterministic string (never `process.cwd()`), so `join`/`relative` stay
+ * side-effect-free and identical on every machine. Exported so the parity test can
+ * normalize an on-disk report's real absolute root to it before comparing.
+ */
+export const BROWSER_ROOT = "/__vigiles_repo__";
+
+/** Mirror of loadPlugin's `MAX_SKILL_FILE_BYTES` — surface files over this are skipped. */
+const MAX_SKILL_FILE_BYTES = 256 * 1024;
+
+/** UTF-8 byte length (mirrors disk `statSync(f).size` for a text file). */
+const byteLen = (s: string): number => new TextEncoder().encode(s).length;
+
+// ---------------------------------------------------------------------------
+// File-map primitives (repo-relative keys, POSIX-style)
+// ---------------------------------------------------------------------------
+
+/** `p in files` — a repo-relative path is present as a file key. */
+function hasFile(files: Record<string, string>, rel: string): boolean {
+  return Object.prototype.hasOwnProperty.call(files, rel);
+}
+
+/** "is a directory" — some file key lives UNDER `rel/`. */
+function isDirRel(files: Record<string, string>, rel: string): boolean {
+  const prefix = rel === "" ? "" : `${rel}/`;
+  if (rel === "") return Object.keys(files).length > 0;
+  return Object.keys(files).some((k) => k.startsWith(prefix));
+}
+
+/**
+ * The repo-relative form of an absolute BROWSER_ROOT-rooted path, or `null` when
+ * the path escapes the root (a `../` outside the plugin — never a plugin file).
+ */
+function toRel(absPath: string): string | null {
+  const rel = relative(BROWSER_ROOT, absPath);
+  if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) return null;
+  return rel;
+}
+
+/** A map-backed `existsSync` over absolute BROWSER_ROOT-rooted paths. */
+function mapExists(files: Record<string, string>): (p: string) => boolean {
+  return (p: string): boolean => {
+    const rel = toRel(p);
+    return rel !== null && hasFile(files, rel);
+  };
+}
+
+/** A map-backed `isDirectory` over absolute BROWSER_ROOT-rooted paths. */
+function mapIsDirectory(files: Record<string, string>): (p: string) => boolean {
+  return (p: string): boolean => {
+    const rel = toRel(p);
+    return rel !== null && isDirRel(files, rel);
+  };
+}
+
+/** A map-backed `readFileSync` (returns "" on a miss, like the detector default). */
+function mapReadFile(files: Record<string, string>): (p: string) => string {
+  return (p: string): string => {
+    const rel = toRel(p);
+    return rel !== null && hasFile(files, rel) ? files[rel] : "";
+  };
+}
+
+/**
+ * Read a subtree of the map as `relativeToBase → content`, mirroring
+ * loadPlugin's `readTree(dir, base)` — including its `MAX_SKILL_FILE_BYTES` cap.
+ * `baseRel === ""` reads the whole repo (the single-skill case's `readTree(root,
+ * root)`).
+ */
+function readTreeUnder(
+  files: Record<string, string>,
+  dirRel: string,
+  baseRel: string,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  const underPrefix = dirRel === "" ? "" : `${dirRel}/`;
+  const basePrefix = baseRel === "" ? "" : `${baseRel}/`;
+  for (const [k, content] of Object.entries(files)) {
+    if (dirRel !== "" && !k.startsWith(underPrefix)) continue;
+    if (byteLen(content) > MAX_SKILL_FILE_BYTES) continue;
+    const rel = baseRel === "" ? k : k.slice(basePrefix.length);
+    out[rel] = content;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Manifest / hooks reading (mirrors plugin-loader.ts readHooks/safeReadManifest)
+// ---------------------------------------------------------------------------
+
+/** Parse a JSON file's text, or null on any error. */
+function safeParseJson(
+  text: string | undefined,
+): Record<string, unknown> | null {
+  if (text === undefined) return null;
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/** Parse the layout's manifest (JSON or TOML) from the map, or null. */
+function readManifest(
+  files: Record<string, string>,
+  layout: PluginLayout,
+): Record<string, unknown> | null {
+  const text = files[layout.manifestPath];
+  if (text === undefined) return null;
+  if (layout.settingsFormat === "toml") {
+    try {
+      return parseToml(text) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+  return safeParseJson(text);
+}
+
+/** The `.hooks` field of a JSON file in the map, or undefined. */
+function readHooksJsonFile(
+  files: Record<string, string>,
+  rel: string,
+): unknown {
+  return safeParseJson(files[rel])?.hooks;
+}
+
+/** The `.hooks` of a settings file in the map, in the layout's format. */
+function readSettingsHooks(text: string, format: "json" | "toml"): unknown {
+  if (format === "json") return safeParseJson(text)?.hooks;
+  try {
+    return (parseToml(text) as Record<string, unknown>).hooks;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Mirror of plugin-loader.ts `readHooks`, over the file map. */
+function readHooks(
+  files: Record<string, string>,
+  layout: PluginLayout,
+): unknown {
+  const m = readManifest(files, layout);
+  if (m) {
+    if (typeof m.hooks === "string") {
+      return readHooksJsonFile(files, m.hooks.replace(/^\.\//, ""));
+    }
+    if (m.hooks !== undefined) return m.hooks;
+  }
+  if (hasFile(files, layout.hooksConventionPath)) {
+    return readHooksJsonFile(files, layout.hooksConventionPath);
+  }
+  const settings = files[layout.settingsPath];
+  if (settings !== undefined) {
+    return readSettingsHooks(settings, layout.settingsFormat);
+  }
+  return undefined;
+}
+
+/** Whether the plugin declares any MCP servers (standalone file or manifest key). */
+function hasMcp(files: Record<string, string>, layout: PluginLayout): boolean {
+  if (hasFile(files, layout.mcpConfigFile)) return true;
+  return readManifest(files, layout)?.[layout.mcpManifestKey] !== undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Surface materialization (mirrors plugin-loader.ts materializeSurfaces)
+// ---------------------------------------------------------------------------
+
+type SurfaceSource =
+  | { readonly kind: "single-skill"; readonly skillName: string }
+  | { readonly kind: "root" }
+  | { readonly kind: "user"; readonly sub: string }
+  | { readonly kind: "none" };
+
+/** Mirror of plugin-loader.ts `surfaceHasLoadable`. */
+function surfaceHasLoadable(
+  layout: PluginLayout,
+  surface: string,
+  tree: Record<string, string>,
+): boolean {
+  const keys = Object.keys(tree);
+  return surface === layout.skillDir
+    ? keys.some((k) => basename(k) === "SKILL.md")
+    : keys.some((k) => k.endsWith(".md"));
+}
+
+/** Mirror of plugin-loader.ts `classifySurfaceSource`, over the file map. */
+function classifySurfaceSource(
+  files: Record<string, string>,
+  layout: PluginLayout,
+  rootTrees: ReadonlyMap<string, Record<string, string>>,
+): SurfaceSource {
+  if (layout.skillDir && hasFile(files, "SKILL.md")) {
+    return { kind: "single-skill", skillName: basename(BROWSER_ROOT) };
+  }
+  const rootHasLoadable = layout.surfaceDirs.some((s) =>
+    surfaceHasLoadable(layout, s, rootTrees.get(s) ?? {}),
+  );
+  const isPluginShaped =
+    hasFile(files, layout.manifestPath) ||
+    hasFile(files, layout.hooksConventionPath);
+  if (rootHasLoadable || isPluginShaped) return { kind: "root" };
+  if (layout.userSurfaceRoot !== undefined) {
+    return { kind: "user", sub: layout.userSurfaceRoot };
+  }
+  return { kind: "none" };
+}
+
+/** Mirror of plugin-loader.ts `materializeSurfaces`, over the file map. */
+function materializeSurfaces(
+  files: Record<string, string>,
+  layout: PluginLayout,
+  out: Record<string, string>,
+  sources: Record<string, string>,
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  const rootTrees = new Map<string, Record<string, string>>();
+  for (const surface of layout.surfaceDirs) {
+    if (isDirRel(files, surface)) {
+      rootTrees.set(surface, readTreeUnder(files, surface, surface));
+    }
+  }
+  const add = (key: string, content: string, onDisk: string): void => {
+    out[key] = content;
+    sources[key] = onDisk;
+  };
+
+  const source = classifySurfaceSource(files, layout, rootTrees);
+  switch (source.kind) {
+    case "single-skill": {
+      const tree = readTreeUnder(files, "", "");
+      for (const [rel, content] of Object.entries(tree)) {
+        add(
+          join(layout.materializeRoot, layout.skillDir, source.skillName, rel),
+          content,
+          join(BROWSER_ROOT, rel),
+        );
+      }
+      counts[layout.skillDir] = Object.keys(tree).length;
+      break;
+    }
+    case "root":
+    case "user": {
+      const baseRel = source.kind === "user" ? source.sub : "";
+      for (const surface of layout.surfaceDirs) {
+        const dirRel = baseRel === "" ? surface : `${baseRel}/${surface}`;
+        const tree =
+          source.kind === "root"
+            ? (rootTrees.get(surface) ?? {})
+            : isDirRel(files, dirRel)
+              ? readTreeUnder(files, dirRel, dirRel)
+              : {};
+        for (const [rel, content] of Object.entries(tree)) {
+          add(
+            join(layout.materializeRoot, surface, rel),
+            content,
+            join(BROWSER_ROOT, dirRel, rel),
+          );
+        }
+        counts[surface] = Object.keys(tree).length;
+      }
+      break;
+    }
+    case "none":
+      break;
+  }
+  return counts;
+}
+
+// ---------------------------------------------------------------------------
+// Dangling intra-plugin refs (mirrors plugin-loader.ts danglingRefs)
+// ---------------------------------------------------------------------------
+
+const INTRA_REF_EXTS = "md|sh|cmd|mjs|cjs|js|ts|py|rb|txt|json";
+function intraRefRe(layout: PluginLayout): RegExp {
+  return new RegExp(
+    `(?:${layout.intraRefDirs.join("|")})/[A-Za-z0-9._/-]+\\.(?:${INTRA_REF_EXTS})`,
+    "g",
+  );
+}
+
+const NON_PLUGIN_VARS = new Set([
+  "CLAUDE_PROJECT_DIR",
+  "CLAUDE_PROJECT",
+  "HOME",
+  "PWD",
+  "OLDPWD",
+]);
+
+/** Mirror of plugin-loader.ts `isPluginRooted`. */
+function isPluginRooted(content: string, idx: number): boolean {
+  if (idx === 0 || content[idx - 1] !== "/") return true;
+  const seg = /([^\s"'`(=:/]*)$/.exec(content.slice(0, idx - 1))?.[1] ?? "";
+  const varName = /^\$\{?(\w+)\}?$/.exec(seg)?.[1];
+  if (varName !== undefined) return !NON_PLUGIN_VARS.has(varName);
+  return false;
+}
+
+const DOC_SOURCE_RE = /\.(?:md|markdown|mdx|txt|rst)$/i;
+
+/** The plugin's executable (non-prose) source-file CONTENTS under the surface dirs. */
+function executableContents(
+  files: Record<string, string>,
+  layout: PluginLayout,
+): string[] {
+  const out: string[] = [];
+  for (const surface of layout.intraRefDirs) {
+    if (!isDirRel(files, surface)) continue;
+    for (const [k, content] of Object.entries(files)) {
+      if (!k.startsWith(`${surface}/`)) continue;
+      if (DOC_SOURCE_RE.test(k)) continue;
+      if (byteLen(content) > MAX_SKILL_FILE_BYTES) continue;
+      out.push(content);
+    }
+  }
+  return out;
+}
+
+/** Mirror of plugin-loader.ts `danglingRefs`, over the file map. */
+function danglingRefs(
+  files: Record<string, string>,
+  layout: PluginLayout,
+): string[] {
+  const re = intraRefRe(layout);
+  const missing = new Set<string>();
+  for (const content of executableContents(files, layout)) {
+    for (const m of content.matchAll(re)) {
+      if (m.index !== undefined && !isPluginRooted(content, m.index)) continue;
+      if (!hasFile(files, m[0])) missing.add(m[0]);
+    }
+  }
+  return [...missing];
+}
+
+// ---------------------------------------------------------------------------
+// Warnings (mirrors plugin-loader.ts pluginWarnings)
+// ---------------------------------------------------------------------------
+
+function pluginWarnings(
+  files: Record<string, string>,
+  layout: PluginLayout,
+  counts: Record<string, number>,
+  hooks: unknown,
+  materialized: Record<string, string>,
+): string[] {
+  const warnings: string[] = [];
+  if (counts.agents) {
+    warnings.push(
+      `plugin defines ${String(counts.agents)} subagent file(s) under agents/ — these run only under a real model; test them at the eval tier (runEval), not the deterministic mock.`,
+    );
+  }
+  if (counts.commands) {
+    warnings.push(
+      `plugin defines ${String(counts.commands)} slash-command file(s) under commands/ — slash-command invocation needs a real model; test at the eval tier.`,
+    );
+  }
+  if (hasMcp(files, layout)) {
+    warnings.push(
+      `plugin declares MCP server(s) (${layout.mcpManifestKey} / ${layout.mcpConfigFile}) — the loader does not wire MCP; bring the server up yourself if your test needs it.`,
+    );
+  }
+  const dangling = danglingRefs(files, layout);
+  if (dangling.length) {
+    const shown = dangling.slice(0, 5).join(", ");
+    const more =
+      dangling.length > 5 ? `, … (+${String(dangling.length - 5)})` : "";
+    warnings.push(
+      `plugin references ${String(dangling.length)} intra-plugin file(s) that don't exist (broken path / partial vendor): ${shown}${more}`,
+    );
+  }
+  if (!hooks && Object.keys(materialized).length === 0) {
+    warnings.push(
+      `nothing was loaded (no hooks, CLAUDE.md, skills, agents, or commands) — the deterministic harness would run an effectively empty machine.`,
+    );
+  }
+  return warnings;
+}
+
+// ---------------------------------------------------------------------------
+// loadPluginFromFiles (mirrors plugin-loader.ts loadPlugin)
+// ---------------------------------------------------------------------------
+
+/**
+ * Reconstruct the `LoadedPlugin` shape from a repo-relative file map, exactly as
+ * `loadPlugin` builds it off disk — surface files materialized under the layout's
+ * `materializeRoot`, hook commands with the plugin-root token expanded to
+ * {@link BROWSER_ROOT}, and the same `warnings`.
+ */
+export function loadPluginFromFiles(
+  files: Record<string, string>,
+  layout: PluginLayout,
+): LoadedPlugin {
+  const hooks = readHooks(files, layout);
+  const resolvedHooks = hooks
+    ? (JSON.parse(
+        JSON.stringify(hooks).replaceAll(layout.pluginRootToken, BROWSER_ROOT),
+      ) as unknown)
+    : undefined;
+
+  const out: Record<string, string> = {};
+  const sources: Record<string, string> = {};
+  const instructionText = files[layout.instructionFile];
+  if (instructionText !== undefined) {
+    out[layout.instructionFile] = instructionText;
+    sources[layout.instructionFile] = join(
+      BROWSER_ROOT,
+      layout.instructionFile,
+    );
+  }
+  const counts = materializeSurfaces(files, layout, out, sources);
+
+  return {
+    settings: resolvedHooks ? { hooks: resolvedHooks } : {},
+    files: out,
+    sources,
+    warnings: pluginWarnings(files, layout, counts, resolvedHooks, out),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// collectMcpServers (mirrors scan.ts collectMcpServers)
+// ---------------------------------------------------------------------------
+
+function collectMcpServers(
+  files: Record<string, string>,
+  layout: PluginLayout,
+): Record<string, unknown> {
+  const servers: Record<string, unknown> = {};
+  const collect = (file: string): void => {
+    const text = files[file];
+    if (text === undefined) return;
+    try {
+      const parsed = JSON.parse(text) as { mcpServers?: unknown };
+      if (parsed.mcpServers !== null && typeof parsed.mcpServers === "object") {
+        Object.assign(servers, parsed.mcpServers);
+      }
+    } catch {
+      /* malformed JSON is the loader's concern, not this check's */
+    }
+  };
+  collect(".mcp.json");
+  collect(layout.manifestPath);
+  return servers;
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Scan an in-memory repo-relative file map and report its surfaces + structural
+ * issues — the browser-safe twin of {@link scanPlugin}. `files` is
+ * `repoRelativePath → content` (as a GitHub fetch yields). Produces a
+ * {@link ScanReport} that {@link buildAuditReport} turns into the exact same
+ * `AuditReport` the CLI's `audit --json` produces over the same files (modulo the
+ * checkout path — see {@link BROWSER_ROOT}).
+ */
+export function scanFiles(
+  files: Record<string, string>,
+  layout: PluginLayout = claudeCodeLayout,
+  dialect: HarnessDialect = claudeCodeDialect,
+): ScanReport {
+  const lay = layout;
+  const cls = makeClassifier(lay);
+  const loaded = loadPluginFromFiles(files, lay);
+  const exists = mapExists(files);
+  const hookRegs = normalizeHooks(loaded.settings.hooks);
+  const { hooks, inline, manual } = scanHooks(
+    hookRegs,
+    BROWSER_ROOT,
+    lay.pluginRootToken,
+    exists,
+  );
+  const eventNames = hookEventNames(loaded.settings.hooks);
+  const hookEventIssues = confidentHookEventIssues(
+    verifyHookEvents(eventNames, dialect),
+  );
+  const instructions: ScanInstructions | null =
+    loaded.files[lay.instructionFile] !== undefined
+      ? {
+          file: lay.instructionFile,
+          hasSpec: hasFile(files, `${lay.instructionFile}.spec.ts`),
+        }
+      : null;
+  const mcpServers = collectMcpServers(files, lay);
+  const declaredServers = Object.keys(mcpServers);
+  const agents = scanAgents(loaded.files, dialect, declaredServers, cls);
+  const skills = scanSkills(loaded.files, cls, {
+    root: BROWSER_ROOT,
+    materializeRoot: lay.materializeRoot,
+    dialect,
+    sources: loaded.sources,
+    existsSync: exists,
+  });
+  const puritySummary = summarizePurity(agents);
+  const { trifectaFindings, skillResourceFindings, skillFenceFindings } =
+    collectSurfaceFindings(agents, skills);
+  return {
+    dir: BROWSER_ROOT,
+    instructions,
+    skills,
+    agents,
+    hooks,
+    inlineHooks: inline,
+    manualHookCount: manual,
+    commands: Object.keys(loaded.files).filter(cls.isCommand).length,
+    mcp: loaded.warnings.some((w) => w.includes("MCP server")),
+    danglingRefs: danglingRefs(files, lay),
+    hookEventIssues,
+    frontmatterIssues: frontmatterIssuesFor(loaded.files, cls),
+    frontmatterValueIssues: frontmatterValueIssuesFor(loaded.files, cls),
+    skillMetaIssues: skillMetaIssuesFor(loaded.files, cls),
+    mcpIssues: verifyMcpServers(mcpServers),
+    mcpHookIssues: verifyMcpHookTargets(
+      loaded.settings.hooks,
+      declaredServers,
+      dialect,
+    ),
+    descriptionOverlaps: descriptionOverlapsFor(loaded.files, cls),
+    descriptionBudgetIssues: descriptionBudgetFor(loaded.files, cls),
+    trifectaFindings,
+    skillResourceIssues: skillResourceFindings,
+    skillFenceIssues: skillFenceFindings,
+    pluginLayoutIssues: pluginDirLayoutIssues(
+      join(BROWSER_ROOT, dirname(lay.manifestPath)),
+      [...new Set([...lay.surfaceDirs, lay.hooksConventionPath.split("/")[0]])],
+      { existsSync: exists, isDirectory: mapIsDirectory(files) },
+    ),
+    delegationTrifecta: collectDelegationTrifecta(agents, dialect),
+    hookBlockFindings: dialect.noEffectHookEvents
+      ? hookBlockIssues(
+          collectHookBlockEntries(
+            hookRegs,
+            BROWSER_ROOT,
+            lay.pluginRootToken,
+            exists,
+          ),
+          {
+            noEffectEvents: new Set(dialect.noEffectHookEvents),
+            permissionDecisionEvents: new Set(
+              dialect.permissionDecisionHookEvents ?? [],
+            ),
+            readFileSync: mapReadFile(files),
+          },
+        )
+      : [],
+    hookMatcherFindings: hookMatcherIssues(
+      collectHookMatchers(hookRegs),
+      declaredServers,
+      dialect,
+    ),
+    malformedFrontmatter: malformedFrontmatterFor(loaded.files, cls),
+    warnings: loaded.warnings,
+    untested: findUntestedSurfacesInFiles(files, lay).untested.length,
+    puritySummary,
+  };
+}

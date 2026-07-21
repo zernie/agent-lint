@@ -410,7 +410,7 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function makeClassifier(layout: PluginLayout): SurfaceClassifier {
+export function makeClassifier(layout: PluginLayout): SurfaceClassifier {
   // An empty dir means "this harness has no such surface" → never matches.
   const at = (dir: string): string | null =>
     dir ? `(?:^|/)${escapeRe(dir)}/` : null;
@@ -501,7 +501,7 @@ function onDiskPath(materializedKey: string, materializeRoot: string): string {
 }
 
 /** The plugin-root + materialize-root + dialect context skill scanning needs. */
-interface SkillScanContext {
+export interface SkillScanContext {
   readonly root: string;
   readonly materializeRoot: string;
   readonly dialect: HarnessDialect;
@@ -522,9 +522,16 @@ interface SkillScanContext {
    * `root` (unchanged when scanning the repo root itself).
    */
   readonly sharedDirsRoot?: string;
+  /**
+   * Injectable existence check for bundled-resource resolution (default: node:fs
+   * `existsSync`). The browser file-map engine (`scanFiles`) passes a map-backed
+   * impl so the same `scanSkills` runs with no disk access; on disk it stays the
+   * node default (backwards-compatible, no behaviour change).
+   */
+  readonly existsSync?: (p: string) => boolean;
 }
 
-function scanSkills(
+export function scanSkills(
   files: Record<string, string>,
   cls: SurfaceClassifier,
   ctx: SkillScanContext,
@@ -561,6 +568,7 @@ function scanSkills(
     const resourceIssues = skillResourceIssues(skillBody(md), skillDir, {
       repoRoot: sharedDirsRoot,
       sharedDirs,
+      existsSync: ctx.existsSync,
     });
     // The lethal trifecta is a property of what a unit CAN do, which for a skill is
     // its declared `allowed-tools` (the CC skill tool contract). Only a model-
@@ -612,7 +620,7 @@ function modelInvocableSkillSurfaces(
   return surfaces;
 }
 
-function descriptionOverlapsFor(
+export function descriptionOverlapsFor(
   files: Record<string, string>,
   cls: SurfaceClassifier,
 ): DescriptionOverlap[] {
@@ -624,14 +632,14 @@ function descriptionOverlapsFor(
  * buried (heuristic proxy; degrades recall + precision). Same surfaces as the
  * overlap check. See skill-description-budget.ts.
  */
-function descriptionBudgetFor(
+export function descriptionBudgetFor(
   files: Record<string, string>,
   cls: SurfaceClassifier,
 ): DescriptionBudgetIssue[] {
   return findDescriptionBudgetIssues(modelInvocableSkillSurfaces(files, cls));
 }
 
-function scanAgents(
+export function scanAgents(
   files: Record<string, string>,
   dialect: HarnessDialect,
   declaredServers: readonly string[],
@@ -697,6 +705,7 @@ function resolveScript(
   root: string,
   pluginRootToken: string,
   fullCommand: string,
+  exists: (p: string) => boolean = existsSync,
 ): ScanHook {
   // "${CLAUDE_PLUGIN_ROOT}" → unbraced "$CLAUDE_PLUGIN_ROOT".
   const unbraced = pluginRootToken.replace(/^\$\{(.+)\}$/, "$$$1");
@@ -720,7 +729,7 @@ function resolveScript(
   return {
     command: resolvedCommand,
     script: cleaned,
-    status: existsSync(abs) ? "ok" : "missing",
+    status: exists(abs) ? "ok" : "missing",
   };
 }
 
@@ -773,10 +782,11 @@ function eventsByScript(
   return map;
 }
 
-function scanHooks(
+export function scanHooks(
   regs: readonly HookRegistration[],
   root: string,
   pluginRootToken: string,
+  exists: (p: string) => boolean = existsSync,
 ): { hooks: ScanHook[]; inline: number; manual: number } {
   const commands = regs.map((r) => r.command);
   const evMap = eventsByScript(regs);
@@ -801,7 +811,7 @@ function scanHooks(
       continue;
     }
     for (const tok of found) {
-      const hook = resolveScript(tok, root, pluginRootToken, cmd);
+      const hook = resolveScript(tok, root, pluginRootToken, cmd, exists);
       const event = evMap.get(tok);
       byScript.set(hook.script, event ? { ...hook, event } : hook);
     }
@@ -825,7 +835,7 @@ function scanHooks(
  * is a separate, behavioral concern). See https://code.claude.com/docs/en/skills
  * and …/sub-agents.
  */
-function frontmatterIssuesFor(
+export function frontmatterIssuesFor(
   files: Record<string, string>,
   cls: SurfaceClassifier,
 ): FrontmatterIssue[] {
@@ -892,7 +902,7 @@ function closeCandidate(
  * High-precision (close-typo only); a full/dated model id is left alone. Folded
  * into the `subagent-frontmatter` rule. Agents only (skills have no model/color).
  */
-function frontmatterValueIssuesFor(
+export function frontmatterValueIssuesFor(
   files: Record<string, string>,
   cls: SurfaceClassifier,
 ): FrontmatterValueIssue[] {
@@ -938,7 +948,7 @@ function frontmatterValueIssuesFor(
  * as an informational note (NOT a structural defect) and the lint rule is a
  * warn, not an error. The file's other fields are still salvaged.
  */
-function malformedFrontmatterFor(
+export function malformedFrontmatterFor(
   files: Record<string, string>,
   cls: SurfaceClassifier,
 ): FrontmatterParseIssue[] {
@@ -963,7 +973,7 @@ function malformedFrontmatterFor(
  * missing either; surfaced as a soft note in scan (NOT a structural defect, NOT
  * scored) and gated by the `skill-frontmatter` lint rule (warn by default).
  */
-function skillMetaIssuesFor(
+export function skillMetaIssuesFor(
   files: Record<string, string>,
   cls: SurfaceClassifier,
 ): FrontmatterIssue[] {
@@ -1021,7 +1031,7 @@ function collectMcpServers(
  * path-tagged report lists the `audit` report AND the `lethal-trifecta` /
  * `skill-resource-resolves` lint rules both consume (one detector, no drift).
  */
-function collectSurfaceFindings(
+export function collectSurfaceFindings(
   agents: readonly ScanAgent[],
   skills: readonly ScanSkill[],
 ): {
@@ -1075,7 +1085,7 @@ function collectSurfaceFindings(
  * advisory's job). One detector, no drift. (Richer edge sources — a typed
  * railway's `delegate()` chain, a Flue subagent inheritance tree — plug in here.)
  */
-function collectDelegationTrifecta(
+export function collectDelegationTrifecta(
   agents: readonly ScanAgent[],
   dialect: HarnessDialect,
 ): ScanDelegationFinding[] {
@@ -1106,10 +1116,11 @@ function collectDelegationTrifecta(
  * resolved to its ABSOLUTE on-disk path against the plugin root (not the caller's
  * cwd). Addresses the gaps a de-duplicated `ScanHook[]` would miss.
  */
-function collectHookBlockEntries(
+export function collectHookBlockEntries(
   regs: readonly HookRegistration[],
   root: string,
   pluginRootToken: string,
+  exists: (p: string) => boolean = existsSync,
 ): HookScriptEntry[] {
   const out: HookScriptEntry[] = [];
   for (const { event, command: cmd } of regs) {
@@ -1126,7 +1137,7 @@ function collectHookBlockEntries(
     }
     const resolvedPaths: string[] = [];
     for (const tok of candidates) {
-      const r = resolveScript(tok, root, pluginRootToken, cmd);
+      const r = resolveScript(tok, root, pluginRootToken, cmd, exists);
       if (r.status === "ok") {
         const abs = isAbsolute(r.script) ? r.script : resolve(root, r.script);
         if (!resolvedPaths.includes(abs)) resolvedPaths.push(abs);
@@ -1146,7 +1157,7 @@ function collectHookBlockEntries(
 }
 
 /** Extract (event, matcher) pairs from the normalized hook registrations. */
-function collectHookMatchers(
+export function collectHookMatchers(
   regs: readonly HookRegistration[],
 ): HookMatcherEntry[] {
   const seen = new Set<string>();
@@ -1162,7 +1173,7 @@ function collectHookMatchers(
 }
 
 /** Tally how many scanned agents fall into each purity rung (effectSurface). */
-function summarizePurity(agents: readonly ScanAgent[]): {
+export function summarizePurity(agents: readonly ScanAgent[]): {
   pure: number;
   bounded: number;
   unrestricted: number;
