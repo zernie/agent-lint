@@ -11,9 +11,8 @@
  *   6. propertyTest()     — random mutation + invariant checking
  */
 
-import { gzipSync } from "node:zlib";
-
 import { sha256short, assertNever } from "./hash.js";
+import { ncd } from "./ncd.js";
 import type { Rule, ClaudeSpec } from "./spec.js";
 
 // ---------------------------------------------------------------------------
@@ -153,39 +152,11 @@ export function ruleStrength(kind: Rule["_kind"]): number {
 // 2. Normalized Compression Distance (NCD)
 // ---------------------------------------------------------------------------
 
-/**
- * Compute the compressed size of a string using gzip.
- * This approximates Kolmogorov complexity — the length of the shortest
- * program that produces the string.
- */
-function compressedSize(s: string): number {
-  return gzipSync(Buffer.from(s, "utf-8"), { level: 9 }).length;
-}
-
-/**
- * Normalized Compression Distance — information-theoretic similarity.
- *
- *   NCD(x, y) = (C(xy) - min(C(x), C(y))) / max(C(x), C(y))
- *
- * Range: [0, 1+ε] where 0 = identical information content.
- * Deterministic. No model dependency. Approximates the universal distance metric.
- *
- * Reference: Li, Chen, Li, Ma, Vitányi (2004) "The Similarity Metric"
- */
-export function ncd(a: string, b: string): number {
-  if (a === b) return 0;
-  if (a.length === 0 && b.length === 0) return 0;
-
-  const ca = compressedSize(a);
-  const cb = compressedSize(b);
-  const cab = compressedSize(a + b);
-
-  const minC = Math.min(ca, cb);
-  const maxC = Math.max(ca, cb);
-
-  if (maxC === 0) return 0;
-  return (cab - minC) / maxC;
-}
+// NCD moved to the node-free leaf src/core/ncd.ts so the description-overlap
+// detector can reach it without dragging this module's node:crypto (hash.js)
+// import into the in-browser audit bundle. Imported above for internal use
+// (findSimilarRules) and re-exported here for existing proofs.ts consumers.
+export { ncd };
 
 export interface NCDPair {
   idA: string;

@@ -225,6 +225,37 @@ jobs:
       - name: Run deterministic harness tests
         run: node dist/cli.js test
 
+  # The in-browser "grade a repo" demo (site/) runs the SAME compiled engine the
+  # CLI runs (`@engine/*` → the built dist/), so its browser-mode vitest suite is a
+  # real gate: parity (pako === node:zlib on real Chromium), the DemoAudit
+  # interaction states, and the idb-keyval grade-cache (real IndexedDB). No API key,
+  # deterministic. This closes the gap where demo/engine-parity regressions were
+  # only caught locally. `test:e2e` (Playwright) stays manual/browser-gated.
+  site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      # The site imports the built root dist/ via the @engine/* aliases (the
+      # literally-same compiled engine), so it must exist before the browser tests.
+      - name: Build engine (root dist/)
+        run: npm run build
+
+      - name: Install Chromium for Playwright (vitest browser mode)
+        run: npx playwright install --with-deps chromium
+        working-directory: site
+
+      - name: Run site browser tests (parity + interaction + grade-cache)
+        run: npm run test:browser
+        working-directory: site
+
   # Dogfood the per-level CI action for the e2e tier (allowlisted REAL egress).
   # The egress connector needs /dev/net/tun + privilege to open the tap and
   # configure the netns — the non-root host runner can't, which is why slirp4netns

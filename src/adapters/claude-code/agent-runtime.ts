@@ -32,46 +32,20 @@ import {
 } from "node:fs";
 import { resolve, dirname, join } from "node:path";
 
-import {
-  readFrontmatter,
-  frontmatterList,
-} from "../../core/frontmatter-read.js";
 import { decidePurityGate } from "../../core/effects.js";
 import type { PurityLevel } from "../../core/effects.js";
 import { claudeCodeDialect } from "./dialect.js";
 import { hasEffectBoundary, readEffectActive } from "./effect-region.js";
+import { parseAgentTools, parseAgentToolList } from "./agent-tools.js";
 
 // ---------------------------------------------------------------------------
 // Parse the tool contract from a compiled agent .md
 // ---------------------------------------------------------------------------
 
-/**
- * Parse an agent's allowed-tools contract from its compiled markdown.
- *
- * Returns the list of allowed tool names, or `null` when the agent declares no
- * `tools:` line at all — which in Claude Code means it inherits EVERY tool (the
- * #1 footgun). `null` is the "no restriction" signal the decision logic honors;
- * an empty list (`tools:` with nothing after it) means "no tools allowed".
- */
-export function parseAgentTools(markdown: string): string[] | null {
-  return parseAgentToolList(markdown, "tools");
-}
-
-/**
- * Parse a comma/array tool list under an arbitrary frontmatter `key` (e.g.
- * `tools:` or `disallowedTools:`) via the shared lenient reader
- * (core/frontmatter-read.ts): a real YAML parse (so `key: [Read, "Bash"]` is a
- * native array and `key: Read, Bash` a comma scalar) with a regex salvage when
- * the block is malformed — the rail still reads the contract. `null` when the key
- * is absent (inherits all), `[]` when present-but-empty (no tools). Shared by the
- * rail (`tools:`) and the `disallowed-tools-contract` scan/lint.
- */
-export function parseAgentToolList(
-  markdown: string,
-  key: string,
-): string[] | null {
-  return frontmatterList(readFrontmatter(markdown), key);
-}
+// The pure `tools:`/`allowed-tools:` parsers live in a node-free leaf so the
+// browser audit engine can read a contract without pulling this file's node:fs
+// rail; re-exported here so every existing consumer of agent-runtime is unchanged.
+export { parseAgentTools, parseAgentToolList };
 
 const PURITY_RE = /<!--\s*vigiles:purity:(pure|bounded|unrestricted)\s*-->/;
 

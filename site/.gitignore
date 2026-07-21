@@ -1,0 +1,9 @@
+# Playwright / Vitest browser-mode artifacts
+test-results/
+playwright-report/
+blob-report/
+.last-run.json
+
+# Vitest browser-mode attachments/screenshots
+.vitest-attachments/
+**/__screenshots__/

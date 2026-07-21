@@ -31,11 +31,12 @@
  * (example / e.g. / such as / would be / template / →). Markdown links are
  * unchanged — a link is already an act-on-it reference. See `inlinePathIsUsed`.
  *
- * Pure: the only IO is an injectable `existsSync` (default node:fs), mirroring
- * core/refs.ts and the loader so the detector is testable with a fake.
+ * Pure + node-free: the only IO is a REQUIRED, injected `existsSync` (the disk
+ * caller passes `node:fs`; the browser engine a map-backed check), so the
+ * detector is testable with a fake and statically imports no `node:` builtin —
+ * it bundles clean in a browser (path ops come from the node-free `posix-path`).
  */
-import { existsSync as nodeExistsSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve } from "../posix-path.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,8 +58,8 @@ export interface SkillResourceFinding {
 }
 
 export interface SkillResourceOptions {
-  /** Injectable existence check (default: node:fs existsSync). */
-  readonly existsSync?: (p: string) => boolean;
+  /** REQUIRED, injected existence check (disk: node:fs existsSync). */
+  readonly existsSync: (p: string) => boolean;
   /**
    * Repo root, used only together with `sharedDirs` (below). Off by default.
    */
@@ -263,9 +264,9 @@ function candidatesInLine(line: string, lineNo: number): Candidate[] {
 export function skillResourceIssues(
   skillBody: string,
   skillDir: string,
-  opts: SkillResourceOptions = {},
+  opts: SkillResourceOptions,
 ): SkillResourceFinding[] {
-  const exists = opts.existsSync ?? nodeExistsSync;
+  const exists = opts.existsSync;
   const sharedDirs = new Set(opts.sharedDirs ?? []);
   // A ref resolves if it exists under the skill's own dir. If (and only if) its
   // first segment is a DECLARED shared dir, it may also resolve against the repo

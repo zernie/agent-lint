@@ -34,10 +34,10 @@
         "score": 100,
         "weight": 1,
         "findings": [
-          "code-reviewer inherits all tools — maximal trifecta blast radius (advisory)",
-          "critic inherits all tools — maximal trifecta blast radius (advisory)",
-          "ask inherits all tools — maximal trifecta blast radius (advisory)",
-          "verify inherits all tools — maximal trifecta blast radius (advisory)"
+          "code-reviewer inherits all tools — the \"lethal trifecta\" (reads data, reaches the web, runs commands), so a prompt injection could exfiltrate secrets (advisory)",
+          "critic inherits all tools — the \"lethal trifecta\" (reads data, reaches the web, runs commands), so a prompt injection could exfiltrate secrets (advisory)",
+          "ask inherits all tools — the \"lethal trifecta\" (reads data, reaches the web, runs commands), so a prompt injection could exfiltrate secrets (advisory)",
+          "verify inherits all tools — the \"lethal trifecta\" (reads data, reaches the web, runs commands), so a prompt injection could exfiltrate secrets (advisory)"
         ]
       },
       {

@@ -18,47 +18,82 @@
 **`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
 via `pages.yml` on push to main.
 
-**This session (2026-07-21): site polish + the shared `@vigiles/report-view` package — merged #80–#96, deployed.**
+**This session (2026-07-21): site polish + shared `@vigiles/report-view` (merged #80–#99, deployed) + the
+NODE-FREE in-browser audit engine + the LIVE-any-repo demo + README-parity content + MANY rounds of Codex review
+fixes + a LIVE UX-REVIEW pass (founder drove) — all on `claude/click-not-working-s9apfb`, PR #100 (OPEN, iterating).**
+
+**PR #100 latest (034d797), CI green — do NOT auto-merge, founder is live-iterating.** UX-review round shipped
+(commits d8a2d71 → 034d797): (1) report copy plain-language — the inherits-all safety finding now NAMES + explains
+the "lethal trifecta (reads data, reaches the web, runs commands), so a prompt injection could exfiltrate" (engine
+copy in `src/audit-score.ts`, ships in CLI report too; baked demo fixtures regenerated). (2) MARKETPLACE repos →
+honest "use the CLI" state (was a false zero-surface F). (3) real PROGRESS BAR in the loading step-log. (4) demo
+report FOOTER gated off via `showFooter` prop (kept on the standalone HTML report). (5) analytics `track()` sends
+OUTCOME KIND only, never the typed slug (privacy; `track()` is still a no-op shim — no Plausible installed). (6)
+transient error/rate-limit no longer cached (retry works). (7) root nameless SKILL.md named after the repo (threaded
+`repoName` into `scanFiles`), + fetch its bundled resources (`references/`/`assets/`). (8) **PERSISTENT GRADE-CACHE**
+(`feat`, Fable-designed): `site/src/demo/gradeCache.ts` on **idb-keyval** (adopted over the reactive
+useLocalStorage hooks — imperative dynamic-key + TTL/version/LRU needs); 24h TTL, version-namespaced key
+(`AUDIT_SCHEMA_VERSION` + build-time git SHA via `__ENGINE_V__` Vite define), 30-LRU, parse-don't-validate; L1
+in-memory Map layered over L2; "graded N ago · re-grade" header badge. Site browser tests 26/26 (real Chromium +
+real IndexedDB), now **WIRED INTO CI** — a new `site` job in `ci.yml` builds root dist/, installs Chromium, runs
+`npm run test:browser` (parity + interaction + grade-cache). Jobs are now test/check/harness/site/e2e; `test:e2e`
+(Playwright) stays manual. The former "wire the site test job" loose end is DONE.
+
+**FETCH-TAIL DOCUMENTED — do NOT keep chasing Codex's `fetchRepo` P2s.** The browser demo's `fetchRepo` does a
+BOUNDED, SELECTIVE fetch (harness-shaped paths + their refs, to respect GitHub's 60-req/hr limit), NOT the CLI's
+whole-repo read — so Codex keeps flagging "file X outside the harness dirs isn't fetched." The INVARIANT that
+makes this safe (NEVER GRADE PARTIAL DATA → bail to `too-large`/`error`, advisory-only data best-effort) + the
+closed edge cases + the non-goals (Codex repos, sharedDirs, Windows, extensionless scripts) are now documented in
+the `fetchRepo.ts` MODULE HEADER (Codex-facing) + `research/browser-demo-fetch-limits.md` (canonical, indexed).
+Founder's call (2026-07-21): DOCUMENT the limitation, don't fix piecemeal. Unless a new case is a genuine WRONG
+GRADE not already covered by the bail-outs, it's the accepted cost of the rate-limit-safe approximation — reply
+"documented in research/browser-demo-fetch-limits.md", don't code.
 
 **TOP GOAL (codified in `.claude/skills/landing-site`): maximize the % of visitors who RUN `npx vigiles audit`.**
 Every site decision serves that ONE conversion; the CTA must be GREAT. HOLD every `site/` change against the
 skill; **screenshot desktop AND the FULL mobile page** (390px, global playwright `$(npm root -g)/playwright` +
 `vite preview`); run a Fable pass on anything nontrivial and ACT on its P0/P1 cuts.
 
-SITE — done this session (all merged + deployed): command-first hero around `npx vigiles audit` (the CC
-`claude-cli://` deeplink is DESKTOP-ONLY, `hidden sm:block`, lives in RepoPicker `#try`); the 724KB hero PNG
-replaced by native `HeroReport.tsx`; ruthless subtraction (Fable-driven). Latest polish (#95/#96): hero shield
-icon top-aligned, GitHub links open new-tab, the five-category explainer FOLDED into "The problem" (`Wedge`;
-`Rings.tsx` deleted), seven linter catalogs shown as a name strip, and — the mobile-dup fix — the whole `#try`
-section is now `hidden sm:block` (it collapsed to the SAME command as the CTA on phones). The `landing-site`
-skill now has an explicit rule to catch cross-section mobile duplication.
-
-**SHARED REPORT VIEW SHIPPED (#96):** `packages/report-view` (`@vigiles/report-view`, source-only/private) now
-holds the presentational report components + the `AuditReport` schema + band tokens + `theme.css`. `report/`
-consumes it (its `src` is just the app shell). Wired as **npm WORKSPACES** (root `workspaces:[packages/*,report,
-site]`) — the clean monorepo the founder asked for; deps hoist to root. Kept the published `vigiles` CI green via
-four aligned changes: root lockfile regen, `pages.yml` builds `site` via the workspace, `build-report.mjs`
-install-guard checks root `node_modules`, per-package lockfiles deleted. Design + rationale + the Stage-2 demo
-brief in `research/report-view-and-browser-demo.md`. Also fixed a PRE-EXISTING latent coverage bug it exposed:
-`egress.ts`/`sandbox.ts` used `/* v8 ignore next -- reason */`, a form `@vitest/coverage-v8` 4.1.8 silently
-DROPS — converted to `/* v8 ignore start/stop */` (the reliable form; the `next -- reason` form is the trap).
+SITE — merged + deployed this session (#80–#99): command-first hero around `npx vigiles audit`; native
+`HeroReport.tsx` (dropped a 724KB PNG); five-category explainer folded into `Wedge`; linter-catalog name strip;
+the desktop-only `#try`/RepoPicker is `hidden sm:block` (mobile-dup fix). **`@vigiles/report-view` (#96):**
+source-only shared report components + `AuditReport` schema + `theme.css`, wired as npm WORKSPACES
+(`workspaces:[packages/*,report,site]`) — the clean monorepo; four CI-critical changes + the coverage-bug fix
+(`/* v8 ignore next -- reason */` → `start/stop`, the reliable form) recorded in
+`research/report-view-and-browser-demo.md`.
 
 ### 🎯 DO NEXT
 
-- **Stage 2 — the in-browser "Grade a repo" demo** (the big one; UNBLOCKED now that report-view is shared). Full
-  Fable design-of-record in `research/report-view-and-browser-demo.md`: zero-click BAKED report on open (featured
-  repo) + 3 cached chips; a real streaming audit log; grade + truthful "N fixes from a B"; an HONEST gate (real
-  numbers NEVER blurred; the model-gated part shows real skill names with dashed `──%` + "your CLI can, free" —
-  no paywall words); every edge case routes back to `npx vigiles audit`. Deterministic detectors must run
-  IN-BROWSER (scan.ts is node-fs-coupled today → porting the pure detectors is the meat). Render via
-  `@vigiles/report-view` so browser == CLI artifact. Likely a new `apps/demo` (or `packages/*`) workspace +
-  `site` consuming report-view — that adds `site` to the report-view consumer set, the point to reconsider a
-  shared `@vigiles/ui` split (rule-of-three).
-- **Analytics — founder decision + NOT built:** instrument the funnel (command copies, chip clicks, repo
-  submits). GitHub Pages, NOT Vercel → **Vercel Analytics N/A**. Rec: **GoatCounter** (free, privacy-friendly,
-  no cookie banner); Plausible/Fathom paid. Needs the founder's account/site-code, then a script tag + events.
-- **Prefilled popular-OSS chips — NOT built:** depends on Stage 2 (a real report needs the in-browser compute);
-  a lighter "prefill the repo picker for anthropics/claude-code" is desktop-only.
+- **PR #100 IS OPEN + AUTO-MERGING** (`feat(site): live in-browser "Grade any repo" audit demo + README-parity
+content`, base `main`). Node-free engine + live demo + site content + 4 rounds of Codex-bot review fixes. CI
+  green (validate/describe/harness/e2e/check/test). A `send_later` merge check squash-merges when the last CI
+  run is green, then unsubscribes. **If picking up post-merge:** the branch is finished — new work restarts from
+  `main` (see the merged-PR rule). Review fixes shipped: hook-script fetch (token + relative + manifest-declared)
+  · dir-aware browser `mapExists` · Codex-scoped demo (CC-only) · harness-marker gate (git-hooks/src-hooks FP) ·
+  truncated-tree state · `pages.yml` builds root `dist/` before the site (deploy-blocker). DEFERRED w/ rationale
+  on the PR: `sharedDirs` in-browser (rare; needs a `scanFiles` param) + Windows path-ops (unsupported OS).
+- **WIRE THE SITE TEST JOB INTO CI (only remaining loose end):** `site/` now has `test:browser` (vitest
+  browser-mode: parity + interaction), `test:e2e` (playwright), `gen:parity`. `ci.yml` was NOT touched. Rec (from
+  the wiring build): `test:browser` in the MAIN gate (fast, deterministic, closes the pako-vs-node gap) after
+  `npx playwright install --with-deps chromium`; keep `test:e2e` opt-in/browser-gated. Regen the parity fixture
+  after any intentional engine change: `npm run gen:parity`.
+- **NODE-FREE ENGINE — DONE + PUSHED:** both browser entry points (`scanFiles` AND `buildAuditReport`) reach ZERO
+  node builtins except `node:zlib`→pako. MODULE-SPLITTING, not stubs/dynamic-imports (decision +
+  graph-trace method in `research/report-view-and-browser-demo.md`): leaves `scan-core.ts`, `core/ncd.ts`,
+  `posix-path.ts`, `core/mcp-contract-message.ts`, `core/assert-never.ts`, `agent-tools.ts`, `score-core.ts`
+  (the audit-report re-taint via leaderboard→scan→ast-grep, caught by the STEP-0 build gate). GATED by the
+  byte-identical parity test `src/scan-files.test.ts` (unchanged + green; 100% cov; api no drift).
+- **LIVE-ANY-REPO demo — SHIPPED + VERIFIED:** `DemoAudit.tsx` type-any-repo → live grade via built `dist/` CJS +
+  pako. `site/src/demo/{fetchRepo,runAudit}.ts` (Trees API + `raw.githubusercontent.com`, harness paths only).
+  3 test layers pass (browser-parity closes pako gap, interaction, one e2e); byte-identical to the CLI. Baked
+  chips kept. Verified desktop + 390px.
+- **SITE CONTENT — SHIPPED (README parity):** VerbMap ("One tool. Four questions." verb table + "your rules →
+  enforced" card), Adoption (skills + hooks + copy-paste agent prompt), FAQ (3 net-new objections), promptfoo
+  cost contrast in Debunk. Fable-reviewed + cut (dropped 2 restating FAQs + the 4th audit-command surface).
+  Order Hero→Wedge→VerbMap→Debunk→DemoAudit→Adoption→FAQ→CTA.
+- **Analytics (NOT built):** founder decision. GH Pages → GoatCounter rec (free, privacy-friendly). Prefilled-OSS
+  chips are now moot (live-any-repo shipped). Fable's remaining P1/P2 on PRE-EXISTING sections (Wedge category
+  trim, 3× reassurance, hero-subhead "references that nothing verifies") are un-actioned — optional polish.
 
 ### Codex trigger-rate is EXPERIMENTAL (shipped earlier)
 

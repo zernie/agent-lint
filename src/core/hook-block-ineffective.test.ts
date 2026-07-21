@@ -24,6 +24,10 @@ const CC_OPTS: HookBlockOptions = {
     "PreCompact",
   ]),
   permissionDecisionEvents: new Set(["PreToolUse"]),
+  // readFileSync is now REQUIRED; these inline-command cases never resolve a
+  // script file, so an empty read is never consulted (a file-backed case uses
+  // `withFiles` to override this).
+  readFileSync: () => "",
 };
 
 function withFiles(

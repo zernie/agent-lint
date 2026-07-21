@@ -14,6 +14,16 @@ import { join } from "node:path";
 import { inlineSpans } from "./refs.js";
 import { assertNever } from "./hash.js";
 import { mcpToolParts } from "./mcp-tool.js";
+import { mcpContractToolMessage } from "./mcp-contract-message.js";
+import type {
+  McpContractToolError,
+  McpContractToolReason,
+} from "./mcp-contract-message.js";
+
+// The contract-tool error shape + its formatter live in a node-free leaf (no
+// child_process/refs), re-exported here so consumers of core/mcp.js are unchanged.
+export { mcpContractToolMessage };
+export type { McpContractToolError, McpContractToolReason };
 
 export interface McpServerConfig {
   readonly command: string;
@@ -306,18 +316,6 @@ export async function verifyMcpRefs(
 // CI default. Tools whose server is undeclared / a built-in / plugin-namespaced are
 // SKIPPED — we have no config to start them, and that's the static check's job.
 
-export type McpContractToolReason = "server-unreachable" | "tool-missing";
-
-export interface McpContractToolError {
-  /** The full `mcp__server__tool` reference (restriction suffix stripped). */
-  readonly tool: string;
-  readonly server: string;
-  /** The tool segment (what's looked up on the server). */
-  readonly toolName: string;
-  readonly reason: McpContractToolReason;
-  readonly suggestions: string[];
-}
-
 /**
  * Live-verify `mcp__server__tool` contract references against the declared MCP
  * servers. Each referenced+declared server is started once; a tool absent from its
@@ -395,22 +393,6 @@ export async function verifyMcpContractTools(
     );
   }
   return errors;
-}
-
-/** Human-readable message for a contract-tool error (with "did you mean"). */
-export function mcpContractToolMessage(e: McpContractToolError): string {
-  switch (e.reason) {
-    case "server-unreachable":
-      return `MCP tool "${e.tool}" — server "${e.server}" failed to start`;
-    case "tool-missing":
-      return `MCP tool "${e.tool}" not found on server "${e.server}"${
-        e.suggestions.length > 0
-          ? ` — did you mean ${e.suggestions.map((s) => `"${s}"`).join(", ")}?`
-          : ""
-      }`;
-    default:
-      return assertNever(e.reason);
-  }
 }
 
 /** Human-readable message for an MCP reference error (with "did you mean"). */
