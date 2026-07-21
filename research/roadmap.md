@@ -839,6 +839,21 @@ assertRates`) is the recommended path for testing one skill, but
 
 ## Later — needs model auth (write-don't-run today) or bigger
 
+- **⛔ SCOPE (2026-07-21): `vigiles audit` is CLAUDE-CODE-FOCUSED for now.** To keep the
+  current iteration a reasonable bite (a clear audit + website update, then iterate),
+  the multi-harness audit DX is DEFERRED. Codex deterministic audit stays supported via
+  `--harness=codex` (ships + tested) but isn't the focus. Deferred, thinking preserved in
+  `research/audit-harness-dx.md`:
+  - **Multi-harness audit DX** — audit ALL detected harnesses (shared-once + per-harness
+    slice), fix the detection (AGENTS.md is an AAIF cross-tool standard, NOT Codex;
+    wire in mirror-collapse for `CLAUDE.md`⇄`AGENTS.md`), read-vs-pick behavior, and a
+    metered-API cost warning. **MED**
+  - **Hosted in-browser audit demo** — deterministic-only rings run in the browser
+    (nothing uploaded), with a real progress bar and the model-gated part TEASED
+    (blurred/locked → "run locally to unlock"). Needs the shared report components. **MED**
+  - **Shared-component monorepo refactor** — `apps/` + `packages/report-view` (npm
+    workspaces) so the report UI is genuinely shared by `report/`, the site hero, and the
+    demo (no screenshots, no hacks). Root `vigiles` package + CI stay green. **MED**
 - **Build the ONE polished front-door demo** — the deprecated demos (`examples/demo/`
   - `examples/plugin-test-demo.mjs` and their `demo`/`demo:plugin` scripts) have
     been **deleted**. What's still needed: ONE polished, reliably-passing demo plus a

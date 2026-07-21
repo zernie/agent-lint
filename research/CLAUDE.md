@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:6bba84de339e36d2 compiled from research/CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:395bf48692de77d5 compiled from research/CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -30,6 +30,7 @@ The `research/` corpus is the INTERNAL record (design rationale, competitive ana
 - `research/audit-adoption-ux.md` — [shipped] Design record for how audit report drives spec creation (init flow); default creates specs, no browser file writes
 - `research/audit-eval-thickening-and-gate.md` — [shipped] Records audit's behavioral tier expanding to three evals (fire/collide/hold) plus the adversarial-gate eval build
 - `research/audit-lighthouse-design.md` — [shipped] Locked design for vigiles audit as "Lighthouse for your harness" — rings, HTML report, battery, --deep tier
+- `research/audit-harness-dx.md` — [deferred] Multi-harness audit DX design (detection: AGENTS.md-≠-Codex per the AAIF standard + mirror-collapse; shared-vs-dialect-specific factoring; perf local/browser/LLM; metered-API cost warning) — DEFERRED 2026-07-21: audit is CLAUDE-CODE-FOCUSED for now. The preserved record + research for when we revisit
 - `research/audit-serve-design.md` — [idea] Design for an opt-in audit --serve local server enabling one-click spec creation from the HTML report
 - `research/audit-wow-ideas.md` — [active] Research on what audit findings create genuine "wow" tension beyond saturated markdown-linter checks
 - `research/haretrail-eval-ideas.md` — [idea] Captures new deterministic audit checks and eval ideas found while dogfooding audit on the haretrail Codex skills repo; not yet built
