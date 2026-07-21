@@ -45,25 +45,39 @@ explicit-config-first per Ruler/rulesync). SHIPPED the safe slice: **mirror-coll
 no independent `.codex/config.toml` → drop codex; no false "matches both"). Genuine different content
 stays ambiguous. Codex deterministic audit still works via `--harness=codex`.
 
-ORDERED NEXT (founder: "all needed, order up to u"): **#1 detection-correctness ✅** (mirror-collapse
-done; lone-AGENTS.md-agnostic + audit-both still deferred). **#2 LOCK THE WEBSITE ← NEXT** — remaining
-polish (simplify RepoPicker on mobile, footer self-link, spacing rhythm) + a final Fable pass. **#3 big
-items** — `apps/` + `packages/report-view` monorepo refactor (npm workspaces; root `vigiles` CI stays
-green; unblocks the demo) → hosted deterministic-only browser demo (tease/blur the LLM part + progress
-bar). Verify UI via headless Chromium (global playwright `$(npm root -g)/playwright` + `vite preview`).
+ORDERED (founder: "all needed, order up to u"): **#1 detection ✅** (mirror-collapse; lone-AGENTS.md-agnostic
+and audit-both deferred). **#2 website locked ✅** (#92/#93, Fable 8.5/8) — BUT a fresh MOBILE-POLISH +
+STRATEGY batch landed after; IN PROGRESS as #94 (below). **#3** = `apps/` + `packages/report-view` monorepo
+refactor (npm workspaces; root `vigiles` CI stays green; unblocks the demo) → hosted deterministic-only
+browser demo (tease/blur the LLM part + progress bar). Verify UI via headless Chromium (global playwright
+`$(npm root -g)/playwright` + `vite preview`).
 
-### Codex behavioral tier is EXPERIMENTAL, not "supported" (SHIPPED this session)
+### 🎯 TOP GOAL + WEBSITE POLISH (post-compact — DO NEXT, before #3)
 
-Deterministic `vigiles audit` on Codex is **full parity** (proven live + `scan-cli.test.ts`) — KEEP it.
-But the real-model **trigger-rate** on Codex is NOT trustworthy: Codex has no skill-fire event, so
-`codexSkillFired` infers firing from whether the model READ `SKILL.md` — cache → false-negative,
-exploration-read → false-positive, so the NUMBER can be wrong either way. A wrong measurement violates
-the precision/don't-cry-wolf brand, so we don't claim Codex trigger-rate. DONE:
-`EvalDriver.experimental` caveat on `codexEvalDriver` (CC stays supported) → copied onto
-`TriggerRateReport`/`BehavioralReport`; `measureTriggerRate` warns on stderr + the formatters print
-`⚠ EXPERIMENTAL` (audit --harness=codex too); documented in `docs/harness-testing-codex.md` +
-`research/harness-capabilities.md`; tests added. REMAINING gate to promote it: a LIVE Codex run that
-MEASURES the oracle's accuracy vs ground truth (needs `codex` on PATH + quota; not installed here).
+**TOP GOAL (now codified in `.claude/skills/landing-site`): maximize the % of visitors who RUN
+`npx vigiles audit`.** Every site decision serves that ONE conversion; the CTA must be GREAT.
+
+- **Analytics — NOT built:** instrument the funnel (command copies, Grade-it/deeplink clicks, prefilled
+  tries). Site is on GitHub Pages, NOT Vercel → **Vercel Analytics N/A**. Use Plausible/Fathom/GoatCounter
+  (or GTM) — a static-hosting script tag; pick one, add the snippet, define events.
+- **Prefilled popular OSS — NOT built:** one-click "grade this" chips (e.g. an official Anthropic plugin)
+  so a visitor sees a real report without typing / owning a repo.
+- **Mobile — #94 IN FLIGHT (partly done, uncommitted at compact):** ✅ mobile `#try` = command-only (was a
+  weird sparse card, "…or" dangled); ✅ blog link new-tab (`Debunk`); ✅ `.reveal` @supports guard
+  (the "empty screenshots" is a scroll-reveal capture artifact, NOT a user bug — Fable concurred). STILL
+  TODO: hero trust-line **shield icon mis-placed** (floats between the 2 wrapped lines → align to top);
+  **CTA buried low / no mobile quick-link** (StickyCTA shows the command on scroll — make the CTA GREAT
+  and reachable); make **other external links (GitHub) open new-tab** too.
+- **Content — TODO:** fold "One score, five categories" (`Rings`) INTO "The problem" (`Wedge`) to be more
+  practical; add **linter icons** to the Wedge "7 linter catalogs" line.
+- Process: hold every change against the skill; screenshot desktop+mobile; Fable pass; deploy = Pages on push.
+
+### Codex trigger-rate is EXPERIMENTAL (shipped earlier)
+
+Deterministic Codex audit = full parity (KEEP). Real-model **trigger-rate** on Codex is NOT trustworthy
+(no skill-fire event → `codexSkillFired` infers from `SKILL.md` reads → wrong either way); marked
+`⚠ EXPERIMENTAL` across the API + formatters + `docs/harness-testing-codex.md`. Promote only after a LIVE
+oracle-accuracy run (needs `codex` + quota).
 
 ### STILL OPEN
 

@@ -105,10 +105,16 @@
     transform: translateY(0);
   }
 }
-.reveal {
-  animation: fade-in-up 0.6s ease-out both;
-  animation-timeline: view();
-  animation-range: entry 0% cover 22%;
+/* Progressive enhancement: content is visible by DEFAULT. The scroll-reveal only
+   applies where scroll-driven animations are supported, so a non-supporting browser
+   never leaves a section blank (a full-page screenshot in a supporting browser can
+   still capture off-screen sections mid-fade — that's a capture artifact, not a bug). */
+@supports (animation-timeline: view()) {
+  .reveal {
+    animation: fade-in-up 0.6s ease-out both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 22%;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .reveal {
