@@ -143,11 +143,55 @@ vigiles audit`." Dead-end → redirect.
 
 ### Build notes
 
-- Deterministic detectors only, compiled to run in-browser (the scan logic is
-  node-fs-coupled today — porting the pure detectors to a browser-safe entry is
-  the meat of Stage 2).
-- Render from `@vigiles/report-view` (Stage 1 prerequisite — done).
-- Chip results baked/cached at build time.
-- Instrument three events (command copied, chip clicked, repo submitted); funnel =
-  copies ÷ visitors. (Analytics provider still a founder decision — Plausible /
-  Fathom / GoatCounter, NOT Vercel since the site is on GitHub Pages.)
+- Deterministic detectors only. Render from `@vigiles/report-view` (Stage 1 — done).
+- Chip results baked/cached at build time. Instrument three events (command copied,
+  chip clicked, repo submitted); funnel = copies ÷ visitors. (Analytics provider a
+  founder decision — GoatCounter rec / Plausible / Fathom, NOT Vercel on Pages.)
+
+## Stage 2 build plan — the in-browser audit engine (the port)
+
+The key finding from mapping the port: **every deterministic detector reduces to a
+Set-membership / content lookup over a `Record<string,string>` file map** — no
+detector needs anything a fetched-file map can't give (no stat/mtime/symlink/dir
+listing beyond `Object.keys`). And `auditScore`/`buildAuditReport` are 100% pure
+over the `ScanReport` — ZERO changes. So the whole port is ONE new seam plus two
+small library refactors.
+
+**The seam** — `scanFiles(files: Record<string,string>, layout?, dialect?): ScanReport`
+(mirrors `scanPlugin(dir,…)` in `src/scan.ts`). It (a) reconstructs the
+`LoadedPlugin` shape (`{settings.hooks, files, warnings, sources}` — `src/plugin-loader.ts:39`)
+from the in-memory map instead of a disk walk, then (b) runs the SAME pure detectors
+`scanPlugin` runs, then (c) calls `auditScore`/`buildAuditReport` unchanged. Every
+fs call in `scanPlugin` maps to a lookup: `existsSync(p)`→`p in files`,
+`readFileSync(p)`→`files[p]`, "is a directory"→`Object.keys(files).some(k=>k.startsWith(p+"/"))`.
+The three DI-shaped detectors MUST be passed file-map impls (they default to node):
+`skillResourceIssues({existsSync})`, `pluginDirLayoutIssues({existsSync,isDirectory})`,
+`hookBlockIssues({readFileSync})`. `findUntestedSurfaces` (`src/test-coverage.ts`) is
+wholly disk-based → reimplement its globs as in-memory `Object.keys().filter()`.
+`verifyLiveMcpTools` (spawns servers) is NOT called by scanPlugin — exclude.
+
+**Two library refactors so the detector modules import clean in a browser bundle:**
+
+1. `editDistance` extracted from `core/linters.ts` (which runs a `node:fs`/`glob`
+   side effect at IMPORT time) into a zero-dep leaf `core/edit-distance.ts`;
+   tool-contract + hook-events repointed. **DONE (this PR).**
+2. `ncd` (used by `description-overlap`) still imports `node:zlib` (`gzipSync`) +
+   transitively `core/hash.ts`'s `node:crypto`. TODO: extract a leaf `ncd` using
+   `pako.gzip` directly, OR let the Vite demo bundle polyfill zlib/crypto. (One
+   detector — description-overlap — can also be skipped in-browser as a fallback.)
+   Also `core/effects.ts`→`bash-effects.ts` needs `mvdan-sh` CJS interop (fine under
+   Vite); `agent-runtime.ts`/`leaderboard.ts` import `node:fs`/`node:path` for
+   UNUSED exports → Vite alias `node:path`→`path-browserify`, `node:fs`→a no-op stub.
+
+**The three PRs:**
+
+- **PR 1 (this one):** `editDistance` leaf extraction + capture this plan. Groundwork.
+- **PR 2 — VISIBLE:** `scanFiles` (node-side first, reusing detectors as-is) + a node
+  test asserting PARITY with `scanPlugin` over the same files; then `apps/demo`
+  (Vite React workspace consuming `@vigiles/report-view`) with the full Fable UX,
+  rendering REAL `AuditReport`s baked at build time via `scanFiles` over vendored
+  `test/dogfood/*` plugins. This is where the UX care + Fable pass + screenshots go.
+- **PR 3 — LIVE:** bundle `scanFiles` client-side (the ncd/path/fs handling above) +
+  in-browser GitHub fetch (Trees API + `raw.githubusercontent.com`, harness paths
+  only) → live audit of any typed repo. Wire the demo into `site` / vigiles.sh; this
+  also fixes the mobile `#try` dead-end (a live in-browser audit works on a phone).
