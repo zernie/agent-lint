@@ -29,6 +29,7 @@ export type FetchOutcome =
       harnessCount: number;
     }
   | { kind: "no-harness"; treeCount: number }
+  | { kind: "marketplace" }
   | { kind: "not-found" }
   | { kind: "rate-limit" }
   | { kind: "too-large" }
@@ -213,6 +214,21 @@ export async function fetchRepo(
     if (tree.truncated === true) return { kind: "too-large" };
     const blobs = (tree.tree ?? []).filter((e) => e.type === "blob");
     const treeCount = blobs.length;
+
+    // A plugin MARKETPLACE (`.claude-plugin/marketplace.json`) is a COLLECTION of
+    // plugins, not one gradeable harness — the CLI expands + ranks its members via
+    // `inspectMarketplace`, a path the browser demo doesn't run. Grading it as a
+    // single plugin would render a bogus zero-surface F. So route a marketplace-only
+    // repo to its own honest state. A repo that ALSO ships `plugin.json` is a single
+    // plugin self-publishing a 1-member marketplace → grade it normally (plugin.json
+    // wins, the branch falls through).
+    const blobPaths = new Set(blobs.map((b) => b.path));
+    if (
+      blobPaths.has(".claude-plugin/marketplace.json") &&
+      !blobPaths.has(".claude-plugin/plugin.json")
+    ) {
+      return { kind: "marketplace" };
+    }
 
     const harness = blobs
       .filter((e) => isHarnessPath(e.path))

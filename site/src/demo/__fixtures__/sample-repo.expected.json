@@ -37,8 +37,8 @@
         "score": 100,
         "weight": 1,
         "findings": [
-          "deploy inherits all tools — maximal trifecta blast radius (advisory)",
-          "release inherits all tools — maximal trifecta blast radius (advisory)"
+          "deploy inherits all tools — no limits on what it can read, fetch, or run (advisory)",
+          "release inherits all tools — no limits on what it can read, fetch, or run (advisory)"
         ]
       },
       {

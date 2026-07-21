@@ -265,7 +265,7 @@ function safety(r: ScanReport): CategoryScore {
     .filter((f) => f.finding.severity === "advisory")
     .map(
       (f) =>
-        `${f.name} inherits all tools — maximal trifecta blast radius (advisory)`,
+        `${f.name} inherits all tools — no limits on what it can read, fetch, or run (advisory)`,
     );
   return {
     key: "Safety",

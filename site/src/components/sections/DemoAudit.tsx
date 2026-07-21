@@ -63,6 +63,7 @@ type View =
   | { k: "loading"; slug: string; detail: LoadingState }
   | { k: "report"; slug: string; audit: AuditReport }
   | { k: "empty"; slug: string }
+  | { k: "marketplace"; slug: string }
   | { k: "notfound"; slug: string }
   | { k: "ratelimit"; slug: string }
   | { k: "too-large"; slug: string }
@@ -181,11 +182,29 @@ function StepLog({ detail }: { detail: LoadingState }) {
         )}
       </div>
       {files !== null && (
-        <div className={filesDone ? "text-good" : "text-muted-foreground"}>
-          {filesDone
-            ? `✓ read ${files.of} harness file${files.of === 1 ? "" : "s"}`
-            : `→ reading harness files (${files.done} of ${files.of})…`}
-        </div>
+        <>
+          <div className={filesDone ? "text-good" : "text-muted-foreground"}>
+            {filesDone
+              ? `✓ read ${files.of} harness file${files.of === 1 ? "" : "s"}`
+              : `→ reading harness files (${files.done} of ${files.of})…`}
+          </div>
+          {files.of > 0 && (
+            <div
+              className="mt-2 h-1 w-full overflow-hidden rounded-full bg-border"
+              role="progressbar"
+              aria-valuenow={files.done}
+              aria-valuemin={0}
+              aria-valuemax={files.of}
+            >
+              <div
+                className="h-full rounded-full bg-good transition-[width] duration-300 ease-out"
+                style={{
+                  width: `${Math.round((files.done / files.of) * 100)}%`,
+                }}
+              />
+            </div>
+          )}
+        </>
       )}
       {filesDone && (
         <div className="text-muted-foreground">
@@ -213,6 +232,23 @@ function EdgeState({ view }: { view: TerminalView }) {
           The browser demo grades Claude Code. For Codex (AGENTS.md / .codex),
           or any harness that lives in a repo, grade it where it lives:{" "}
           <InlineCommand />
+        </p>
+        <p className="mt-3">Or try one of the featured plugins above.</p>
+      </>
+    );
+  } else if (view.k === "marketplace") {
+    body = (
+      <>
+        <p>
+          <strong className="text-foreground">
+            {slug} is a plugin marketplace
+          </strong>{" "}
+          — a collection of plugins, not a single harness. The browser demo
+          grades one plugin at a time.
+        </p>
+        <p className="mt-3">
+          The CLI expands a marketplace and ranks every member into a
+          leaderboard: <InlineCommand />
         </p>
         <p className="mt-3">Or try one of the featured plugins above.</p>
       </>
@@ -269,8 +305,8 @@ function AGradeNote() {
       <strong className="text-foreground">
         A — clean on every check a browser can run.
       </strong>{" "}
-      The open question is behavioral: do your skills actually fire? That needs
-      a real model — the row below is your next step.
+      The open question is behavioral: do your skills actually fire? A browser
+      can&apos;t ask a model — your CLI does, on your Claude subscription.
     </div>
   );
 }
@@ -344,6 +380,8 @@ export function DemoAudit() {
         settled = { k: "report", slug, audit };
       } else if (outcome.kind === "no-harness") {
         settled = { k: "empty", slug };
+      } else if (outcome.kind === "marketplace") {
+        settled = { k: "marketplace", slug };
       } else if (outcome.kind === "not-found") {
         settled = { k: "notfound", slug };
       } else if (outcome.kind === "rate-limit") {
@@ -387,6 +425,7 @@ export function DemoAudit() {
     view.k === "loading" && !loadingVisible ? prevFrame.current : view;
   const isEdge =
     frameView.k === "empty" ||
+    frameView.k === "marketplace" ||
     frameView.k === "notfound" ||
     frameView.k === "ratelimit" ||
     frameView.k === "too-large" ||
@@ -461,6 +500,7 @@ export function DemoAudit() {
               {isAGrade && <AGradeNote />}
               <div className="p-5 sm:p-7">
                 <Report
+                  showFooter={false}
                   data={
                     frameView.k === "report"
                       ? frameView.audit
@@ -503,12 +543,21 @@ export function DemoAudit() {
 /** The instrument suffix for a settled run. */
 function runKind(
   v: TerminalView,
-): "ok" | "empty" | "notfound" | "ratelimit" | "too-large" | "error" {
+):
+  | "ok"
+  | "empty"
+  | "marketplace"
+  | "notfound"
+  | "ratelimit"
+  | "too-large"
+  | "error" {
   switch (v.k) {
     case "report":
       return "ok";
     case "empty":
       return "empty";
+    case "marketplace":
+      return "marketplace";
     case "notfound":
       return "notfound";
     case "ratelimit":

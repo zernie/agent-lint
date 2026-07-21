@@ -34,9 +34,9 @@
         "score": 100,
         "weight": 1,
         "findings": [
-          "ui-visual-validator inherits all tools — maximal trifecta blast radius (advisory)",
-          "screen-reader-testing inherits all tools — maximal trifecta blast radius (advisory)",
-          "wcag-audit-patterns inherits all tools — maximal trifecta blast radius (advisory)"
+          "ui-visual-validator inherits all tools — no limits on what it can read, fetch, or run (advisory)",
+          "screen-reader-testing inherits all tools — no limits on what it can read, fetch, or run (advisory)",
+          "wcag-audit-patterns inherits all tools — no limits on what it can read, fetch, or run (advisory)"
         ]
       },
       {

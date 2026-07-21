@@ -34,10 +34,10 @@
         "score": 100,
         "weight": 1,
         "findings": [
-          "code-reviewer inherits all tools — maximal trifecta blast radius (advisory)",
-          "critic inherits all tools — maximal trifecta blast radius (advisory)",
-          "ask inherits all tools — maximal trifecta blast radius (advisory)",
-          "verify inherits all tools — maximal trifecta blast radius (advisory)"
+          "code-reviewer inherits all tools — no limits on what it can read, fetch, or run (advisory)",
+          "critic inherits all tools — no limits on what it can read, fetch, or run (advisory)",
+          "ask inherits all tools — no limits on what it can read, fetch, or run (advisory)",
+          "verify inherits all tools — no limits on what it can read, fetch, or run (advisory)"
         ]
       },
       {

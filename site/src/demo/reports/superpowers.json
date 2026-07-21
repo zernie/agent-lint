@@ -34,8 +34,8 @@
         "score": 100,
         "weight": 1,
         "findings": [
-          "systematic-debugging inherits all tools — maximal trifecta blast radius (advisory)",
-          "test-driven-development inherits all tools — maximal trifecta blast radius (advisory)"
+          "systematic-debugging inherits all tools — no limits on what it can read, fetch, or run (advisory)",
+          "test-driven-development inherits all tools — no limits on what it can read, fetch, or run (advisory)"
         ]
       },
       {

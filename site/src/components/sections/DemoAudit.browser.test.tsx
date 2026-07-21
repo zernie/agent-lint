@@ -109,7 +109,7 @@ describe("DemoAudit — chips stay instant", () => {
   });
 });
 
-describe("DemoAudit — the four in-frame edge states", () => {
+describe("DemoAudit — the in-frame edge states", () => {
   const cases: {
     name: string;
     outcome: FetchOutcome;
@@ -119,6 +119,11 @@ describe("DemoAudit — the four in-frame edge states", () => {
       name: "no-harness → empty",
       outcome: { kind: "no-harness", treeCount: 10 },
       expect: /No Claude Code harness in/i,
+    },
+    {
+      name: "marketplace → not a single harness",
+      outcome: { kind: "marketplace" },
+      expect: /is a plugin marketplace/i,
     },
     {
       name: "not-found → private/404",
