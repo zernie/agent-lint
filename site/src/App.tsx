@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Hero } from "@/components/sections/Hero";
 import { Wedge } from "@/components/sections/Wedge";
 import { Debunk } from "@/components/sections/Debunk";
-import { RepoPicker } from "@/components/sections/RepoPicker";
+import { DemoAudit } from "@/components/sections/DemoAudit";
 import { CTA } from "@/components/sections/CTA";
 import { Footer } from "@/components/Footer";
 
@@ -15,7 +15,7 @@ export function App() {
         <Hero />
         <Wedge />
         <Debunk />
-        <RepoPicker />
+        <DemoAudit />
         <CTA />
         <Footer />
       </main>

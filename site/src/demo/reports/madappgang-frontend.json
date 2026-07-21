@@ -1,0 +1,89 @@
+{
+  "meta": {
+    "schemaVersion": 2,
+    "tool": "vigiles",
+    "kind": "audit",
+    "vigilesVersion": "0.0.0-semantically-released",
+    "harness": "claude-code",
+    "dir": "test/dogfood/madappgang-frontend@6097ad4"
+  },
+  "score": {
+    "overall": 82,
+    "grade": "B",
+    "categories": [
+      {
+        "key": "Truthfulness",
+        "score": 100,
+        "weight": 1,
+        "findings": []
+      },
+      {
+        "key": "Triggering",
+        "score": 100,
+        "weight": 1,
+        "findings": []
+      },
+      {
+        "key": "Structure",
+        "score": 92,
+        "weight": 1,
+        "findings": ["1 agent tool that don't exist (typo / never-available)"]
+      },
+      {
+        "key": "Safety",
+        "score": 90,
+        "weight": 1,
+        "findings": [
+          "1 unit holding all three lethal-trifecta legs (prompt-injection exfil path)"
+        ]
+      },
+      {
+        "key": "Tested",
+        "score": 97,
+        "weight": 1,
+        "advisory": true,
+        "findings": ["1 untested surface"]
+      }
+    ],
+    "empty": false
+  },
+  "verdict": {
+    "sentence": "One one-line fix away from an A.",
+    "grade": "B",
+    "pointsToNextGrade": 8,
+    "fixesToNextGrade": 1,
+    "perRecommendation": [
+      {
+        "index": 0,
+        "pointsIfFixed": 8
+      }
+    ]
+  },
+  "recommendations": [
+    {
+      "surface": "tester",
+      "action": "fix",
+      "rationale": "Tool \"AskUserQuestion\" is never available to a subagent — remove it from the tools list.",
+      "fix": "In \"tester\", remove or correct the tool \"AskUserQuestion\" — it isn't an available tool, so it's silently dropped from the contract.",
+      "detector": "subagent-tool-contract",
+      "confidence": "likely"
+    }
+  ],
+  "inventory": {
+    "skills": 0,
+    "agents": 1,
+    "hooks": 0,
+    "commands": 0,
+    "mcp": false,
+    "untested": 1
+  },
+  "adoptable": {
+    "surfaces": [
+      {
+        "path": "agents/tester.md",
+        "command": "npx vigiles init --target=agents/tester.md"
+      }
+    ],
+    "createAllCommand": "npx vigiles init"
+  }
+}
