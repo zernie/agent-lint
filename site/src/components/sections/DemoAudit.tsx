@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Lock } from "lucide-react";
 import { Report, type AuditReport } from "@vigiles/report-view";
 import { CommandBlock } from "@/components/CommandBlock";
 import { cn } from "@/lib/utils";
@@ -98,8 +99,28 @@ export function DemoAudit() {
           </div>
         </div>
 
+        {/* The honest model-gated tease — ONE row. Everything above is what the
+            browser can compute (deterministic). This names the ONE thing the local
+            run shows that this page can't — with NO fake numbers, bars, or blurred
+            skill names (that would be the dark pattern), just the plain reason. */}
+        <div className="mt-6 flex items-start gap-3 rounded-xl border border-border bg-card/40 px-5 py-4">
+          <Lock
+            className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+            aria-hidden
+          />
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            <span className="font-semibold text-foreground">
+              Whether your skills actually fire
+            </span>{" "}
+            — and your guidance changes what the agent does — needs a real
+            model, and a browser can&apos;t ask one.{" "}
+            <span className="text-foreground">Your CLI can</span>, on your
+            Claude subscription. No API key, no signup, free.
+          </p>
+        </div>
+
         {/* The command — run it on your own repo. */}
-        <div className="mt-10 flex flex-col items-center gap-3 text-center">
+        <div className="mt-8 flex flex-col items-center gap-3 text-center">
           <p className="text-base text-muted-foreground">
             Now grade yours — one command, nothing uploaded:
           </p>
