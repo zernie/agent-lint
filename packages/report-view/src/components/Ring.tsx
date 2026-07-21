@@ -1,5 +1,5 @@
-import { band, STROKE, FILL } from "@/lib/band";
-import { cn } from "@/lib/utils";
+import { band, STROKE, FILL } from "../lib/band";
+import { cn } from "../lib/utils";
 
 /** A circular score gauge (the Lighthouse ring) as inline SVG — styled via Tailwind. */
 export function Ring({
