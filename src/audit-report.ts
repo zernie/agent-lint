@@ -97,7 +97,7 @@ export interface AuditReport {
   /**
    * The one-line verdict + per-recommendation `pointsIfFixed`, both derived by
    * RE-SCORING (never a hardcoded number). Drives the report's verdict-led header
-   * ("Two one-line fixes away from a B.") and the `+N pts` badges on fix cards.
+   * ("Two fixes away from a B.") and the `+N pts` badges on fix cards.
    * Pure/deterministic — always present.
    */
   readonly verdict: Verdict;
