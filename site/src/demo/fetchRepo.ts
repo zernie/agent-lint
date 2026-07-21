@@ -67,6 +67,26 @@ function isHarnessPath(path: string): boolean {
   return path.split("/").some((seg) => HARNESS_DIRS.has(seg));
 }
 
+/**
+ * Repo-relative paths a harness file references via the plugin-root / project-dir
+ * tokens — e.g. a hook command `${CLAUDE_PLUGIN_ROOT}/scripts/guard.sh`. Those
+ * scripts often live OUTSIDE the harness dirs, so the harness-path filter drops
+ * them; the CLI reads the whole repo, so to stay byte-identical the browser must
+ * fetch any referenced path that actually exists in the tree (else the scan reports
+ * a real hook script as missing and applies the graded penalty). Matches braced and
+ * unbraced `$CLAUDE_PLUGIN_ROOT` / `$CLAUDE_PROJECT_DIR`.
+ */
+const ROOT_REF =
+  /\$\{?(?:CLAUDE_PLUGIN_ROOT|CLAUDE_PROJECT_DIR)\}?\/([A-Za-z0-9._/-]+)/g;
+
+export function collectReferencedPaths(files: RepoFiles): Set<string> {
+  const out = new Set<string>();
+  for (const content of Object.values(files)) {
+    for (const m of content.matchAll(ROOT_REF)) out.add(m[1]);
+  }
+  return out;
+}
+
 interface TreeEntry {
   path: string;
   type: string;
@@ -133,28 +153,51 @@ export async function fetchRepo(
 
     // (3) Content from raw.githubusercontent.com (NOT rate-limited), pooled.
     const files: RepoFiles = {};
+    const sizeOf = new Map(blobs.map((b) => [b.path, b.size ?? 0]));
     let done = 0;
-    const queue = [...harness];
-    const worker = async (): Promise<void> => {
-      for (;;) {
-        const entry = queue.shift();
-        if (entry === undefined) return;
-        const url = `${RAW}/${owner}/${repo}/${encodeURIComponent(
-          branch,
-        )}/${entry.path.split("/").map(encodeURIComponent).join("/")}`;
-        try {
-          const res = await fetch(url, { signal });
-          if (res.ok) files[entry.path] = await res.text();
-        } catch {
-          // A single missing/broken blob is skipped, not fatal.
-        }
-        done += 1;
-        onProgress?.({ phase: "file", done, of: harness.length });
+    let total = harness.length;
+    const fetchBlob = async (entry: TreeEntry): Promise<void> => {
+      const url = `${RAW}/${owner}/${repo}/${encodeURIComponent(
+        branch,
+      )}/${entry.path.split("/").map(encodeURIComponent).join("/")}`;
+      try {
+        const res = await fetch(url, { signal });
+        if (res.ok) files[entry.path] = await res.text();
+      } catch {
+        // A single missing/broken blob is skipped, not fatal.
       }
+      done += 1;
+      onProgress?.({ phase: "file", done, of: total });
     };
-    await Promise.all(
-      Array.from({ length: Math.min(CONCURRENCY, harness.length) }, worker),
-    );
+    const drain = async (entries: TreeEntry[]): Promise<void> => {
+      const queue = [...entries];
+      const worker = async (): Promise<void> => {
+        for (;;) {
+          const entry = queue.shift();
+          if (entry === undefined) return;
+          await fetchBlob(entry);
+        }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, entries.length) }, worker),
+      );
+    };
+
+    await drain(harness);
+
+    // Second pass: fetch scripts the harness files reference via the plugin-root
+    // token but that live outside the harness dirs (byte-identical with the CLI's
+    // whole-repo read). Bounded to paths actually present in the tree + size cap.
+    const inTree = new Set(blobs.map((b) => b.path));
+    const extra = [...collectReferencedPaths(files)]
+      .filter((p) => inTree.has(p) && !(p in files))
+      .filter((p) => (sizeOf.get(p) ?? 0) <= MAX_FILE_BYTES)
+      .slice(0, MAX_FILES)
+      .map((path) => ({ path, type: "blob" }) as TreeEntry);
+    if (extra.length > 0) {
+      total += extra.length;
+      await drain(extra);
+    }
 
     return { kind: "ok", files, treeCount, harnessCount: harness.length };
   } catch (e) {

@@ -116,11 +116,17 @@ function toRel(absPath: string): string | null {
   return rel;
 }
 
-/** A map-backed `existsSync` over absolute BROWSER_ROOT-rooted paths. */
+/**
+ * A map-backed `existsSync` over absolute BROWSER_ROOT-rooted paths. Mirrors
+ * node's `fs.existsSync`, which is true for a FILE **or a DIRECTORY** — so a
+ * detector like `pluginDirLayoutIssues` (`exists(dir) && isDirectory(dir)`)
+ * resolves the same in the browser as on disk. File-only here would silently miss
+ * any directory-existence check the CLI reports.
+ */
 function mapExists(files: Record<string, string>): (p: string) => boolean {
   return (p: string): boolean => {
     const rel = toRel(p);
-    return rel !== null && hasFile(files, rel);
+    return rel !== null && (hasFile(files, rel) || isDirRel(files, rel));
   };
 }
 
