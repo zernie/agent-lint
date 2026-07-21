@@ -31,6 +31,7 @@ export type FetchOutcome =
   | { kind: "no-harness"; treeCount: number }
   | { kind: "not-found" }
   | { kind: "rate-limit" }
+  | { kind: "too-large" }
   | { kind: "error"; message: string };
 
 /** Honest loading progress — each event maps 1:1 to a real awaited request. */
@@ -66,28 +67,40 @@ const HARNESS_DIRS = new Set([
   "commands",
 ]);
 
-/** A tree blob whose path is a harness surface (top-level file or under a harness dir). */
-function isHarnessPath(path: string): boolean {
+/**
+ * A tree blob that's a harness surface: a top-level harness file, or a path whose
+ * FIRST segment is a harness dir (a root `skills/`/`hooks/` or a `.claude`/
+ * `.claude-plugin` root). Deliberately NOT "any segment" — a normal repo's nested
+ * `src/hooks/useThing.ts` or `packages/x/skills/` must not be mistaken for a Claude
+ * harness (which would grade an empty machine instead of showing the no-harness
+ * state). Referenced scripts outside these dirs are picked up by the 2nd fetch pass.
+ */
+export function isHarnessPath(path: string): boolean {
   if (!path.includes("/")) return HARNESS_ROOT_FILES.has(path);
-  return path.split("/").some((seg) => HARNESS_DIRS.has(seg));
+  return HARNESS_DIRS.has(path.slice(0, path.indexOf("/")));
 }
 
 /**
- * Repo-relative paths a harness file references via the plugin-root / project-dir
- * tokens — e.g. a hook command `${CLAUDE_PLUGIN_ROOT}/scripts/guard.sh`. Those
- * scripts often live OUTSIDE the harness dirs, so the harness-path filter drops
- * them; the CLI reads the whole repo, so to stay byte-identical the browser must
- * fetch any referenced path that actually exists in the tree (else the scan reports
- * a real hook script as missing and applies the graded penalty). Matches braced and
- * unbraced `$CLAUDE_PLUGIN_ROOT` / `$CLAUDE_PROJECT_DIR`.
+ * Repo-relative paths a harness file references but that the harness-path filter
+ * drops — hook scripts living OUTSIDE the harness dirs. The CLI reads the whole repo,
+ * so to stay byte-identical the browser fetches any referenced path present in the
+ * tree (else the scan reports a real hook script as missing + a graded penalty).
+ * Two forms: (1) plugin-root / project-dir tokens (`${CLAUDE_PLUGIN_ROOT}/scripts/
+ * guard.sh`, braced or unbraced); (2) a RELATIVE dir-qualified script path (`scripts/
+ * guard.sh`, `./bin/x.sh`) — the form `scanHooks` resolves against the plugin root.
+ * Over-matching is harmless: only tree-present paths are fetched (a real file the scan
+ * simply ignores if unreferenced), bounded by the size + count caps.
  */
 const ROOT_REF =
   /\$\{?(?:CLAUDE_PLUGIN_ROOT|CLAUDE_PROJECT_DIR)\}?\/([A-Za-z0-9._/-]+)/g;
+const REL_SCRIPT =
+  /(?:^|[\s"'`(=:,])(?:\.\/)?((?:[\w.-]+\/)+[\w.-]+\.(?:sh|bash|zsh|js|mjs|cjs|ts|py|rb))(?=$|[\s"'`),;])/gm;
 
 export function collectReferencedPaths(files: RepoFiles): Set<string> {
   const out = new Set<string>();
   for (const content of Object.values(files)) {
     for (const m of content.matchAll(ROOT_REF)) out.add(m[1]);
+    for (const m of content.matchAll(REL_SCRIPT)) out.add(m[1]);
   }
   return out;
 }
@@ -144,7 +157,14 @@ export async function fetchRepo(
       if (err) return err;
       return { kind: "error", message: `GitHub responded ${treeRes.status}` };
     }
-    const tree = (await treeRes.json()) as { tree?: TreeEntry[] };
+    const tree = (await treeRes.json()) as {
+      tree?: TreeEntry[];
+      truncated?: boolean;
+    };
+    // GitHub truncates the recursive tree for very large repos (>100k entries or
+    // >7MB), so the harness files we need may be outside the returned slice — we'd
+    // misreport no-harness or grade a partial harness. Bail honestly to the CLI.
+    if (tree.truncated === true) return { kind: "too-large" };
     const blobs = (tree.tree ?? []).filter((e) => e.type === "blob");
     const treeCount = blobs.length;
 

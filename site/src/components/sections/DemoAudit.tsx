@@ -65,6 +65,7 @@ type View =
   | { k: "empty"; slug: string }
   | { k: "notfound"; slug: string }
   | { k: "ratelimit"; slug: string }
+  | { k: "too-large"; slug: string }
   | { k: "error"; slug: string };
 
 /** A terminal (cacheable) view — everything a completed run can settle to. */
@@ -236,6 +237,15 @@ function EdgeState({ view }: { view: TerminalView }) {
         disk: <InlineCommand />
       </p>
     );
+  } else if (view.k === "too-large") {
+    body = (
+      <p>
+        <strong className="text-foreground">{slug} is too large</strong> for the
+        browser demo to read fully — GitHub truncates the file tree for very big
+        repos, so a grade here could miss files. The CLI reads your working copy
+        directly, with no such limit: <InlineCommand />
+      </p>
+    );
   } else {
     body = (
       <p>
@@ -338,6 +348,8 @@ export function DemoAudit() {
         settled = { k: "notfound", slug };
       } else if (outcome.kind === "rate-limit") {
         settled = { k: "ratelimit", slug };
+      } else if (outcome.kind === "too-large") {
+        settled = { k: "too-large", slug };
       } else {
         settled = { k: "error", slug };
       }
@@ -377,6 +389,7 @@ export function DemoAudit() {
     frameView.k === "empty" ||
     frameView.k === "notfound" ||
     frameView.k === "ratelimit" ||
+    frameView.k === "too-large" ||
     frameView.k === "error";
   const isAGrade =
     frameView.k === "report" && frameView.audit.score.grade === "A";
@@ -490,7 +503,7 @@ export function DemoAudit() {
 /** The instrument suffix for a settled run. */
 function runKind(
   v: TerminalView,
-): "ok" | "empty" | "notfound" | "ratelimit" | "error" {
+): "ok" | "empty" | "notfound" | "ratelimit" | "too-large" | "error" {
   switch (v.k) {
     case "report":
       return "ok";
@@ -500,6 +513,8 @@ function runKind(
       return "notfound";
     case "ratelimit":
       return "ratelimit";
+    case "too-large":
+      return "too-large";
     case "error":
       return "error";
   }
