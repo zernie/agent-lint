@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { isHarnessPath, collectReferencedPaths } from "./fetchRepo";
+import {
+  isHarnessPath,
+  isHarnessMarker,
+  collectReferencedPaths,
+} from "./fetchRepo";
 
 // Pure-helper guards for the two harness-detection bugs the PR review flagged.
 // (These run under the browser-mode project like the rest of site/, but they touch
@@ -23,6 +27,29 @@ describe("isHarnessPath — top-level surfaces only", () => {
     expect(isHarnessPath("app/commands/run.ts")).toBe(false);
     expect(isHarnessPath("README.md")).toBe(false);
     expect(isHarnessPath("src/agents.ts")).toBe(false);
+  });
+});
+
+describe("isHarnessMarker — a definitive Claude harness signal", () => {
+  it("accepts real markers", () => {
+    expect(isHarnessMarker("CLAUDE.md")).toBe(true);
+    expect(isHarnessMarker(".mcp.json")).toBe(true);
+    expect(isHarnessMarker(".claude/settings.json")).toBe(true);
+    expect(isHarnessMarker(".claude-plugin/plugin.json")).toBe(true);
+    expect(isHarnessMarker("hooks/hooks.json")).toBe(true);
+    expect(isHarnessMarker("skills/deploy/SKILL.md")).toBe(true);
+    expect(isHarnessMarker("agents/reviewer.md")).toBe(true);
+    expect(isHarnessMarker("commands/ship.md")).toBe(true);
+  });
+
+  it("rejects an undeclared top-level hooks/ (git hooks) + ordinary files", () => {
+    // The bug: a repo with `hooks/pre-commit.sh` and no Claude declaration was
+    // graded instead of shown the no-harness state.
+    expect(isHarnessMarker("hooks/pre-commit.sh")).toBe(false);
+    expect(isHarnessMarker("hooks/lint.js")).toBe(false);
+    expect(isHarnessMarker("skills/README.md")).toBe(false);
+    expect(isHarnessMarker("README.md")).toBe(false);
+    expect(isHarnessMarker("src/index.js")).toBe(false);
   });
 });
 

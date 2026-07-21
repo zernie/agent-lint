@@ -81,6 +81,50 @@ export function isHarnessPath(path: string): boolean {
 }
 
 /**
+ * A path that PROVES the repo is a Claude Code harness — not merely a repo that
+ * happens to contain a dir named `hooks`/`skills`/… (a git-hooks `hooks/`, a React
+ * app's `src/hooks/`). The harness GATE requires at least one, so an ordinary repo
+ * lands in the no-harness state instead of a bogus grade. Markers: `CLAUDE.md`, an
+ * `.mcp.json`, anything under `.claude/`/`.claude-plugin/`, the hook convention file
+ * `hooks/hooks.json`, or a REAL top-level surface FILE (`skills/<x>/SKILL.md`,
+ * `agents/<x>.md`, `commands/<x>.md`). A bare top-level `hooks/` of scripts with no
+ * declaration is NOT a harness — the loader only treats hooks as loadable when
+ * declared via a manifest / settings / `hooks/hooks.json`.
+ */
+export function isHarnessMarker(path: string): boolean {
+  if (path === "CLAUDE.md" || path === ".mcp.json") return true;
+  if (path.startsWith(".claude/") || path.startsWith(".claude-plugin/"))
+    return true;
+  if (path === "hooks/hooks.json") return true;
+  return (
+    /^skills\/[^/]+\/SKILL\.md$/.test(path) ||
+    /^agents\/[^/]+\.md$/.test(path) ||
+    /^commands\/.+\.md$/.test(path)
+  );
+}
+
+/**
+ * A hook-config file a plugin manifest points its `hooks` field at (e.g.
+ * `.claude-plugin/plugin.json` with `"hooks": "config/hooks.json"`). That file can
+ * live OUTSIDE the harness dirs, so the harness-path filter drops it and the scan's
+ * `readHooksJsonFile` then finds nothing → every hook silently dropped. Return the
+ * referenced repo-relative path so the 2nd fetch pass pulls it.
+ */
+function manifestHookConfig(files: RepoFiles): string | null {
+  for (const p of [".claude-plugin/plugin.json", "plugin.json"]) {
+    const text = files[p];
+    if (text === undefined) continue;
+    try {
+      const m = JSON.parse(text) as { hooks?: unknown };
+      if (typeof m.hooks === "string") return m.hooks.replace(/^\.\//, "");
+    } catch {
+      // A malformed manifest is the scan's concern, not this fetch helper's.
+    }
+  }
+  return null;
+}
+
+/**
  * Repo-relative paths a harness file references but that the harness-path filter
  * drops — hook scripts living OUTSIDE the harness dirs. The CLI reads the whole repo,
  * so to stay byte-identical the browser fetches any referenced path present in the
@@ -173,8 +217,13 @@ export async function fetchRepo(
       .filter((e) => (e.size ?? 0) <= MAX_FILE_BYTES)
       .slice(0, MAX_FILES);
 
+    // The harness GATE: matching harness-SHAPED paths isn't enough — require a
+    // definitive marker (isHarnessMarker), so a repo whose only match is a
+    // git-hooks `hooks/` or a nested source dir lands in no-harness, not a grade.
+    if (!harness.some((e) => isHarnessMarker(e.path))) {
+      return { kind: "no-harness", treeCount };
+    }
     onProgress?.({ phase: "tree", treeCount, harnessCount: harness.length });
-    if (harness.length === 0) return { kind: "no-harness", treeCount };
 
     // (3) Content from raw.githubusercontent.com (NOT rate-limited), pooled.
     const files: RepoFiles = {};
@@ -210,11 +259,15 @@ export async function fetchRepo(
 
     await drain(harness);
 
-    // Second pass: fetch scripts the harness files reference via the plugin-root
-    // token but that live outside the harness dirs (byte-identical with the CLI's
-    // whole-repo read). Bounded to paths actually present in the tree + size cap.
+    // Second pass: fetch what the harness files REFERENCE but the path filter drops
+    // (byte-identical with the CLI's whole-repo read) — hook scripts via the
+    // plugin-root token / relative paths, PLUS a manifest-declared hook-config file
+    // (`"hooks": "config/hooks.json"`). Bounded to tree-present paths + size cap.
     const inTree = new Set(blobs.map((b) => b.path));
-    const extra = [...collectReferencedPaths(files)]
+    const referenced = collectReferencedPaths(files);
+    const manifestHooks = manifestHookConfig(files);
+    if (manifestHooks !== null) referenced.add(manifestHooks);
+    const extra = [...referenced]
       .filter((p) => inTree.has(p) && !(p in files))
       .filter((p) => (sizeOf.get(p) ?? 0) <= MAX_FILE_BYTES)
       .slice(0, MAX_FILES)
