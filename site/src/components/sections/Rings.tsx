@@ -34,7 +34,7 @@ export function Rings() {
         </h2>
         <p className="mt-4 text-lg text-muted-foreground">
           Deterministic and model-free — the same grade on every machine, no API
-          key, nothing to run.
+          key, no setup.
         </p>
       </div>
 

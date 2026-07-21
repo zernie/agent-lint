@@ -89,10 +89,6 @@ export function HeroReport({ className }: { className?: string }) {
           </span>
         </p>
       </div>
-
-      <p className="mt-5 text-center text-xs text-muted-foreground">
-        deterministic · no model · nothing leaves your machine
-      </p>
     </Card>
   );
 }
