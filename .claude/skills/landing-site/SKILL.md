@@ -93,14 +93,16 @@ few words, one clear focal point per section. NOT a feature-stuffed template.
   `npx vigiles audit` block in back-to-back sections on the phone. (Fix:
   `hidden sm:block` the whole desktop-only section; the hero + CTA already carry it.)
 
-## Hosted / in-browser demo (direction, when built)
+## In-browser demo (direction, when built)
 
+- **In-browser, NOT hosted.** The audit compute runs entirely CLIENT-SIDE in the
+  visitor's browser (fetch the repo's files via the GitHub API, run the pure
+  detectors in JS) → reinforces "nothing leaves your machine"; zero backend/cost.
+  The only "hosting" is static file serving on vigiles.sh, like the current site.
+  A cached-serverless backend is explicitly NOT the plan.
 - **Deterministic-only compute.** Run the model-free rings (Truthfulness / Structure /
   Safety-via-lethal-trifecta / description-overlap). Skip the model-gated
   trigger-rate — that's the part that needs an LLM + quota.
-- **Prefer in-browser** (runs in the visitor's browser → reinforces "nothing leaves
-  your machine"; zero backend/cost). Fallback: cached serverless keyed by
-  `repo@commit-SHA` + per-IP rate-limit.
 - **A real progress bar / streaming state** while the audit runs — fetching files,
   running each ring — never a dead spinner. It should feel like work is happening.
 - **TEASE the locked LLM part, don't just label it "limited."** Render the

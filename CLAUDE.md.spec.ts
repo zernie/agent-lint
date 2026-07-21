@@ -87,7 +87,7 @@ AUXILIARY PACKAGES (separate npm packages with their OWN \`package.json\`, NOT p
 
 - \`rule-enforcer/\` — \`@vigiles/rule-enforcer\`, the opt-in rule-SYNTHESIS engine + its two-stage blind-gold TRUST GATE (\`gate.js\`). Folded in from a former standalone repo; CI runs its gate (dogfood). The \`pr-to-lint-rule\` skill's engine.
 - \`report/\` — \`@vigiles/report\`, the Vite + Tailwind audit-report app that CONSUMES \`@vigiles/report-view\` and builds it to one self-contained HTML template the CLI fills. Kept out of the CLI's runtime deps.
-- \`packages/report-view/\` — \`@vigiles/report-view\`, the SHARED source-only report view (presentational components + AuditReport schema + band tokens + theme.css) rendered by \`report/\` (and later \`site/\` + the hosted demo) from the same AuditReport JSON. Wired as npm WORKSPACES (\`packages/*\`, \`report\`, \`site\`) — deps hoist to root, the published package's CI stays green (see \`research/report-view-and-hosted-demo.md\`).
+- \`packages/report-view/\` — \`@vigiles/report-view\`, the SHARED source-only report view (presentational components + AuditReport schema + band tokens + theme.css) rendered by \`report/\` (and later \`site/\` + the in-browser demo) from the same AuditReport JSON. Wired as npm WORKSPACES (\`packages/*\`, \`report\`, \`site\`) — deps hoist to root, the published package's CI stays green (see \`research/report-view-and-browser-demo.md\`).
 
 DOCS (two tiers — see the doc-tiers rule):
 
