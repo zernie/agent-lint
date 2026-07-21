@@ -8,28 +8,6 @@ const FULL_FAQ = "https://github.com/zernie/vigiles/blob/main/docs/faq.md";
  *  so we can bold the key phrase without dangerouslySetInnerHTML. */
 const QA: { q: string; a: ReactNode }[] = [
   {
-    q: "Is this a framework I have to build around?",
-    a: (
-      <>
-        No. It&apos;s a tool you <span className="text-foreground">run</span> —
-        like ESLint, Lighthouse, or <span className="font-mono">npm audit</span>
-        . One command, a report, an optional CI gate. There&apos;s a library API
-        for automation, but you never touch it to get value.
-      </>
-    ),
-  },
-  {
-    q: "Isn't this just a markdown linter?",
-    a: (
-      <>
-        No — it checks whether your instruction file is{" "}
-        <span className="text-foreground">true</span> (every path, script,
-        symbol, and rule exists and is enabled), then tests and measures your
-        harness. A style linter can&apos;t do any of that.
-      </>
-    ),
-  },
-  {
     q: "Do I have to write TypeScript?",
     a: (
       <>

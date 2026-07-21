@@ -7,7 +7,6 @@ import {
 } from "react";
 import { Lock, CornerDownLeft, Check, Copy } from "lucide-react";
 import { Report, type AuditReport } from "@vigiles/report-view";
-import { CommandBlock } from "@/components/CommandBlock";
 import { normalizeSlug } from "@/lib/deeplink";
 import { track } from "@/lib/track";
 import { fetchRepo, type FetchProgress } from "@/demo/fetchRepo";
@@ -409,9 +408,10 @@ export function DemoAudit() {
 
         <RepoInput onSubmit={run} />
 
-        {/* Featured chips — one-tap examples. On mobile a horizontally-scrollable
-            row (not 3 wrapped rows pushing the grade down the fold). */}
-        <div className="mt-6 flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:justify-center sm:overflow-x-visible">
+        {/* Featured chips — one-tap examples. Wrap + centered on every width so a
+            chip never clips at the mobile viewport edge (only four, so mobile is
+            two tidy rows, not a pushed-down fold). */}
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
           {FEATURED.map((f, i) => {
             const active = frameView.k === "featured" && frameView.i === i;
             return (
@@ -421,7 +421,7 @@ export function DemoAudit() {
                 onClick={() => pickChip(i)}
                 aria-pressed={active}
                 className={cn(
-                  "shrink-0 rounded-full border px-3.5 py-1.5 font-mono text-sm transition-colors",
+                  "rounded-full border px-3.5 py-1.5 font-mono text-sm transition-colors",
                   active
                     ? "border-accent/60 bg-accent/10 text-foreground"
                     : "border-border text-muted-foreground hover:border-accent/40 hover:text-foreground",
@@ -477,13 +477,6 @@ export function DemoAudit() {
                 <span className="text-foreground">Your CLI can</span>, on your
                 Claude subscription. No API key, no signup, free.
               </p>
-            </div>
-
-            <div className="mt-8 flex flex-col items-center gap-3 text-center">
-              <p className="text-base text-muted-foreground">
-                Now grade yours — one command:
-              </p>
-              <CommandBlock command={AUDIT_CMD} />
             </div>
           </>
         )}

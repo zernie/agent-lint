@@ -7,31 +7,26 @@ const VERBS: {
   verb: string;
   answers: string;
   model: string;
-  when: string;
 }[] = [
   {
     verb: "audit",
     answers: "Everything, graded A–F",
-    model: "No — read-only",
-    when: "Anytime — it's the report",
+    model: "no model · read-only · anytime",
   },
   {
     verb: "lint",
     answers: "Do the structural checks pass?",
-    model: "No",
-    when: "CI gate, every push",
+    model: "no model · CI gate, every push",
   },
   {
     verb: "test",
     answers: "Does the harness behave?",
-    model: "No — scripted stand-in",
-    when: "Every commit",
+    model: "no model · scripted stand-in · every commit",
   },
   {
     verb: "eval",
     answers: "Does a skill actually help?",
-    model: "Yes — your subscription",
-    when: "On demand",
+    model: "needs a model · your subscription · on demand",
   },
 ];
 
@@ -65,7 +60,7 @@ export function VerbMap() {
               </code>
               <span className="text-sm text-foreground">{v.answers}</span>
               <span className="text-xs text-muted-foreground sm:text-right">
-                {v.model} · {v.when}
+                {v.model}
               </span>
             </div>
           ))}

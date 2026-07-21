@@ -65,9 +65,7 @@ export function Adoption() {
         </ul>
 
         <p className="mx-auto mt-8 max-w-2xl text-center text-sm leading-relaxed text-muted-foreground">
-          The hooks keep it honest in-loop — nudging the agent to tag a
-          linter-rule mention so vigiles can verify it, or to re-run a test
-          whose result went stale. Nothing to remember.
+          Hooks nudge the agent in-loop — nothing to remember.
         </p>
 
         {/* The copy-paste agent prompt — the fastest on-ramp. */}
