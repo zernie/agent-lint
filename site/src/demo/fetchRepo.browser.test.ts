@@ -34,6 +34,8 @@ describe("isHarnessMarker — a definitive Claude harness signal", () => {
   it("accepts real markers", () => {
     expect(isHarnessMarker("CLAUDE.md")).toBe(true);
     expect(isHarnessMarker(".mcp.json")).toBe(true);
+    expect(isHarnessMarker("SKILL.md")).toBe(true); // single-skill repo root
+    expect(isHarnessPath("SKILL.md")).toBe(true);
     expect(isHarnessMarker(".claude/settings.json")).toBe(true);
     expect(isHarnessMarker(".claude-plugin/plugin.json")).toBe(true);
     expect(isHarnessMarker("hooks/hooks.json")).toBe(true);

@@ -55,8 +55,9 @@ const CONCURRENCY = 6;
 // in the honest no-harness state that points at the CLI, not a report scanned with the
 // wrong layout. Do NOT re-add AGENTS.md/.codex here without wiring the Codex adapter
 // into runAudit — fetching a surface the scan then ignores is what produced the bug.
-/** Top-level files that ARE a harness surface on their own. */
-const HARNESS_ROOT_FILES = new Set(["CLAUDE.md", ".mcp.json"]);
+/** Top-level files that ARE a harness surface on their own. `SKILL.md` at the repo
+ *  root is the single-skill plugin shape (loadPluginFromFiles' "single-skill" case). */
+const HARNESS_ROOT_FILES = new Set(["CLAUDE.md", ".mcp.json", "SKILL.md"]);
 /** Any path segment equal to one of these is a harness directory. */
 const HARNESS_DIRS = new Set([
   ".claude",
@@ -92,7 +93,8 @@ export function isHarnessPath(path: string): boolean {
  * declared via a manifest / settings / `hooks/hooks.json`.
  */
 export function isHarnessMarker(path: string): boolean {
-  if (path === "CLAUDE.md" || path === ".mcp.json") return true;
+  if (path === "CLAUDE.md" || path === ".mcp.json" || path === "SKILL.md")
+    return true;
   if (path.startsWith(".claude/") || path.startsWith(".claude-plugin/"))
     return true;
   if (path === "hooks/hooks.json") return true;
@@ -259,20 +261,26 @@ export async function fetchRepo(
 
     await drain(harness);
 
-    // Second pass: fetch what the harness files REFERENCE but the path filter drops
-    // (byte-identical with the CLI's whole-repo read) — hook scripts via the
-    // plugin-root token / relative paths, PLUS a manifest-declared hook-config file
-    // (`"hooks": "config/hooks.json"`). Bounded to tree-present paths + size cap.
+    // Second pass (bounded FIXPOINT): fetch what the harness files REFERENCE but the
+    // path filter drops — hook scripts via the plugin-root token / relative paths,
+    // PLUS a manifest-declared hook-config file (`"hooks": "config/hooks.json"`).
+    // Re-scan after each round so a newly-fetched config's OWN script refs resolve
+    // too (manifest → config/hooks.json → scripts/guard.sh). Bounded to tree-present
+    // paths, the size + file caps, and a small round limit — byte-identical with the
+    // CLI's whole-repo read for realistic chains without unbounded fetching.
     const inTree = new Set(blobs.map((b) => b.path));
-    const referenced = collectReferencedPaths(files);
-    const manifestHooks = manifestHookConfig(files);
-    if (manifestHooks !== null) referenced.add(manifestHooks);
-    const extra = [...referenced]
-      .filter((p) => inTree.has(p) && !(p in files))
-      .filter((p) => (sizeOf.get(p) ?? 0) <= MAX_FILE_BYTES)
-      .slice(0, MAX_FILES)
-      .map((path) => ({ path, type: "blob" }) as TreeEntry);
-    if (extra.length > 0) {
+    for (let round = 0; round < 3; round += 1) {
+      const referenced = collectReferencedPaths(files);
+      const manifestHooks = manifestHookConfig(files);
+      if (manifestHooks !== null) referenced.add(manifestHooks);
+      const budget = MAX_FILES - Object.keys(files).length;
+      if (budget <= 0) break;
+      const extra = [...referenced]
+        .filter((p) => inTree.has(p) && !(p in files))
+        .filter((p) => (sizeOf.get(p) ?? 0) <= MAX_FILE_BYTES)
+        .slice(0, budget)
+        .map((path) => ({ path, type: "blob" }) as TreeEntry);
+      if (extra.length === 0) break;
       total += extra.length;
       await drain(extra);
     }
