@@ -1,4 +1,4 @@
-import { ArrowRight, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { CommandBlock } from "@/components/CommandBlock";
 import { cn } from "@/lib/utils";
 
@@ -28,15 +28,6 @@ export function AuditWidget({ className }: { className?: string }) {
           <span className="text-foreground/70">Nothing is uploaded.</span>
         </span>
       </p>
-
-      {/* Secondary — the desktop Claude Code one-click flow lives at #try. */}
-      <a
-        href="#try"
-        className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-foreground/80 underline-offset-4 transition-colors hover:text-foreground hover:underline"
-      >
-        Have Claude Code? Audit a specific repo
-        <ArrowRight className="h-4 w-4" aria-hidden />
-      </a>
     </div>
   );
 }

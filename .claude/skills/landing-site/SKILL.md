@@ -46,6 +46,14 @@ few words, one clear focal point per section. NOT a feature-stuffed template.
 
 - **Every element must earn its place.** Remove anything that only restates another
   (a caption repeating the screenshot; a trust line said twice; a redundant subhead).
+- **Cut any label another element already IMPLIES.** A "free & open source" badge is
+  redundant when a GitHub/star link is present; an "AUDIT A SPECIFIC REPO" badge above
+  a "Grade a specific repo" heading restates it. If the context already tells the
+  reader, the label is noise.
+- **Every link/CTA is ACTIONABLE and specific.** The reader must know exactly what
+  happens on click. No vague or passive secondary links ("Have Claude Code?…"). If a
+  secondary path isn't worth a clear, concrete action, cut it (or move it to the nav,
+  where a persistent link beats a limp fold link).
 - **One focal point per section.** The eye should land on one thing first.
 - **Whitespace + typography over boxes.** Don't stack 3+ full-width bordered boxes;
   that repetition is what reads as crowded. Prefer type hierarchy and space to
@@ -106,5 +114,6 @@ change, not bolted onto a design pass.
 2. **Screenshot desktop AND mobile** (390px) and actually look — most crowding shows
    up on the phone fold. (Global playwright + `vite preview`; or the `screenshot` skill.)
 3. **Run a Fable blind pass** for anything nontrivial — fresh skeptical eyes catch
-   crowding and incoherence the author is blind to.
+   crowding and incoherence the author is blind to. **Act on the flagged cuts** — a
+   Fable P0/P1 "delete this" is not optional; don't just note it and move on.
 4. Verify build + Prettier clean; deterministic deploy via `pages.yml` on push to main.
