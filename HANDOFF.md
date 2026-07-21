@@ -18,58 +18,50 @@
 **`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
 via `pages.yml` on push to main.
 
-**This session (2026-07-21): site polish + shared `@vigiles/report-view` + the LIVE in-browser demo — merged #80–#99, deployed.**
+**This session (2026-07-21): site polish + shared `@vigiles/report-view` (merged #80–#99, deployed) + the
+NODE-FREE in-browser audit engine (pushed, NOT yet a PR) + the LIVE-any-repo demo wiring (in progress).**
 
 **TOP GOAL (codified in `.claude/skills/landing-site`): maximize the % of visitors who RUN `npx vigiles audit`.**
 Every site decision serves that ONE conversion; the CTA must be GREAT. HOLD every `site/` change against the
 skill; **screenshot desktop AND the FULL mobile page** (390px, global playwright `$(npm root -g)/playwright` +
 `vite preview`); run a Fable pass on anything nontrivial and ACT on its P0/P1 cuts.
 
-SITE — done this session (all merged + deployed): command-first hero around `npx vigiles audit` (the CC
-`claude-cli://` deeplink is DESKTOP-ONLY, `hidden sm:block`, lives in RepoPicker `#try`); the 724KB hero PNG
-replaced by native `HeroReport.tsx`; ruthless subtraction (Fable-driven). Latest polish (#95/#96): hero shield
-icon top-aligned, GitHub links open new-tab, the five-category explainer FOLDED into "The problem" (`Wedge`;
-`Rings.tsx` deleted), seven linter catalogs shown as a name strip, and — the mobile-dup fix — the whole `#try`
-section is now `hidden sm:block` (it collapsed to the SAME command as the CTA on phones). The `landing-site`
-skill now has an explicit rule to catch cross-section mobile duplication.
-
-**SHARED REPORT VIEW SHIPPED (#96):** `packages/report-view` (`@vigiles/report-view`, source-only/private) now
-holds the presentational report components + the `AuditReport` schema + band tokens + `theme.css`. `report/`
-consumes it (its `src` is just the app shell). Wired as **npm WORKSPACES** (root `workspaces:[packages/*,report,
-site]`) — the clean monorepo the founder asked for; deps hoist to root. Kept the published `vigiles` CI green via
-four aligned changes: root lockfile regen, `pages.yml` builds `site` via the workspace, `build-report.mjs`
-install-guard checks root `node_modules`, per-package lockfiles deleted. Design + rationale + the Stage-2 demo
-brief in `research/report-view-and-browser-demo.md`. Also fixed a PRE-EXISTING latent coverage bug it exposed:
-`egress.ts`/`sandbox.ts` used `/* v8 ignore next -- reason */`, a form `@vitest/coverage-v8` 4.1.8 silently
-DROPS — converted to `/* v8 ignore start/stop */` (the reliable form; the `next -- reason` form is the trap).
+SITE — merged + deployed this session (#80–#99): command-first hero around `npx vigiles audit`; native
+`HeroReport.tsx` (dropped a 724KB PNG); five-category explainer folded into `Wedge`; linter-catalog name strip;
+the desktop-only `#try`/RepoPicker is `hidden sm:block` (mobile-dup fix). **`@vigiles/report-view` (#96):**
+source-only shared report components + `AuditReport` schema + `theme.css`, wired as npm WORKSPACES
+(`workspaces:[packages/*,report,site]`) — the clean monorepo; four CI-critical changes + the coverage-bug fix
+(`/* v8 ignore next -- reason */` → `start/stop`, the reliable form) recorded in
+`research/report-view-and-browser-demo.md`.
 
 ### 🎯 DO NEXT
 
-- **#99 SHIPPED the demo (BAKED reports):** `site/src/components/sections/DemoAudit.tsx` renders REAL
-  `AuditReport`s — baked at build time via `vigiles audit --json` on `test/dogfood/*`, stored in
-  `site/src/demo/reports/*.json` — through `@vigiles/report-view` (browser == CLI artifact). Repo chips + an
-  honest ONE-ROW model-gated tease ("skills firing / guidance moving behavior needs a real model; your CLI can,
-  free" — NO fake numbers/blurred names). Fable-reviewed (full report on mobile, opaque nav, chips scroll-row).
-  Real GRAMMAR fixes in the CLI output: audit-verdict "One fix away from an A" (was "One one-line fix" stutter),
-  audit-score/leaderboard "unavailable agent tool(s)" (was "1 tool that don't exist"). `editDistance` extracted
-  to `src/core/edit-distance.ts` (browser-port groundwork — removes linters.ts's import-time fs side effect).
-  Replaced RepoPicker; works desktop + mobile (fixes the old mobile `#try` dead-end).
-- **PR 3 — LIVE audit of any TYPED repo — IN PROGRESS THIS SESSION via subagents** (founder: "go all the way
-  leveraging subagents + Fable"). Two background agents launched: (1) the browser-safe engine `src/scan-files.ts`
-  — `scanFiles(files: Record<string,string>)` reconstructs `LoadedPlugin` from an in-memory file map + REUSES
-  scan.ts's pure per-surface detectors + reimplements ONLY ~6 fs touchpoints (loader, hook-script resolve,
-  mcp-config read, spec-exists, dangling-refs, untested-globs) — GATED by a byte-identical PARITY test vs
-  `scanPlugin` on every `test/dogfood/*` (the correctness firewall: a wrong grade breaks "same as the CLI"); (2)
-  Fable designing the live-typing UX (input → real fetch → real audit; honest loading now that it's real work;
-  edge cases no-config/404/rate-limit/A-grade). THEN (me): the client-side Vite bundle (ncd→pako, crypto shim,
-  node:path shim), in-browser GitHub fetch (Trees API + raw.githubusercontent.com, harness paths only), wire a
-  typed repo → live report, screenshot + Fable review, ship. Full plan: the "Stage 2 build plan — the in-browser
-  audit engine" section of `research/report-view-and-browser-demo.md`.
-- **Analytics — founder decision + NOT built:** instrument the funnel (command copies, chip clicks, repo
-  submits). GitHub Pages, NOT Vercel → **Vercel Analytics N/A**. Rec: **GoatCounter** (free, privacy-friendly,
-  no cookie banner); Plausible/Fathom paid. Needs the founder's account/site-code, then a script tag + events.
-- **Prefilled popular-OSS chips — NOT built:** depends on Stage 2 (a real report needs the in-browser compute);
-  a lighter "prefill the repo picker for anthropics/claude-code" is desktop-only.
+- **BAKED demo SHIPPED (#99):** `DemoAudit.tsx` renders REAL `AuditReport`s (baked via `audit --json` on
+  `test/dogfood/*`) through `@vigiles/report-view` + repo chips + an honest one-row model-gated tease. Fixes the
+  old mobile `#try` dead-end.
+- **NODE-FREE ENGINE — DONE, PUSHED (not yet a PR):** the browser audit engine `scanFiles(files)` +
+  `test-coverage-files.ts` now reach ZERO node builtins except `node:zlib` (dist require-graph = 29 files;
+  pkgs @iarna/toml/js-yaml/mvdan-sh, all browser-bundleable). Achieved by MODULE-SPLITTING (not bundler stubs /
+  not dynamic imports — see the decision in `research/report-view-and-browser-demo.md`): `scan-core.ts` (pure
+  detectors; `scan.ts` re-exports via `export *`), `core/ncd.ts`, `posix-path.ts`, `core/mcp-contract-message.ts`,
+  `core/assert-never.ts`, `adapters/claude-code/agent-tools.ts`, + required-injected-IO in
+  hook-block-ineffective/plugin-dir-layout/skill-resources. GATED by the byte-identical parity test
+  `src/scan-files.test.ts` (verified unchanged + green; full unit suite 100% cov; api no drift).
+- **LIVE-ANY-REPO demo wiring — IN PROGRESS (background subagent):** Vite bundle (consume built `dist/` CJS +
+  ONE `node:zlib`→`pako` alias — the site runs the literally-same compiled code as the CLI), in-browser GitHub
+  fetch (Trees API + `raw.githubusercontent.com`, harness paths only), the Fable live-typing UX
+  (`scratchpad/fable-live-typing-brief.md`), + 3 test layers (engine parity ✓, Vitest browser-mode
+  interaction+parity, one Playwright e2e). Brief: `scratchpad/wiring-subagent-brief.md`. THEN: verify + commit +
+  screenshot + Fable, and wire a `site` test job into CI.
+- **SITE CONTENT ADDITIONS — APPROVED, NOT YET BUILT (do after the demo wiring lands, avoids site/ conflicts):**
+  founder flagged the site is "missing tons from the README." All 4 approved: (1) verb-map "one tool, four
+  questions" (audit/lint/test/eval table + the "your rules → enforced" card), (2) adoption "your agent does the
+  rest" (init + skills test-harness/strengthen/edit-spec + hooks + the copy-paste agent prompt), (3) FAQ
+  (framework?/markdown-linter?/TS?/stability), (4) promptfoo cost contrast folded into Debunk. Copy is drafted;
+  re-derive from README.md (the durable source) — order Hero→Wedge→VerbMap→Debunk→DemoAudit→Adoption→FAQ→CTA.
+  Fable + 390px screenshot each; hold against `.claude/skills/landing-site` (brevity still applies).
+- **Analytics (NOT built) + prefilled-OSS chips (NOT built):** founder decisions. GH Pages → GoatCounter rec
+  (free, privacy-friendly); prefilled chips now moot once live-any-repo lands.
 
 ### Codex trigger-rate is EXPERIMENTAL (shipped earlier)
 
