@@ -88,6 +88,10 @@ few words, one clear focal point per section. NOT a feature-stuffed template.
 - Adding a notice/button _per problem_ instead of rethinking the flow.
 - Two competing primary CTAs (deeplink + command) with no hierarchy.
 - CC-first framing ("runs in your own Claude Code…") as the headline reassurance.
+- A desktop-only flow (repo-picker/deeplink) left visible on mobile as a fallback
+  that just repeats the command another section already shows — the same
+  `npx vigiles audit` block in back-to-back sections on the phone. (Fix:
+  `hidden sm:block` the whole desktop-only section; the hero + CTA already carry it.)
 
 ## Hosted / in-browser demo (direction, when built)
 
@@ -123,8 +127,19 @@ change, not bolted onto a design pass.
 ## Process — before shipping any site change
 
 1. **Hold it against this bar.** Ask "what can I remove?" before "what can I add?"
-2. **Screenshot desktop AND mobile** (390px) and actually look — most crowding shows
-   up on the phone fold. (Global playwright + `vite preview`; or the `screenshot` skill.)
+2. **Screenshot desktop AND mobile (390px) — the FULL page top-to-bottom on EACH,
+   every time, and actually look.** Mobile is its own layout, not desktop-minus-width;
+   a change is not verified until you've looked at both. Two things to scan for on the
+   mobile scroll specifically (both have bitten us):
+   - **No cross-section duplication.** The same command block / CTA / trust line must
+     not appear in two adjacent sections. If a section's mobile fallback just repeats
+     what the hero or CTA already shows, that IS the duplication — hide the section on
+     mobile, don't repeat the command.
+   - **No desktop-only flow dead-ending on mobile.** A desktop-only interaction (the
+     repo-picker + Claude Code deeplink) collapsed to a near-empty or command-only card
+     on a phone is noise — `hidden sm:block` the WHOLE section rather than show a stub
+     that promises a desktop feature the phone can't use.
+     (Global playwright + `vite preview`; or the `screenshot` skill.)
 3. **Run a Fable blind pass** for anything nontrivial — fresh skeptical eyes catch
    crowding and incoherence the author is blind to. **Act on the flagged cuts** — a
    Fable P0/P1 "delete this" is not optional; don't just note it and move on.
