@@ -74,6 +74,13 @@ closed + tested in `site/src/demo/fetchRepo.browser.test.ts`:
   fetching it would trade precision for a rare recall case. A manifest hook
   registering an extensionless script that then exits 2 on a non-blocking event is
   a narrow miss (a slightly-too-high grade), accepted for the collector's precision.
+- **Oversized bundled resources** (a SKILL.md resource > `MAX_FILE_BYTES` = 256 KiB,
+  e.g. a large `assets/model.bin`): the size cap skips the fetch, so the map-backed
+  `existsSync` returns false and `skillResourceIssues` may report it missing, where
+  the CLI's `existsSync` (filesystem, size-blind) sees it. Rare — bundled refs are
+  almost always small `.md`/`.json`. A clean fix (an existence STUB for tree-present
+  oversized non-surface files) is possible but needs surface-vs-resource
+  discrimination in the fetch layer; deferred as a narrow edge, not built.
 
 ## Why the tail isn't worth chasing
 

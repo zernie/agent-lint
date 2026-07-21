@@ -196,13 +196,24 @@ const BUNDLE_RES =
 const MD_LINK_REL =
   /\[[^\]]*\]\((?!\w+:\/\/|\/|#|mailto:)(?:\.\/)?([\w./-]+\.[A-Za-z0-9]+)(?:[?#][^)]*)?\)/g;
 
+const isSkillFile = (path: string): boolean =>
+  path === "SKILL.md" || path.endsWith("/SKILL.md");
+
 export function collectReferencedPaths(files: RepoFiles): Set<string> {
   const out = new Set<string>();
-  for (const content of Object.values(files)) {
+  for (const [path, content] of Object.entries(files)) {
+    // Hook-script refs are graded from ANY file (a hook command lives in a
+    // manifest / settings / hook config), so scan them everywhere.
     for (const m of content.matchAll(ROOT_REF)) out.add(m[1]);
     for (const m of content.matchAll(REL_SCRIPT)) out.add(m[1]);
-    for (const m of content.matchAll(BUNDLE_RES)) out.add(m[1]);
-    for (const m of content.matchAll(MD_LINK_REL)) out.add(m[1]);
+    // Bundled-resource refs are graded ONLY from a SKILL.md body
+    // (skillResourceIssues), so collect them there alone — else a CLAUDE.md's
+    // ordinary `[doc](docs/x.md)` links would be treated as REQUIRED files and
+    // could wrongly bail the whole repo to too-large/error (a repo the CLI grades).
+    if (isSkillFile(path)) {
+      for (const m of content.matchAll(BUNDLE_RES)) out.add(m[1]);
+      for (const m of content.matchAll(MD_LINK_REL)) out.add(m[1]);
+    }
   }
   return out;
 }

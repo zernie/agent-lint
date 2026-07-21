@@ -101,6 +101,22 @@ describe("collectReferencedPaths — hook scripts outside harness dirs", () => {
     });
     expect(refs.size).toBe(0);
   });
+
+  it("collects bundled-resource refs ONLY from SKILL.md, not CLAUDE.md", () => {
+    // A CLAUDE.md's ordinary doc links are not graded bundled resources, so they
+    // must NOT become required second-pass fetches (which could wrongly bail the
+    // repo to too-large/error). A SKILL.md's are; a hook-script ref is, anywhere.
+    const refs = collectReferencedPaths({
+      "CLAUDE.md":
+        "See [the guide](docs/guide.md) and [api](references/api.md).",
+      "skills/foo/SKILL.md": "Read `references/schema.md`.",
+      ".claude/settings.json": '{ "command": "bash scripts/guard.sh" }',
+    });
+    expect(refs.has("docs/guide.md")).toBe(false); // CLAUDE.md md-link — dropped
+    expect(refs.has("references/api.md")).toBe(false); // CLAUDE.md ref — dropped
+    expect(refs.has("references/schema.md")).toBe(true); // SKILL.md bundled resource
+    expect(refs.has("scripts/guard.sh")).toBe(true); // hook script — any file
+  });
 });
 
 describe("fetchRepo — never grades partial data", () => {
