@@ -328,7 +328,10 @@ export function DemoAudit() {
   const suppressTimer = useRef<number | null>(null);
 
   const run = useCallback((slug: string): void => {
-    track("demo_typed_submit", { slug });
+    // Analytics carries the OUTCOME kind only — never the typed slug: the demo
+    // promises nothing leaves the browser but GitHub requests, and a typed slug
+    // would leak a private/sensitive repo name (which resolves to 404) to Plausible.
+    track("demo_typed_submit");
     const id = ++runId.current;
     abort.current?.abort();
 
@@ -338,7 +341,7 @@ export function DemoAudit() {
       setView(cached);
       prevFrame.current = cached;
       syncUrl(cached);
-      track(`demo_run_${runKind(cached)}`, { slug, cached: true });
+      track(`demo_run_${runKind(cached)}`, { cached: true });
       return;
     }
 
@@ -391,11 +394,13 @@ export function DemoAudit() {
       } else {
         settled = { k: "error", slug };
       }
-      cache.current.set(slug, settled);
+      // Cache only STABLE outcomes — a transient error/rate-limit must be able to
+      // retry on the next submit, so the frame's own "try again" guidance works.
+      if (isCacheable(settled)) cache.current.set(slug, settled);
       prevFrame.current = settled;
       setView(settled);
       syncUrl(settled);
-      track(`demo_run_${runKind(settled)}`, { slug });
+      track(`demo_run_${runKind(settled)}`);
     });
   }, []);
 
@@ -539,6 +544,11 @@ export function DemoAudit() {
 }
 
 // ---------------------------------------------------------------------------
+
+/** A stable outcome worth caching — a transient failure must stay retryable. */
+function isCacheable(v: TerminalView): boolean {
+  return v.k !== "error" && v.k !== "ratelimit";
+}
 
 /** The instrument suffix for a settled run. */
 function runKind(

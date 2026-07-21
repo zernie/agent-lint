@@ -265,7 +265,7 @@ function safety(r: ScanReport): CategoryScore {
     .filter((f) => f.finding.severity === "advisory")
     .map(
       (f) =>
-        `${f.name} inherits all tools — no limits on what it can read, fetch, or run (advisory)`,
+        `${f.name} inherits all tools — the "lethal trifecta" (reads data, reaches the web, runs commands), so a prompt injection could exfiltrate secrets (advisory)`,
     );
   return {
     key: "Safety",

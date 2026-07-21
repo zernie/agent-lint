@@ -275,9 +275,16 @@ function classifySurfaceSource(
   files: Record<string, string>,
   layout: PluginLayout,
   rootTrees: ReadonlyMap<string, Record<string, string>>,
+  repoName?: string,
 ): SurfaceSource {
   if (layout.skillDir && hasFile(files, "SKILL.md")) {
-    return { kind: "single-skill", skillName: basename(BROWSER_ROOT) };
+    // Disk mirrors the CLI: a nameless root SKILL.md takes the audited dir's
+    // basename. In-browser there's no real dir, so use the repo name when the
+    // caller (runAudit) supplies it, else the synthetic BROWSER_ROOT basename.
+    return {
+      kind: "single-skill",
+      skillName: repoName ?? basename(BROWSER_ROOT),
+    };
   }
   const rootHasLoadable = layout.surfaceDirs.some((s) =>
     surfaceHasLoadable(layout, s, rootTrees.get(s) ?? {}),
@@ -292,13 +299,20 @@ function classifySurfaceSource(
   return { kind: "none" };
 }
 
+/** The materialization accumulator — surface contents + their on-disk source paths. */
+interface Materialized {
+  out: Record<string, string>;
+  sources: Record<string, string>;
+}
+
 /** Mirror of plugin-loader.ts `materializeSurfaces`, over the file map. */
 function materializeSurfaces(
   files: Record<string, string>,
   layout: PluginLayout,
-  out: Record<string, string>,
-  sources: Record<string, string>,
+  acc: Materialized,
+  repoName?: string,
 ): Record<string, number> {
+  const { out, sources } = acc;
   const counts: Record<string, number> = {};
   const rootTrees = new Map<string, Record<string, string>>();
   for (const surface of layout.surfaceDirs) {
@@ -311,7 +325,7 @@ function materializeSurfaces(
     sources[key] = onDisk;
   };
 
-  const source = classifySurfaceSource(files, layout, rootTrees);
+  const source = classifySurfaceSource(files, layout, rootTrees, repoName);
   switch (source.kind) {
     case "single-skill": {
       const tree = readTreeUnder(files, "", "");
@@ -475,6 +489,7 @@ function pluginWarnings(
 export function loadPluginFromFiles(
   files: Record<string, string>,
   layout: PluginLayout,
+  repoName?: string,
 ): LoadedPlugin {
   const hooks = readHooks(files, layout);
   const resolvedHooks = hooks
@@ -493,7 +508,7 @@ export function loadPluginFromFiles(
       layout.instructionFile,
     );
   }
-  const counts = materializeSurfaces(files, layout, out, sources);
+  const counts = materializeSurfaces(files, layout, { out, sources }, repoName);
 
   return {
     settings: resolvedHooks ? { hooks: resolvedHooks } : {},
@@ -545,10 +560,11 @@ export function scanFiles(
   files: Record<string, string>,
   layout: PluginLayout = claudeCodeLayout,
   dialect: HarnessDialect = claudeCodeDialect,
+  repoName?: string,
 ): ScanReport {
   const lay = layout;
   const cls = makeClassifier(lay);
-  const loaded = loadPluginFromFiles(files, lay);
+  const loaded = loadPluginFromFiles(files, lay, repoName);
   const exists = mapExists(files);
   const hookRegs = normalizeHooks(loaded.settings.hooks);
   const { hooks, inline, manual } = scanHooks(

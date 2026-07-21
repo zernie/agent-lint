@@ -34,9 +34,9 @@
         "score": 100,
         "weight": 1,
         "findings": [
-          "ui-visual-validator inherits all tools — no limits on what it can read, fetch, or run (advisory)",
-          "screen-reader-testing inherits all tools — no limits on what it can read, fetch, or run (advisory)",
-          "wcag-audit-patterns inherits all tools — no limits on what it can read, fetch, or run (advisory)"
+          "ui-visual-validator inherits all tools — the \"lethal trifecta\" (reads data, reaches the web, runs commands), so a prompt injection could exfiltrate secrets (advisory)",
+          "screen-reader-testing inherits all tools — the \"lethal trifecta\" (reads data, reaches the web, runs commands), so a prompt injection could exfiltrate secrets (advisory)",
+          "wcag-audit-patterns inherits all tools — the \"lethal trifecta\" (reads data, reaches the web, runs commands), so a prompt injection could exfiltrate secrets (advisory)"
         ]
       },
       {

@@ -19,7 +19,10 @@ const VIGILES_VERSION = "live";
  * a synthetic `BROWSER_ROOT`, which would otherwise show as the dir name).
  */
 export function runAudit(files: RepoFiles, slug: string): AuditReport {
-  const report = scanFiles(files);
+  // Pass the repo name so a nameless root SKILL.md is labeled after the repo (as
+  // the CLI does from the dir basename), not the synthetic BROWSER_ROOT.
+  const repoName = slug.split("/")[1];
+  const report = scanFiles(files, undefined, undefined, repoName);
   const audit = buildAuditReport(report, {
     harness: "claude-code",
     vigilesVersion: VIGILES_VERSION,
