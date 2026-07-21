@@ -15,6 +15,8 @@ export function CTA() {
         </div>
         <a
           href={REPO}
+          target="_blank"
+          rel="noopener noreferrer"
           className="mt-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
         >
           <Github className="h-4 w-4" aria-hidden />

@@ -1,7 +1,6 @@
 import { StickyCTA } from "@/components/StickyCTA";
 import { Toaster } from "@/components/ui/toaster";
 import { Hero } from "@/components/sections/Hero";
-import { Rings } from "@/components/sections/Rings";
 import { Wedge } from "@/components/sections/Wedge";
 import { Debunk } from "@/components/sections/Debunk";
 import { RepoPicker } from "@/components/sections/RepoPicker";
@@ -14,7 +13,6 @@ export function App() {
       <StickyCTA />
       <main className="min-h-screen">
         <Hero />
-        <Rings />
         <Wedge />
         <Debunk />
         <RepoPicker />
