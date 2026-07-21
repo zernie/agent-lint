@@ -19,7 +19,8 @@
 via `pages.yml` on push to main.
 
 **This session (2026-07-21): site polish + shared `@vigiles/report-view` (merged #80–#99, deployed) + the
-NODE-FREE in-browser audit engine (pushed, NOT yet a PR) + the LIVE-any-repo demo wiring (in progress).**
+NODE-FREE in-browser audit engine + the LIVE-any-repo demo + the README-parity site content sections. All
+pushed to `claude/click-not-working-s9apfb`, NOT yet a PR (branch has ~9 commits past #99).**
 
 **TOP GOAL (codified in `.claude/skills/landing-site`): maximize the % of visitors who RUN `npx vigiles audit`.**
 Every site decision serves that ONE conversion; the CTA must be GREAT. HOLD every `site/` change against the
@@ -36,32 +37,31 @@ source-only shared report components + `AuditReport` schema + `theme.css`, wired
 
 ### 🎯 DO NEXT
 
-- **BAKED demo SHIPPED (#99):** `DemoAudit.tsx` renders REAL `AuditReport`s (baked via `audit --json` on
-  `test/dogfood/*`) through `@vigiles/report-view` + repo chips + an honest one-row model-gated tease. Fixes the
-  old mobile `#try` dead-end.
-- **NODE-FREE ENGINE — DONE, PUSHED (not yet a PR):** the browser audit engine `scanFiles(files)` +
-  `test-coverage-files.ts` now reach ZERO node builtins except `node:zlib` (dist require-graph = 29 files;
-  pkgs @iarna/toml/js-yaml/mvdan-sh, all browser-bundleable). Achieved by MODULE-SPLITTING (not bundler stubs /
-  not dynamic imports — see the decision in `research/report-view-and-browser-demo.md`): `scan-core.ts` (pure
-  detectors; `scan.ts` re-exports via `export *`), `core/ncd.ts`, `posix-path.ts`, `core/mcp-contract-message.ts`,
-  `core/assert-never.ts`, `adapters/claude-code/agent-tools.ts`, + required-injected-IO in
-  hook-block-ineffective/plugin-dir-layout/skill-resources. GATED by the byte-identical parity test
-  `src/scan-files.test.ts` (verified unchanged + green; full unit suite 100% cov; api no drift).
-- **LIVE-ANY-REPO demo wiring — IN PROGRESS (background subagent):** Vite bundle (consume built `dist/` CJS +
-  ONE `node:zlib`→`pako` alias — the site runs the literally-same compiled code as the CLI), in-browser GitHub
-  fetch (Trees API + `raw.githubusercontent.com`, harness paths only), the Fable live-typing UX
-  (`scratchpad/fable-live-typing-brief.md`), + 3 test layers (engine parity ✓, Vitest browser-mode
-  interaction+parity, one Playwright e2e). Brief: `scratchpad/wiring-subagent-brief.md`. THEN: verify + commit +
-  screenshot + Fable, and wire a `site` test job into CI.
-- **SITE CONTENT ADDITIONS — APPROVED, NOT YET BUILT (do after the demo wiring lands, avoids site/ conflicts):**
-  founder flagged the site is "missing tons from the README." All 4 approved: (1) verb-map "one tool, four
-  questions" (audit/lint/test/eval table + the "your rules → enforced" card), (2) adoption "your agent does the
-  rest" (init + skills test-harness/strengthen/edit-spec + hooks + the copy-paste agent prompt), (3) FAQ
-  (framework?/markdown-linter?/TS?/stability), (4) promptfoo cost contrast folded into Debunk. Copy is drafted;
-  re-derive from README.md (the durable source) — order Hero→Wedge→VerbMap→Debunk→DemoAudit→Adoption→FAQ→CTA.
-  Fable + 390px screenshot each; hold against `.claude/skills/landing-site` (brevity still applies).
-- **Analytics (NOT built) + prefilled-OSS chips (NOT built):** founder decisions. GH Pages → GoatCounter rec
-  (free, privacy-friendly); prefilled chips now moot once live-any-repo lands.
+- **OPEN THE PR** — the branch carries ~9 commits past #99 (node-free engine + live demo + content). Not opened
+  yet. Conventional-Commit title with `!` (public API: `score-core`/`scan-core` are internal re-exports so NO
+  api drift — but confirm). CI won't auto-run on Claude-authored commits (Approve-and-run in the PR UI).
+- **WIRE THE SITE TEST JOB INTO CI (only remaining loose end):** `site/` now has `test:browser` (vitest
+  browser-mode: parity + interaction), `test:e2e` (playwright), `gen:parity`. `ci.yml` was NOT touched. Rec (from
+  the wiring build): `test:browser` in the MAIN gate (fast, deterministic, closes the pako-vs-node gap) after
+  `npx playwright install --with-deps chromium`; keep `test:e2e` opt-in/browser-gated. Regen the parity fixture
+  after any intentional engine change: `npm run gen:parity`.
+- **NODE-FREE ENGINE — DONE + PUSHED:** both browser entry points (`scanFiles` AND `buildAuditReport`) reach ZERO
+  node builtins except `node:zlib`→pako. MODULE-SPLITTING, not stubs/dynamic-imports (decision +
+  graph-trace method in `research/report-view-and-browser-demo.md`): leaves `scan-core.ts`, `core/ncd.ts`,
+  `posix-path.ts`, `core/mcp-contract-message.ts`, `core/assert-never.ts`, `agent-tools.ts`, `score-core.ts`
+  (the audit-report re-taint via leaderboard→scan→ast-grep, caught by the STEP-0 build gate). GATED by the
+  byte-identical parity test `src/scan-files.test.ts` (unchanged + green; 100% cov; api no drift).
+- **LIVE-ANY-REPO demo — SHIPPED + VERIFIED:** `DemoAudit.tsx` type-any-repo → live grade via built `dist/` CJS +
+  pako. `site/src/demo/{fetchRepo,runAudit}.ts` (Trees API + `raw.githubusercontent.com`, harness paths only).
+  3 test layers pass (browser-parity closes pako gap, interaction, one e2e); byte-identical to the CLI. Baked
+  chips kept. Verified desktop + 390px.
+- **SITE CONTENT — SHIPPED (README parity):** VerbMap ("One tool. Four questions." verb table + "your rules →
+  enforced" card), Adoption (skills + hooks + copy-paste agent prompt), FAQ (3 net-new objections), promptfoo
+  cost contrast in Debunk. Fable-reviewed + cut (dropped 2 restating FAQs + the 4th audit-command surface).
+  Order Hero→Wedge→VerbMap→Debunk→DemoAudit→Adoption→FAQ→CTA.
+- **Analytics (NOT built):** founder decision. GH Pages → GoatCounter rec (free, privacy-friendly). Prefilled-OSS
+  chips are now moot (live-any-repo shipped). Fable's remaining P1/P2 on PRE-EXISTING sections (Wedge category
+  trim, 3× reassurance, hero-subhead "references that nothing verifies") are un-actioned — optional polish.
 
 ### Codex trigger-rate is EXPERIMENTAL (shipped earlier)
 
