@@ -36,7 +36,17 @@ export interface DetectResult {
   readonly ambiguousWith: readonly string[];
 }
 
-/** Auto-detect the harness for a repo at `root` by highest detect() specificity. */
+/**
+ * Auto-detect the harness for a repo at `root` by highest detect() specificity.
+ *
+ * SCOPE (2026-07-21): `vigiles audit` is CLAUDE-CODE-FOCUSED for now. This is
+ * file-marker detection (a specificity score); it picks ONE harness (or the CC
+ * default) and reports `ambiguousWith` when several match. The known-weak parts —
+ * `AGENTS.md` is an AAIF cross-tool standard NOT a Codex signal, and a
+ * `CLAUDE.md`⇄`AGENTS.md` mirror should collapse to one harness rather than read as
+ * "both" — plus auditing ALL detected harnesses (shared-once + per-harness slice)
+ * are DEFERRED. Full design + research: `research/audit-harness-dx.md`.
+ */
 export function detectAdapterResult(root: string): DetectResult {
   const scored = ADAPTERS.map((a) => ({ a, score: a.detect(root) })).filter(
     (s) => s.score > 0,
