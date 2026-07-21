@@ -1,4 +1,4 @@
-import type { AuditReport } from "@/schema";
+import type { AuditReport } from "./schema";
 
 /** Dev/fallback fixture — shown by `npm run dev` and if the CLI hasn't injected data. */
 export const SAMPLE: AuditReport = {

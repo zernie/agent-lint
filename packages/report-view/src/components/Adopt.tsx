@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Check, Copy, FilePlus2, Loader2, X } from "lucide-react";
-import type { Adoptable } from "@/schema";
-import { Card } from "@/components/ui/card";
-import { TEXT } from "@/lib/band";
-import { cn } from "@/lib/utils";
+import type { Adoptable } from "../schema";
+import { Card } from "./ui/card";
+import { TEXT } from "../lib/band";
+import { cn } from "../lib/utils";
 
 /**
  * Adoption affordances. The report ships two ways:

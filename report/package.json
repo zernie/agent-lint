@@ -9,6 +9,7 @@
     "dev": "vite"
   },
   "dependencies": {
+    "@vigiles/report-view": "*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.469.0",

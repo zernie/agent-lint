@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Check, Copy, ChevronRight, Zap, Sparkles } from "lucide-react";
-import type { RuleInventoryItem, RuleRouting, RuleCategory } from "@/schema";
-import { Card } from "@/components/ui/card";
-import { TEXT, BG } from "@/lib/band";
-import { cn } from "@/lib/utils";
+import type { RuleInventoryItem, RuleRouting, RuleCategory } from "../schema";
+import { Card } from "./ui/card";
+import { TEXT, BG } from "../lib/band";
+import { cn } from "../lib/utils";
 
 const BTN =
   "inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-left text-xs font-medium hover:border-foreground disabled:opacity-60";

@@ -1,0 +1,48 @@
+/*
+  Shared report theme — the shadcn-style tokens the report components map onto
+  (bg-card, text-muted-foreground, border-border, rounded-lg…) + the four
+  Lighthouse band colors (good/warn/bad/na). Auto light/dark via
+  prefers-color-scheme. A consumer does `@import "tailwindcss";` then
+  `@import "@vigiles/report-view/theme.css";` and `@source`s this package's src
+  so Tailwind sees the components' utility classes.
+*/
+@theme inline {
+  --color-background: var(--background);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --color-na: var(--na);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+}
+
+:root {
+  --background: #fafafa;
+  --card: #ffffff;
+  --border: #e4e4e7;
+  --foreground: #09090b;
+  --muted: #71717a;
+  --good: #16a34a;
+  --warn: #f59e0b;
+  --bad: #ef4444;
+  --na: #a1a1aa;
+  --radius: 0.75rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0b0f17;
+    --card: #121826;
+    --border: #1e2636;
+    --foreground: #e6e9ef;
+    --muted: #9aa4b2;
+    --good: #16c784;
+    --warn: #ffb020;
+    --bad: #ff5c5c;
+    --na: #6b7280;
+  }
+}
