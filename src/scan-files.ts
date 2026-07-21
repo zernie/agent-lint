@@ -33,7 +33,7 @@
  * filters). `verifyLiveMcpTools` (spawns servers) is NOT part of `scanPlugin` and
  * is excluded. See research/report-view-and-browser-demo.md.
  */
-import { basename, dirname, isAbsolute, join, relative } from "node:path";
+import { basename, dirname, isAbsolute, join, relative } from "./posix-path.js";
 
 import { parse as parseToml } from "@iarna/toml";
 
@@ -69,9 +69,12 @@ import {
   collectHookBlockEntries,
   collectHookMatchers,
   summarizePurity,
-  type ScanReport,
-  type ScanInstructions,
-} from "./scan.js";
+} from "./scan-core.js";
+// TYPE-ONLY from ./scan.js (the report shapes) — elided at build, so the
+// node-only runtime deps of scan.ts (plugin-loader/mcp/test-coverage/node:fs)
+// never enter this browser-safe engine's graph. The runtime detectors come from
+// the node-free ./scan-core.js above.
+import type { ScanReport, ScanInstructions } from "./scan.js";
 
 /**
  * The synthetic absolute root every path in a browser scan resolves against. A

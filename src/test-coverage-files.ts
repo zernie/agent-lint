@@ -12,7 +12,7 @@
  * colocation + content-reference coverage rules. See the parity test in
  * src/scan-files.test.ts.
  */
-import { basename, dirname } from "node:path";
+import { basename, dirname } from "./posix-path.js";
 
 import type { PluginLayout } from "./core/layout.js";
 import type { Surface, SurfaceKind } from "./test-coverage.js";

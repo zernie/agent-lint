@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
 
+// `assertNever` lives in a node-free leaf (no crypto), re-exported here so every
+// existing `import { assertNever } from "./hash.js"` is unchanged while a
+// browser-bound module can import it from ./assert-never.js without pulling crypto.
+export { assertNever } from "./assert-never.js";
+
 const HASH_LENGTH = 16;
 
 declare const __brand: unique symbol;
@@ -10,8 +15,4 @@ export function sha256short(data: string | Buffer): SHA256Hash {
     .update(data)
     .digest("hex")
     .slice(0, HASH_LENGTH) as SHA256Hash;
-}
-
-export function assertNever(x: never): never {
-  throw new Error(`Unexpected value: ${String(x)}`);
 }

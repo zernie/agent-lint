@@ -9,10 +9,11 @@
  * completely invisible to the harness. Only `plugin.json` belongs inside the
  * manifest directory; everything else must live at the root.
  *
- * Pure + FP-safe: the only IO is an injectable `existsSync` and `isDirectory`
- * (defaults: node:fs), mirroring the pattern in core/skill-resources.ts and the
- * loader, so the detector is fully testable with fakes and never touches the
- * filesystem in tests.
+ * Pure + FP-safe + node-free: the only IO is a REQUIRED, injected `existsSync`
+ * and `isDirectory` (the disk caller passes `node:fs`; the browser engine passes
+ * a map-backed pair), so the detector is fully testable with fakes, never touches
+ * the filesystem in tests, and statically imports no `node:` builtin — it bundles
+ * clean in a browser (path ops come from the node-free `posix-path`).
  *
  * Harness-agnostic: the surface directory names are INJECTED from the layout
  * (PluginLayout.skillDir / agentDir / commandDir / hookDir, or equivalent), never
@@ -20,8 +21,7 @@
  * `plugin-dir-layout` rule) and `vigiles audit` (the read-only report) — one
  * detector, no drift.
  */
-import { existsSync as nodeExistsSync, statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, join } from "../posix-path.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,30 +36,18 @@ export interface PluginLayoutFinding {
 }
 
 export interface PluginLayoutOptions {
-  /** Injectable: does this path exist? (default: node:fs existsSync) */
-  readonly existsSync?: (p: string) => boolean;
+  /** REQUIRED, injected: does this path exist? (disk: node:fs existsSync) */
+  readonly existsSync: (p: string) => boolean;
   /**
-   * Injectable: is this path a directory? (default: node:fs
+   * REQUIRED, injected: is this path a directory? (disk: node:fs
    * statSync(p).isDirectory(), returning false on any throw)
    */
-  readonly isDirectory?: (p: string) => boolean;
+  readonly isDirectory: (p: string) => boolean;
 }
 
 // ---------------------------------------------------------------------------
 // Detector
 // ---------------------------------------------------------------------------
-
-/**
- * Default `isDirectory` implementation — wraps statSync so that a missing or
- * unreadable path returns `false` instead of throwing.
- */
-function defaultIsDirectory(p: string): boolean {
-  try {
-    return statSync(p).isDirectory();
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Surface directories found nested INSIDE the manifest directory, where they are
@@ -76,10 +64,10 @@ function defaultIsDirectory(p: string): boolean {
 export function pluginDirLayoutIssues(
   manifestDir: string,
   surfaceDirNames: readonly string[],
-  opts?: PluginLayoutOptions,
+  opts: PluginLayoutOptions,
 ): PluginLayoutFinding[] {
-  const exists = opts?.existsSync ?? nodeExistsSync;
-  const isDir = opts?.isDirectory ?? defaultIsDirectory;
+  const exists = opts.existsSync;
+  const isDir = opts.isDirectory;
 
   const manifestBase = basename(manifestDir);
   const findings: PluginLayoutFinding[] = [];
