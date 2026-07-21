@@ -80,4 +80,23 @@ describe("collectReferencedPaths — hook scripts outside harness dirs", () => {
     });
     expect(refs.size).toBe(0);
   });
+
+  it("catches SKILL.md bundled resources (references/assets + md links)", () => {
+    // A root single-skill repo's non-script bundled resources — the harness filter
+    // drops them, so the scan would falsely flag them missing without this fetch.
+    const refs = collectReferencedPaths({
+      "SKILL.md":
+        "Read `references/api.md` for the schema. See [the guide](assets/guide.md).\n",
+    });
+    expect(refs.has("references/api.md")).toBe(true);
+    expect(refs.has("assets/guide.md")).toBe(true);
+  });
+
+  it("ignores external links (no false bundled-resource fetch)", () => {
+    const refs = collectReferencedPaths({
+      "SKILL.md":
+        "See [docs](https://example.com/x.md) and prose about assets.\n",
+    });
+    expect(refs.size).toBe(0);
+  });
 });

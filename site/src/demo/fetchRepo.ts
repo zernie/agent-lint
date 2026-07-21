@@ -142,12 +142,24 @@ const ROOT_REF =
   /\$\{?(?:CLAUDE_PLUGIN_ROOT|CLAUDE_PROJECT_DIR)\}?\/([A-Za-z0-9._/-]+)/g;
 const REL_SCRIPT =
   /(?:^|[\s"'`(=:,])(?:\.\/)?((?:[\w.-]+\/)+[\w.-]+\.(?:sh|bash|zsh|js|mjs|cjs|ts|py|rb))(?=$|[\s"'`),;])/gm;
+// A SKILL.md's BUNDLED RESOURCES (the scan's `skillResourceIssues` verifies these):
+// a `scripts/`/`references/`/`assets/`-prefixed path with any extension, or a
+// markdown link to a relative file. The harness filter fetches the SKILL.md but
+// drops non-script resources at the REPO ROOT (a root single-skill repo's
+// `references/api.md`), so the scan would falsely flag them missing; fetch the
+// tree-present ones. (Nested-skill resources under `skills/**` are already fetched.)
+const BUNDLE_RES =
+  /(?:^|[\s"'`(=:,])(?:\.\/)?((?:scripts|references|assets)\/[\w./-]+\.[A-Za-z0-9]+)/gm;
+const MD_LINK_REL =
+  /\[[^\]]*\]\((?!\w+:\/\/|\/|#|mailto:)(?:\.\/)?([\w./-]+\.[A-Za-z0-9]+)(?:[?#][^)]*)?\)/g;
 
 export function collectReferencedPaths(files: RepoFiles): Set<string> {
   const out = new Set<string>();
   for (const content of Object.values(files)) {
     for (const m of content.matchAll(ROOT_REF)) out.add(m[1]);
     for (const m of content.matchAll(REL_SCRIPT)) out.add(m[1]);
+    for (const m of content.matchAll(BUNDLE_RES)) out.add(m[1]);
+    for (const m of content.matchAll(MD_LINK_REL)) out.add(m[1]);
   }
   return out;
 }
