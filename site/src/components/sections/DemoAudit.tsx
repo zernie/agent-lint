@@ -5,12 +5,17 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Lock, CornerDownLeft, Check, Copy } from "lucide-react";
+import { Lock, CornerDownLeft, Check, Copy, RotateCw } from "lucide-react";
 import { Report, type AuditReport } from "@vigiles/report-view";
 import { normalizeSlug } from "@/lib/deeplink";
 import { track } from "@/lib/track";
-import { fetchRepo, type FetchProgress } from "@/demo/fetchRepo";
+import {
+  fetchRepo,
+  type FetchProgress,
+  type FetchOutcome,
+} from "@/demo/fetchRepo";
 import { runAudit } from "@/demo/runAudit";
+import { readGrade, writeGrade, sweepGrades } from "@/demo/gradeCache";
 import { cn } from "@/lib/utils";
 
 // Real audit reports, computed by the actual `vigiles audit` on real published
@@ -61,8 +66,10 @@ type LoadingState = {
 type View =
   | { k: "featured"; i: number }
   | { k: "loading"; slug: string; detail: LoadingState }
-  | { k: "report"; slug: string; audit: AuditReport }
-  | { k: "empty"; slug: string }
+  // `cachedAt` (present iff served from a cache) drives the "graded N ago · re-grade"
+  // provenance strip — only the two persistable kinds carry it (see gradeCache).
+  | { k: "report"; slug: string; audit: AuditReport; cachedAt?: number }
+  | { k: "empty"; slug: string; cachedAt?: number }
   | { k: "marketplace"; slug: string }
   | { k: "notfound"; slug: string }
   | { k: "ratelimit"; slug: string }
@@ -317,8 +324,12 @@ export function DemoAudit() {
   const [view, setView] = useState<View>({ k: "featured", i: 0 });
   const [loadingVisible, setLoadingVisible] = useState(false);
 
-  // Session cache: a repo audited once re-shows instantly (no re-fetch).
-  const cache = useRef(new Map<string, TerminalView>());
+  // L1 — session cache: a repo audited once re-shows instantly (no re-fetch). Holds
+  // all stable outcomes; `gradedAt` lets even a memory hit show honest age. The
+  // persistent L2 (gradeCache, idb-keyval) sits under it for cross-reload/deep-link.
+  const cache = useRef(
+    new Map<string, { view: TerminalView; gradedAt: number }>(),
+  );
   // Ignore stale async: only the latest run may commit.
   const runId = useRef(0);
   // The last frame with real content — kept on screen during the <200ms
@@ -327,29 +338,40 @@ export function DemoAudit() {
   const abort = useRef<AbortController | null>(null);
   const suppressTimer = useRef<number | null>(null);
 
-  const run = useCallback((slug: string): void => {
+  const run = useCallback((slug: string, opts?: { force?: boolean }): void => {
     // Analytics carries the OUTCOME kind only — never the typed slug: the demo
     // promises nothing leaves the browser but GitHub requests, and a typed slug
     // would leak a private/sensitive repo name (which resolves to 404) to Plausible.
-    track("demo_typed_submit");
+    track(opts?.force ? "demo_regrade" : "demo_typed_submit");
     const id = ++runId.current;
     abort.current?.abort();
 
-    // Cached → straight to the settled view, no loading, no request.
-    const cached = cache.current.get(slug);
-    if (cached) {
-      setView(cached);
-      prevFrame.current = cached;
-      syncUrl(cached);
-      track(`demo_run_${runKind(cached)}`, { cached: true });
-      return;
+    const showCached = (
+      view: TerminalView,
+      gradedAt: number,
+      via: "memory" | "persistent",
+    ): void => {
+      const v = withCachedAt(view, gradedAt);
+      prevFrame.current = v;
+      setView(v);
+      syncUrl(v);
+      track(`demo_run_${runKind(view)}`, { cached: via });
+    };
+
+    // L1 (memory) — sync, instant. `force` skips both cache layers.
+    if (!opts?.force) {
+      const hit = cache.current.get(slug);
+      if (hit) {
+        showCached(hit.view, hit.gradedAt, "memory");
+        return;
+      }
     }
 
     const controller = new AbortController();
     abort.current = controller;
     setView({ k: "loading", slug, detail: { treeCount: null, files: null } });
     // Suppress the step log for ~200ms so a tiny/cached repo goes straight to
-    // the report with no skeleton flash.
+    // the report with no skeleton flash (an L2 read resolves well inside it).
     setLoadingVisible(false);
     if (suppressTimer.current) window.clearTimeout(suppressTimer.current);
     suppressTimer.current = window.setTimeout(() => {
@@ -374,38 +396,51 @@ export function DemoAudit() {
       );
     };
 
-    void fetchRepo(slug, onProgress, controller.signal).then((outcome) => {
-      if (runId.current !== id) return;
-      let settled: TerminalView;
-      if (outcome.kind === "ok") {
-        // The "running deterministic checks" step — real work, no padding.
-        const audit = runAudit(outcome.files, slug);
-        settled = { k: "report", slug, audit };
-      } else if (outcome.kind === "no-harness") {
-        settled = { k: "empty", slug };
-      } else if (outcome.kind === "marketplace") {
-        settled = { k: "marketplace", slug };
-      } else if (outcome.kind === "not-found") {
-        settled = { k: "notfound", slug };
-      } else if (outcome.kind === "rate-limit") {
-        settled = { k: "ratelimit", slug };
-      } else if (outcome.kind === "too-large") {
-        settled = { k: "too-large", slug };
-      } else {
-        settled = { k: "error", slug };
+    const fetchAndGrade = (): void => {
+      void fetchRepo(slug, onProgress, controller.signal).then((outcome) => {
+        if (runId.current !== id) return;
+        const settled = settleOutcome(outcome, slug);
+        const gradedAt = Date.now();
+        // Cache only STABLE outcomes in L1 — a transient error/rate-limit must be
+        // able to retry on the next submit, so the frame's "try again" works.
+        if (isCacheable(settled))
+          cache.current.set(slug, { view: settled, gradedAt });
+        // Persist only the expensive, shareable, stable report/empty to L2 — never
+        // notfound (a private repo name on disk) or a flippable/transient state.
+        if (settled.k === "report") {
+          void writeGrade({ k: "report", slug, audit: settled.audit });
+        } else if (settled.k === "empty") {
+          void writeGrade({ k: "empty", slug });
+        }
+        prevFrame.current = settled;
+        setView(settled);
+        syncUrl(settled);
+        track(`demo_run_${runKind(settled)}`);
+      });
+    };
+
+    // L2 (persistent) — async, checked BEFORE the network. A hit renders with zero
+    // GitHub requests. `force` bypasses it.
+    if (opts?.force) {
+      fetchAndGrade();
+      return;
+    }
+    void readGrade(slug).then((hit) => {
+      if (runId.current !== id) return; // a chip / newer submit superseded us
+      if (hit) {
+        cache.current.set(slug, { view: hit.view, gradedAt: hit.gradedAt }); // promote to L1
+        if (suppressTimer.current) window.clearTimeout(suppressTimer.current);
+        showCached(hit.view, hit.gradedAt, "persistent");
+        return;
       }
-      // Cache only STABLE outcomes — a transient error/rate-limit must be able to
-      // retry on the next submit, so the frame's own "try again" guidance works.
-      if (isCacheable(settled)) cache.current.set(slug, settled);
-      prevFrame.current = settled;
-      setView(settled);
-      syncUrl(settled);
-      track(`demo_run_${runKind(settled)}`);
+      fetchAndGrade();
     });
   }, []);
 
-  // Deep-link: on load with ?repo=owner/repo, auto-run it.
+  // Deep-link: on load with ?repo=owner/repo, auto-run it (L1→L2→network). Also
+  // sweep expired / old-namespace persistent entries once per mount.
   useEffect(() => {
+    void sweepGrades();
     const param = new URLSearchParams(window.location.search).get("repo");
     const slug = param ? normalizeSlug(param) : null;
     if (slug) run(slug);
@@ -493,8 +528,16 @@ export function DemoAudit() {
         {/* The report frame — one component, every state renders inside it (no
             toast, no layout jump). */}
         <div className="reveal mt-8 overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
-          <div className="border-b border-border bg-card/40 px-5 py-2.5 font-mono text-xs text-muted-foreground">
-            $ vigiles audit {headerSlug(frameView)}
+          <div className="flex items-center justify-between gap-3 border-b border-border bg-card/40 px-5 py-2.5 font-mono text-xs text-muted-foreground">
+            <span className="truncate">
+              $ vigiles audit {headerSlug(frameView)}
+            </span>
+            {cachedAtOf(frameView) !== undefined && (
+              <CachedBadge
+                gradedAt={cachedAtOf(frameView) as number}
+                onRegrade={() => run(headerSlug(frameView), { force: true })}
+              />
+            )}
           </div>
           {frameView.k === "loading" ? (
             <StepLog detail={frameView.detail} />
@@ -548,6 +591,74 @@ export function DemoAudit() {
 /** A stable outcome worth caching — a transient failure must stay retryable. */
 function isCacheable(v: TerminalView): boolean {
   return v.k !== "error" && v.k !== "ratelimit";
+}
+
+/** Map a fetch outcome to the terminal view it settles to (the live grade compute
+ *  happens here for the ok case — the one real "running checks" step). */
+function settleOutcome(outcome: FetchOutcome, slug: string): TerminalView {
+  switch (outcome.kind) {
+    case "ok":
+      return { k: "report", slug, audit: runAudit(outcome.files, slug) };
+    case "no-harness":
+      return { k: "empty", slug };
+    case "marketplace":
+      return { k: "marketplace", slug };
+    case "not-found":
+      return { k: "notfound", slug };
+    case "rate-limit":
+      return { k: "ratelimit", slug };
+    case "too-large":
+      return { k: "too-large", slug };
+    case "error":
+      return { k: "error", slug };
+  }
+}
+
+/** Stamp cache provenance on the two kinds that carry it; pass others through. */
+function withCachedAt(v: TerminalView, gradedAt: number): TerminalView {
+  return v.k === "report" || v.k === "empty" ? { ...v, cachedAt: gradedAt } : v;
+}
+
+/** The `cachedAt` on the frame's report/empty view, if any (drives the badge). */
+function cachedAtOf(v: View): number | undefined {
+  return v.k === "report" || v.k === "empty" ? v.cachedAt : undefined;
+}
+
+/** Coarse relative age — "just now" / "12 min ago" / "3 h ago" / "2 d ago". */
+function relativeAge(from: number, now: number): string {
+  const s = Math.max(0, Math.round((now - from) / 1000));
+  if (s < 60) return "just now";
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h} h ago`;
+  return `${Math.round(h / 24)} d ago`;
+}
+
+/** The header provenance strip on a cached hit — honest age + a one-click re-grade
+ *  so a cached grade is never silently stale. */
+function CachedBadge({
+  gradedAt,
+  onRegrade,
+}: {
+  gradedAt: number;
+  onRegrade: () => void;
+}) {
+  return (
+    <span className="flex items-center gap-2 text-muted-foreground">
+      <span className="hidden sm:inline">
+        graded {relativeAge(gradedAt, Date.now())}
+      </span>
+      <span className="hidden sm:inline">·</span>
+      <button
+        type="button"
+        onClick={onRegrade}
+        className="inline-flex items-center gap-1 transition-colors hover:text-accent"
+      >
+        <RotateCw className="h-3 w-3" aria-hidden /> re-grade
+      </button>
+    </span>
+  );
 }
 
 /** The instrument suffix for a settled run. */

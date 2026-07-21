@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { playwright } from "@vitest/browser-playwright";
 import { aliases } from "./vite.aliases";
+import { ENGINE_VERSION } from "./vite.engine-version";
 
 // Browser-mode tests for the live demo (real Chromium + real pako, so the
 // pako-vs-node-zlib parity is closed for real, not mocked). Runs
@@ -23,7 +24,10 @@ export default defineConfig({
     esbuildOptions: { define: { global: "globalThis" } },
   },
   // Mirror the define for any non-optimized transform path too.
-  define: { global: "globalThis" },
+  define: {
+    global: "globalThis",
+    __ENGINE_V__: JSON.stringify(ENGINE_VERSION),
+  },
   server: {
     fs: {
       // Allow importing the repo-root `dist/` (one level above the site root).

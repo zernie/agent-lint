@@ -16,6 +16,7 @@
     "@vigiles/report-view": "*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "idb-keyval": "^6.3.0",
     "lucide-react": "^0.469.0",
     "pako": "^2.2.0",
     "react": "^19.0.0",

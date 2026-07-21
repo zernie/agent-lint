@@ -18,6 +18,9 @@ vi.mock("@/demo/fetchRepo", () => ({
   fetchRepo: vi.fn(),
 }));
 import { fetchRepo } from "@/demo/fetchRepo";
+import { clear } from "idb-keyval";
+import { writeGrade } from "@/demo/gradeCache";
+import { runAudit } from "@/demo/runAudit";
 import { DemoAudit } from "./DemoAudit";
 
 const mockFetch = vi.mocked(fetchRepo);
@@ -37,9 +40,10 @@ function scripted(
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   history.replaceState(null, "", "/"); // no ?repo= auto-run
   mockFetch.mockReset();
+  await clear(); // hermetic: no persistent grade leaks between tests
 });
 afterEach(cleanup);
 
@@ -152,4 +156,47 @@ describe("DemoAudit — the in-frame edge states", () => {
       expect(screen.getByText(/vigiles audit acme\/widgets/)).toBeTruthy();
     });
   }
+});
+
+describe("DemoAudit — persistent cache (idb-keyval)", () => {
+  it("grades a persisted repo with ZERO fetch (the deep-link / reload path)", async () => {
+    // Prime L2 as a prior session would have.
+    await writeGrade({
+      k: "report",
+      slug: "acme/widgets",
+      audit: runAudit(sampleFiles as Record<string, string>, "acme/widgets"),
+    });
+    mockFetch.mockImplementation(
+      scripted({ kind: "error", message: "must not be called on a cache hit" }),
+    );
+    render(<DemoAudit />);
+    await typeRepo("acme/widgets");
+    // The cached provenance badge appears, and no GitHub request was made.
+    await screen.findByText(/re-grade/i);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("re-grade forces a fresh fetch, bypassing the cache", async () => {
+    await writeGrade({
+      k: "report",
+      slug: "acme/widgets",
+      audit: runAudit(sampleFiles as Record<string, string>, "acme/widgets"),
+    });
+    mockFetch.mockImplementation(
+      scripted({
+        kind: "ok",
+        files: sampleFiles as Record<string, string>,
+        treeCount: 5,
+        harnessCount: 3,
+      }),
+    );
+    render(<DemoAudit />);
+    await typeRepo("acme/widgets");
+    const regrade = await screen.findByText(/re-grade/i);
+    expect(mockFetch).not.toHaveBeenCalled(); // served from cache
+
+    const user = userEvent.setup();
+    await user.click(regrade);
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1)); // forced network run
+  });
 });
