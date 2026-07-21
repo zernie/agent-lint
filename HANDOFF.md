@@ -35,8 +35,9 @@ transient error/rate-limit no longer cached (retry works). (7) root nameless SKI
 useLocalStorage hooks — imperative dynamic-key + TTL/version/LRU needs); 24h TTL, version-namespaced key
 (`AUDIT_SCHEMA_VERSION` + build-time git SHA via `__ENGINE_V__` Vite define), 30-LRU, parse-don't-validate; L1
 in-memory Map layered over L2; "graded N ago · re-grade" header badge. Site browser tests 26/26 (real Chromium +
-real IndexedDB). **GAP: the site browser suite still isn't in CI** — gradeCache/DemoAudit correctness is only
-verified locally (see the site-test-job loose end below).
+real IndexedDB), now **WIRED INTO CI** — a new `site` job in `ci.yml` builds root dist/, installs Chromium, runs
+`npm run test:browser` (parity + interaction + grade-cache). Jobs are now test/check/harness/site/e2e; `test:e2e`
+(Playwright) stays manual. The former "wire the site test job" loose end is DONE.
 
 **TOP GOAL (codified in `.claude/skills/landing-site`): maximize the % of visitors who RUN `npx vigiles audit`.**
 Every site decision serves that ONE conversion; the CTA must be GREAT. HOLD every `site/` change against the
