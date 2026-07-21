@@ -343,14 +343,19 @@ export async function fetchRepo(
       const referenced = collectReferencedPaths(files);
       const manifestHooks = manifestHookConfig(files);
       if (manifestHooks !== null) referenced.add(manifestHooks);
-      const budget = MAX_FILES - Object.keys(files).length;
-      if (budget <= 0) break;
-      const extra = [...referenced]
+      const eligible = [...referenced]
         .filter((p) => inTree.has(p) && !(p in files))
-        .filter((p) => (sizeOf.get(p) ?? 0) <= MAX_FILE_BYTES)
-        .slice(0, budget)
-        .map((path) => ({ path, type: "blob" }) as TreeEntry);
-      if (extra.length === 0) break;
+        .filter((p) => (sizeOf.get(p) ?? 0) <= MAX_FILE_BYTES);
+      if (eligible.length === 0) break;
+      const budget = MAX_FILES - Object.keys(files).length;
+      // These referenced files feed GRADED findings (a missing hook / script /
+      // bundled resource is penalized), so if they don't fit the budget, grading
+      // would be over a PARTIAL repo — bail to too-large rather than slice off
+      // required files (mirrors the first-pass harness cap).
+      if (eligible.length > budget) return { kind: "too-large" };
+      const extra = eligible.map(
+        (path) => ({ path, type: "blob" }) as TreeEntry,
+      );
       total += extra.length;
       await drain(extra);
     }

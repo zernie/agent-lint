@@ -190,6 +190,29 @@ describe("fetchRepo — never grades partial data", () => {
     if (out.kind === "ok") expect("tests/foo.test.ts" in out.files).toBe(true);
   });
 
+  it("returns too-large when required second-pass files exceed the budget", async () => {
+    // 300 skill surfaces (== cap, so first-pass passes) whose first skill also
+    // references a tree-present bundled resource → the second pass has no budget
+    // left, so grading would drop a required file → bail to too-large.
+    const tree = [
+      ...Array.from({ length: 300 }, (_, i) => ({
+        path: `skills/s${i}/SKILL.md`,
+        type: "blob",
+        size: 10,
+      })),
+      { path: "references/api.md", type: "blob", size: 10 },
+    ];
+    stubGitHub(tree, (path) =>
+      resp({
+        text: async () =>
+          path === "skills/s0/SKILL.md"
+            ? "Read `references/api.md`.\n"
+            : "A skill.\n",
+      }),
+    );
+    expect((await fetchRepo("o/r")).kind).toBe("too-large");
+  });
+
   it("a coverage-test fetch FAILURE does not error the grade (advisory)", async () => {
     const tree = [
       { path: "skills/foo/SKILL.md", type: "blob", size: 10 },
