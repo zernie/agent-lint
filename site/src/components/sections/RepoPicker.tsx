@@ -127,14 +127,15 @@ export function RepoPicker() {
         <div className="mx-auto max-w-2xl text-center">
           <Badge variant="accent" className="mb-5">
             <Star className="h-3 w-3" aria-hidden />
-            Try it on your repo
+            Audit a specific repo
           </Badge>
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Grade your harness.
+            Grade a specific repo.
           </h2>
           <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
-            Pick a repo and hand it to your own Claude Code. It runs locally, on
-            your subscription — no account, no server, nothing uploaded.
+            Pick a repo and audit it — locally, on your own machine, nothing
+            uploaded. With Claude Code on your desktop it&apos;s one click;
+            anywhere else it&apos;s one command.
           </p>
         </div>
 
@@ -340,38 +341,48 @@ export function RepoPicker() {
                     {targetSlug}
                   </span>
                 </p>
-                <Button
-                  href={deeplink(targetSlug)}
-                  onClick={handoff}
-                  variant="primary"
-                  size="lg"
-                  className="mt-3 w-full"
-                >
-                  <Terminal className="h-4 w-4" aria-hidden />
-                  Test my skills in Claude Code
-                  <ArrowRight className="h-4 w-4" aria-hidden />
-                </Button>
-                <p className="mt-2.5 text-center text-xs text-muted-foreground">
-                  Opens your local Claude Code (the repo must be cloned
-                  locally); runs on your own subscription.{" "}
-                  <span className="text-foreground/70">
-                    Your code never leaves your machine — no server ever sees
-                    your repo.
-                  </span>
+
+                {/* Desktop: one click opens the user's local Claude Code. */}
+                <div className="hidden sm:block">
+                  <Button
+                    href={deeplink(targetSlug)}
+                    onClick={handoff}
+                    variant="primary"
+                    size="lg"
+                    className="mt-3 w-full"
+                  >
+                    <Terminal className="h-4 w-4" aria-hidden />
+                    Audit this repo in Claude Code
+                    <ArrowRight className="h-4 w-4" aria-hidden />
+                  </Button>
+                  <p className="mt-2.5 text-center text-xs text-muted-foreground">
+                    Opens your local Claude Code (the repo must be cloned
+                    locally) and runs the full audit on your own subscription —
+                    nothing uploaded.
+                  </p>
+                </div>
+
+                {/* Mobile: the deeplink can't reach Claude Code — use the command. */}
+                <p className="mt-3 rounded-xl border border-border bg-background px-4 py-3 text-sm text-muted-foreground sm:hidden">
+                  Claude Code runs on a computer, not a phone. On your machine,{" "}
+                  <span className="whitespace-nowrap font-mono text-foreground">
+                    cd {targetSlug.split("/")[1] ?? targetSlug}
+                  </span>{" "}
+                  and run the command below.
                 </p>
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
                 Pick a repo above or type{" "}
-                <span className="font-mono">owner/name</span> to get your Claude
-                Code handoff.
+                <span className="font-mono">owner/name</span> to get your
+                command and (on desktop) a one-click Claude Code handoff.
               </p>
             )}
 
             <div className="mt-6 flex flex-col items-center gap-2 border-t border-border pt-6">
               <CommandBlock command="npx vigiles audit" />
               <p className="text-xs text-muted-foreground">
-                No Claude Code CLI? Run this in your terminal — zero install.
+                Any terminal, zero install — auto-detects Claude Code or Codex.
               </p>
             </div>
           </div>
