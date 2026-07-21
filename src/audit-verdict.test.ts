@@ -91,7 +91,7 @@ describe("computeVerdict", () => {
     expect(v.grade).toBe("B");
     expect(v.pointsToNextGrade).toBe(10);
     expect(v.fixesToNextGrade).toBe(1);
-    expect(v.sentence).toBe("One one-line fix away from an A.");
+    expect(v.sentence).toBe("One fix away from an A.");
     expect(v.perRecommendation).toHaveLength(2);
   });
 
@@ -148,7 +148,7 @@ describe("computeVerdict", () => {
     expect(v.grade).toBe("C");
     expect(v.pointsToNextGrade).toBe(9);
     expect(v.fixesToNextGrade).toBe(2);
-    expect(v.sentence).toBe("Two one-line fixes away from a B.");
+    expect(v.sentence).toBe("Two fixes away from a B.");
     // The three tool findings are recs; the invalid model is not.
     expect(v.perRecommendation).toHaveLength(3);
   });

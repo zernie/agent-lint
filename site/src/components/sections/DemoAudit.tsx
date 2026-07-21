@@ -65,8 +65,10 @@ export function DemoAudit() {
           </p>
         </div>
 
-        {/* Repo chips — switch the rendered report. */}
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
+        {/* Repo chips — switch the rendered report. On mobile they're one
+            horizontally-scrollable row (not 3 wrapped rows pushing the grade
+            down the fold); on desktop they wrap + center. */}
+        <div className="mt-8 flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:justify-center sm:overflow-x-visible">
           {FEATURED.map((f, i) => (
             <button
               key={f.slug}
@@ -74,7 +76,7 @@ export function DemoAudit() {
               onClick={() => setActive(i)}
               aria-pressed={i === active}
               className={cn(
-                "rounded-full border px-3.5 py-1.5 font-mono text-sm transition-colors",
+                "shrink-0 rounded-full border px-3.5 py-1.5 font-mono text-sm transition-colors",
                 i === active
                   ? "border-accent/60 bg-accent/10 text-foreground"
                   : "border-border text-muted-foreground hover:border-accent/40 hover:text-foreground",
@@ -85,12 +87,13 @@ export function DemoAudit() {
           ))}
         </div>
 
-        {/* The real report, rendered through @vigiles/report-view. */}
+        {/* The real report, rendered through @vigiles/report-view — full height,
+            NO inner scroll box (that hid the fix card, the whole payoff). */}
         <div className="reveal mt-8 overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
           <div className="border-b border-border bg-card/40 px-5 py-2.5 font-mono text-xs text-muted-foreground">
             $ vigiles audit {current.slug}
           </div>
-          <div className="max-h-[36rem] overflow-y-auto p-5 sm:p-7">
+          <div className="p-5 sm:p-7">
             <Report data={current.report} />
           </div>
         </div>

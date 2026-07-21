@@ -27,7 +27,7 @@
         "key": "Structure",
         "score": 92,
         "weight": 1,
-        "findings": ["1 agent tool that don't exist (typo / never-available)"]
+        "findings": ["1 unavailable agent tool (typo / never-available)"]
       },
       {
         "key": "Safety",
@@ -48,7 +48,7 @@
     "empty": false
   },
   "verdict": {
-    "sentence": "One one-line fix away from an A.",
+    "sentence": "One fix away from an A.",
     "grade": "B",
     "pointsToNextGrade": 8,
     "fixesToNextGrade": 1,
