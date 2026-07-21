@@ -8,7 +8,6 @@ import {
   Star,
   Terminal,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CommandBlock } from "@/components/CommandBlock";
@@ -125,17 +124,12 @@ export function RepoPicker() {
     <section id="try" className="scroll-mt-8 border-t border-border bg-card/30">
       <div className="mx-auto w-full max-w-3xl px-6 py-20 sm:py-28">
         <div className="mx-auto max-w-2xl text-center">
-          <Badge variant="accent" className="mb-5">
-            <Star className="h-3 w-3" aria-hidden />
-            Audit a specific repo
-          </Badge>
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
             Grade a specific repo.
           </h2>
           <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
-            Pick a repo and audit it — locally, on your own machine, nothing
-            uploaded. With Claude Code on your desktop it&apos;s one click;
-            anywhere else it&apos;s one command.
+            One click with Claude Code on your desktop — one command anywhere
+            else.
           </p>
         </div>
 
@@ -357,8 +351,7 @@ export function RepoPicker() {
                   </Button>
                   <p className="mt-2.5 text-center text-xs text-muted-foreground">
                     Opens your local Claude Code (the repo must be cloned
-                    locally) and runs the full audit on your own subscription —
-                    nothing uploaded.
+                    locally) and runs the audit on your subscription.
                   </p>
                 </div>
 
@@ -381,9 +374,6 @@ export function RepoPicker() {
 
             <div className="mt-6 flex flex-col items-center gap-2 border-t border-border pt-6">
               <CommandBlock command="npx vigiles audit" />
-              <p className="text-xs text-muted-foreground">
-                Any terminal, zero install — auto-detects Claude Code or Codex.
-              </p>
             </div>
           </div>
         </Card>
