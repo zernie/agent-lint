@@ -118,7 +118,7 @@ describe("DemoAudit — the four in-frame edge states", () => {
     {
       name: "no-harness → empty",
       outcome: { kind: "no-harness", treeCount: 10 },
-      expect: /No agent harness in/i,
+      expect: /No Claude Code harness in/i,
     },
     {
       name: "not-found → private/404",

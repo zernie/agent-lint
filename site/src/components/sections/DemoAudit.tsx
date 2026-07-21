@@ -204,16 +204,16 @@ function EdgeState({ view }: { view: TerminalView }) {
       <>
         <p>
           <strong className="text-foreground">
-            No agent harness in {slug}.
+            No Claude Code harness in {slug}.
           </strong>{" "}
-          No CLAUDE.md, AGENTS.md, .claude/, or .codex/ — nothing for an agent
-          audit to grade.
+          No CLAUDE.md or .claude/ — nothing for the browser demo to grade.
         </p>
         <p className="mt-3">
-          Try a repo that ships skills, hooks, or agent instructions — or one of
-          the featured plugins above. If your harness lives in a repo, grade it
-          where it lives: <InlineCommand />
+          The browser demo grades Claude Code. For Codex (AGENTS.md / .codex),
+          or any harness that lives in a repo, grade it where it lives:{" "}
+          <InlineCommand />
         </p>
+        <p className="mt-3">Or try one of the featured plugins above.</p>
       </>
     );
   } else if (view.k === "notfound") {

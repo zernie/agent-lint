@@ -80,7 +80,7 @@ test("a repo with no harness shows the in-frame empty state, not an error", asyn
   await mockRepo(page, {}, ["README.md", "src/index.js", "package.json"]);
   await gradeRepo(page);
 
-  await expect(page.getByText(/No agent harness in/i)).toBeVisible();
+  await expect(page.getByText(/No Claude Code harness in/i)).toBeVisible();
   await expect(
     page.getByText("$ vigiles audit acme/widgets", { exact: true }),
   ).toBeVisible();

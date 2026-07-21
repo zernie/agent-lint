@@ -48,13 +48,18 @@ const MAX_FILES = 300;
 /** How many raw content fetches run at once. */
 const CONCURRENCY = 6;
 
+// The browser demo grades CLAUDE CODE harnesses only (the engine's Codex audit is
+// full-parity, but the demo doesn't wire the Codex layout/dialect yet — a follow-up).
+// So we fetch only Claude-Code surfaces; a Codex-only repo (AGENTS.md / .codex) lands
+// in the honest no-harness state that points at the CLI, not a report scanned with the
+// wrong layout. Do NOT re-add AGENTS.md/.codex here without wiring the Codex adapter
+// into runAudit — fetching a surface the scan then ignores is what produced the bug.
 /** Top-level files that ARE a harness surface on their own. */
-const HARNESS_ROOT_FILES = new Set(["CLAUDE.md", "AGENTS.md", ".mcp.json"]);
+const HARNESS_ROOT_FILES = new Set(["CLAUDE.md", ".mcp.json"]);
 /** Any path segment equal to one of these is a harness directory. */
 const HARNESS_DIRS = new Set([
   ".claude",
   ".claude-plugin",
-  ".codex",
   "skills",
   "hooks",
   "agents",
