@@ -1,5 +1,4 @@
 import { Github } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { CommandBlock } from "@/components/CommandBlock";
 
 const REPO = "https://github.com/zernie/vigiles";
@@ -11,18 +10,16 @@ export function CTA() {
         <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
           Grade your harness in one command.
         </h2>
-        <p className="mt-4 max-w-xl text-lg text-muted-foreground">
-          Point it at any repo. It reads, reports, and never touches your world.
-        </p>
-        <div className="mt-9">
+        <div className="mt-8">
           <CommandBlock command="npx vigiles audit" />
         </div>
-        <div className="mt-8">
-          <Button href={REPO} size="lg" variant="primary">
-            <Github className="h-4 w-4" aria-hidden />
-            View on GitHub
-          </Button>
-        </div>
+        <a
+          href={REPO}
+          className="mt-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+        >
+          <Github className="h-4 w-4" aria-hidden />
+          View the source on GitHub
+        </a>
       </div>
     </section>
   );
