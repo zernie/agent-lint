@@ -134,163 +134,170 @@ export function RepoPicker() {
         </div>
 
         <Card className="reveal mt-12 p-6 sm:p-8">
-          {/* Step 1 — username */}
-          <label
-            htmlFor="gh-username"
-            className="block text-sm font-semibold tracking-tight"
-          >
-            Your GitHub username
-          </label>
-          <div className="mt-2 flex flex-col gap-2.5 sm:flex-row">
-            <div className="relative flex-1">
-              <Github
-                className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden
-              />
-              <input
-                id="gh-username"
-                type="text"
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-                placeholder="octocat"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void loadRepos();
-                  }
-                }}
-                className="w-full rounded-xl border border-border bg-background py-3 pl-10 pr-3.5 text-sm text-foreground placeholder:text-muted-foreground/70 transition-colors focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/30"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => void loadRepos()}
-              disabled={!username.trim() || state.kind === "loading"}
-              className="inline-flex h-[46px] items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-accent px-6 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:pointer-events-none disabled:opacity-50"
+          {/* GitHub-username search is a desktop convenience; hide it on mobile,
+              where the repo flow dead-ends into "run the command" anyway. Phones
+              keep the manual owner/name field + the command. */}
+          <div className="hidden sm:block">
+            {/* Step 1 — username */}
+            <label
+              htmlFor="gh-username"
+              className="block text-sm font-semibold tracking-tight"
             >
-              {state.kind === "loading" ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                  Loading
-                </>
-              ) : (
-                <>
-                  Find repos
-                  <ArrowRight className="h-4 w-4" aria-hidden />
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Public-only messaging + repo list */}
-          {state.kind !== "idle" && (
-            <div className="mt-6">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                <span className="text-sm font-semibold tracking-tight">
-                  Your public repos
-                </span>
-                <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Lock className="h-3 w-3" aria-hidden />
-                  Public repos only. For a private repo, type owner/name below.
-                </span>
+              Your GitHub username
+            </label>
+            <div className="mt-2 flex flex-col gap-2.5 sm:flex-row">
+              <div className="relative flex-1">
+                <Github
+                  className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden
+                />
+                <input
+                  id="gh-username"
+                  type="text"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  placeholder="octocat"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void loadRepos();
+                    }
+                  }}
+                  className="w-full rounded-xl border border-border bg-background py-3 pl-10 pr-3.5 text-sm text-foreground placeholder:text-muted-foreground/70 transition-colors focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/30"
+                />
               </div>
-
-              <div className="mt-3">
-                {state.kind === "loading" && (
-                  <ul className="space-y-2" aria-hidden>
-                    {[0, 1, 2, 3].map((i) => (
-                      <li
-                        key={i}
-                        className="h-11 animate-pulse rounded-lg border border-border bg-muted/30"
-                      />
-                    ))}
-                  </ul>
-                )}
-
-                {state.kind === "error" && (
-                  <p className="rounded-lg border border-signal/30 bg-signal/[0.06] px-4 py-3 text-sm text-signal">
-                    {state.message}
-                  </p>
-                )}
-
-                {state.kind === "loaded" && repos.length === 0 && (
-                  <p className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
-                    No public repos on this account. Enter one manually below.
-                  </p>
-                )}
-
-                {state.kind === "loaded" && repos.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void loadRepos()}
+                disabled={!username.trim() || state.kind === "loading"}
+                className="inline-flex h-[46px] items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-accent px-6 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:pointer-events-none disabled:opacity-50"
+              >
+                {state.kind === "loading" ? (
                   <>
-                    {repos.length > 7 && (
-                      <div className="relative mb-2.5">
-                        <Search
-                          className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                          aria-hidden
-                        />
-                        <input
-                          type="text"
-                          aria-label="Filter repositories"
-                          placeholder={`Filter ${repos.length} repos…`}
-                          value={filter}
-                          onChange={(e) => setFilter(e.target.value)}
-                          className="w-full rounded-xl border border-border bg-background py-2.5 pl-10 pr-3.5 text-sm text-foreground placeholder:text-muted-foreground/70 transition-colors focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/30"
-                        />
-                      </div>
-                    )}
-                    <ul className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
-                      {shown.map((r) => {
-                        const active = selected === r.full_name && !manualSlug;
-                        return (
-                          <li key={r.full_name}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelected(r.full_name);
-                                setManual("");
-                              }}
-                              aria-pressed={active}
-                              className={cn(
-                                "flex w-full items-center justify-between gap-3 rounded-lg border px-3.5 py-2.5 text-left transition-colors",
-                                active
-                                  ? "border-accent/60 bg-accent/10"
-                                  : "border-border bg-background hover:border-accent/40 hover:bg-muted/40",
-                              )}
-                            >
-                              <span className="min-w-0 flex-1 truncate font-mono text-sm text-foreground">
-                                {r.name}
-                                {r.fork && (
-                                  <span className="ml-2 text-xs text-muted-foreground">
-                                    fork
-                                  </span>
-                                )}
-                              </span>
-                              <span className="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
-                                {r.stargazers_count > 0 && (
-                                  <span className="inline-flex items-center gap-1">
-                                    <Star className="h-3 w-3" aria-hidden />
-                                    {r.stargazers_count}
-                                  </span>
-                                )}
-                                <span>{timeAgo(r.updated_at)}</span>
-                              </span>
-                            </button>
-                          </li>
-                        );
-                      })}
-                      {shown.length === 0 && (
-                        <li className="px-3.5 py-2.5 text-sm text-muted-foreground">
-                          No repos match &ldquo;{filter}&rdquo;.
-                        </li>
-                      )}
-                    </ul>
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    Loading
+                  </>
+                ) : (
+                  <>
+                    Find repos
+                    <ArrowRight className="h-4 w-4" aria-hidden />
                   </>
                 )}
-              </div>
+              </button>
             </div>
-          )}
+
+            {/* Public-only messaging + repo list */}
+            {state.kind !== "idle" && (
+              <div className="mt-6">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <span className="text-sm font-semibold tracking-tight">
+                    Your public repos
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Lock className="h-3 w-3" aria-hidden />
+                    Public repos only. For a private repo, type owner/name
+                    below.
+                  </span>
+                </div>
+
+                <div className="mt-3">
+                  {state.kind === "loading" && (
+                    <ul className="space-y-2" aria-hidden>
+                      {[0, 1, 2, 3].map((i) => (
+                        <li
+                          key={i}
+                          className="h-11 animate-pulse rounded-lg border border-border bg-muted/30"
+                        />
+                      ))}
+                    </ul>
+                  )}
+
+                  {state.kind === "error" && (
+                    <p className="rounded-lg border border-signal/30 bg-signal/[0.06] px-4 py-3 text-sm text-signal">
+                      {state.message}
+                    </p>
+                  )}
+
+                  {state.kind === "loaded" && repos.length === 0 && (
+                    <p className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
+                      No public repos on this account. Enter one manually below.
+                    </p>
+                  )}
+
+                  {state.kind === "loaded" && repos.length > 0 && (
+                    <>
+                      {repos.length > 7 && (
+                        <div className="relative mb-2.5">
+                          <Search
+                            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                            aria-hidden
+                          />
+                          <input
+                            type="text"
+                            aria-label="Filter repositories"
+                            placeholder={`Filter ${repos.length} repos…`}
+                            value={filter}
+                            onChange={(e) => setFilter(e.target.value)}
+                            className="w-full rounded-xl border border-border bg-background py-2.5 pl-10 pr-3.5 text-sm text-foreground placeholder:text-muted-foreground/70 transition-colors focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/30"
+                          />
+                        </div>
+                      )}
+                      <ul className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+                        {shown.map((r) => {
+                          const active =
+                            selected === r.full_name && !manualSlug;
+                          return (
+                            <li key={r.full_name}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelected(r.full_name);
+                                  setManual("");
+                                }}
+                                aria-pressed={active}
+                                className={cn(
+                                  "flex w-full items-center justify-between gap-3 rounded-lg border px-3.5 py-2.5 text-left transition-colors",
+                                  active
+                                    ? "border-accent/60 bg-accent/10"
+                                    : "border-border bg-background hover:border-accent/40 hover:bg-muted/40",
+                                )}
+                              >
+                                <span className="min-w-0 flex-1 truncate font-mono text-sm text-foreground">
+                                  {r.name}
+                                  {r.fork && (
+                                    <span className="ml-2 text-xs text-muted-foreground">
+                                      fork
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
+                                  {r.stargazers_count > 0 && (
+                                    <span className="inline-flex items-center gap-1">
+                                      <Star className="h-3 w-3" aria-hidden />
+                                      {r.stargazers_count}
+                                    </span>
+                                  )}
+                                  <span>{timeAgo(r.updated_at)}</span>
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                        {shown.length === 0 && (
+                          <li className="px-3.5 py-2.5 text-sm text-muted-foreground">
+                            No repos match &ldquo;{filter}&rdquo;.
+                          </li>
+                        )}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Manual repo field (the private / any-repo path) */}
           <div className="mt-6">
@@ -363,18 +370,16 @@ export function RepoPicker() {
                   </span>{" "}
                   and run the command below.
                 </p>
+                <div className="mt-6 flex flex-col items-center gap-2 border-t border-border pt-6">
+                  <CommandBlock command="npx vigiles audit" />
+                </div>
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Pick a repo above or type{" "}
-                <span className="font-mono">owner/name</span> to get your
-                command and (on desktop) a one-click Claude Code handoff.
+                Enter a repo above to get your command — plus a one-click Claude
+                Code handoff on desktop.
               </p>
             )}
-
-            <div className="mt-6 flex flex-col items-center gap-2 border-t border-border pt-6">
-              <CommandBlock command="npx vigiles audit" />
-            </div>
           </div>
         </Card>
       </div>
