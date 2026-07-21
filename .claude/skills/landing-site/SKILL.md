@@ -142,7 +142,21 @@ change, not bolted onto a design pass.
      on a phone is noise — `hidden sm:block` the WHOLE section rather than show a stub
      that promises a desktop feature the phone can't use.
      (Global playwright + `vite preview`; or the `screenshot` skill.)
-3. **Run a Fable blind pass** for anything nontrivial — fresh skeptical eyes catch
-   crowding and incoherence the author is blind to. **Act on the flagged cuts** — a
-   Fable P0/P1 "delete this" is not optional; don't just note it and move on.
-4. Verify build + Prettier clean; deterministic deploy via `pages.yml` on push to main.
+3. **Read the WHOLE page cohesively from multiple USER POVs — not just the changed
+   section in isolation.** A change can be locally fine yet break the flow/cohesion of
+   the whole page, or answer one persona while confusing another. Walk the full site
+   (desktop AND 390px) as at least these five readers and ask, per persona, "is this
+   clear, does the flow make sense, would I convert (run `npx vigiles audit`)?":
+   - a **Claude Code / Codex power user** (has plugins/skills; wants depth),
+   - a total **newcomer / skeptic skimming on a phone** (30-second patience),
+   - a **plugin / skill author**,
+   - a **skeptical senior engineer** who won't run anything unless convinced,
+   - a **decision-maker / lead** evaluating adoption.
+   Fold this into the Fable pass below (Fable is good at holding several POVs at once);
+   the `review-docs` skill is the analog for docs. The point is COHESION across the
+   whole page + across audiences, caught before shipping — not per-section polish.
+4. **Run a Fable blind pass** for anything nontrivial — fresh skeptical eyes catch
+   crowding and incoherence the author is blind to, and run the multi-persona walk
+   above. **Act on the flagged cuts** — a Fable P0/P1 "delete this" is not optional;
+   don't just note it and move on.
+5. Verify build + Prettier clean; deterministic deploy via `pages.yml` on push to main.
