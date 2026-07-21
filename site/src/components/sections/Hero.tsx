@@ -1,5 +1,4 @@
 import { Star } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { AuditWidget } from "@/components/AuditWidget";
 import { HeroReport } from "@/components/HeroReport";
 
@@ -20,22 +19,25 @@ export function Hero() {
           />
           <span className="text-lg font-semibold tracking-tight">vigiles</span>
         </a>
-        <a
-          href={REPO}
-          className="inline-flex items-center gap-2 rounded-full border border-border px-3.5 py-1.5 text-sm font-medium text-muted-foreground no-underline transition-colors hover:border-accent/50 hover:text-foreground"
-        >
-          <Star className="h-3.5 w-3.5" aria-hidden />
-          Star on GitHub
-        </a>
+        <div className="flex items-center gap-5">
+          <a
+            href="#try"
+            className="hidden text-sm font-medium text-muted-foreground no-underline transition-colors hover:text-foreground sm:inline"
+          >
+            Grade a repo
+          </a>
+          <a
+            href={REPO}
+            className="inline-flex items-center gap-2 rounded-full border border-border px-3.5 py-1.5 text-sm font-medium text-muted-foreground no-underline transition-colors hover:border-accent/50 hover:text-foreground"
+          >
+            <Star className="h-3.5 w-3.5" aria-hidden />
+            Star on GitHub
+          </a>
+        </div>
       </nav>
 
       {/* Hero content — headline + ONE primary action, then the real product shot. */}
-      <div className="mx-auto flex w-full max-w-3xl flex-col items-center px-6 pb-10 pt-10 text-center sm:pt-14">
-        <Badge variant="accent" className="mb-6">
-          <Star className="h-3 w-3" aria-hidden />
-          Free &amp; open source
-        </Badge>
-
+      <div className="mx-auto flex w-full max-w-3xl flex-col items-center px-6 pb-10 pt-14 text-center sm:pt-20">
         <h1 className="text-balance text-4xl font-bold leading-[1.05] tracking-tight sm:text-6xl">
           Lighthouse for your
           <br className="hidden sm:block" /> agent harness.
