@@ -12,6 +12,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { editDistance } from "./edit-distance.js";
 import { execSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { globSync } from "glob";
@@ -457,30 +458,10 @@ function makeResult(
   return { exists, enabled, linter: ctx.linterName, rule: ctx.ruleName, error };
 }
 
-/**
- * Levenshtein distance for short-string typo detection. Rule names are
- * short so edit distance is more appropriate than NCD (which is tuned
- * for longer texts).
- */
-export function editDistance(a: string, b: string): number {
-  if (a === b) return 0;
-  const m = a.length;
-  const n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  const dp: number[] = Array.from({ length: n + 1 }, (_, i) => i);
-  for (let i = 1; i <= m; i++) {
-    let prev = dp[0];
-    dp[0] = i;
-    for (let j = 1; j <= n; j++) {
-      const tmp = dp[j];
-      dp[j] =
-        a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j], dp[j - 1]);
-      prev = tmp;
-    }
-  }
-  return dp[n];
-}
+// editDistance moved to ./edit-distance.ts (a zero-dep leaf) so the browser-safe
+// typo detectors don't transitively import this node-coupled module. Imported at
+// the top for closestRuleNames below; re-exported here for backward compatibility.
+export { editDistance };
 
 /** Top-N closest rule names by edit distance, filtered by a max distance. */
 function closestRuleNames(

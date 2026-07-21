@@ -13,7 +13,7 @@
  * `hook-events` lint rule call the same code. Dialect injected (core ⊄ adapter).
  */
 import type { HarnessDialect } from "./dialect.js";
-import { editDistance } from "./linters.js";
+import { editDistance } from "./edit-distance.js";
 
 export interface HookEventIssue {
   readonly event: string;
