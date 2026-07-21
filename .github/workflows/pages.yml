@@ -45,6 +45,14 @@ jobs:
 
       - run: npm ci
 
+      # 0) Build the root package FIRST → produces the compiled engine in `dist/`.
+      #    The landing's live audit demo imports it (dist/scan-files.js +
+      #    dist/audit-report.js) via the site's `@engine/*` Vite aliases, and `dist/`
+      #    is a build artifact (gitignored), so the site build below can't resolve
+      #    those imports without this step.
+      - name: Build engine (root dist/)
+        run: npm run build
+
       # 1) Landing → the Pages ROOT (Vite base "./" → works at / or a subpath).
       #    site/ is an npm workspace, so its deps come from the root `npm ci`
       #    above — build it via the workspace (no per-package `npm ci`).
