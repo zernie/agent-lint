@@ -19,8 +19,24 @@
 via `pages.yml` on push to main.
 
 **This session (2026-07-21): site polish + shared `@vigiles/report-view` (merged #80–#99, deployed) + the
-NODE-FREE in-browser audit engine + the LIVE-any-repo demo + the README-parity site content sections + 4 rounds
-of Codex review fixes — all on `claude/click-not-working-s9apfb`, shipped as PR #100 (open, CI green, auto-merging).**
+NODE-FREE in-browser audit engine + the LIVE-any-repo demo + README-parity content + MANY rounds of Codex review
+fixes + a LIVE UX-REVIEW pass (founder drove) — all on `claude/click-not-working-s9apfb`, PR #100 (OPEN, iterating).**
+
+**PR #100 latest (034d797), CI green — do NOT auto-merge, founder is live-iterating.** UX-review round shipped
+(commits d8a2d71 → 034d797): (1) report copy plain-language — the inherits-all safety finding now NAMES + explains
+the "lethal trifecta (reads data, reaches the web, runs commands), so a prompt injection could exfiltrate" (engine
+copy in `src/audit-score.ts`, ships in CLI report too; baked demo fixtures regenerated). (2) MARKETPLACE repos →
+honest "use the CLI" state (was a false zero-surface F). (3) real PROGRESS BAR in the loading step-log. (4) demo
+report FOOTER gated off via `showFooter` prop (kept on the standalone HTML report). (5) analytics `track()` sends
+OUTCOME KIND only, never the typed slug (privacy; `track()` is still a no-op shim — no Plausible installed). (6)
+transient error/rate-limit no longer cached (retry works). (7) root nameless SKILL.md named after the repo (threaded
+`repoName` into `scanFiles`), + fetch its bundled resources (`references/`/`assets/`). (8) **PERSISTENT GRADE-CACHE**
+(`feat`, Fable-designed): `site/src/demo/gradeCache.ts` on **idb-keyval** (adopted over the reactive
+useLocalStorage hooks — imperative dynamic-key + TTL/version/LRU needs); 24h TTL, version-namespaced key
+(`AUDIT_SCHEMA_VERSION` + build-time git SHA via `__ENGINE_V__` Vite define), 30-LRU, parse-don't-validate; L1
+in-memory Map layered over L2; "graded N ago · re-grade" header badge. Site browser tests 26/26 (real Chromium +
+real IndexedDB). **GAP: the site browser suite still isn't in CI** — gradeCache/DemoAudit correctness is only
+verified locally (see the site-test-job loose end below).
 
 **TOP GOAL (codified in `.claude/skills/landing-site`): maximize the % of visitors who RUN `npx vigiles audit`.**
 Every site decision serves that ONE conversion; the CTA must be GREAT. HOLD every `site/` change against the
