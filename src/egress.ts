@@ -61,8 +61,9 @@ function hasBinary(name: string): boolean {
       }).status === 0
     );
   } catch {
-    /* v8 ignore next -- spawnSync only throws on a fork failure */
+    /* v8 ignore start -- defensive: spawnSync only throws on a fork failure */
     return false;
+    /* v8 ignore stop */
   }
 }
 
@@ -73,8 +74,9 @@ function hasBinary(name: string): boolean {
  * change within a run. `available` is injected so the bwrap probe isn't repeated.
  */
 export function probeEgressAvailable(available: boolean): boolean {
-  /* v8 ignore next -- non-Linux has no bwrap/slirp; CI/coverage runs on Linux */
+  /* v8 ignore start -- non-Linux has no bwrap/slirp; CI/coverage runs on Linux */
   if (process.platform !== "linux") return false;
+  /* v8 ignore stop */
   return available && hasBinary("slirp4netns") && hasBinary("nft");
 }
 

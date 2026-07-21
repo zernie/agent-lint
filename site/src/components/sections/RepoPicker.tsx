@@ -121,7 +121,14 @@ export function RepoPicker() {
   }
 
   return (
-    <section id="try" className="scroll-mt-8 border-t border-border bg-card/30">
+    // The whole section is a DESKTOP-ONLY flow (username → repo list → one-click
+    // Claude Code deeplink). On mobile it can only fall back to the same
+    // `npx vigiles audit` command the hero + CTA already show, so rather than
+    // duplicate it in a near-empty card, the section is hidden on phones.
+    <section
+      id="try"
+      className="hidden scroll-mt-8 border-t border-border bg-card/30 sm:block"
+    >
       <div className="mx-auto w-full max-w-3xl px-6 py-20 sm:py-28">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
@@ -131,19 +138,10 @@ export function RepoPicker() {
             One click with Claude Code on your desktop — one command anywhere
             else.
           </p>
-
-          {/* Mobile: the repo picker + deeplink are a DESKTOP flow, so phones get
-              the universal command instead of a near-empty card. */}
-          <div className="mt-8 flex flex-col items-center gap-2 sm:hidden">
-            <CommandBlock command="npx vigiles audit" />
-            <p className="text-xs text-muted-foreground">
-              Run it inside any repo on your computer.
-            </p>
-          </div>
         </div>
 
-        {/* Desktop only — the username search, repo list, and one-click deeplink. */}
-        <Card className="reveal mt-12 hidden p-6 sm:block sm:p-8">
+        {/* The username search, repo list, and one-click deeplink. */}
+        <Card className="reveal mt-12 p-6 sm:p-8">
           {/* Step 1 — username */}
           <label
             htmlFor="gh-username"

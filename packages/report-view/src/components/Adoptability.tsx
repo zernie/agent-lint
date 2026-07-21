@@ -1,9 +1,9 @@
 import { CheckCircle2, Link2Off } from "lucide-react";
-import type { AdoptabilityResult, BrokenRef } from "@/schema";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { BORDER_L, TEXT } from "@/lib/band";
-import { cn } from "@/lib/utils";
+import type { AdoptabilityResult, BrokenRef } from "../schema";
+import { Card } from "./ui/card";
+import { Badge } from "./ui/badge";
+import { BORDER_L, TEXT } from "../lib/band";
+import { cn } from "../lib/utils";
 
 const KIND_LABEL: Record<BrokenRef["kind"], string> = {
   enforce: "rule",

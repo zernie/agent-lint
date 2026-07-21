@@ -1,9 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
-import { Report } from "@/Report";
-import { SAMPLE } from "@/sample";
-import type { AuditReport } from "@/schema";
+import { Report, SAMPLE, type AuditReport } from "@vigiles/report-view";
 
 // The CLI replaces the placeholder string in index.html with the AuditReport
 // object; until then (dev, or an unfilled template) fall back to the sample.
