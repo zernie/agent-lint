@@ -82,6 +82,17 @@ export function isHarnessPath(path: string): boolean {
   return HARNESS_DIRS.has(path.slice(0, path.indexOf("/")));
 }
 
+// A test / eval file the coverage check (findUntestedSurfaces) reads to decide a
+// surface is tested. These often live OUTSIDE the harness dirs (a top-level
+// `tests/`/`__tests__/`, or a colocated `*.eval.mjs`/`*.test.ts`), so they must be
+// fetched for the Tested category to match the CLI's whole-repo read. NOT a harness
+// marker — a repo of only tests is still no-harness.
+const TEST_PATH =
+  /(?:^|\/)(?:tests?|__tests__)\/|\.(?:test|spec|harness|eval)\.[cm]?[jt]sx?$/;
+export function isTestPath(path: string): boolean {
+  return TEST_PATH.test(path);
+}
+
 /**
  * A path that PROVES the repo is a Claude Code harness — not merely a repo that
  * happens to contain a dir named `hooks`/`skills`/… (a git-hooks `hooks/`, a React
@@ -267,29 +278,42 @@ export async function fetchRepo(
     let done = 0;
     let total = harness.length;
     let failed = 0;
-    const fetchBlob = async (entry: TreeEntry): Promise<void> => {
+    // `countFailure` distinguishes a REQUIRED fetch (a harness surface or a
+    // referenced hook/config/resource — a failure means a partial GRADE, so it
+    // errors) from an ADVISORY one (a coverage test file — its absence only changes
+    // the excluded-from-grade `untested` count, so a failure is tolerated).
+    const fetchBlob = async (
+      entry: TreeEntry,
+      countFailure = true,
+    ): Promise<void> => {
       const url = `${RAW}/${owner}/${repo}/${encodeURIComponent(
         branch,
       )}/${entry.path.split("/").map(encodeURIComponent).join("/")}`;
       try {
         const res = await fetch(url, { signal });
         if (res.ok) files[entry.path] = await res.text();
-        else failed += 1;
+        else if (countFailure) failed += 1;
       } catch (e) {
         // An abort is intentional; any other error is a real fetch failure.
-        if (!(e instanceof DOMException && e.name === "AbortError"))
+        if (
+          countFailure &&
+          !(e instanceof DOMException && e.name === "AbortError")
+        )
           failed += 1;
       }
       done += 1;
       onProgress?.({ phase: "file", done, of: total });
     };
-    const drain = async (entries: TreeEntry[]): Promise<void> => {
+    const drain = async (
+      entries: TreeEntry[],
+      countFailure = true,
+    ): Promise<void> => {
       const queue = [...entries];
       const worker = async (): Promise<void> => {
         for (;;) {
           const entry = queue.shift();
           if (entry === undefined) return;
-          await fetchBlob(entry);
+          await fetchBlob(entry, countFailure);
         }
       };
       await Promise.all(
@@ -301,19 +325,19 @@ export async function fetchRepo(
     // A harness SURFACE that failed to fetch (a transient 500 / CORS drop on
     // SKILL.md, .claude/settings.json, an agent…) would leave the grade computed
     // over a PARTIAL harness. Return the retryable error state instead of grading
-    // incomplete data. (Second-pass referenced files below are supplementary — a
-    // missing one is a soft advisory, not a reason to fail a valid grade.)
+    // incomplete data.
     if (failed > 0) {
       return { kind: "error", message: "some files couldn't be fetched" };
     }
 
     // Second pass (bounded FIXPOINT): fetch what the harness files REFERENCE but the
     // path filter drops — hook scripts via the plugin-root token / relative paths,
-    // PLUS a manifest-declared hook-config file (`"hooks": "config/hooks.json"`).
-    // Re-scan after each round so a newly-fetched config's OWN script refs resolve
-    // too (manifest → config/hooks.json → scripts/guard.sh). Bounded to tree-present
-    // paths, the size + file caps, and a small round limit — byte-identical with the
-    // CLI's whole-repo read for realistic chains without unbounded fetching.
+    // a manifest-declared hook-config file (`"hooks": "config/hooks.json"`), and a
+    // SKILL.md's bundled resources (`references/*`, `assets/*`). Re-scan after each
+    // round so a newly-fetched config's OWN script refs resolve too (manifest →
+    // config/hooks.json → scripts/guard.sh). Bounded to tree-present paths, the size
+    // + file caps, and a small round limit — byte-identical with the CLI's whole-repo
+    // read for realistic chains without unbounded fetching.
     const inTree = new Set(blobs.map((b) => b.path));
     for (let round = 0; round < 3; round += 1) {
       const referenced = collectReferencedPaths(files);
@@ -329,6 +353,31 @@ export async function fetchRepo(
       if (extra.length === 0) break;
       total += extra.length;
       await drain(extra);
+    }
+    // These second-pass files are all REQUIRED (a dropped hook config drops every
+    // hook; a missing script / bundled resource is a graded finding), so the same
+    // partial-data rule applies here as to the first pass.
+    if (failed > 0) {
+      return { kind: "error", message: "some files couldn't be fetched" };
+    }
+
+    // Coverage (ADVISORY, best-effort): the untested-surface check reads test files
+    // that can live OUTSIDE the harness dirs (`tests/foo.test.ts`, a top-level eval),
+    // which the harness filter drops — so without them the browser shows a false
+    // `untested` advisory the CLI (whole-repo read) wouldn't. Fetch tree-present
+    // test-shaped files, budget-bounded; a failure does NOT error (untested is
+    // excluded from the overall grade, so a missing test is cosmetic, not a wrong
+    // grade — that's why `countFailure` is false here).
+    const covBudget = MAX_FILES - Object.keys(files).length;
+    if (covBudget > 0) {
+      const tests = blobs
+        .filter((e) => isTestPath(e.path) && !(e.path in files))
+        .filter((e) => (e.size ?? 0) <= MAX_FILE_BYTES)
+        .slice(0, covBudget);
+      if (tests.length > 0) {
+        total += tests.length;
+        await drain(tests, false);
+      }
     }
 
     return { kind: "ok", files, treeCount, harnessCount: harness.length };

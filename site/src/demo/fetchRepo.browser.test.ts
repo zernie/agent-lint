@@ -3,6 +3,7 @@ import {
   fetchRepo,
   isHarnessPath,
   isHarnessMarker,
+  isTestPath,
   collectReferencedPaths,
 } from "./fetchRepo";
 
@@ -115,8 +116,9 @@ describe("fetchRepo — never grades partial data", () => {
       ...body,
     }) as unknown as Response;
 
-  /** Route the three GitHub endpoints; `raw` decides the raw.githubusercontent leg. */
-  function stubGitHub(tree: unknown[], raw: () => Response): void {
+  /** Route the three GitHub endpoints; `raw(path)` decides the raw.githubusercontent
+   *  leg (path = the repo-relative path after `/main/`). */
+  function stubGitHub(tree: unknown[], raw: (path: string) => Response): void {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (u: string) => {
@@ -125,7 +127,8 @@ describe("fetchRepo — never grades partial data", () => {
         if (u.startsWith("https://api.github.com/repos/")) {
           return resp({ json: async () => ({ default_branch: "main" }) });
         }
-        return raw(); // raw.githubusercontent.com
+        const path = decodeURIComponent(u.slice(u.indexOf("/main/") + 6));
+        return raw(path); // raw.githubusercontent.com
       }),
     );
   }
@@ -155,5 +158,58 @@ describe("fetchRepo — never grades partial data", () => {
       resp({ text: async () => "Does a thing.\n" }),
     );
     expect((await fetchRepo("o/r")).kind).toBe("ok");
+  });
+
+  it("errors when a REQUIRED second-pass file (manifest hook config) fails", async () => {
+    const tree = [
+      { path: ".claude-plugin/plugin.json", type: "blob", size: 40 },
+      { path: "config/hooks.json", type: "blob", size: 20 },
+    ];
+    stubGitHub(tree, (path) => {
+      if (path === ".claude-plugin/plugin.json") {
+        return resp({ text: async () => '{ "hooks": "config/hooks.json" }' });
+      }
+      return resp({ ok: false, status: 500 }); // the referenced hook config 500s
+    });
+    expect((await fetchRepo("o/r")).kind).toBe("error");
+  });
+
+  it("fetches a coverage test outside the harness dirs (advisory), still ok", async () => {
+    const tree = [
+      { path: "skills/foo/SKILL.md", type: "blob", size: 10 },
+      { path: "tests/foo.test.ts", type: "blob", size: 20 },
+    ];
+    stubGitHub(tree, (path) =>
+      resp({
+        text: async () =>
+          path === "tests/foo.test.ts" ? "covers skills/foo" : "A skill.\n",
+      }),
+    );
+    const out = await fetchRepo("o/r");
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok") expect("tests/foo.test.ts" in out.files).toBe(true);
+  });
+
+  it("a coverage-test fetch FAILURE does not error the grade (advisory)", async () => {
+    const tree = [
+      { path: "skills/foo/SKILL.md", type: "blob", size: 10 },
+      { path: "tests/foo.test.ts", type: "blob", size: 20 },
+    ];
+    stubGitHub(tree, (path) => {
+      if (path === "tests/foo.test.ts") return resp({ ok: false, status: 500 });
+      return resp({ text: async () => "A skill.\n" });
+    });
+    expect((await fetchRepo("o/r")).kind).toBe("ok"); // test 500 tolerated
+  });
+});
+
+describe("isTestPath", () => {
+  it("matches test/eval files (incl. outside harness dirs), not sources", () => {
+    expect(isTestPath("tests/foo.test.ts")).toBe(true);
+    expect(isTestPath("skills/foo/foo.eval.mjs")).toBe(true);
+    expect(isTestPath("__tests__/x.spec.tsx")).toBe(true);
+    expect(isTestPath("test/thing.py")).toBe(true);
+    expect(isTestPath("src/index.ts")).toBe(false);
+    expect(isTestPath("skills/foo/SKILL.md")).toBe(false);
   });
 });
