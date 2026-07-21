@@ -18,59 +18,47 @@
 **`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
 via `pages.yml` on push to main.
 
-**This session (2026-07-21): landing-site UX overhaul + audit scope decision — merged #80–#90, deployed.**
+**This session (2026-07-21): site polish + the shared `@vigiles/report-view` package — merged #80–#96, deployed.**
 
-SITE (command-first + subtraction, #80–#88): the site led with the CC `claude-cli://` deeplink as the
-PRIMARY CTA → dead-ends on mobile ("type repo → tap → nothing"). Reworked around the universal action
-`npx vigiles audit`. Command-first hero; deeplink DEMOTED to the RepoPicker (`#try`), DESKTOP-ONLY
-(`hidden sm:block`); honest mobile note. Two Fable passes drove ruthless SUBTRACTION:
+**TOP GOAL (codified in `.claude/skills/landing-site`): maximize the % of visitors who RUN `npx vigiles audit`.**
+Every site decision serves that ONE conversion; the CTA must be GREAT. HOLD every `site/` change against the
+skill; **screenshot desktop AND the FULL mobile page** (390px, global playwright `$(npm root -g)/playwright` +
+`vite preview`); run a Fable pass on anything nontrivial and ACT on its P0/P1 cuts.
 
-- **PNG DELETED** → `site/src/components/HeroReport.tsx` (native, responsive, DATA-DRIVEN report slice:
-  verdict + category strip + top fix; ONE component serves desktop AND mobile). No more 9px screenshot.
-- Killed say-it-5× redundancy; cut "FREE & OPEN SOURCE" badge (GitHub link implies it) + the weak
-  "Have Claude Code?" fold link → a desktop-only **"Grade a repo"** NAV link. Rings dropped the repeated
-  scores (name+question only, "One score, five categories"). Wedge badge → "The problem". CTA = one
-  primary action ("View on GitHub" demoted to a text link). Removed an auto-clipboard-write that
-  triggered a scary mobile permission prompt (`lib/toast.ts` + `ui/toaster.tsx` = a tiny toast).
-- **Design skill codified**: `.claude/skills/landing-site` (model-invocable) — "design by subtraction",
-  cut-what's-implied, actionable-CTAs, hosted-demo direction (TEASE the locked LLM part + a real
-  progress bar). HOLD every `site/` change against it; screenshot desktop+mobile; run a Fable pass.
-- **CI fix (#81):** the API-surface gate had been RED on main since #79 — ran `npm run api:report`.
+SITE — done this session (all merged + deployed): command-first hero around `npx vigiles audit` (the CC
+`claude-cli://` deeplink is DESKTOP-ONLY, `hidden sm:block`, lives in RepoPicker `#try`); the 724KB hero PNG
+replaced by native `HeroReport.tsx`; ruthless subtraction (Fable-driven). Latest polish (#95/#96): hero shield
+icon top-aligned, GitHub links open new-tab, the five-category explainer FOLDED into "The problem" (`Wedge`;
+`Rings.tsx` deleted), seven linter catalogs shown as a name strip, and — the mobile-dup fix — the whole `#try`
+section is now `hidden sm:block` (it collapsed to the SAME command as the CTA on phones). The `landing-site`
+skill now has an explicit rule to catch cross-section mobile duplication.
 
-AUDIT SCOPE (#89–#90): **`vigiles audit` is CLAUDE-CODE-FOCUSED for now** (founder descope — multi-harness
-DX too complex for this bite). Deferred design + sourced research in `research/audit-harness-dx.md`
-(AGENTS.md is an AAIF cross-tool standard read by 20+ tools, NOT Codex; CLAUDE.md near-exclusive;
-explicit-config-first per Ruler/rulesync). SHIPPED the safe slice: **mirror-collapse** (#90) — a
-`CLAUDE.md`⇄`AGENTS.md` mirror collapses to one harness in `detectAdapterResult` (top===1 + a mirror,
-no independent `.codex/config.toml` → drop codex; no false "matches both"). Genuine different content
-stays ambiguous. Codex deterministic audit still works via `--harness=codex`.
+**SHARED REPORT VIEW SHIPPED (#96):** `packages/report-view` (`@vigiles/report-view`, source-only/private) now
+holds the presentational report components + the `AuditReport` schema + band tokens + `theme.css`. `report/`
+consumes it (its `src` is just the app shell). Wired as **npm WORKSPACES** (root `workspaces:[packages/*,report,
+site]`) — the clean monorepo the founder asked for; deps hoist to root. Kept the published `vigiles` CI green via
+four aligned changes: root lockfile regen, `pages.yml` builds `site` via the workspace, `build-report.mjs`
+install-guard checks root `node_modules`, per-package lockfiles deleted. Design + rationale + the Stage-2 demo
+brief in `research/report-view-and-hosted-demo.md`. Also fixed a PRE-EXISTING latent coverage bug it exposed:
+`egress.ts`/`sandbox.ts` used `/* v8 ignore next -- reason */`, a form `@vitest/coverage-v8` 4.1.8 silently
+DROPS — converted to `/* v8 ignore start/stop */` (the reliable form; the `next -- reason` form is the trap).
 
-ORDERED (founder: "all needed, order up to u"): **#1 detection ✅** (mirror-collapse; lone-AGENTS.md-agnostic
-and audit-both deferred). **#2 website locked ✅** (#92/#93, Fable 8.5/8) — BUT a fresh MOBILE-POLISH +
-STRATEGY batch landed after; IN PROGRESS as #94 (below). **#3** = `apps/` + `packages/report-view` monorepo
-refactor (npm workspaces; root `vigiles` CI stays green; unblocks the demo) → hosted deterministic-only
-browser demo (tease/blur the LLM part + progress bar). Verify UI via headless Chromium (global playwright
-`$(npm root -g)/playwright` + `vite preview`).
+### 🎯 DO NEXT
 
-### 🎯 TOP GOAL + WEBSITE POLISH (post-compact — DO NEXT, before #3)
-
-**TOP GOAL (now codified in `.claude/skills/landing-site`): maximize the % of visitors who RUN
-`npx vigiles audit`.** Every site decision serves that ONE conversion; the CTA must be GREAT.
-
-- **Analytics — NOT built:** instrument the funnel (command copies, Grade-it/deeplink clicks, prefilled
-  tries). Site is on GitHub Pages, NOT Vercel → **Vercel Analytics N/A**. Use Plausible/Fathom/GoatCounter
-  (or GTM) — a static-hosting script tag; pick one, add the snippet, define events.
-- **Prefilled popular OSS — NOT built:** one-click "grade this" chips (e.g. an official Anthropic plugin)
-  so a visitor sees a real report without typing / owning a repo.
-- **Mobile — #94 IN FLIGHT (partly done, uncommitted at compact):** ✅ mobile `#try` = command-only (was a
-  weird sparse card, "…or" dangled); ✅ blog link new-tab (`Debunk`); ✅ `.reveal` @supports guard
-  (the "empty screenshots" is a scroll-reveal capture artifact, NOT a user bug — Fable concurred). STILL
-  TODO: hero trust-line **shield icon mis-placed** (floats between the 2 wrapped lines → align to top);
-  **CTA buried low / no mobile quick-link** (StickyCTA shows the command on scroll — make the CTA GREAT
-  and reachable); make **other external links (GitHub) open new-tab** too.
-- **Content — TODO:** fold "One score, five categories" (`Rings`) INTO "The problem" (`Wedge`) to be more
-  practical; add **linter icons** to the Wedge "7 linter catalogs" line.
-- Process: hold every change against the skill; screenshot desktop+mobile; Fable pass; deploy = Pages on push.
+- **Stage 2 — the hosted "Grade a repo" demo** (the big one; UNBLOCKED now that report-view is shared). Full
+  Fable design-of-record in `research/report-view-and-hosted-demo.md`: zero-click BAKED report on open (featured
+  repo) + 3 cached chips; a real streaming audit log; grade + truthful "N fixes from a B"; an HONEST gate (real
+  numbers NEVER blurred; the model-gated part shows real skill names with dashed `──%` + "your CLI can, free" —
+  no paywall words); every edge case routes back to `npx vigiles audit`. Deterministic detectors must run
+  IN-BROWSER (scan.ts is node-fs-coupled today → porting the pure detectors is the meat). Render via
+  `@vigiles/report-view` so browser == CLI artifact. Likely a new `apps/demo` (or `packages/*`) workspace +
+  `site` consuming report-view — that adds `site` to the report-view consumer set, the point to reconsider a
+  shared `@vigiles/ui` split (rule-of-three).
+- **Analytics — founder decision + NOT built:** instrument the funnel (command copies, chip clicks, repo
+  submits). GitHub Pages, NOT Vercel → **Vercel Analytics N/A**. Rec: **GoatCounter** (free, privacy-friendly,
+  no cookie banner); Plausible/Fathom paid. Needs the founder's account/site-code, then a script tag + events.
+- **Prefilled popular-OSS chips — NOT built:** depends on Stage 2 (a real report needs the in-browser compute);
+  a lighter "prefill the repo picker for anthropics/claude-code" is desktop-only.
 
 ### Codex trigger-rate is EXPERIMENTAL (shipped earlier)
 
@@ -81,8 +69,8 @@ oracle-accuracy run (needs `codex` + quota).
 
 ### STILL OPEN
 
-- **Multi-harness audit DX + hosted demo + monorepo refactor** — the ORDERED-NEXT #2/#3 above;
-  full design + research in `research/audit-harness-dx.md`; scope entry in `roadmap.md` (Later).
+- **Multi-harness audit DX** — DEFERRED (audit is CLAUDE-CODE-FOCUSED); design in `research/audit-harness-dx.md`,
+  scope entry in `roadmap.md` (Later). (The monorepo refactor is DONE — #96; the hosted demo is now DO NEXT.)
 - **Codex trigger-rate promotion** — the live oracle-accuracy run above (blocked on codex + quota).
 - Personal/launch/calendar follow-ups → PRIVATE `zernie/mine` only (branch `claude/adoption-playbook-s49`,
   pushed, needs squash-merge). Do not restate here.
