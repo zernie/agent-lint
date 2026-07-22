@@ -595,12 +595,12 @@ export function Report({
               ))}
             </MoreFold>
           </>
-        ) : (
+        ) : safetyFindings.length === 0 ? (
           <Card className="flex items-center gap-2 p-4 text-sm text-good">
             <CheckCircle2 size={16} /> No deterministic fixes — the structure is
             clean.
           </Card>
-        )}
+        ) : null}
 
         {safetyFindings.length > 0 && (
           <>
@@ -648,12 +648,12 @@ export function Report({
             <FixCard key={i} r={r} points={points} />
           ))}
         </div>
-      ) : (
+      ) : safetyFindings.length === 0 ? (
         <Card className="flex items-center gap-2 p-4 text-sm text-good">
           <CheckCircle2 size={16} /> No deterministic fixes — the structure is
           clean.
         </Card>
-      )}
+      ) : null}
 
       {/* Safety findings have no auto-fix (the lethal-trifecta exfil path is a
           design call, not a typo) — so they never appear as a ranked +N-pts card.
