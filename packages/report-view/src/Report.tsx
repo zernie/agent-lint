@@ -293,42 +293,63 @@ function LockedTease({ onUnlock }: { onUnlock?: () => void }) {
       () => undefined,
     );
   };
+  // Blurred stand-in rows — decorative (aria-hidden), sized to read as REAL per-skill
+  // trigger data behind the veil so the reader wants the actual numbers.
+  const ghostRows = [
+    { w: "w-1/3", bar: "w-[92%]" },
+    { w: "w-1/2", bar: "w-[46%]" },
+    { w: "w-2/5", bar: "w-[78%]" },
+  ];
   return (
     <div className="relative overflow-hidden rounded-xl border border-border/50">
       <div className="select-none px-5 py-4 opacity-50 blur-[3px]" aria-hidden>
         <div className="flex items-baseline justify-between">
           <span className="text-xs font-medium text-muted-foreground">
-            Trigger rate
+            Trigger rate — per skill
           </span>
           <span className={cn("font-mono text-sm font-bold", TEXT.good)}>
             ·· % recall · ·· % precision
           </span>
         </div>
-        <div className="mt-1.5 h-1 rounded-full bg-border">
-          <div className={cn("h-full w-3/4 rounded-full", BG.good)} />
+        <div className="mt-3 space-y-2.5">
+          {ghostRows.map((r, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <span className={cn("h-2 rounded bg-muted-foreground/50", r.w)} />
+              <span className="h-1 flex-1 rounded-full bg-border">
+                <span
+                  className={cn("block h-full rounded-full", BG.good, r.bar)}
+                />
+              </span>
+            </div>
+          ))}
         </div>
       </div>
       <button
         type="button"
         onClick={unlock}
         title={AUDIT_PROMPT}
-        className="absolute inset-0 flex items-center justify-center gap-2 bg-background/40 px-4 text-center text-xs font-medium text-foreground"
+        className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-background/50 px-5 text-center"
       >
         {copied ? (
-          <>
-            <Check
-              size={13}
-              aria-hidden
-              className={cn("shrink-0", TEXT.good)}
-            />
-            <span className={TEXT.good}>
-              Prompt copied — paste into Claude Code or Codex
-            </span>
-          </>
+          <span
+            className={cn(
+              "flex items-center gap-2 text-xs font-medium",
+              TEXT.good,
+            )}
+          >
+            <Check size={13} aria-hidden className="shrink-0" />
+            Prompt copied — paste into Claude Code or Codex
+          </span>
         ) : (
           <>
-            <Lock size={13} aria-hidden className="shrink-0" />
-            Do your skills fire? Needs a real model — run locally to unlock
+            <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Lock size={13} aria-hidden className="shrink-0" />
+              Which of your skills actually fire?
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Measure recall + precision on a real model — free on your Claude
+              subscription. Copy the prompt to run it locally.
+            </span>
           </>
         )}
       </button>
