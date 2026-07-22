@@ -5,7 +5,10 @@
   "type": "module",
   "description": "The vigiles marketing landing page — Vite + React + Tailwind v4 + shadcn-style components, built to static output for GitHub Pages. A separate package (like @vigiles/report) so its frontend toolchain never enters the published CLI's runtime deps.",
   "scripts": {
+    "gen:checks": "tsx scripts/gen-check-pages.ts",
+    "prebuild": "tsx scripts/gen-check-pages.ts",
     "build": "vite build",
+    "predev": "tsx scripts/gen-check-pages.ts",
     "dev": "vite",
     "preview": "vite preview",
     "test:browser": "vitest run --config vitest.config.ts",
