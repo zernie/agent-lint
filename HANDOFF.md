@@ -18,32 +18,27 @@
 **`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
 via `pages.yml` on push to main.
 
-**DEMO UX REDESIGN is FULLY MERGED (PRs #100–#105, all squashed to `main`).** The live in-browser "grade any repo"
-demo + `@vigiles/report-view` + the founder-driven cohesive overhaul all shipped. Branch
-`claude/click-not-working-s9apfb` is now MERGED history — **restart it from `main` for any follow-up**
-(`git fetch origin main && git checkout -B claude/click-not-working-s9apfb origin/main`).
+**DEMO UX REDESIGN + real-F default MERGED (PRs #100–#106, squashed to `main`).** The live in-browser demo, the
+cohesive overhaul, the real F→C→B→A featured default (davila7 F → disler C → madappgang B → superpowers A, found via
+`git clone` since codeload/api are proxy-blocked), and the site e2e + 390px mobile-overflow CI gate all shipped.
 
-**This session (2026-07-22): the cohesive demo overhaul + CI-hardening (landed via #102–#105).**
+**Branch `claude/click-not-working-s9apfb` was rebuilt from `main` and has 5 UNMERGED commits (pushed, NO PR yet)** —
+restart follow-ups from `main` (`git fetch origin main && git checkout -B claude/click-not-working-s9apfb origin/main`):
+1. `fix(audit)` — a percent-encoded markdown link was flagged as a broken bundled resource (a real FALSE POSITIVE;
+   verified a clean repo went 92→100). 2. `feat/fix(report)` — the trigger-rate tease is now a BLURRED "preview"
+   (gated-content pattern, honest: blurred + labelled + sr-only truth; founder wanted the tease, NOT honest em-dashes —
+   `LockedRow` in `report-view/src/Report.tsx`). 3–4. two research docs (below).
 
-- **Credibility fix** — the report REVEALS every finding (not just names it) + a real verdict engine
-  (`src/audit-verdict.ts`): only claims "clean" at `overall===100`, else "A — nothing blocks, but N X flagged".
-  Added an additive `brokenReferences?: string[]` (from `report.danglingRefs`) so the report shows the concrete
-  broken path (e.g. superpowers → `skills/using-superpowers/SKILL.md`).
-- **Folded the model-gated tease into the report** (`LockedRow` in `report-view/src/Report.tsx`), stacks on mobile,
-  copies a `TRIGGER_RATE_PROMPT` (runs `measureTriggerRate`, not the read-only audit).
-- **Live stars on featured chips** (mini-leaderboard); source-tagged frame header (`example` vs `your repo`).
-- **VerbMap** explains audit/lint/test/eval (expandable `<details>` + examples); "example" tag on the
-  "Your rules → enforced" card (illustration, not a scan).
-- **Site e2e now runs in CI** (`site` job, per founder "whattt it should be ci") + a **390px mobile-overflow gate**
-  (`site/e2e/mobile.spec.ts`) — fails on horizontal page bleed or an unwrapped `<pre>`. Verified GREEN on #105.
-- **Verb-map alignment fix** — the model note needed `sm:col-start-3`; without it, on desktop it collided with the
-  answer's grid cell and bumped the answer to a middle-indented second row. Skill now carries the responsive-grid
-  cell-collision lesson (check BOTH breakpoints — the bug hides at 390px, it's the `sm:` layout that breaks).
-- **Docs** — new `docs/commands-and-how-they-relate.md` (audit/lint/test/eval/init model + why measuring skills
-  uses `init`, not `audit`), linked from README/cli.md/index.
-- **Roadmap** — added (Later) a **backend with rate-limited LLM access** running the real `vigiles audit`
-  server-side: the ONLY way to close the demo's reference/behavioral gap (client-side prose-ref parsing is
-  undecidable; trigger-rate needs a model). Public-repo only, vigiles-funded LLM. Interim: a muted demo caveat.
+**IN FLIGHT (2026-07-22, post-#106): ADOPTION DESIGN.** Founder pain from a real existing-harness team (Kotlin/MD,
+own eval loop, no JS linter): full `init` is friction, `Tested` reads as a failure, `rules→enforced` is silent on
+non-JS. Decisions captured in `research/cli-command-model.md` (verbs: audit=read ⊄ init=write, NEVER merge — progressive
+disclosure instead; init NUDGES spec adoption via the ask tool at install + gently later but is NOT evil — 1-keystroke
+decline, no nag, no grade penalty, agent/CI never hangs) + `research/adoption-personas.md` (adoption mapped by team POV;
+throughline: sell the integrity GATE — audit+lint — to everyone, INVITE specs/skills/eval on top). NEXT: writing
+`research/adoption-design.md` (the buildable spec unifying init-gate-only + Tested/rules honesty + non-interactive
+audit HTML-report/leaderboard-action-points + the LOCAL-RESULT SHARE loop) — a research agent on ETHICAL viral loops
+(share mechanics without dark-pattern reputation damage) is RUNNING to ground the sharing section. GTM/growth STRATEGY
+stays VAULT (zernie/mine), the spec is product mechanics only.
 
 **GATE-FAILURE RULE (founder, standing): if a skill/hook/rule DIDN'T CATCH an issue the founder had to spot,
 FIX THE GATE FIRST.** This session's applications: the mobile-overflow CI gate (layout bugs reached a real phone —
@@ -54,24 +49,27 @@ exposes a class of bug, encode the catch (a test, a checklist item, a rule) BEFO
 (public no-session-links rule). Using the GitHub MCP `create/update_pull_request` (as this session did) AVOIDS it —
 those bodies are clean. If a PR is opened another way, edit the body to end at the `claude.com/claude-code` line.
 
-**FETCH-TAIL DOCUMENTED — do NOT keep chasing Codex's `fetchRepo` P2s.** The browser demo's `fetchRepo` does a
-BOUNDED, SELECTIVE fetch (harness-shaped paths + refs, to respect GitHub's 60-req/hr limit), NOT the CLI's
-whole-repo read. The safety invariant (NEVER GRADE PARTIAL DATA → bail to `too-large`/`error`) + closed edge cases
+**FETCH-TAIL DOCUMENTED — do NOT chase Codex's `fetchRepo` P2s.** The demo fetches a BOUNDED, SELECTIVE set (not the
+CLI's whole-repo read); invariant = NEVER GRADE PARTIAL DATA (bail to `too-large`/`error`). Canonical:
+`research/browser-demo-fetch-limits.md`. DOCUMENT, don't fix piecemeal — unless a genuine WRONG GRADE past the bail-outs.
 
-- non-goals are in the `fetchRepo.ts` header + `research/browser-demo-fetch-limits.md` (canonical). Founder's call:
-  DOCUMENT, don't fix piecemeal — unless a new case is a genuine WRONG GRADE not covered by the bail-outs.
-
-**TOP GOAL (codified in `.claude/skills/landing-site`): maximize the % of visitors who RUN `npx vigiles audit`.**
-Every site decision serves that ONE conversion. HOLD every `site/` change against the skill; **screenshot desktop
-AND the FULL mobile page** (390px); the mobile-overflow e2e is now the deterministic backstop but the visual pass
-still matters; run a Fable cold-visitor pass on anything nontrivial and ACT on its P0/P1 cuts.
+**TOP GOAL (`.claude/skills/landing-site`): maximize visitors who RUN `npx vigiles audit`.** HOLD every `site/` change
+against the skill (READ it before touching `site/`); screenshot desktop AND full 390px mobile; the mobile-overflow e2e
+is the backstop but the visual + Fable cold-visitor pass still matter — ACT on P0/P1 cuts.
 
 ### 🎯 DO NEXT
 
-No open founder task in flight — the demo overhaul + CI-hardening are merged. Candidate next work (founder's call):
-wire an analytics provider (`track()` funnel instrumented, no GoatCounter/Plausible script yet); the roadmap
-backend-audit-service item; Codex trigger-rate promotion (below). Durable record of the demo work is in
-`research/report-view-and-browser-demo.md` + `research/browser-demo-fetch-limits.md`.
+1. **Finish `research/adoption-design.md`** once the ethical-viral-loops research agent returns (it informs the
+   share-loop section), then get founder sign-off on scope.
+2. **Build in priority order** (founder-agreed): (a) `init` gate-only + non-evil spec nudge (`src/setup-plan.ts`
+   `SetupPlan.gateOnly`; the nudge = TTY ask / headless one-liner + a `.vigilesrc.json` `nudge:"dismissed"` flag) —
+   the adoption unblocker; (b) `Tested` + `rules→enforced` HONESTY (detect a repo's own test signal / re-word the ring;
+   gate rules→enforced on `detectedLinters`); (c) non-interactive `audit` emits `vigiles-report.html` + prints path,
+   leaderboard gets worst-finding + per-plugin link; (d) LOCAL-RESULT SHARE — for a repo with a public GH remote,
+   `audit` prints `Share → vigiles.sh/?repo=owner/repo` (reuses the demo deep-link; private/local needs the backend).
+3. **Open a PR** for the 5 committed fixes when founder OKs (they hadn't decided PR-now vs bundle-with-adoption).
+Other candidates (founder's call): analytics provider (`track()` instrumented, no script yet); roadmap
+backend-audit-service; Codex trigger-rate promotion (below).
 
 ### Codex trigger-rate is EXPERIMENTAL
 
