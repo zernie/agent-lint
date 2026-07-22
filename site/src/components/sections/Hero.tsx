@@ -45,9 +45,10 @@ export function Hero() {
         </h1>
 
         <p className="mt-5 max-w-2xl text-balance text-lg leading-relaxed text-muted-foreground sm:text-xl">
-          Your skills, hooks, and subagents are full of references nothing
-          verifies. One command grades what&apos;s silently broken — try any
-          public repo right here.
+          You review every PR. Nothing reviews your CLAUDE.md. The files, tools,
+          and rules your skills and hooks name — nothing checks they exist. One
+          command grades what&apos;s silently broken. Free, open-source — try
+          any public repo right here.
         </p>
       </div>
 

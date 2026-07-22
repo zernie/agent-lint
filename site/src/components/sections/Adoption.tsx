@@ -21,7 +21,7 @@ const SKILLS: { ask: string; does: string; skill: string }[] = [
   },
   {
     ask: "add a rule to my CLAUDE.md or AGENTS.md",
-    does: "edits the source and recompiles",
+    does: "edits it safely and keeps every reference verified",
     skill: "edit-spec",
   },
 ];
@@ -48,8 +48,8 @@ export function Adoption() {
           </h2>
           <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
             <span className="font-mono text-foreground">init</span> installs the
-            skills and hooks — so a plain-English ask does the work. No specs to
-            hand-write, no hooks to wire.
+            skills and hooks — so a plain-English ask does the work. No config
+            to hand-write, no hooks to wire.
           </p>
         </div>
 

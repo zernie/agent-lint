@@ -3,7 +3,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { Hero } from "@/components/sections/Hero";
 import { Wedge } from "@/components/sections/Wedge";
 import { VerbMap } from "@/components/sections/VerbMap";
-import { Debunk } from "@/components/sections/Debunk";
 import { Adoption } from "@/components/sections/Adoption";
 import { FAQ } from "@/components/sections/FAQ";
 import { CTA } from "@/components/sections/CTA";
@@ -17,7 +16,6 @@ export function App() {
         <Hero />
         <Wedge />
         <VerbMap />
-        <Debunk />
         <Adoption />
         <FAQ />
         <CTA />

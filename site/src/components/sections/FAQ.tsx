@@ -8,13 +8,15 @@ const FULL_FAQ = "https://github.com/zernie/vigiles/blob/main/docs/faq.md";
  *  so we can bold the key phrase without dangerouslySetInnerHTML. */
 const QA: { q: string; a: ReactNode }[] = [
   {
-    q: "How is this different from a linter?",
+    q: "Isn't this just another linter?",
     a: (
       <>
-        A linter checks your config is <em>well-formed</em>. vigiles checks
-        it&apos;s <span className="font-semibold text-foreground">true</span> —
-        that every rule, file, and tool your instructions name actually exists
-        and is enabled. Valid and correct are different failures.
+        It includes one — but the checks are about{" "}
+        <span className="font-semibold text-foreground">truth</span>, not style:
+        every rule, file, and tool your instructions name has to actually exist
+        and be enabled (checked against your real ESLint / Ruff / Clippy
+        config). And the test half <em>runs</em> your harness against a model to
+        prove hooks block and skills fire — which no linter does.
       </>
     ),
   },
@@ -22,10 +24,11 @@ const QA: { q: string; a: ReactNode }[] = [
     q: "What do I have to change to adopt it?",
     a: (
       <>
-        Almost nothing. Plain markdown works with zero new files, rules run in
-        your existing linter, and the agent edits the specs for you.{" "}
-        <span className="font-mono">npx vigiles init</span> wires it up; typed
-        specs are opt-in, only for checks a linter can&apos;t express.
+        Nothing up front. <span className="font-mono">audit</span> and{" "}
+        <span className="font-mono">lint</span> read the CLAUDE.md or AGENTS.md
+        you already have, as-is — nothing is moved or rewritten. When you like
+        what you see, <span className="font-mono">npx vigiles init</span> adds
+        the CI gate and installs the skills, so your agent handles the upkeep.
       </>
     ),
   },
@@ -40,15 +43,6 @@ const QA: { q: string; a: ReactNode }[] = [
         </span>{" "}
         — nothing leaves your machine. Only the browser demo above is
         public-only (it calls GitHub&apos;s API to read a repo you name).
-      </>
-    ),
-  },
-  {
-    q: "Non-JS repo?",
-    a: (
-      <>
-        <span className="font-mono">npx vigiles lint</span> verifies your
-        CLAUDE.md or AGENTS.md with no install — Ruff, Clippy, Pylint too.
       </>
     ),
   },

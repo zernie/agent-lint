@@ -509,6 +509,37 @@ function LockedRow({ onUnlock }: { onUnlock?: () => void }) {
   );
 }
 
+/** The second "browser can't do this" row (beside LockedRow): the rule
+ * cross-reference. The browser has no access to your linter config, so it can't
+ * tell whether a rule your instructions name is actually enabled — that's a local
+ * `vigiles audit`. Folded in here (a dashed teaser row) instead of a separate card
+ * on the landing page, so the report itself carries the "run it locally for more". */
+function CliRulesRow() {
+  return (
+    <div className="mt-2.5 rounded-xl border border-dashed border-border/70 bg-card/20 p-4">
+      <div className="flex items-center gap-1.5 text-sm font-medium">
+        <Lock
+          size={13}
+          className="shrink-0 text-muted-foreground"
+          aria-hidden
+        />
+        Your rules → enforced
+        <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          CLI only
+        </span>
+      </div>
+      <p className="mt-1 text-[13px] leading-snug text-muted-foreground">
+        Run it locally and vigiles maps each prose rule you wrote to the linter
+        rule that enforces it — and flags the costly case: a rule you told the
+        agent to follow that&apos;s silently turned off in your own config.
+      </p>
+      <pre className="mt-2 whitespace-pre-wrap break-words rounded-md border border-border bg-card/40 px-3 py-2 font-mono text-xs leading-relaxed text-foreground">
+        {`"always use ===" → eqeqeq is "off" in your ESLint config`}
+      </pre>
+    </div>
+  );
+}
+
 /** The verdict-led hero: the grade + score as one badge, the re-scored verdict
  * sentence as the headline, the plugin name + harness, and the trust line. */
 function VerdictHeader({
@@ -706,12 +737,14 @@ export function Report({
           ))}
         </div>
 
-        {/* The model-gated sixth line — folded into the SAME strip (its own dashed
-            row, captioned), not a bolt-on card floating below. */}
+        {/* The two things a browser can't do — folded into the SAME strip (dashed
+            rows, captioned), not bolt-on cards floating below: the model-gated
+            trigger-rate, and the linter cross-reference (needs your local config). */}
         <p className="mb-2.5 mt-6 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">
-          One thing a browser can&apos;t measure
+          What the browser can&apos;t do here
         </p>
         <LockedRow onUnlock={onUnlock} />
+        <CliRulesRow />
 
         {/* The fixes section shows ONLY when it has something to say: ranked fixes,
             or the green all-clear at a real 100. When there are graded findings but
