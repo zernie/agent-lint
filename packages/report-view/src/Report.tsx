@@ -434,8 +434,10 @@ function LockedRow({ onUnlock }: { onUnlock?: () => void }) {
   };
   return (
     <div className="rounded-xl border border-dashed border-border/70 bg-card/20 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-        <div className="min-w-0 flex-1">
+      {/* Stack on mobile (the button below the text) — side-by-side only at sm+,
+          so a narrow screen never crushes the heading into a 1-word-per-line column. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0 sm:flex-1">
           <div className="flex items-center gap-1.5 text-sm font-medium">
             <Lock
               size={13}
@@ -463,12 +465,12 @@ function LockedRow({ onUnlock }: { onUnlock?: () => void }) {
             </span>
           </div>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
+        <div className="flex flex-col items-start gap-1 sm:shrink-0 sm:items-end">
           <button
             type="button"
             onClick={unlock}
             title={TRIGGER_RATE_PROMPT}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-semibold transition-colors hover:border-foreground"
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-card px-3 py-1.5 text-xs font-semibold transition-colors hover:border-foreground"
           >
             {copied ? (
               <>

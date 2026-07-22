@@ -150,11 +150,40 @@ change, not bolted onto a design pass.
 
 ## Process — before shipping any site change
 
+> **GATE-FAILURE → FIX THE GATE FIRST (non-negotiable).** If a bug reaches the user
+> that this skill's review _should_ have caught — a broken mobile layout, a clipped
+> element, an unexplained control — the **skill is the root cause**, not just the
+> component. Before (or in the same change as) fixing the bug, UPDATE THIS SKILL so
+> the gate would catch that whole class next time: add the missing check to the
+> checklist below, name the failure that slipped, and make the check concrete enough
+> that following it mechanically would have caught it. A shipped bug the gate missed
+> is a SKILL bug — fixing only the component and moving on guarantees the next one
+> slips too. (This is why the mobile-layout checklist in step 2 exists: it was written
+> from real misses — a flex row that crushed a heading into one word per line, and a
+> `<pre>` that clipped its example off the right edge on a phone.)
+
 1. **Hold it against this bar.** Ask "what can I remove?" before "what can I add?"
 2. **Screenshot desktop AND mobile (390px) — the FULL page top-to-bottom on EACH,
    every time, and actually look.** Mobile is its own layout, not desktop-minus-width;
-   a change is not verified until you've looked at both. Two things to scan for on the
-   mobile scroll specifically (both have bitten us):
+   a change is not verified until you've looked at both. **Every component you added or
+   changed must be SCROLLED FULLY INTO VIEW and screenshotted at 390px — not just the
+   top of it, not "it's below the fold so I'll trust it."** A component whose mobile
+   render you did not actually see in a screenshot is UNVERIFIED, full stop.
+   **MOBILE-LAYOUT BUG CHECKLIST** — scan every changed component's 390px shot for these
+   (each is a real ship that slipped THIS gate; if you can't rule one out from the
+   screenshot, you haven't looked hard enough):
+   - **Crushed flex column** — a `flex ... justify-between` row (text on one side, a
+     button/badge on the other) that should STACK on a phone but doesn't, squeezing the
+     text into a 1–2-word-per-line column. Fix: `flex-col sm:flex-row` (stack on mobile,
+     row at `sm+`); never leave a `flex-1 min-w-0` text block fighting a `shrink-0`
+     button on a narrow screen.
+   - **Clipped / overflowing code or long text** — a `<pre>`/`<code>`/long inline string
+     cut off at the card's right edge (an `overflow-x-auto` block reads as _clipped_, not
+     scrollable, on a phone). Fix: `whitespace-pre-wrap break-words` so it wraps, or
+     shorten the example. Check EVERY `<pre>` and monospace example at 390px.
+   - **Text touching / bleeding past edges**, and any element that reads as a render bug
+     (ghosting through a sticky bar, a blurred block that looks failed-to-load).
+     Then, two more things to scan for on the mobile scroll (both have also bitten us):
    - **No cross-section duplication.** The same command block / CTA / trust line must
      not appear in two adjacent sections. If a section's mobile fallback just repeats
      what the hero or CTA already shows, that IS the duplication — hide the section on
