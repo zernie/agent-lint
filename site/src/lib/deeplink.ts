@@ -1,6 +1,6 @@
 /**
  * The Claude Code handoff deeplink — shared by the hero AuditWidget and the
- * RepoPicker section so "grade my repo" means one thing in one place.
+ * `#try` demo section so "grade my repo" means one thing in one place.
  *
  * The deeplink opens the user's OWN local Claude Code against a repo they name,
  * with a prompt to run vigiles — so the audit runs on their machine, their

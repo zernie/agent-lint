@@ -5,10 +5,9 @@ import { cn } from "@/lib/utils";
 /**
  * The hero CTA — command-first. The one action that works for EVERYONE (any
  * OS, any terminal, mobile included as "run it on your computer") is
- * `npx vigiles audit`, so that's the star. The Claude-Code-specific "grade a
- * specific repo in one click" flow (a desktop-only deeplink) lives lower in the
- * RepoPicker section (#try) — this just links down to it, rather than leading
- * with a button that dead-ends on mobile / without Claude Code.
+ * `npx vigiles audit`, so that's the star. The live "grade any repo" demo lives
+ * lower in the `#try` section (DemoAudit) — this just links down to it, rather
+ * than leading with a button that dead-ends on mobile / without Claude Code.
  */
 export function AuditWidget({ className }: { className?: string }) {
   return (

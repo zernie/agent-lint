@@ -5,7 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Lock, CornerDownLeft, Check, Copy, RotateCw } from "lucide-react";
+import { CornerDownLeft, Check, Copy, RotateCw } from "lucide-react";
 import { Report, type AuditReport } from "@vigiles/report-view";
 import { normalizeSlug } from "@/lib/deeplink";
 import { track } from "@/lib/track";
@@ -305,19 +305,6 @@ function EdgeState({ view }: { view: TerminalView }) {
   );
 }
 
-/** The A-grade tease — the one honest line for a clean typed repo. */
-function AGradeNote() {
-  return (
-    <div className="border-b border-border bg-good/5 px-5 py-3 text-sm leading-relaxed text-muted-foreground sm:px-7">
-      <strong className="text-foreground">
-        A — clean on every check a browser can run.
-      </strong>{" "}
-      The open question is behavioral: do your skills actually fire? A browser
-      can&apos;t ask a model — your CLI does, on your Claude subscription.
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 
 export function DemoAudit() {
@@ -470,12 +457,6 @@ export function DemoAudit() {
     frameView.k === "ratelimit" ||
     frameView.k === "too-large" ||
     frameView.k === "error";
-  const isAGrade =
-    frameView.k === "report" && frameView.audit.score.grade === "A";
-  // The lock row + bottom command belong with a REAL report (and the loading
-  // that becomes one); an edge state carries its own inline CTA, so they'd only
-  // duplicate it (and read as a back-to-back command on mobile).
-  const showConversion = !isEdge;
 
   return (
     <section
@@ -544,43 +525,22 @@ export function DemoAudit() {
           ) : isEdge ? (
             <EdgeState view={frameView as TerminalView} />
           ) : (
-            <div>
-              {isAGrade && <AGradeNote />}
-              <div className="p-5 sm:p-7">
-                <Report
-                  showFooter={false}
-                  data={
-                    frameView.k === "report"
-                      ? frameView.audit
-                      : FEATURED[(frameView as { i: number }).i].report
-                  }
-                />
-              </div>
+            <div className="p-5 sm:p-7">
+              {/* The summary variant owns its own declutter (compact header,
+                  borderless category strip, top-3 fixes, and the model-gated
+                  locked tease that replaces the old AGradeNote + lock-row). */}
+              <Report
+                variant="summary"
+                showFooter={false}
+                data={
+                  frameView.k === "report"
+                    ? frameView.audit
+                    : FEATURED[(frameView as { i: number }).i].report
+                }
+              />
             </div>
           )}
         </div>
-
-        {showConversion && (
-          <>
-            {/* The honest model-gated tease — ONE row. Everything above is what
-                the browser can compute; this names the one thing it can't. */}
-            <div className="mt-6 flex items-start gap-3 rounded-xl border border-border bg-card/40 px-5 py-4">
-              <Lock
-                className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
-                aria-hidden
-              />
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                <span className="font-semibold text-foreground">
-                  Whether your skills actually fire
-                </span>{" "}
-                — and your guidance changes what the agent does — needs a real
-                model, and a browser can&apos;t ask one.{" "}
-                <span className="text-foreground">Your CLI can</span>, on your
-                Claude subscription. No API key, no signup, free.
-              </p>
-            </div>
-          </>
-        )}
       </div>
     </section>
   );

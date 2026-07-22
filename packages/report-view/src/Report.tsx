@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   CheckCircle2,
   Wrench,
@@ -7,6 +7,7 @@ import {
   Copy,
   Check,
   ShieldAlert,
+  Lock,
 } from "lucide-react";
 import type {
   AuditReport,
@@ -22,6 +23,15 @@ import { RuleInventory } from "./components/RuleInventory";
 import { Observations } from "./components/Observations";
 import { band, type Band, TEXT, BG, BORDER, BORDER_L } from "./lib/band";
 import { cn } from "./lib/utils";
+
+/** The one canonical paste-into-agent prompt — reused by the demo's hint line, edge
+ *  states, the locked tease, and the site CTA (one artifact, many surfaces). Short
+ *  enough to read before pasting, explicitly READ-ONLY, harness-neutral (works pasted
+ *  into Claude Code OR Codex). */
+export const AUDIT_PROMPT =
+  "Run `npx vigiles audit` in this repo and walk me through the report: " +
+  "the overall grade, each category, and the top fixes in order of impact. " +
+  "It's a read-only audit — don't change any files.";
 
 /** The last path segment — the audited dir reads as a plugin name, not a path. */
 function basename(dir: string): string {
@@ -105,6 +115,25 @@ function FixCard({ r, points }: { r: Recommendation; points: number }) {
   );
 }
 
+/** A safety review item — no auto-fix (a lethal-trifecta exfil path is a design
+ * call, not a typo), so it's shown as a review card, never a ranked +N-pts fix. */
+function SafetyCard({ finding }: { finding: string }) {
+  return (
+    <Card className={cn("border-l-4 p-4", BORDER_L.bad)}>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <Badge>
+          <ShieldAlert size={12} className="mr-1" />
+          safety
+        </Badge>
+        <span className="text-muted-foreground">{finding}</span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          your call — no deterministic fix
+        </span>
+      </div>
+    </Card>
+  );
+}
+
 /** A compact category cell — a thin band bar + score, so the five read as one
  * scannable strip rather than five heavy rings competing with the verdict. */
 function CategoryCell({ c }: { c: CategoryScore }) {
@@ -147,6 +176,91 @@ function CategoryCell({ c }: { c: CategoryScore }) {
   );
 }
 
+/** A borderless category row (summary variant) — label + score + a findings COUNT +
+ * a thin band bar. Type and space, not a bordered box, so the five read as one clean
+ * strip; full-width at 390px (grid-cols-1) fixes the mobile 2-up cramping. */
+function CategoryRow({ c }: { c: CategoryScore }) {
+  const b: Band = c.advisory ? "na" : band(c.score);
+  const pct = c.score === null ? 0 : Math.max(0, Math.min(100, c.score));
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-medium text-muted-foreground">{c.key}</span>
+        <span className={cn("font-mono text-sm font-bold", TEXT[b])}>
+          {c.advisory ? "—" : c.score === null ? "n/a" : c.score}
+          {!c.advisory && c.findings.length > 0 && (
+            <span className="ml-1.5 font-sans text-[11px] font-medium text-muted-foreground">
+              · {c.findings.length}
+            </span>
+          )}
+        </span>
+      </div>
+      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-border">
+        <div
+          className={cn("h-full rounded-full", BG[b])}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** The locked model-gated tease (summary variant): the deterministic rings show real
+ * numbers; the ONE thing a browser can't do — measure whether skills actually fire —
+ * is present but veiled, with a click-to-copy "run locally to unlock" prompt. Blurred
+ * numbers are `··` placeholders, never fabricated digits. Replaces the AGradeNote +
+ * the lock-row box (net fewer elements) while adding the curiosity gap. */
+function LockedTease({ onUnlock }: { onUnlock?: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const unlock = (): void => {
+    onUnlock?.();
+    void navigator.clipboard?.writeText(AUDIT_PROMPT).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1800);
+      },
+      () => undefined,
+    );
+  };
+  return (
+    <div className="relative mt-4 overflow-hidden rounded-lg border border-border/60">
+      <div className="select-none px-4 py-3 opacity-50 blur-[3px]" aria-hidden>
+        <div className="flex items-baseline justify-between">
+          <span className="text-xs font-medium text-muted-foreground">
+            Trigger rate
+          </span>
+          <span className={cn("font-mono text-sm font-bold", TEXT.good)}>
+            ·· % recall · ·· % precision
+          </span>
+        </div>
+        <div className="mt-1.5 h-1 rounded-full bg-border">
+          <div className={cn("h-full w-3/4 rounded-full", BG.good)} />
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={unlock}
+        title={AUDIT_PROMPT}
+        className="absolute inset-0 flex items-center justify-center gap-2 bg-background/40 px-4 text-center text-xs font-medium text-foreground"
+      >
+        {copied ? (
+          <>
+            <Check size={13} aria-hidden className={cn("shrink-0", TEXT.good)} />
+            <span className={TEXT.good}>
+              Prompt copied — paste into Claude Code or Codex
+            </span>
+          </>
+        ) : (
+          <>
+            <Lock size={13} aria-hidden className="shrink-0" />
+            Do your skills fire? Needs a real model — run locally to unlock
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
+
 /** The verdict-led hero: the grade + score as one badge, the re-scored verdict
  * sentence as the headline, the plugin name + harness, and the trust line. */
 function VerdictHeader({
@@ -154,52 +268,108 @@ function VerdictHeader({
   overall,
   dir,
   harness,
+  compact = false,
+  subline,
 }: {
   verdict: Verdict;
   overall: number | null;
   dir: string;
   harness: string;
+  /** Summary variant: no Card border, smaller grade box, no separate trust line
+   *  (the section subhead already says "deterministic, model-free"). */
+  compact?: boolean;
+  /** Extra identity context (e.g. the merged "ships" counts) appended to the name
+   *  line — context belongs with identity, not as its own section band. */
+  subline?: ReactNode;
 }) {
   const b = band(overall);
-  return (
-    <Card className="flex flex-col gap-5 p-7 sm:flex-row sm:items-center">
+  const box = compact
+    ? "h-20 w-20 rounded-xl text-4xl"
+    : "h-28 w-28 rounded-2xl text-5xl";
+  const inner = (
+    <>
       <div
         className={cn(
-          "flex h-28 w-28 shrink-0 flex-col items-center justify-center rounded-2xl border-2",
+          "flex shrink-0 flex-col items-center justify-center border-2",
+          box,
           BORDER[b],
         )}
       >
-        <span className={cn("text-5xl font-black leading-none", TEXT[b])}>
+        <span className={cn("font-black leading-none", TEXT[b])}>
           {verdict.grade}
         </span>
-        <span className="mt-1 text-sm font-medium text-muted-foreground">
+        <span className="mt-1 text-xs font-medium text-muted-foreground">
           {overall === null ? "—" : `${overall}/100`}
         </span>
       </div>
       <div className="min-w-0">
-        <h1 className="text-xl font-bold leading-snug tracking-tight sm:text-2xl">
+        <h1
+          className={cn(
+            "font-bold leading-snug tracking-tight",
+            compact ? "text-lg sm:text-xl" : "text-xl sm:text-2xl",
+          )}
+        >
           {verdict.sentence}
         </h1>
         <div className="mt-2 text-sm text-muted-foreground">
           <span className="font-medium text-foreground">{basename(dir)}</span> ·{" "}
           {harness}
+          {subline}
         </div>
-        <div className="mt-1 text-xs text-muted-foreground">
-          deterministic · no model · nothing leaves your machine
-        </div>
+        {!compact && (
+          <div className="mt-1 text-xs text-muted-foreground">
+            deterministic · no model · nothing leaves your machine
+          </div>
+        )}
       </div>
+    </>
+  );
+  return compact ? (
+    <div className="flex flex-col gap-5 sm:flex-row sm:items-center">{inner}</div>
+  ) : (
+    <Card className="flex flex-col gap-5 p-7 sm:flex-row sm:items-center">
+      {inner}
     </Card>
   );
 }
 
+/** A "+ N more" fold for a list already showing its most important items. */
+function MoreFold({ n, children }: { n: number; children: ReactNode }) {
+  if (n <= 0) return null;
+  return (
+    <details className="group mt-2.5">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
+        <ChevronRight
+          size={13}
+          className="transition-transform group-open:rotate-90"
+        />
+        + {n} more
+      </summary>
+      <div className="mt-2.5 flex flex-col gap-2.5">{children}</div>
+    </details>
+  );
+}
+
+const SECTION_H =
+  "mb-3 mt-8 text-xs font-semibold uppercase tracking-widest text-muted-foreground";
+
 export function Report({
   data,
   showFooter = true,
+  variant = "full",
+  onUnlock,
 }: {
   data: AuditReport;
   /** The "Generated by vigiles" footer. On by default (the standalone HTML report's
    *  only attribution); the in-page demo turns it off — the page already brands. */
   showFooter?: boolean;
+  /** `"summary"` is the decluttered in-demo variant: compact header, borderless
+   *  category strip (1-col mobile), top-3 fixes folded, the model-gated tease, and
+   *  none of the standalone-only sections. `"full"` (default) is unchanged. */
+  variant?: "full" | "summary";
+  /** Summary only: click handler for the locked tease. Defaults to copying the
+   *  canonical agent prompt; the demo overrides to add a toast. */
+  onUnlock?: () => void;
 }) {
   const {
     score,
@@ -228,6 +398,93 @@ export function Report({
   const rankedFixes = recommendations
     .map((r, i) => ({ r, points: pointsFor(i) }))
     .sort((a, b) => b.points - a.points);
+
+  const safety = score.categories.find((c) => c.key === "Safety");
+  const safetyFindings =
+    safety && !safety.advisory ? safety.findings : ([] as string[]);
+
+  if (variant === "summary") {
+    const unlock =
+      onUnlock ??
+      (() => void navigator.clipboard?.writeText(AUDIT_PROMPT).catch(() => {}));
+    const ships = [
+      inventory.skills && `${inventory.skills} skills`,
+      inventory.agents && `${inventory.agents} agents`,
+      inventory.hooks && `${inventory.hooks} hooks`,
+      inventory.commands && `${inventory.commands} commands`,
+    ].filter(Boolean) as string[];
+    const top = rankedFixes.slice(0, 3);
+    const rest = rankedFixes.slice(3);
+    return (
+      <div>
+        <VerdictHeader
+          compact
+          verdict={verdict}
+          overall={overall}
+          dir={meta.dir}
+          harness={meta.harness}
+          subline={
+            <>
+              {ships.map((s) => (
+                <span key={s}> · {s}</span>
+              ))}
+              {inventory.untested > 0 && (
+                <span className={TEXT.warn}> · {inventory.untested} untested</span>
+              )}
+            </>
+          }
+        />
+
+        <h2 className={SECTION_H}>Categories</h2>
+        <div className="grid grid-cols-1 gap-x-6 gap-y-3.5 sm:grid-cols-2 lg:grid-cols-5">
+          {score.categories.map((c) => (
+            <CategoryRow key={c.key} c={c} />
+          ))}
+        </div>
+
+        <LockedTease onUnlock={unlock} />
+
+        <h2 className={SECTION_H}>
+          {recommendations.length > 0 ? "Do these first" : "Fixes"}
+        </h2>
+        {top.length > 0 ? (
+          <>
+            <div className="flex flex-col gap-2.5">
+              {top.map(({ r, points }, i) => (
+                <FixCard key={i} r={r} points={points} />
+              ))}
+            </div>
+            <MoreFold n={rest.length}>
+              {rest.map(({ r, points }, i) => (
+                <FixCard key={i} r={r} points={points} />
+              ))}
+            </MoreFold>
+          </>
+        ) : (
+          <Card className="flex items-center gap-2 p-4 text-sm text-good">
+            <CheckCircle2 size={16} /> No deterministic fixes — the structure is
+            clean.
+          </Card>
+        )}
+
+        {safetyFindings.length > 0 && (
+          <>
+            <h2 className={SECTION_H}>Review — no auto-fix</h2>
+            <div className="flex flex-col gap-2.5">
+              {safetyFindings.slice(0, 2).map((f, i) => (
+                <SafetyCard key={i} finding={f} />
+              ))}
+            </div>
+            <MoreFold n={safetyFindings.length - 2}>
+              {safetyFindings.slice(2).map((f, i) => (
+                <SafetyCard key={i} finding={f} />
+              ))}
+            </MoreFold>
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-6 pb-16 pt-10">
@@ -278,18 +535,7 @@ export function Report({
             </h2>
             <div className="flex flex-col gap-2.5">
               {safety.findings.map((f, i) => (
-                <Card key={i} className={cn("border-l-4 p-4", BORDER_L.bad)}>
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <Badge>
-                      <ShieldAlert size={12} className="mr-1" />
-                      safety
-                    </Badge>
-                    <span className="text-muted-foreground">{f}</span>
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      your call — no deterministic fix
-                    </span>
-                  </div>
-                </Card>
+                <SafetyCard key={i} finding={f} />
               ))}
             </div>
           </>
