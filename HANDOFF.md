@@ -16,61 +16,61 @@
 ## RESUME HERE
 
 **`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
-via `pages.yml` on push to main.
+via `pages.yml` on push to main. Demo UX + real-F default MERGED (PRs #100–#106).
 
-**DEMO UX REDESIGN + real-F default MERGED (PRs #100–#106, squashed to `main`).** The live in-browser demo, the
-cohesive overhaul, the real F→C→B→A featured default (davila7 F → disler C → madappgang B → superpowers A, found via
-`git clone` since codeload/api are proxy-blocked), and the site e2e + 390px mobile-overflow CI gate all shipped.
+**Branch `claude/click-not-working-s9apfb`: 14 UNMERGED commits (pushed, NO PR yet).** Restart from `main`
+if needed (`git fetch origin main && git checkout -B claude/click-not-working-s9apfb origin/main`). What's on it:
+earlier — percent-encoded-link false-positive fix (real bug, 92→100), blurred "preview" trigger-rate tease
+(`LockedRow`), adoption docs. This session (2026-07-22 cont.):
 
-**Branch `claude/click-not-working-s9apfb` was rebuilt from `main` and has 5 UNMERGED commits (pushed, NO PR yet)** —
-restart follow-ups from `main` (`git fetch origin main && git checkout -B claude/click-not-working-s9apfb origin/main`):
-
-1. `fix(audit)` — a percent-encoded markdown link was flagged as a broken bundled resource (a real FALSE POSITIVE;
-   verified a clean repo went 92→100). 2. `feat/fix(report)` — the trigger-rate tease is now a BLURRED "preview"
-   (gated-content pattern, honest: blurred + labelled + sr-only truth; founder wanted the tease, NOT honest em-dashes —
-   `LockedRow` in `report-view/src/Report.tsx`). 3–4. two research docs (below).
-
-**IN FLIGHT (2026-07-22, post-#106): ADOPTION DESIGN.** Founder pain from a real existing-harness team (Kotlin/MD,
-own eval loop, no JS linter): full `init` is friction, `Tested` reads as a failure, `rules→enforced` is silent on
-non-JS. Decisions captured in `research/cli-command-model.md` (verbs: audit=read ⊄ init=write, NEVER merge — progressive
-disclosure instead; init NUDGES spec adoption via the ask tool at install + gently later but is NOT evil — 1-keystroke
-decline, no nag, no grade penalty, agent/CI never hangs) + `research/adoption-personas.md` (adoption mapped by team POV;
-throughline: sell the integrity GATE — audit+lint — to everyone, INVITE specs/skills/eval on top). NEXT: writing
-`research/adoption-design.md` (the buildable spec unifying init-gate-only + Tested/rules honesty + non-interactive
-audit HTML-report/leaderboard-action-points + the LOCAL-RESULT SHARE loop) — a research agent on ETHICAL viral loops
-(share mechanics without dark-pattern reputation damage) is RUNNING to ground the sharing section. GTM/growth STRATEGY
-stays VAULT (zernie/mine), the spec is product mechanics only.
+- **Adoption docs DONE + signed off** — `research/adoption-goals.md` (G1–G5 + non-evil contract), `adoption-design.md`
+  (6 build items + reputation-safe grading checklist), `adoption-personas.md`, `cli-command-model.md`; the
+  `gate-first-adoption` rule distills the goals into root `CLAUDE.md`. Ethical-viral research → PRIVATE `zernie/mine`
+  `vigiles/s50.md` (NOT here — strategy). davila7-F reconciliation noted (design item, not blocking).
+- **Item 1 (gate-first `init`) — PARTIAL/SHIPPED** — `SetupPlan.scaffoldSpecs` decouples the lint GATE from the SPEC
+  scaffold; wizard's new FIRST question is "gate vs full"; `gateOnlyInvitation` one-liner. NO new CLI surface (honors
+  the high-bar). NON-INTERACTIVE gate is the DEFERRED half (needs a founder call: `--gate` flag vs default-flip that
+  breaks ~16 "specs by default" tests).
+- **Item 2 (Tested + rules honesty) — SHIPPED** — `detectOwnTestSignal` in `scan.ts` (`ScanReport.ownTestSignal`) +
+  `audit-score.ts tested()` re-worded to "N surfaces with no vigiles test/eval" + credits your own test setup as
+  OPTIONAL. `CliRulesRow` (demo/summary variant ONLY — NOT the real CLI report) notes rule-xref covers
+  ESLint/Ruff/Pylint/Clippy/RuboCop.
+- **VerbMap red→green — SHIPPED** (Vlad's idea, founder-approved) — each verb shows ✗ broken → ✓ green fix (honest:
+  green = the fix, NOT an auto-fix). Site-only; 390px gate green.
+- **Item 4a (share deep-link) — SHIPPED** — `audit` prints `Share this grade → vigiles.sh/?repo=owner/repo` for a
+  GitHub `origin` remote (the demo re-runs live; zero upload/backend, closes "can't share from localhost"). Pure
+  `src/share-link.ts` (100% cov, in the allowlist) + thin `readOriginRemote` in cli.ts. Offline — no public/private
+  check, captioned "public repos". No new CLI surface.
 
 **GATE-FAILURE RULE (founder, standing): if a skill/hook/rule DIDN'T CATCH an issue the founder had to spot,
-FIX THE GATE FIRST.** This session's applications: the mobile-overflow CI gate (layout bugs reached a real phone —
-S23 Ultra), and the responsive-grid alignment lesson added to `.claude/skills/landing-site`. When founder feedback
-exposes a class of bug, encode the catch (a test, a checklist item, a rule) BEFORE/ALONGSIDE the one-off fix.
+FIX THE GATE FIRST.** (e.g. the mobile-overflow CI gate + the responsive-grid lesson in `.claude/skills/landing-site`.)
 
 **FLAG (founder's call):** the PR-CREATION harness auto-appends a `claude.ai/code/session_…` URL to PR bodies
-(public no-session-links rule). Using the GitHub MCP `create/update_pull_request` (as this session did) AVOIDS it —
-those bodies are clean. If a PR is opened another way, edit the body to end at the `claude.com/claude-code` line.
+(public no-session-links rule). Using the GitHub MCP `create/update_pull_request` (as this session did) AVOIDS it.
+If a PR is opened another way, edit the body to end at the `claude.com/claude-code` line.
 
-**FETCH-TAIL DOCUMENTED — do NOT chase Codex's `fetchRepo` P2s.** The demo fetches a BOUNDED, SELECTIVE set (not the
-CLI's whole-repo read); invariant = NEVER GRADE PARTIAL DATA (bail to `too-large`/`error`). Canonical:
-`research/browser-demo-fetch-limits.md`. DOCUMENT, don't fix piecemeal — unless a genuine WRONG GRADE past the bail-outs.
+**FETCH-TAIL DOCUMENTED — do NOT chase Codex's `fetchRepo` P2s.** Demo fetches a BOUNDED set; invariant = NEVER GRADE
+PARTIAL DATA. Canonical: `research/browser-demo-fetch-limits.md`.
 
 **TOP GOAL (`.claude/skills/landing-site`): maximize visitors who RUN `npx vigiles audit`.** HOLD every `site/` change
-against the skill (READ it before touching `site/`); screenshot desktop AND full 390px mobile; the mobile-overflow e2e
-is the backstop but the visual + Fable cold-visitor pass still matter — ACT on P0/P1 cuts.
+against the skill (READ it before touching `site/`); screenshot desktop AND full 390px mobile.
 
 ### 🎯 DO NEXT
 
-1. **Finish `research/adoption-design.md`** once the ethical-viral-loops research agent returns (it informs the
-   share-loop section), then get founder sign-off on scope.
-2. **Build in priority order** (founder-agreed): (a) `init` gate-only + non-evil spec nudge (`src/setup-plan.ts`
-   `SetupPlan.gateOnly`; the nudge = TTY ask / headless one-liner + a `.vigilesrc.json` `nudge:"dismissed"` flag) —
-   the adoption unblocker; (b) `Tested` + `rules→enforced` HONESTY (detect a repo's own test signal / re-word the ring;
-   gate rules→enforced on `detectedLinters`); (c) non-interactive `audit` emits `vigiles-report.html` + prints path,
-   leaderboard gets worst-finding + per-plugin link; (d) LOCAL-RESULT SHARE — for a repo with a public GH remote,
-   `audit` prints `Share → vigiles.sh/?repo=owner/repo` (reuses the demo deep-link; private/local needs the backend).
-3. **Open a PR** for the 5 committed fixes when founder OKs (they hadn't decided PR-now vs bundle-with-adoption).
-   Other candidates (founder's call): analytics provider (`track()` instrumented, no script yet); roadmap
-   backend-audit-service; Codex trigger-rate promotion (below).
+1. **Item 4b (OG social-card) — EXPLAINED, ready to build.** IMPORTANT CORRECTION to `adoption-design.md`: an OG card
+   only works on a CRAWLABLE hosted URL (crawlers read static `<head>` meta, no JS, no `file://`) — so 4b lives on
+   `vigiles.sh` (the 4a deep-link), NOT baked into the local report file (fix that wording). Two tiers: (a) GENERIC
+   branded card = zero-infra, ships now on GitHub Pages (every 4a link previews nicely, but not per-grade); (b)
+   PER-GRADE card (`acme/widgets · F · rings`) needs a SERVERLESS OG endpoint (GitHub Pages is static, can't vary meta
+   by `?repo=`) → bundles with item 4c (hosted upload), not now. Founder OK'd (a) + the wording fix — **do those next.**
+2. **Open the PR** for the 14 commits — founder hasn't given final go; the false-positive fix is a real bug worth
+   shipping. (Founder deprioritized item 6 GHA PR-comment grade — GHA is later-adoption AND not even guaranteed after
+   gate-first init.)
+3. **Remaining adoption items** (order per `adoption-design.md`): item 3 (non-interactive `audit` writes
+   `vigiles-report.html` + prints path; leaderboard worst-finding + per-plugin link); 4c (time-boxed upload, needs
+   backend); item 5 (one opt-in README badge). Item 2b full-variant half (soften rule-enforcement wording in the REAL
+   audit HTML when no linter detected) is a small follow-on.
+4. **Non-interactive gate-only `init`** — the deferred founder call (`--gate` flag vs default-flip).
 
 ### Codex trigger-rate is EXPERIMENTAL
 
@@ -117,8 +117,6 @@ Deterministic Codex audit = full parity (KEEP). Real-model **trigger-rate** on C
 - `CLAUDE.md` (root + `src/` + `research/`) is COMPILED from `.spec.ts` — edit the spec +
   recompile (`node dist/cli.js compile <spec>`), NEVER hand-edit (a PostToolUse hook does).
 - **COMMIT SIGNING is BROKEN in-container** (0-byte pubkey) → "Unverified"; email correct.
-- `dialect-drift.test.ts` now SKIPS LOUDLY (not fails) when the located claude-code package ≠
-  the running `claude --version` (the stale-leftover case) — fixed this session (`a85228b`). CI pins CC so it gates for real there.
 - **`add_repo` is same-owner only** — fetch external files via
   `curl https://raw.githubusercontent.com/OWNER/REPO/BRANCH/PATH` (through the proxy).
 - Commits/PR: NO session links / NO raw model-id strings. Conventional-Commit titles;
