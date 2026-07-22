@@ -60,6 +60,15 @@
   docs/compiled-hooks.md §disler battery + src/hook-dogfood.test.ts) — reachable
   evidence under the Lighthouse umbrella, not the hero, not the brand.
 
+  WEBSITE (added 2026-07-22): vigiles.sh is the LIVE interactive demo (grade any
+  repo in the browser). The README is the AGENT's install door + the GitHub/npm
+  landing — it LINKS to the site prominently (hero line + badge + the catches CTA
+  + quick-start + docs) rather than re-embedding the whole proof. The 4 detailed
+  Proof narratives were COLLAPSED to a 4-bullet list that leans on the live demo +
+  docs/what-vigiles-catches.md (the site + that doc own the depth). Don't re-expand
+  them here; deepen them on the site or in docs instead. Split of labour: site =
+  marketing/try, README = install + 60-sec what, docs/ = the shared HOW.
+
   RULES: lead with the reader's CONCRETE PAIN; ≤ ~3-line paragraphs; ONE bold per
   block; ONE idea per sentence; NO internal vocabulary (moat/flywheel) / NO
   research/ links / NO enterprise/national-interest framing — name the user
@@ -89,9 +98,14 @@
 </p>
 
 <p align="center">
+  <a href="https://vigiles.sh"><strong>▶ Grade any public repo live at vigiles.sh</strong></a> — no install, runs in your browser.
+</p>
+
+<p align="center">
   <a href="https://www.npmjs.com/package/vigiles"><img src="https://img.shields.io/npm/v/vigiles?color=orange" alt="npm version" /></a>
   <a href="https://github.com/zernie/vigiles/actions"><img src="https://img.shields.io/github/actions/workflow/status/zernie/vigiles/ci.yml?branch=main" alt="CI" /></a>
   <a href="https://github.com/zernie/vigiles/blob/main/LICENSE"><img src="https://img.shields.io/github/license/zernie/vigiles" alt="License" /></a>
+  <a href="https://vigiles.sh"><img src="https://img.shields.io/badge/demo-vigiles.sh-f97316" alt="live demo" /></a>
 </p>
 
 ---
@@ -128,55 +142,14 @@ And it closes the loop from prose to enforcement: **your rules → enforced** ma
 
 These are real scans of public plugins — run `npx vigiles audit <any-repo>` for your own. The examples below use Claude Code subagents; the same checks run on Codex `AGENTS.md`, skills, and hooks. ↓
 
-## Proof 1 — a tool your agent thinks it has and doesn't
+Every one of these is **valid markdown** — parses fine, does the wrong thing. That's the gap a style linter can't see:
 
-```text
-✗ tester — Tool "AskUserQuestion" is never available to a subagent.
-    → remove or correct it — it's silently dropped from the contract.
-```
+- **A tool your agent thinks it has and doesn't** — a subagent lists a tool that isn't available to it. The harness drops it silently; the agent loses a capability it believes it has.
+- **Two skills your agent can't tell apart** — near-identical descriptions, so the agent (which picks by _reading_ them) fires the wrong one. One popular plugin ships 45 such pairs.
+- **A rule you wrote that nothing enforces** — `"always use ==="` while `eqeqeq` is set to `"off"` in your ESLint config. Your CLAUDE.md says enforce it; your config quietly turns it off.
+- **A subagent that can read your secrets and send them out** — one holding all three "lethal-trifecta" legs (reads data · takes untrusted web input · can send data out). A poisoned page makes it POST your `.env` anywhere — no exploit, just the tools it was given, hidden behind a healthy-looking grade.
 
-This subagent — a helper your main agent hands work to — lists a tool that doesn't exist for it. The harness drops it without a word, so the agent quietly loses a capability it thinks it has. The markdown is perfectly valid. vigiles catches it and hands you the **one-line fix**.
-
-## Proof 2 — two skills your agent can't tell apart
-
-```text
-✗ Triggering   0  (0/100)
-    └ 45 pairs of near-identical skill descriptions — the agent can't tell them
-      apart, so the wrong one fires  (e.g. "agent-coder" ↔ "agent-tester", 83% alike)
-```
-
-One popular plugin ships **45 pairs** of near-identical skill descriptions. Your agent picks a skill by _reading_ them — so when two match, it fires the wrong one. Still perfectly valid markdown.
-**[How triggering works →](docs/measuring-skills.md)**
-
-## Proof 3 — a rule you wrote that nothing enforces
-
-Point vigiles at your own repo and the rules section maps each prose rule to the lint rule that enforces it — then checks your config. Representative output:
-
-```text
-Your rules → enforced   1 of 4 enforced · 2 one line away · 1 contradicted by config
-    └ "always use ===" → eqeqeq is set to "off" in your ESLint config
-       your CLAUDE.md says enforce it; your config quietly turns it off
-```
-
-You wrote the rule. Your agent treats it as gospel and follows it — until it doesn't, and nothing tells you which time. vigiles checks each mapped rule three ways: enforced, **one line away**, or — the one people screenshot — documented but silently **turned off**. Deterministic, no model. Acting on the map is **opt-in and agent-driven**: enable a rule in one line (the `strengthen` skill does it for you), turn an action rule like `git push` into a compiled hook, leave judgment calls as prose. Nothing runs a model — or changes your config — unless you ask.
-**[How enforcement works →](docs/verifying-instruction-files.md)**
-
-## Proof 4 — it can quietly read your secrets and send them out
-
-```text
-◑ Safety   80  (80/100)
-    └ subagent "tester" holds all three lethal-trifecta legs:
-        reads private data (Bash, Read) · takes in untrusted web content (WebFetch)
-        · can send data out (Bash, WebFetch)
-```
-
-Hand one subagent all three powers and a poisoned web page can make it read your `.env` and POST it anywhere — no exploit code, just the tools it was given. The **80 looks like a B** — and that's the trap: a healthy grade hiding a subagent that's a data-leak waiting to happen. vigiles spots it from the tool list alone, free, no model.
-
-And the guard you'd write to stop it usually doesn't work: a widely-copied "safety hook" pattern blocks only **2 of 7** classic dangerous commands in our battery — the other five sail through while the hook _looks_ like it's working. A hook vigiles compiles for you blocks **7 of 7**, because the exit code and JSON contract are generated, not hand-written.
-**[The safety-hook battery →](docs/compiled-hooks.md)**
-
-That's the whole idea: it checks your harness against **reality, not style**. Every tool, hook, file, script, and skill you reference is verified to actually resolve — and where you name a linter rule, it's checked to exist _and_ be enabled (ESLint, Ruff, Clippy, and more).
-**[Everything it catches →](docs/what-vigiles-catches.md)** · point `audit` at a whole marketplace and it ranks every plugin the same way.
+**[▶ See these live at vigiles.sh](https://vigiles.sh)** — grade any repo · **[everything it catches →](docs/what-vigiles-catches.md)**. Point `audit` at a whole marketplace and it ranks every plugin the same way.
 
 ## How it works — vibes → verified
 
@@ -216,7 +189,7 @@ Point it at any harness change that claims a number — does a compression skill
 
 ## Quick start
 
-**1. See what's broken** — read-only, no setup:
+**1. See what's broken** — read-only, no setup (or try it in your browser first at **[vigiles.sh](https://vigiles.sh)**):
 
 ```bash
 npx vigiles audit
@@ -265,8 +238,8 @@ Targets Claude Code and Codex out of the box, or [your own harness](docs/authori
 
 - **Is this a framework I have to build around?** No. It's a tool you run — like ESLint, Lighthouse, or `npm audit`. One command, a report, an optional CI gate. There's a library API for automation, but you never touch it to get value.
 - **Isn't this just a markdown linter?** No — it checks whether your instruction file is _true_ (every path/script/symbol/rule exists and is enabled), then tests and measures your harness. A style linter can't do any of that.
-- **Do I have to write TypeScript?** No — plain markdown works with zero new files, and rules run in your own linter config. The typed spec is opt-in, only for the structural checks a linter can't do — like TS's `strict` ([why?](docs/faq.md#why-are-the-strongest-guarantees-opt-in-not-the-default)).
-- **Is it stable enough to adopt?** The CLI you run is small and rarely changes; the library API still moves between releases. The high version number is release automation (a new major per breaking change), not age — see [Stability](STABILITY.md).
+- **Does anything leave my machine?** No. `audit` and `lint` read your local repo — no upload, no account, no server. (`eval` is the only step that calls a model, on your own Claude subscription; the browser demo only reads a public repo you name via GitHub's API.)
+- **What do I have to change to adopt it?** Almost nothing. Plain markdown works with zero new files, rules run in your existing linter, and the agent edits the specs for you. The typed spec is opt-in, only for structural checks a linter can't express — like TS's `strict` ([why?](docs/faq.md#why-are-the-strongest-guarantees-opt-in-not-the-default)).
 - **Non-JS repo?** `npx vigiles lint` verifies your CLAUDE.md or AGENTS.md with no install (Ruff/Clippy/Pylint/… too).
 
 **[Full FAQ →](docs/faq.md)**
@@ -275,7 +248,7 @@ Targets Claude Code and Codex out of the box, or [your own harness](docs/authori
 
 ## Docs
 
-The **[docs index](docs/README.md)** is the full map, grouped by what you're doing:
+**[vigiles.sh](https://vigiles.sh)** is the live demo — grade any repo in your browser. The **[docs index](docs/README.md)** is the full map, grouped by what you're doing:
 
 - **Guides** — [verify instruction files](docs/verifying-instruction-files.md) · [test your harness](docs/harness-testing.md) · [measure a skill](docs/measuring-skills.md) · [ship a plugin](docs/for-plugin-authors.md) · [Codex & other harnesses](docs/harnesses.md)
 - **Reference** — [CLI](docs/cli.md) · [rules matrix](docs/verifying-instruction-files.md#the-validation-rules--the-full-matrix) · [testing API](docs/testing-api.md) · [full API](https://zernie.github.io/vigiles/api/)
