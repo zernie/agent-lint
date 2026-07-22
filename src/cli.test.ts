@@ -1297,6 +1297,44 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
+  it("--test (with gha): the workflow has the harness job but NO lint job (dogfood I4)", () => {
+    const dir = freshProject();
+    try {
+      run("init --test --no-plugin", dir);
+      const wf = join(dir, ".github/workflows/vigiles.yml");
+      assert.ok(existsSync(wf), "workflow written");
+      const yaml = readFileSync(wf, "utf-8");
+      assert.match(yaml, /npx vigiles test/, "harness job present");
+      assert.doesNotMatch(
+        yaml,
+        /^ {2}lint:/m,
+        "no lint job when the lint pillar is off",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("no package.json: the harness job omits `npm install` (dogfood I1)", () => {
+    // A non-JS repo has no package.json — an `npm install` step would ENOENT.
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-init-nopkg-"));
+    try {
+      writeFileSync(join(dir, "CLAUDE.md"), "# proj\n");
+      run("init --no-plugin", dir);
+      const wf = join(dir, ".github/workflows/vigiles.yml");
+      assert.ok(existsSync(wf), "workflow written");
+      const yaml = readFileSync(wf, "utf-8");
+      assert.match(yaml, /npx vigiles test/, "harness job present");
+      assert.doesNotMatch(
+        yaml,
+        /run: npm install/,
+        "no npm install step without a package.json",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("--test: only the harness starter, no spec/workflow", () => {
     const dir = freshProject();
     try {

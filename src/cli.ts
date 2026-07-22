@@ -2617,7 +2617,30 @@ function harnessTestBinaries(harnesses: string[]): string {
   return (pkgs.length > 0 ? pkgs : ["@anthropic-ai/claude-code"]).join(" ");
 }
 
-function vigilesWorkflow(plan: SetupPlan, harnesses: string[]): string {
+function vigilesWorkflow(
+  plan: SetupPlan,
+  harnesses: string[],
+  hasPackageJson: boolean,
+): string {
+  // The lint job — ONLY when the lint pillar is selected (dogfood I4: a
+  // `--test`-only setup must not wire a lint job).
+  const lint = plan.lint
+    ? `
+  lint:
+    # Lint pillar — verify the references in your instruction files (composite
+    # Action over the published CLI). Posts a sticky PR comment + a \`valid\` output.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: zernie/vigiles@v1
+`
+    : "";
+  // `npm install` only when a package.json exists (dogfood I1: a non-JS repo has
+  // none, so the step would ENOENT). Without one, npx fetches vigiles on demand.
+  const install = hasPackageJson ? "      - run: npm install\n" : "";
   const harness = plan.test
     ? `
   harness:
@@ -2630,8 +2653,7 @@ function vigilesWorkflow(plan: SetupPlan, harnesses: string[]): string {
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: npm install
-      - run: npm i -g ${harnessTestBinaries(harnesses)} # mock tier needs the binary, no API key
+${install}      - run: npm i -g ${harnessTestBinaries(harnesses)} # mock tier needs the binary, no API key
       - run: npx vigiles test
 
   eval-check:
@@ -2660,18 +2682,7 @@ permissions:
   contents: read
   pull-requests: write # for the sticky PR comment
 
-jobs:
-  lint:
-    # Lint pillar — verify the references in your instruction files (composite
-    # Action over the published CLI). Posts a sticky PR comment + a \`valid\` output.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - uses: zernie/vigiles@v1
-${harness}`;
+jobs:${lint}${harness}`;
 }
 
 /**
@@ -2733,6 +2744,7 @@ function wireGha(plan: SetupPlan, harnesses: string[]): string[] {
   const dir = resolve(process.cwd(), ".github", "workflows");
   const path = resolve(dir, "vigiles.yml");
   const rel = ".github/workflows/vigiles.yml";
+  const hasPackageJson = existsSync(resolve(process.cwd(), "package.json"));
   if (existsSync(path)) {
     const content = readFileSync(path, "utf-8");
     const removed = workflowRemovedSubcommand(content);
@@ -2753,7 +2765,7 @@ function wireGha(plan: SetupPlan, harnesses: string[]): string[] {
       );
     } else if (workflowUsesStaleApi(content)) {
       if (plan.force) {
-        writeFileSync(path, vigilesWorkflow(plan, harnesses));
+        writeFileSync(path, vigilesWorkflow(plan, harnesses, hasPackageJson));
         console.log(`✓ Regenerated ${rel} (was a stale bare \`npx vigiles\`)`);
         return [rel];
       }
@@ -2769,7 +2781,7 @@ function wireGha(plan: SetupPlan, harnesses: string[]): string[] {
     return [];
   }
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(path, vigilesWorkflow(plan, harnesses));
+  writeFileSync(path, vigilesWorkflow(plan, harnesses, hasPackageJson));
   console.log(
     "✓ Created .github/workflows/vigiles.yml (uses zernie/vigiles@v1)",
   );
