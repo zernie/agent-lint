@@ -33,7 +33,10 @@ import { execSync } from "node:child_process";
 const CLI = resolve(__dirname, "..", "dist", "cli.js");
 const VENDOR = resolve(__dirname, "..", "test/dogfood");
 
-function run(args: string, cwd?: string): { stdout: string; exitCode: number } {
+function run(
+  args: string,
+  cwd?: string,
+): { stdout: string; stderr: string; exitCode: number } {
   // A default `audit` writes vigiles-report.html + vigiles-report.json into cwd —
   // suppress both here so the test run never drops an artifact in the repo root.
   // The dedicated write tests exercise those paths explicitly in a tmp cwd.
@@ -48,10 +51,14 @@ function run(args: string, cwd?: string): { stdout: string; exitCode: number } {
       timeout: 30000,
       cwd,
     });
-    return { stdout, exitCode: 0 };
+    return { stdout, stderr: "", exitCode: 0 };
   } catch (e: unknown) {
-    const err = e as { stdout?: string; status?: number };
-    return { stdout: err.stdout ?? "", exitCode: err.status ?? 1 };
+    const err = e as { stdout?: string; stderr?: string; status?: number };
+    return {
+      stdout: err.stdout ?? "",
+      stderr: err.stderr ?? "",
+      exitCode: err.status ?? 1,
+    };
   }
 }
 
@@ -222,6 +229,15 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
     const forced = run(`audit ${join(root, "mixed")} --harness=codex`);
     assert.match(forced.stdout, /Detected harness: codex/);
     assert.doesNotMatch(forced.stdout, /repo matches/); // override silences it
+  });
+
+  it("an unknown --harness fails with a clean message, not a stack trace (dogfood C2)", () => {
+    const r = run(`audit ${join(root, "normal")} --harness=bogus`);
+    assert.equal(r.exitCode, 2);
+    assert.match(r.stderr, /Unknown harness "bogus"/);
+    assert.match(r.stderr, /claude-code, codex/); // lists the known harnesses
+    // A user-facing failure must NOT dump a Node stack trace.
+    assert.doesNotMatch(r.stderr, /^\s+at .+\(.*\)/m);
   });
 
   it("honors the .vigilesrc.json `harness` key (audit no longer ignores config)", () => {

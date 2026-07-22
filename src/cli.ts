@@ -7304,4 +7304,14 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+void main().catch((e: unknown) => {
+  // A thrown Error reaching the top is a user-facing failure (e.g. an unknown
+  // `--harness=`) — print the MESSAGE, not a raw stack trace (dogfood C2). Set
+  // VIGILES_DEBUG=1 to see the full stack when diagnosing a real internal bug.
+  if (process.env.VIGILES_DEBUG && e instanceof Error && e.stack) {
+    console.error(e.stack);
+  } else {
+    console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
+  }
+  process.exit(2);
+});
