@@ -77,9 +77,16 @@ file it's asked to emit, nothing in the audited tree.
 share must be a deliberate act on a standalone-useful artifact, never auto/coerced.
 **How (three tiers, all opt-in, value-first):**
 
-- **(a) Public-remote deep-link (ship first, zero backend):** when the audited repo has
-  a PUBLIC GitHub remote, `audit` prints `Share → vigiles.sh/?repo=owner/repo` — reuses
-  the demo deep-link, which re-runs live for the recipient. No upload, no new infra.
+- **(a) Public-remote deep-link — SHIPPED (zero backend):** `audit` reads the audited
+  repo's `origin` remote (offline, best-effort) and, for a GitHub repo, prints
+  `Share this grade → https://vigiles.sh/?repo=owner/repo` — reuses the demo deep-link,
+  which re-runs live for the recipient. No upload, no new infra, no new CLI surface (a
+  line on the existing `audit` output). Pure parse in `src/share-link.ts`
+  (`parseGitHubRemote`/`shareLinkForRemote`, unit-tested for the https/scp/ssh shapes);
+  the git read is a thin `readOriginRemote` in `cli.ts`. We can't verify public/private
+  offline and deliberately don't (audit stays network-free) — the line is captioned
+  "public repos … no upload", honest about the requirement. Non-evil: a suggestion,
+  never an auto-share, only on the human (`!json`) path.
 - **(b) OG/social-card image in the HTML report:** bake a self-contained grade + four-ring
   social-preview image into the single-file report (SVG/canvas, no network) so a pasted
   link previews as a scannable card, not a screenshot — the exact gap that made a third

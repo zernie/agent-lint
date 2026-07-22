@@ -120,6 +120,7 @@ import {
   formatLeaderboardMarkdown,
 } from "./leaderboard.js";
 import { optimize, formatRecommendations } from "./optimize.js";
+import { shareLinkForRemote } from "./share-link.js";
 import { formatAuditScore } from "./audit-score.js";
 import {
   autoTriggerPrompts,
@@ -6406,6 +6407,29 @@ function writeAuditHtml(
 }
 
 /**
+ * The audited repo's `origin` remote URL, or null when there's no remote / it
+ * isn't a git tree. Offline, best-effort — feeds the `audit` share deep-link. The
+ * pure parse lives in src/share-link.ts; this is the local read.
+ */
+/* v8 ignore start — thin git-config read; the parse is unit-tested in share-link.test.ts */
+function readOriginRemote(root: string): string | null {
+  try {
+    const { execSync } =
+      require("node:child_process") as typeof import("node:child_process");
+    return (
+      execSync("git config --get remote.origin.url", {
+        cwd: root,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim() || null
+    );
+  } catch {
+    return null;
+  }
+}
+/* v8 ignore stop */
+
+/**
  * Start the live (`--serve`) adoption server: render the report with a per-run
  * token, serve it on loopback, and run `init` in-process when a button POSTs. The
  * security model lives in src/audit-serve.ts (token + Origin + allowlist). Blocks
@@ -7195,6 +7219,22 @@ async function main(): Promise<void> {
             return pathSep === "/" ? r : r.split(pathSep).join("/");
           });
           ensureReportGitignored(process.cwd(), rel);
+        }
+        // A shareable deep-link for a public GitHub repo: the in-browser demo
+        // re-runs the audit LIVE for whoever opens it, so a local result is
+        // shareable with zero upload/backend (the "can't share from localhost"
+        // gap). Offline + best-effort — read the audited repo's origin remote;
+        // print nothing when it isn't a GitHub repo (self-hosted / no remote /
+        // not a git tree). A suggestion only, never an auto-share, honest about
+        // the public requirement (the non-evil sharing contract).
+        if (!json) {
+          const share = shareLinkForRemote(readOriginRemote(root) ?? "");
+          if (share) {
+            console.log(`\nShare this grade → ${share}`);
+            console.log(
+              "  public repos — opens a live re-run for anyone, no upload",
+            );
+          }
         }
       }
       break;

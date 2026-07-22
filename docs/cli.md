@@ -350,6 +350,13 @@ automatically (like `lighthouse --view`; `--no-open` suppresses it). `--no-html`
 skips writing it. A versioned **`vigiles-report.json`** is written alongside
 (`--no-json` to skip) — the same contract `--json` prints, for CI or upload.
 
+**Share a local result with no upload.** When the audited repo has a GitHub
+`origin` remote, `audit` prints `Share this grade → https://vigiles.sh/?repo=owner/repo`.
+The in-browser demo re-runs the audit **live** for whoever opens the link, so
+there's nothing to upload and no backend — but a recipient can only fetch a
+**public** repo (the line says so). It's a suggestion on the human-readable path
+only, never an automatic share.
+
 **The report artifacts stay out of git.** Because `audit` runs zero-config
 (without `init`), it keeps `git status` clean itself: when it writes a report it
 idempotently adds `vigiles-report.*` to your `.gitignore` (appending only what's
