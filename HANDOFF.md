@@ -18,26 +18,36 @@
 **`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
 via `pages.yml` on push to main.
 
-**This session (2026-07-21): site polish + shared `@vigiles/report-view` (merged #80–#99, deployed) + the
-NODE-FREE in-browser audit engine + the LIVE-any-repo demo + README-parity content + MANY rounds of Codex review
-fixes + a LIVE UX-REVIEW pass (founder drove) — all on `claude/click-not-working-s9apfb`, PR #100 (OPEN, iterating).**
+**PR #100 (`claude/click-not-working-s9apfb`, OPEN, CI green — do NOT auto-merge, founder is live-iterating).**
+The live in-browser "grade any repo" demo + `@vigiles/report-view` shipped earlier (#80–#99 deployed; demo wired
+into CI via the `site` job — parity + interaction + grade-cache browser tests). Fetch-tail is DOCUMENTED (see below).
 
-**PR #100 latest (034d797), CI green — do NOT auto-merge, founder is live-iterating.** UX-review round shipped
-(commits d8a2d71 → 034d797): (1) report copy plain-language — the inherits-all safety finding now NAMES + explains
-the "lethal trifecta (reads data, reaches the web, runs commands), so a prompt injection could exfiltrate" (engine
-copy in `src/audit-score.ts`, ships in CLI report too; baked demo fixtures regenerated). (2) MARKETPLACE repos →
-honest "use the CLI" state (was a false zero-surface F). (3) real PROGRESS BAR in the loading step-log. (4) demo
-report FOOTER gated off via `showFooter` prop (kept on the standalone HTML report). (5) analytics `track()` sends
-OUTCOME KIND only, never the typed slug (privacy; `track()` is still a no-op shim — no Plausible installed). (6)
-transient error/rate-limit no longer cached (retry works). (7) root nameless SKILL.md named after the repo (threaded
-`repoName` into `scanFiles`), + fetch its bundled resources (`references/`/`assets/`). (8) **PERSISTENT GRADE-CACHE**
-(`feat`, Fable-designed): `site/src/demo/gradeCache.ts` on **idb-keyval** (adopted over the reactive
-useLocalStorage hooks — imperative dynamic-key + TTL/version/LRU needs); 24h TTL, version-namespaced key
-(`AUDIT_SCHEMA_VERSION` + build-time git SHA via `__ENGINE_V__` Vite define), 30-LRU, parse-don't-validate; L1
-in-memory Map layered over L2; "graded N ago · re-grade" header badge. Site browser tests 26/26 (real Chromium +
-real IndexedDB), now **WIRED INTO CI** — a new `site` job in `ci.yml` builds root dist/, installs Chromium, runs
-`npm run test:browser` (parity + interaction + grade-cache). Jobs are now test/check/harness/site/e2e; `test:e2e`
-(Playwright) stays manual. The former "wire the site test job" loose end is DONE.
+**This session (2026-07-22): founder-driven DEMO UX REDESIGN.** Shipped on the same branch:
+(1) SELLING COPY — demo H2 "What's broken in your agent setup?" + benefit subhead (replaced the meaningless
+"same report / deterministic" framing). (2) SHAREABLE GRADES — `ShareRow` (native share on mobile, copy the
+`?repo=owner/repo#try` deep-link that auto-runs) — the growth loop; written into the `landing-site` skill as a
+first-class goal + a staleness pass. (3) LETHAL-TRIFECTA PLAIN LANGUAGE — hoisted to ONE shared `TRIFECTA_LABEL`
+in `src/score-core.ts` (Safety card + verdict can't drift), de-jargoned to "can read data, reach the web, and run
+commands — the lethal trifecta, so a prompt injection could exfiltrate secrets"; ships in the CLI report too; baked
+madappgang fixture regenerated. (4) REPO COMBOBOX (`site/src/components/sections/RepoCombobox.tsx` +
+`site/src/demo/searchRepos.ts`): type an owner→autocomplete its public repos with LIVE stars; **and a bare repo
+name searches across GitHub (no org needed — most people remember the repo, not the owner)**; owner/repo+Enter
+still grades directly; degrades to the direct path on rate-limit; injectable search seam for tests + the
+api.github.com-blocked sandbox (screenshot via Playwright route-mock). Star counts are LIVE-fetched, never
+hardcoded. Two tiny hand-rolled hooks (`site/src/lib/hooks.ts`) instead of a dep.
+
+**IN FLIGHT / PENDING (founder picked "build all four" + more):**
+
+- **Next.js EVAL running in a subagent** (isolated worktree) — deciding whether the dedicated per-check explainer
+  pages (`/checks/<slug>`, "React-errors-have-a-page") are a signal to migrate the Vite site to Next.js / Astro /
+  Vite-MPA-or-router. Report pending; DO NOT wire routing until it lands. `site/src/checks/checks.ts` (8 finding
+  detectors + lethal-trifecta concept, plain what/why/fix) is written + committed, framework-agnostic, unwired.
+- **Findings explainer** (detector labels → `/checks/<slug>` pages) — GATED on the routing decision above.
+- **Strengthen the locked trigger-rate tease** + **leaderboard framing** ("how does your setup rank") — queued.
+- **PALETTE** (softer, "material-oceanic" vibe) — founder wants it LAST; shared token change (`site/src/index.css`
+  - `report-view` theme) = one win for the site AND the local audit HTML report.
+- DECIDED: untested skills stay ADVISORY in the grade (don't game the score to nudge adoption — protects the
+  honest-grader trust); the locked tease is the nudge instead.
 
 **FETCH-TAIL DOCUMENTED — do NOT keep chasing Codex's `fetchRepo` P2s.** The browser demo's `fetchRepo` does a
 BOUNDED, SELECTIVE fetch (harness-shaped paths + their refs, to respect GitHub's 60-req/hr limit), NOT the CLI's
