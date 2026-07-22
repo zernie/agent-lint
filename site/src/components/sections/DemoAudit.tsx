@@ -421,12 +421,13 @@ export function DemoAudit() {
           </h2>
           <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
             <span className="text-foreground">vigiles</span> grades a
-            repo&apos;s Claude Code or Codex setup — the skills, hooks, and
-            instructions — and flags what&apos;s{" "}
+            repo&apos;s <span className="text-foreground">Claude Code</span>{" "}
+            setup — the skills, hooks, and instructions — and flags what&apos;s{" "}
             <span className="text-foreground">
               broken, mistyped, or leaking secrets
             </span>{" "}
-            before it bites your agent. Try any public repo, right here.
+            before it bites your agent. Try any public repo right here; the CLI
+            grades Codex too.
           </p>
         </div>
 
