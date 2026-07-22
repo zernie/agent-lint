@@ -77,6 +77,12 @@ export function RepoCombobox({
   // client-side fragment filtering never re-hit the network). Owner mode fetches an
   // owner's repos once; query mode searches by name across GitHub.
   useEffect(() => {
+    // Invalidate any in-flight lookup UP FRONT: a newer key must supersede a prior
+    // request even when this run resolves from cache or is too short to search —
+    // otherwise a late resolution still matches the current id and overwrites the
+    // suggestions with the prior query's results.
+    const id = ++reqId.current;
+    abort.current?.abort();
     const minLen = mode === "query" ? 2 : 1;
     if (debouncedKey.length < minLen) {
       setOutcome(null);
@@ -88,8 +94,6 @@ export function RepoCombobox({
       setOutcome(cached);
       return;
     }
-    const id = ++reqId.current;
-    abort.current?.abort();
     const ctrl = new AbortController();
     abort.current = ctrl;
     setOutcome("loading");

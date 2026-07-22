@@ -85,6 +85,21 @@ function basename(dir: string): string {
   return parts[parts.length - 1] || dir;
 }
 
+/**
+ * The Safety findings to surface as "Review — no auto-fix" cards. ONLY when Safety
+ * is ASSESSABLE (`score !== null`) and not the advisory ring: a `null` score is the
+ * "no tool-bearing surface to assess" n/a note (an instructions-only repo), NOT a
+ * lethal-trifecta finding, so it must never render as a red review card. One home so
+ * the summary + full paths can't diverge.
+ */
+function safetyReviewFindings(
+  categories: readonly CategoryScore[],
+): readonly string[] {
+  const safety = categories.find((c) => c.key === "Safety");
+  if (!safety || safety.advisory || safety.score === null) return [];
+  return safety.findings;
+}
+
 /** Impact band for a fix: bigger score gain ⇒ hotter. Never green (green =
  * passing only), so a fix card never masquerades as a clean signal. */
 function impactBand(points: number): Band {
@@ -497,9 +512,7 @@ export function Report({
     .map((r, i) => ({ r, points: pointsFor(i) }))
     .sort((a, b) => b.points - a.points);
 
-  const safety = score.categories.find((c) => c.key === "Safety");
-  const safetyFindings =
-    safety && !safety.advisory ? safety.findings : ([] as string[]);
+  const safetyFindings = safetyReviewFindings(score.categories);
 
   if (variant === "summary") {
     const unlock =
@@ -628,16 +641,15 @@ export function Report({
           Surface them here as review items so the report's most severe finding
           isn't buried in 11px category-strip text. */}
       {(() => {
-        const safety = score.categories.find((c) => c.key === "Safety");
-        if (!safety || safety.advisory || safety.findings.length === 0)
-          return null;
+        const findings = safetyReviewFindings(score.categories);
+        if (findings.length === 0) return null;
         return (
           <>
             <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Review — no auto-fix
             </h2>
             <div className="flex flex-col gap-2.5">
-              {safety.findings.map((f, i) => (
+              {findings.map((f, i) => (
                 <SafetyCard key={i} finding={f} />
               ))}
             </div>
