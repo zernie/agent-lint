@@ -85,7 +85,12 @@ function FixCard({ r, points }: { r: Recommendation; points: number }) {
   const Icon = r.action === "fix" ? Wrench : GitCompareArrows;
   const accent = impactBand(points);
   return (
-    <Card className={cn("border-l-4 p-4", BORDER_L[accent])}>
+    <div
+      className={cn(
+        "rounded-xl border border-l-4 border-border/40 bg-card/30 p-5",
+        BORDER_L[accent],
+      )}
+    >
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Badge>
           <Icon size={12} className="mr-1" />
@@ -102,16 +107,18 @@ function FixCard({ r, points }: { r: Recommendation; points: number }) {
             +{points} pts
           </span>
         )}
-        <span className="ml-auto font-mono text-xs text-muted-foreground">
+        <span className="ml-auto hidden font-mono text-xs text-muted-foreground sm:inline">
           {r.detector}
         </span>
       </div>
-      <div className="mt-1.5 text-sm text-muted-foreground">{r.rationale}</div>
-      <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm text-good">→ {r.fix}</span>
+      <div className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
+        {r.rationale}
+      </div>
+      <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm leading-relaxed text-good">→ {r.fix}</span>
         <CopyFix r={r} />
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -119,18 +126,23 @@ function FixCard({ r, points }: { r: Recommendation; points: number }) {
  * call, not a typo), so it's shown as a review card, never a ranked +N-pts fix. */
 function SafetyCard({ finding }: { finding: string }) {
   return (
-    <Card className={cn("border-l-4 p-4", BORDER_L.bad)}>
+    <div
+      className={cn(
+        "rounded-xl border border-l-4 border-border/40 bg-card/30 p-5",
+        BORDER_L.bad,
+      )}
+    >
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Badge>
           <ShieldAlert size={12} className="mr-1" />
           safety
         </Badge>
-        <span className="text-muted-foreground">{finding}</span>
+        <span className="leading-relaxed text-muted-foreground">{finding}</span>
         <span className="ml-auto text-xs text-muted-foreground">
           your call — no deterministic fix
         </span>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -185,7 +197,9 @@ function CategoryRow({ c }: { c: CategoryScore }) {
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-xs font-medium text-muted-foreground">{c.key}</span>
+        <span className="text-xs font-medium text-muted-foreground">
+          {c.key}
+        </span>
         <span className={cn("font-mono text-sm font-bold", TEXT[b])}>
           {c.advisory ? "—" : c.score === null ? "n/a" : c.score}
           {!c.advisory && c.findings.length > 0 && (
@@ -223,8 +237,8 @@ function LockedTease({ onUnlock }: { onUnlock?: () => void }) {
     );
   };
   return (
-    <div className="relative mt-4 overflow-hidden rounded-lg border border-border/60">
-      <div className="select-none px-4 py-3 opacity-50 blur-[3px]" aria-hidden>
+    <div className="relative overflow-hidden rounded-xl border border-border/50">
+      <div className="select-none px-5 py-4 opacity-50 blur-[3px]" aria-hidden>
         <div className="flex items-baseline justify-between">
           <span className="text-xs font-medium text-muted-foreground">
             Trigger rate
@@ -245,7 +259,11 @@ function LockedTease({ onUnlock }: { onUnlock?: () => void }) {
       >
         {copied ? (
           <>
-            <Check size={13} aria-hidden className={cn("shrink-0", TEXT.good)} />
+            <Check
+              size={13}
+              aria-hidden
+              className={cn("shrink-0", TEXT.good)}
+            />
             <span className={TEXT.good}>
               Prompt copied — paste into Claude Code or Codex
             </span>
@@ -325,7 +343,9 @@ function VerdictHeader({
     </>
   );
   return compact ? (
-    <div className="flex flex-col gap-5 sm:flex-row sm:items-center">{inner}</div>
+    <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
+      {inner}
+    </div>
   ) : (
     <Card className="flex flex-col gap-5 p-7 sm:flex-row sm:items-center">
       {inner}
@@ -351,7 +371,7 @@ function MoreFold({ n, children }: { n: number; children: ReactNode }) {
 }
 
 const SECTION_H =
-  "mb-3 mt-8 text-xs font-semibold uppercase tracking-widest text-muted-foreground";
+  "mb-4 mt-12 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70";
 
 export function Report({
   data,
@@ -429,20 +449,25 @@ export function Report({
                 <span key={s}> · {s}</span>
               ))}
               {inventory.untested > 0 && (
-                <span className={TEXT.warn}> · {inventory.untested} untested</span>
+                <span className={TEXT.warn}>
+                  {" "}
+                  · {inventory.untested} untested
+                </span>
               )}
             </>
           }
         />
 
         <h2 className={SECTION_H}>Categories</h2>
-        <div className="grid grid-cols-1 gap-x-6 gap-y-3.5 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-x-10 gap-y-5 sm:grid-cols-2 lg:grid-cols-5">
           {score.categories.map((c) => (
             <CategoryRow key={c.key} c={c} />
           ))}
         </div>
 
-        <LockedTease onUnlock={unlock} />
+        <div className="mt-7">
+          <LockedTease onUnlock={unlock} />
+        </div>
 
         <h2 className={SECTION_H}>
           {recommendations.length > 0 ? "Do these first" : "Fixes"}

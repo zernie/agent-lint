@@ -525,7 +525,7 @@ export function DemoAudit() {
           ) : isEdge ? (
             <EdgeState view={frameView as TerminalView} />
           ) : (
-            <div className="p-5 sm:p-7">
+            <div className="px-5 py-7 sm:px-9 sm:py-9">
               {/* The summary variant owns its own declutter (compact header,
                   borderless category strip, top-3 fixes, and the model-gated
                   locked tease that replaces the old AGradeNote + lock-row). */}

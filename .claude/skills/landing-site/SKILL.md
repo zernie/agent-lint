@@ -152,9 +152,9 @@ change, not bolted onto a design pass.
    - a **plugin / skill author**,
    - a **skeptical senior engineer** who won't run anything unless convinced,
    - a **decision-maker / lead** evaluating adoption.
-   Fold this into the Fable pass below (Fable is good at holding several POVs at once);
-   the `review-docs` skill is the analog for docs. The point is COHESION across the
-   whole page + across audiences, caught before shipping — not per-section polish.
+     Fold this into the Fable pass below (Fable is good at holding several POVs at once);
+     the `review-docs` skill is the analog for docs. The point is COHESION across the
+     whole page + across audiences, caught before shipping — not per-section polish.
 4. **Run a Fable blind pass** for anything nontrivial — fresh skeptical eyes catch
    crowding and incoherence the author is blind to, and run the multi-persona walk
    above. **Act on the flagged cuts** — a Fable P0/P1 "delete this" is not optional;
