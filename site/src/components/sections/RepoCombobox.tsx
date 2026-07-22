@@ -4,6 +4,7 @@ import { normalizeSlug } from "@/lib/deeplink";
 import { useDebouncedValue, useClickOutside } from "@/lib/hooks";
 import {
   fetchOwnerRepos,
+  searchReposByName,
   rankRepos,
   formatStars,
   type RepoHit,
@@ -13,12 +14,15 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * The typed-repo input, upgraded to an AUTOCOMPLETE combobox: type an owner and it
- * suggests that owner's public repos (with star counts) to pick from; type
- * `owner/repo` and Enter still grades directly. Autocomplete is an ENHANCEMENT layered
- * over the plain slug+Enter path — any lookup failure (unknown owner, rate-limit,
- * offline) just shows no suggestions, never blocks the direct submit. The GitHub
- * lookup is injected (`search`) so a test / the sandbox drives it with mock data.
+ * The typed-repo input, upgraded to an AUTOCOMPLETE combobox. Two modes, because most
+ * people remember the REPO name, not the org:
+ *   • no slash yet ("superpowers") → search repos by name across all of GitHub, so a
+ *     bare name finds `obra/superpowers` without knowing the owner;
+ *   • a slash ("obra/super") → scope to that owner's repos and filter client-side.
+ * Either way, `owner/repo` + Enter still grades directly — autocomplete is an
+ * ENHANCEMENT over the plain path, so any lookup failure (rate-limit, offline) just
+ * shows no suggestions and never blocks the submit. Both GitHub lookups are injected
+ * so a test / the api.github.com-blocked sandbox drives them with mock data.
  */
 
 /** Split the typed text into `{ owner, fragment }` — everything before the first `/`
@@ -38,10 +42,14 @@ function isCacheable(o: SearchOutcome): boolean {
 
 export function RepoCombobox({
   onSubmit,
-  search = fetchOwnerRepos,
+  searchOwner = fetchOwnerRepos,
+  searchByName = searchReposByName,
 }: {
   onSubmit: (slug: string) => void;
-  search?: SearchFn;
+  /** Owner-scoped lookup (used once a `/` is typed). Injectable for tests. */
+  searchOwner?: SearchFn;
+  /** Global by-name search (used before a `/` is typed). Injectable for tests. */
+  searchByName?: SearchFn;
 }) {
   const [text, setText] = useState("");
   const [open, setOpen] = useState(false);
@@ -58,16 +66,24 @@ export function RepoCombobox({
   const abort = useRef<AbortController | null>(null);
 
   const { owner, fragment } = splitOwnerFragment(text);
-  const debouncedOwner = useDebouncedValue(owner, 300);
+  // A slash means the owner is known → scope to it; otherwise the whole text is a
+  // repo-name query searched across GitHub. `mode` + `lookupKey` drive the fetch.
+  const hasSlash = text.includes("/");
+  const mode: "owner" | "query" = hasSlash ? "owner" : "query";
+  const lookupKey = hasSlash ? owner : text.trim();
+  const debouncedKey = useDebouncedValue(lookupKey, 300);
 
-  // Fetch the owner's repos once per owner (cached), debounced so a partial owner
-  // isn't looked up on every keystroke. Filtering by `fragment` is client-side (below).
+  // Fetch suggestions for the debounced key (cached per mode+key so re-typing and
+  // client-side fragment filtering never re-hit the network). Owner mode fetches an
+  // owner's repos once; query mode searches by name across GitHub.
   useEffect(() => {
-    if (debouncedOwner.length < 1) {
+    const minLen = mode === "query" ? 2 : 1;
+    if (debouncedKey.length < minLen) {
       setOutcome(null);
       return;
     }
-    const cached = cache.current.get(debouncedOwner);
+    const cacheKey = `${mode}:${debouncedKey}`;
+    const cached = cache.current.get(cacheKey);
     if (cached) {
       setOutcome(cached);
       return;
@@ -77,18 +93,23 @@ export function RepoCombobox({
     const ctrl = new AbortController();
     abort.current = ctrl;
     setOutcome("loading");
-    void search(debouncedOwner, ctrl.signal).then((o) => {
-      if (reqId.current !== id) return; // a newer owner superseded us
-      if (isCacheable(o)) cache.current.set(debouncedOwner, o);
+    const fetcher = mode === "owner" ? searchOwner : searchByName;
+    void fetcher(debouncedKey, ctrl.signal).then((o) => {
+      if (reqId.current !== id) return; // a newer key superseded us
+      if (isCacheable(o)) cache.current.set(cacheKey, o);
       setOutcome(o);
     });
-  }, [debouncedOwner, search]);
+  }, [debouncedKey, mode, searchOwner, searchByName]);
 
   useClickOutside(rootRef, () => setOpen(false), open);
 
+  // Owner mode filters the owner's repos by the typed fragment; query mode's results
+  // arrive already ranked by stars from the search API, so show them as-is.
   const hits: readonly RepoHit[] =
     outcome !== null && outcome !== "loading" && outcome.kind === "ok"
-      ? rankRepos(outcome.repos, fragment)
+      ? mode === "owner"
+        ? rankRepos(outcome.repos, fragment)
+        : outcome.repos.slice(0, 7)
       : [];
 
   // Keep the active row in range as the hit list changes under the cursor.
@@ -151,8 +172,8 @@ export function RepoCombobox({
             if (hasText) setOpen(true);
           }}
           onKeyDown={onKeyDown}
-          placeholder="your-org/your-repo"
-          aria-label="GitHub repo to grade (owner/repo or URL)"
+          placeholder="a repo name, or org/repo"
+          aria-label="GitHub repo to grade (repo name, owner/repo, or URL)"
           aria-expanded={showPanel}
           aria-autocomplete="list"
           role="combobox"
@@ -180,7 +201,13 @@ export function RepoCombobox({
         >
           {loading && (
             <div className="px-4 py-2.5 font-mono text-sm text-muted-foreground">
-              searching <span className="text-foreground">@{owner}</span>…
+              {mode === "owner" ? (
+                <>
+                  searching <span className="text-foreground">@{owner}</span>…
+                </>
+              ) : (
+                "searching repos…"
+              )}
             </div>
           )}
           {rateLimited && (
@@ -205,7 +232,9 @@ export function RepoCombobox({
             >
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-mono text-sm text-foreground">
-                  {hit.name}
+                  {/* Query mode spans owners, so show owner/name; owner mode already
+                      knows the owner, so the bare repo name is enough. */}
+                  {mode === "query" ? hit.fullName : hit.name}
                   {hit.archived && (
                     <span className="ml-2 text-xs text-muted-foreground">
                       archived

@@ -53,6 +53,59 @@ interface ApiRepo {
   archived?: boolean;
 }
 
+/**
+ * Search repos by NAME across all of GitHub — so a visitor who remembers the repo
+ * name but not the owner (most people) can type `superpowers` and get
+ * `obra/superpowers`. Uses the search API, which has a stricter anonymous limit
+ * (~10 req/min) than the core budget — hence the combobox debounces + caches per
+ * query and degrades to the direct path on a rate-limit, exactly like the owner path.
+ * Results come back ranked by stars from GitHub, so no client re-rank is needed.
+ */
+export const searchReposByName: SearchFn = async (query, signal) => {
+  const q = query.trim();
+  if (q.length < 2) return { kind: "ok", repos: [] };
+  try {
+    const res = await fetch(
+      `${API}/search/repositories?q=${encodeURIComponent(
+        `${q} in:name`,
+      )}&sort=stars&order=desc&per_page=7`,
+      { signal, headers: { Accept: "application/vnd.github+json" } },
+    );
+    if (!res.ok) {
+      // 422 = unprocessable query (e.g. too short / bad chars) → just no matches.
+      if (res.status === 422) return { kind: "ok", repos: [] };
+      if (res.status === 403 || res.status === 429)
+        return { kind: "rate-limit" };
+      return {
+        kind: "error",
+        message: `GitHub responded ${String(res.status)}`,
+      };
+    }
+    const body = (await res.json()) as { items?: ApiRepo[] };
+    const repos: RepoHit[] = (body.items ?? [])
+      .filter((r): r is ApiRepo & { name: string; full_name: string } =>
+        Boolean(r.name && r.full_name),
+      )
+      .map((r) => ({
+        name: r.name,
+        fullName: r.full_name,
+        stars: r.stargazers_count ?? 0,
+        description: r.description ?? null,
+        fork: r.fork ?? false,
+        archived: r.archived ?? false,
+      }));
+    return { kind: "ok", repos };
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      return { kind: "error", message: "aborted" };
+    }
+    return {
+      kind: "error",
+      message: e instanceof Error ? e.message : "network",
+    };
+  }
+};
+
 /** Fetch an owner's public repos (user OR org), newest-pushed first, as `RepoHit`s. */
 export const fetchOwnerRepos: SearchFn = async (owner, signal) => {
   try {

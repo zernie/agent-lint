@@ -1,10 +1,10 @@
 /**
- * RepoCombobox interaction tests (real Chromium). The GitHub lookup is injected via
- * the `search` prop, so these drive the autocomplete with mock data — no network, and
- * the same seam the api.github.com-blocked sandbox uses to screenshot the dropdown.
- * Covers: owner → debounced lookup → starred suggestions; client-side fragment filter;
- * keyboard pick; direct owner/repo submit (autocomplete is never a gate); rate-limit
- * degrades to the direct path.
+ * RepoCombobox interaction tests (real Chromium). Both GitHub lookups are injected via
+ * `searchOwner` / `searchByName`, so these drive the autocomplete with mock data — no
+ * network, and the same seam the api.github.com-blocked sandbox uses to screenshot the
+ * dropdown. Covers: bare name → global by-name search (no owner needed); owner/ →
+ * scoped filter; keyboard pick; direct owner/repo submit (autocomplete never gates);
+ * rate-limit degrades to the direct path.
  */
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { render, screen, cleanup, waitFor } from "@testing-library/react";
@@ -20,7 +20,7 @@ import {
 
 afterEach(cleanup);
 
-const REPOS: RepoHit[] = [
+const OBRA_REPOS: RepoHit[] = [
   {
     name: "superpowers",
     fullName: "obra/superpowers",
@@ -47,56 +47,104 @@ const REPOS: RepoHit[] = [
   },
 ];
 
-const okSearch = (repos: RepoHit[] = REPOS) =>
+const NAME_HITS: RepoHit[] = [
+  {
+    name: "superpowers",
+    fullName: "obra/superpowers",
+    stars: 4200,
+    description: "An agentic skills framework.",
+    fork: false,
+    archived: false,
+  },
+  {
+    name: "superpowers",
+    fullName: "someone/superpowers",
+    stars: 30,
+    description: "A fork-ish thing.",
+    fork: false,
+    archived: false,
+  },
+];
+
+const ok = (repos: RepoHit[]) =>
   vi.fn(async (): Promise<SearchOutcome> => ({ kind: "ok", repos }));
 
 describe("RepoCombobox — autocomplete", () => {
-  it("types an owner → debounced lookup → shows starred suggestions", async () => {
-    const search = okSearch();
-    const onSubmit = vi.fn();
-    render(<RepoCombobox onSubmit={onSubmit} search={search} />);
+  it("a bare repo name searches across GitHub (no owner needed) and shows owner/name", async () => {
+    const searchByName = ok(NAME_HITS);
+    const searchOwner = ok(OBRA_REPOS);
+    render(
+      <RepoCombobox
+        onSubmit={vi.fn()}
+        searchByName={searchByName}
+        searchOwner={searchOwner}
+      />,
+    );
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("combobox"));
-    await user.type(screen.getByRole("combobox"), "obra");
+    await user.type(screen.getByRole("combobox"), "superpowers");
 
     await waitFor(() =>
-      expect(search).toHaveBeenCalledWith("obra", expect.anything()),
+      expect(searchByName).toHaveBeenCalledWith(
+        "superpowers",
+        expect.anything(),
+      ),
     );
-    // A suggestion row with its star count renders.
+    // The by-name mode is used, not the owner lookup.
+    expect(searchOwner).not.toHaveBeenCalled();
+    // Rows show owner/name (the owner spans, so it must be visible) + stars.
     await waitFor(() =>
-      expect(screen.getByRole("option", { name: /superpowers/ })).toBeTruthy(),
+      expect(
+        screen.getByRole("option", { name: /obra\/superpowers/ }),
+      ).toBeTruthy(),
     );
     expect(screen.getByText("4.2k")).toBeTruthy();
   });
 
-  it("filters the owner's repos client-side by the typed fragment", async () => {
-    const search = okSearch();
-    render(<RepoCombobox onSubmit={vi.fn()} search={search} />);
+  it("a slash scopes to that owner and filters client-side", async () => {
+    const searchOwner = ok(OBRA_REPOS);
+    render(
+      <RepoCombobox
+        onSubmit={vi.fn()}
+        searchOwner={searchOwner}
+        searchByName={ok([])}
+      />,
+    );
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("combobox"));
     await user.type(screen.getByRole("combobox"), "obra/super");
 
+    await waitFor(() =>
+      expect(searchOwner).toHaveBeenCalledWith("obra", expect.anything()),
+    );
     await waitFor(() =>
       expect(screen.getByRole("option", { name: /superpowers/ })).toBeTruthy(),
     );
     // "unrelated" doesn't match the "super" fragment → filtered out.
     expect(screen.queryByRole("option", { name: /unrelated/ })).toBeNull();
     // The owner is fetched ONCE (cached), not per fragment keystroke.
-    expect(search).toHaveBeenCalledTimes(1);
+    expect(searchOwner).toHaveBeenCalledTimes(1);
   });
 
   it("picks a suggestion with keyboard → submits its full slug", async () => {
-    const search = okSearch();
     const onSubmit = vi.fn();
-    render(<RepoCombobox onSubmit={onSubmit} search={search} />);
+    render(
+      <RepoCombobox
+        onSubmit={onSubmit}
+        searchByName={ok(NAME_HITS)}
+        searchOwner={ok(OBRA_REPOS)}
+      />,
+    );
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("combobox"));
-    await user.type(screen.getByRole("combobox"), "obra/super");
+    await user.type(screen.getByRole("combobox"), "superpowers");
     await waitFor(() =>
-      expect(screen.getByRole("option", { name: /superpowers/ })).toBeTruthy(),
+      expect(
+        screen.getByRole("option", { name: /obra\/superpowers/ }),
+      ).toBeTruthy(),
     );
     await user.keyboard("{ArrowDown}{Enter}");
 
@@ -104,11 +152,16 @@ describe("RepoCombobox — autocomplete", () => {
   });
 
   it("submits a directly-typed owner/repo even with no suggestions (autocomplete never gates)", async () => {
-    const search = vi.fn(
-      async (): Promise<SearchOutcome> => ({ kind: "not-found" }),
-    );
     const onSubmit = vi.fn();
-    render(<RepoCombobox onSubmit={onSubmit} search={search} />);
+    render(
+      <RepoCombobox
+        onSubmit={onSubmit}
+        searchOwner={vi.fn(
+          async () => ({ kind: "not-found" }) as SearchOutcome,
+        )}
+        searchByName={ok([])}
+      />,
+    );
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("combobox"));
@@ -118,29 +171,35 @@ describe("RepoCombobox — autocomplete", () => {
   });
 
   it("rate-limit shows the direct-path note, and the direct submit still works", async () => {
-    const search = vi.fn(
-      async (): Promise<SearchOutcome> => ({ kind: "rate-limit" }),
-    );
     const onSubmit = vi.fn();
-    render(<RepoCombobox onSubmit={onSubmit} search={search} />);
+    render(
+      <RepoCombobox
+        onSubmit={onSubmit}
+        searchByName={vi.fn(
+          async () => ({ kind: "rate-limit" }) as SearchOutcome,
+        )}
+        searchOwner={ok(OBRA_REPOS)}
+      />,
+    );
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("combobox"));
-    await user.type(screen.getByRole("combobox"), "obra");
+    await user.type(screen.getByRole("combobox"), "superpowers");
     await waitFor(() =>
       expect(screen.getByText(/anonymous rate limit/i)).toBeTruthy(),
     );
 
-    await user.type(screen.getByRole("combobox"), "/superpowers{Enter}");
+    await user.clear(screen.getByRole("combobox"));
+    await user.type(screen.getByRole("combobox"), "obra/superpowers{Enter}");
     expect(onSubmit).toHaveBeenCalledWith("obra/superpowers");
   });
 });
 
 describe("rankRepos / formatStars", () => {
   it("prefix beats substring, then stars; empty fragment ranks by stars", () => {
-    const ranked = rankRepos(REPOS, "super");
+    const ranked = rankRepos(OBRA_REPOS, "super");
     expect(ranked.map((r) => r.name)).toEqual(["superpowers", "super-tiny"]);
-    const top = rankRepos(REPOS, "");
+    const top = rankRepos(OBRA_REPOS, "");
     expect(top[0].name).toBe("superpowers"); // most stars first
   });
 
