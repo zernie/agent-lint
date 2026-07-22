@@ -611,6 +611,17 @@ export function DemoAudit({
         )}
       </div>
 
+      {/* Honest scope: the browser runs the deterministic STRUCTURAL detectors —
+          it can't reach your linter config, so it doesn't do the full rule
+          cross-reference (does each `enforce()` rule exist AND is it enabled?).
+          That's the CLI. Keeps the demo from over-claiming what it verifies. */}
+      <p className="mt-4 text-center text-[11px] leading-relaxed text-muted-foreground/60">
+        Structural checks, in your browser.{" "}
+        <span className="font-mono">vigiles audit</span> locally goes deeper —
+        it cross-references every linter rule your instructions name against
+        your actual config.
+      </p>
+
       {/* Shareability is the growth loop — a graded result is a public link that
           auto-runs. Surface a one-tap share on any report/featured view. */}
       {canShare && <ShareRow slug={headerSlug(frameView)} />}
