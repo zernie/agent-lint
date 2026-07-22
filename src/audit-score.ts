@@ -37,6 +37,7 @@ import {
   W_OVERLAP,
   W_NO_CONTRACT,
   W_TRIFECTA,
+  TRIFECTA_LABEL,
   type PluginScore,
 } from "./score-core.js";
 import type { ScanReport } from "./scan.js";
@@ -255,8 +256,7 @@ function safety(r: ScanReport): CategoryScore {
     {
       n: hard.length,
       weight: W_TRIFECTA,
-      label:
-        "unit(s) holding all three lethal-trifecta legs (prompt-injection exfil path)",
+      label: TRIFECTA_LABEL,
     },
   ]);
   // inherits-all trifecta findings are ADVISORY: surfaced as a maximal-blast-radius

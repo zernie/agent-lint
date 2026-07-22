@@ -5,9 +5,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Lock, CornerDownLeft, Check, Copy, RotateCw } from "lucide-react";
+import { Check, Copy, RotateCw, Link2 } from "lucide-react";
 import { Report, type AuditReport } from "@vigiles/report-view";
 import { normalizeSlug } from "@/lib/deeplink";
+import { RepoCombobox } from "./RepoCombobox";
 import { track } from "@/lib/track";
 import {
   fetchRepo,
@@ -84,70 +85,14 @@ function headerSlug(view: View): string {
   return view.k === "featured" ? FEATURED[view.i].slug : view.slug;
 }
 
-// ---------------------------------------------------------------------------
-
-/** The typed-repo input — `$ vigiles audit ‹your-org/your-repo›`, Enter to grade. */
-function RepoInput({ onSubmit }: { onSubmit: (slug: string) => void }) {
-  const [text, setText] = useState("");
-  const [hint, setHint] = useState(false);
-
-  const submit = (): void => {
-    const slug = normalizeSlug(text);
-    if (slug === null) {
-      setHint(true);
-      return;
-    }
-    setHint(false);
-    onSubmit(slug);
-  };
-
-  const hasText = text.trim().length > 0;
-  return (
-    <div className="mx-auto mt-8 w-full max-w-[28rem]">
-      <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-4 py-3 font-mono text-base focus-within:border-accent/60">
-        <span className="shrink-0 select-none text-muted-foreground">
-          $ vigiles audit
-        </span>
-        <input
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            if (hint) setHint(false);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") submit();
-          }}
-          placeholder="your-org/your-repo"
-          aria-label="GitHub repo to grade (owner/repo or URL)"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          // 16px min (text-base) so iOS doesn't zoom the viewport on focus.
-          className="min-w-0 flex-1 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground/60"
-        />
-        {hasText && (
-          <button
-            type="button"
-            onClick={submit}
-            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:text-accent"
-          >
-            <CornerDownLeft className="h-3.5 w-3.5" aria-hidden /> Grade
-          </button>
-        )}
-      </div>
-      <p className="mt-2 text-center text-xs text-muted-foreground">
-        {hint ? (
-          <span>
-            Use <span className="font-mono text-foreground">owner/repo</span> or
-            paste a GitHub URL.
-          </span>
-        ) : (
-          "Runs in your browser via the GitHub API — nothing leaves it."
-        )}
-      </p>
-    </div>
-  );
+/** Grade → band color token (matches the report's bands: A passing, B–D warn, F bad). */
+function gradeTone(grade: string): string {
+  if (grade === "A") return "text-good";
+  if (grade === "F") return "text-bad";
+  return "text-warn";
 }
+
+// ---------------------------------------------------------------------------
 
 /** A quiet inline copy affordance for `npx vigiles audit` (edge-state frames). */
 function InlineCommand() {
@@ -305,19 +250,6 @@ function EdgeState({ view }: { view: TerminalView }) {
   );
 }
 
-/** The A-grade tease — the one honest line for a clean typed repo. */
-function AGradeNote() {
-  return (
-    <div className="border-b border-border bg-good/5 px-5 py-3 text-sm leading-relaxed text-muted-foreground sm:px-7">
-      <strong className="text-foreground">
-        A — clean on every check a browser can run.
-      </strong>{" "}
-      The open question is behavioral: do your skills actually fire? A browser
-      can&apos;t ask a model — your CLI does, on your Claude subscription.
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 
 export function DemoAudit() {
@@ -470,12 +402,12 @@ export function DemoAudit() {
     frameView.k === "ratelimit" ||
     frameView.k === "too-large" ||
     frameView.k === "error";
-  const isAGrade =
-    frameView.k === "report" && frameView.audit.score.grade === "A";
-  // The lock row + bottom command belong with a REAL report (and the loading
-  // that becomes one); an edge state carries its own inline CTA, so they'd only
-  // duplicate it (and read as a back-to-back command on mobile).
-  const showConversion = !isEdge;
+  // Share only a REAL fetched report — never a baked featured chip. A share link
+  // can only carry a `?repo=` slug that RE-FETCHES on open, so it can't reproduce a
+  // baked example (and some featured slugs aren't a fetchable owner/repo, e.g.
+  // `oh-my-claudecode`, or are too large to grade in-browser). A typed/opened report
+  // always came from a live fetch, so its share link reproduces faithfully.
+  const canShare = frameView.k === "report";
 
   return (
     <section
@@ -485,27 +417,34 @@ export function DemoAudit() {
       <div className="mx-auto w-full max-w-4xl px-6 py-20 sm:py-28">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            A real grade, for a real repo.
+            What&apos;s broken in your agent setup?
           </h2>
           <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
-            The same report{" "}
-            <span className="font-mono text-foreground">vigiles audit</span>{" "}
-            prints — deterministic, model-free.{" "}
+            <span className="text-foreground">vigiles</span> grades a
+            repo&apos;s <span className="text-foreground">Claude Code</span>{" "}
+            setup — the skills, hooks, and instructions — and flags what&apos;s{" "}
             <span className="text-foreground">
-              Run it on any public repo, right here
+              broken, mistyped, or leaking secrets
             </span>{" "}
-            — or pick a published plugin:
+            before it bites your agent. Try any public repo right here; the CLI
+            grades Codex too.
           </p>
         </div>
 
-        <RepoInput onSubmit={run} />
+        <RepoCombobox onSubmit={run} />
 
-        {/* Featured chips — one-tap examples. Wrap + centered on every width so a
-            chip never clips at the mobile viewport edge (only four, so mobile is
-            two tidy rows, not a pushed-down fold). */}
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
+        {/* Featured chips as a lightweight LEADERBOARD — real popular plugins with
+            their real grades. Reframes the one-tap examples as "here's how the
+            ecosystem scores; where does yours land?" (social proof + the ranking
+            nudge), and the grade letters explain themselves. Wrap + centered so a
+            chip never clips at the mobile edge. */}
+        <p className="mt-8 text-center text-xs text-muted-foreground">
+          Popular plugins, graded — tap to see why:
+        </p>
+        <div className="mt-3 flex flex-wrap justify-center gap-2">
           {FEATURED.map((f, i) => {
             const active = frameView.k === "featured" && frameView.i === i;
+            const grade = f.report.score.grade;
             return (
               <button
                 key={f.slug}
@@ -513,13 +452,19 @@ export function DemoAudit() {
                 onClick={() => pickChip(i)}
                 aria-pressed={active}
                 className={cn(
-                  "rounded-full border px-3.5 py-1.5 font-mono text-sm transition-colors",
+                  "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-sm transition-colors",
                   active
                     ? "border-accent/60 bg-accent/10 text-foreground"
                     : "border-border text-muted-foreground hover:border-accent/40 hover:text-foreground",
                 )}
               >
                 {f.label}
+                <span
+                  className={cn("font-bold", gradeTone(grade))}
+                  aria-label={`grade ${grade}`}
+                >
+                  {grade}
+                </span>
               </button>
             );
           })}
@@ -544,43 +489,26 @@ export function DemoAudit() {
           ) : isEdge ? (
             <EdgeState view={frameView as TerminalView} />
           ) : (
-            <div>
-              {isAGrade && <AGradeNote />}
-              <div className="p-5 sm:p-7">
-                <Report
-                  showFooter={false}
-                  data={
-                    frameView.k === "report"
-                      ? frameView.audit
-                      : FEATURED[(frameView as { i: number }).i].report
-                  }
-                />
-              </div>
+            <div className="px-5 py-7 sm:px-9 sm:py-9">
+              {/* The summary variant owns its own declutter (compact header,
+                  borderless category strip, top-3 fixes, and the model-gated
+                  locked tease that replaces the old AGradeNote + lock-row). */}
+              <Report
+                variant="summary"
+                showFooter={false}
+                data={
+                  frameView.k === "report"
+                    ? frameView.audit
+                    : FEATURED[(frameView as { i: number }).i].report
+                }
+              />
             </div>
           )}
         </div>
 
-        {showConversion && (
-          <>
-            {/* The honest model-gated tease — ONE row. Everything above is what
-                the browser can compute; this names the one thing it can't. */}
-            <div className="mt-6 flex items-start gap-3 rounded-xl border border-border bg-card/40 px-5 py-4">
-              <Lock
-                className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
-                aria-hidden
-              />
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                <span className="font-semibold text-foreground">
-                  Whether your skills actually fire
-                </span>{" "}
-                — and your guidance changes what the agent does — needs a real
-                model, and a browser can&apos;t ask one.{" "}
-                <span className="text-foreground">Your CLI can</span>, on your
-                Claude subscription. No API key, no signup, free.
-              </p>
-            </div>
-          </>
-        )}
+        {/* Shareability is the growth loop — a graded result is a public link that
+            auto-runs. Surface a one-tap share on any report/featured view. */}
+        {canShare && <ShareRow slug={headerSlug(frameView)} />}
       </div>
     </section>
   );
@@ -658,6 +586,56 @@ function CachedBadge({
         <RotateCw className="h-3 w-3" aria-hidden /> re-grade
       </button>
     </span>
+  );
+}
+
+/** The viral loop — a graded result is a shareable PUBLIC link
+ *  (vigiles.sh/?repo=owner/repo, which auto-runs on load). Make sharing a one-tap
+ *  action: the native share sheet on mobile, copy-to-clipboard elsewhere. This is
+ *  how a grade spreads — people share a repo's report, not a landing page. */
+function ShareRow({ slug }: { slug: string }) {
+  const [copied, setCopied] = useState(false);
+  const share = (): void => {
+    const url = `${window.location.origin}${window.location.pathname}?repo=${encodeURIComponent(
+      slug,
+    )}#try`;
+    const done = (): void => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    };
+    const copy = (): void =>
+      void navigator.clipboard?.writeText(url).then(done, () => undefined);
+    const nav = navigator as Navigator & {
+      share?: (d: { title?: string; url?: string }) => Promise<void>;
+    };
+    if (typeof nav.share === "function") {
+      void nav.share({ title: `vigiles grade — ${slug}`, url }).then(
+        () => undefined,
+        copy, // share cancelled/failed → fall back to copy
+      );
+    } else {
+      copy();
+    }
+  };
+  return (
+    <div className="mt-5 flex items-center justify-center">
+      <button
+        type="button"
+        onClick={share}
+        className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 text-sm text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground"
+      >
+        {copied ? (
+          <>
+            <Check className="h-3.5 w-3.5 text-good" aria-hidden />
+            <span className="text-good">Link copied — share the grade</span>
+          </>
+        ) : (
+          <>
+            <Link2 className="h-3.5 w-3.5" aria-hidden /> Share this grade
+          </>
+        )}
+      </button>
+    </div>
   );
 }
 

@@ -34,7 +34,7 @@
         "score": 90,
         "weight": 1,
         "findings": [
-          "1 unit holding all three lethal-trifecta legs (prompt-injection exfil path)"
+          "1 unit can read data, reach the web, and run commands — the \"lethal trifecta\", so a prompt injection could exfiltrate secrets"
         ]
       },
       {
