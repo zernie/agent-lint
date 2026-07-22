@@ -85,6 +85,13 @@ function headerSlug(view: View): string {
   return view.k === "featured" ? FEATURED[view.i].slug : view.slug;
 }
 
+/** Grade → band color token (matches the report's bands: A passing, B–D warn, F bad). */
+function gradeTone(grade: string): string {
+  if (grade === "A") return "text-good";
+  if (grade === "F") return "text-bad";
+  return "text-warn";
+}
+
 // ---------------------------------------------------------------------------
 
 /** A quiet inline copy affordance for `npx vigiles audit` (edge-state frames). */
@@ -420,12 +427,18 @@ export function DemoAudit() {
 
         <RepoCombobox onSubmit={run} />
 
-        {/* Featured chips — one-tap examples. Wrap + centered on every width so a
-            chip never clips at the mobile viewport edge (only four, so mobile is
-            two tidy rows, not a pushed-down fold). */}
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
+        {/* Featured chips as a lightweight LEADERBOARD — real popular plugins with
+            their real grades. Reframes the one-tap examples as "here's how the
+            ecosystem scores; where does yours land?" (social proof + the ranking
+            nudge), and the grade letters explain themselves. Wrap + centered so a
+            chip never clips at the mobile edge. */}
+        <p className="mt-8 text-center text-xs text-muted-foreground">
+          Popular plugins, graded — tap to see why:
+        </p>
+        <div className="mt-3 flex flex-wrap justify-center gap-2">
           {FEATURED.map((f, i) => {
             const active = frameView.k === "featured" && frameView.i === i;
+            const grade = f.report.score.grade;
             return (
               <button
                 key={f.slug}
@@ -433,13 +446,19 @@ export function DemoAudit() {
                 onClick={() => pickChip(i)}
                 aria-pressed={active}
                 className={cn(
-                  "rounded-full border px-3.5 py-1.5 font-mono text-sm transition-colors",
+                  "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-sm transition-colors",
                   active
                     ? "border-accent/60 bg-accent/10 text-foreground"
                     : "border-border text-muted-foreground hover:border-accent/40 hover:text-foreground",
                 )}
               >
                 {f.label}
+                <span
+                  className={cn("font-bold", gradeTone(grade))}
+                  aria-label={`grade ${grade}`}
+                >
+                  {grade}
+                </span>
               </button>
             );
           })}

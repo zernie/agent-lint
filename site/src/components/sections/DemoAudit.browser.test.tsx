@@ -105,7 +105,8 @@ describe("DemoAudit — chips stay instant", () => {
   it("tapping a chip shows its baked report with NO fetch and NO loading", async () => {
     const user = userEvent.setup();
     render(<DemoAudit />);
-    await user.click(screen.getByRole("button", { name: "oh-my-claudecode" }));
+    // The chip's accessible name now includes its grade badge ("… A").
+    await user.click(screen.getByRole("button", { name: /oh-my-claudecode/ }));
     // Baked report frame header updates instantly; fetch never called.
     await screen.findByText(/vigiles audit oh-my-claudecode/);
     expect(mockFetch).not.toHaveBeenCalled();
