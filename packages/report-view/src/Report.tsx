@@ -86,18 +86,24 @@ function basename(dir: string): string {
 }
 
 /**
- * The Safety findings to surface as "Review — no auto-fix" cards. ONLY when Safety
- * is ASSESSABLE (`score !== null`) and not the advisory ring: a `null` score is the
- * "no tool-bearing surface to assess" n/a note (an instructions-only repo), NOT a
- * lethal-trifecta finding, so it must never render as a red review card. One home so
- * the summary + full paths can't diverge.
+ * The Safety findings to surface as red "Review — no auto-fix" cards — the HARD
+ * lethal-trifecta findings only. Two kinds are deliberately excluded so a report
+ * that isn't actually failing on safety never shows a red defect card:
+ *   - a `null` score → the "no tool-bearing surface to assess" n/a note (an
+ *     instructions-only repo), NOT a trifecta finding;
+ *   - an `(advisory)`-suffixed finding → the inherits-all note, which the scorer
+ *     appends WITHOUT reducing the score (a broad-by-default A/100 repo), so it must
+ *     not read as a hard defect.
+ * The scorer flattens hard + advisory findings into one string array (no per-finding
+ * severity in the wire shape), so the stable `(advisory)` suffix is the only signal.
+ * One home so the summary + full paths can't diverge.
  */
 function safetyReviewFindings(
   categories: readonly CategoryScore[],
 ): readonly string[] {
   const safety = categories.find((c) => c.key === "Safety");
   if (!safety || safety.advisory || safety.score === null) return [];
-  return safety.findings;
+  return safety.findings.filter((f) => !f.endsWith("(advisory)"));
 }
 
 /** Impact band for a fix: bigger score gain ⇒ hotter. Never green (green =
