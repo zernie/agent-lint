@@ -5,7 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { CornerDownLeft, Check, Copy, RotateCw } from "lucide-react";
+import { CornerDownLeft, Check, Copy, RotateCw, Link2 } from "lucide-react";
 import { Report, type AuditReport } from "@vigiles/report-view";
 import { normalizeSlug } from "@/lib/deeplink";
 import { track } from "@/lib/track";
@@ -457,6 +457,7 @@ export function DemoAudit() {
     frameView.k === "ratelimit" ||
     frameView.k === "too-large" ||
     frameView.k === "error";
+  const isResult = frameView.k === "report" || frameView.k === "featured";
 
   return (
     <section
@@ -466,16 +467,16 @@ export function DemoAudit() {
       <div className="mx-auto w-full max-w-4xl px-6 py-20 sm:py-28">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            A real grade, for a real repo.
+            What&apos;s broken in your agent setup?
           </h2>
           <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
-            The same report{" "}
-            <span className="font-mono text-foreground">vigiles audit</span>{" "}
-            prints — deterministic, model-free.{" "}
+            <span className="text-foreground">vigiles</span> grades a
+            repo&apos;s Claude Code or Codex setup — the skills, hooks, and
+            instructions — and flags what&apos;s{" "}
             <span className="text-foreground">
-              Run it on any public repo, right here
+              broken, mistyped, or leaking secrets
             </span>{" "}
-            — or pick a published plugin:
+            before it bites your agent. Try any public repo, right here.
           </p>
         </div>
 
@@ -541,6 +542,10 @@ export function DemoAudit() {
             </div>
           )}
         </div>
+
+        {/* Shareability is the growth loop — a graded result is a public link that
+            auto-runs. Surface a one-tap share on any report/featured view. */}
+        {isResult && <ShareRow slug={headerSlug(frameView)} />}
       </div>
     </section>
   );
@@ -618,6 +623,56 @@ function CachedBadge({
         <RotateCw className="h-3 w-3" aria-hidden /> re-grade
       </button>
     </span>
+  );
+}
+
+/** The viral loop — a graded result is a shareable PUBLIC link
+ *  (vigiles.sh/?repo=owner/repo, which auto-runs on load). Make sharing a one-tap
+ *  action: the native share sheet on mobile, copy-to-clipboard elsewhere. This is
+ *  how a grade spreads — people share a repo's report, not a landing page. */
+function ShareRow({ slug }: { slug: string }) {
+  const [copied, setCopied] = useState(false);
+  const share = (): void => {
+    const url = `${window.location.origin}${window.location.pathname}?repo=${encodeURIComponent(
+      slug,
+    )}#try`;
+    const done = (): void => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    };
+    const copy = (): void =>
+      void navigator.clipboard?.writeText(url).then(done, () => undefined);
+    const nav = navigator as Navigator & {
+      share?: (d: { title?: string; url?: string }) => Promise<void>;
+    };
+    if (typeof nav.share === "function") {
+      void nav.share({ title: `vigiles grade — ${slug}`, url }).then(
+        () => undefined,
+        copy, // share cancelled/failed → fall back to copy
+      );
+    } else {
+      copy();
+    }
+  };
+  return (
+    <div className="mt-5 flex items-center justify-center">
+      <button
+        type="button"
+        onClick={share}
+        className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 text-sm text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground"
+      >
+        {copied ? (
+          <>
+            <Check className="h-3.5 w-3.5 text-good" aria-hidden />
+            <span className="text-good">Link copied — share the grade</span>
+          </>
+        ) : (
+          <>
+            <Link2 className="h-3.5 w-3.5" aria-hidden /> Share this grade
+          </>
+        )}
+      </button>
+    </div>
   );
 }
 
