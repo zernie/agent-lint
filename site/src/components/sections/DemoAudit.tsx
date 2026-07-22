@@ -402,7 +402,12 @@ export function DemoAudit() {
     frameView.k === "ratelimit" ||
     frameView.k === "too-large" ||
     frameView.k === "error";
-  const isResult = frameView.k === "report" || frameView.k === "featured";
+  // Share only a REAL fetched report — never a baked featured chip. A share link
+  // can only carry a `?repo=` slug that RE-FETCHES on open, so it can't reproduce a
+  // baked example (and some featured slugs aren't a fetchable owner/repo, e.g.
+  // `oh-my-claudecode`, or are too large to grade in-browser). A typed/opened report
+  // always came from a live fetch, so its share link reproduces faithfully.
+  const canShare = frameView.k === "report";
 
   return (
     <section
@@ -502,7 +507,7 @@ export function DemoAudit() {
 
         {/* Shareability is the growth loop — a graded result is a public link that
             auto-runs. Surface a one-tap share on any report/featured view. */}
-        {isResult && <ShareRow slug={headerSlug(frameView)} />}
+        {canShare && <ShareRow slug={headerSlug(frameView)} />}
       </div>
     </section>
   );
