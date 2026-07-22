@@ -39,10 +39,12 @@ export const AUDIT_PROMPT =
  *  trigger-rate measurement (measureTriggerRate, via the test-harness skill) on the
  *  user's own Claude subscription. */
 export const TRIGGER_RATE_PROMPT =
-  "Set up vigiles and measure whether my skills actually fire: run " +
-  "`npx vigiles init`, then use the test-harness skill to run measureTriggerRate. " +
-  "Report each skill's recall (does it fire when it should?) and precision (does " +
-  "it stay quiet on unrelated prompts?). It runs on my Claude subscription — no API key.";
+  "Measure whether my skills actually fire (recall + precision). This is the " +
+  "test/eval tier, not the read-only audit — so if vigiles isn't set up in this " +
+  "repo yet, run `npx vigiles init` first (that installs the test-harness skill), " +
+  "then use that skill to run measureTriggerRate. Report each skill's recall (does " +
+  "it fire when it should?) and precision (does it stay quiet on unrelated " +
+  "prompts?). It runs on my Claude subscription — no API key.";
 
 /** The audit checks that have a dedicated explainer page at vigiles.sh/checks/<slug>/.
  *  Mirrors the slugs in site/src/checks/checks.ts — a finding whose detector is here

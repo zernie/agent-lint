@@ -61,16 +61,14 @@ test("types a repo → the real graded report renders in-frame", async ({
   await mockRepo(page, sampleFiles);
   await gradeRepo(page);
 
-  // The frame header names their repo; the real <Report> renders its grade badge.
-  await expect(
-    page.getByText("$ vigiles audit acme/widgets", { exact: true }),
-  ).toBeVisible();
+  // The frame header names their repo + tags it "your repo" (a typed report, not
+  // an example chip); the real <Report> renders its grade badge.
+  await expect(page.getByText("your repo", { exact: true })).toBeVisible();
+  await expect(page.getByText("acme/widgets").first()).toBeVisible();
   // The real <Report> rendered its grade badge (the sample map grades D).
   await expect(page.getByText("D", { exact: true }).first()).toBeVisible();
   // The model-gated lock row is present for a real report.
-  await expect(
-    page.getByText(/Whether your skills actually fire/i),
-  ).toBeVisible();
+  await expect(page.getByText(/Do your skills actually fire/i)).toBeVisible();
 });
 
 test("a repo with no harness shows the in-frame empty state, not an error", async ({
@@ -81,7 +79,8 @@ test("a repo with no harness shows the in-frame empty state, not an error", asyn
   await gradeRepo(page);
 
   await expect(page.getByText(/No Claude Code harness in/i)).toBeVisible();
-  await expect(
-    page.getByText("$ vigiles audit acme/widgets", { exact: true }),
-  ).toBeVisible();
+  // The in-frame empty state hands off to the CLI via an inline copy pill — the
+  // command is `npx vigiles audit` (repo-agnostic), not a `$ vigiles audit <slug>`
+  // echo. There's also the always-present private-repo hand-off pill, so match ≥1.
+  await expect(page.getByText("npx vigiles audit").first()).toBeVisible();
 });

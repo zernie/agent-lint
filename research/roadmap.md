@@ -851,6 +851,31 @@ assertRates`) is the recommended path for testing one skill, but
   - **Hosted in-browser audit demo** — deterministic-only rings run in the browser
     (nothing uploaded), with a real progress bar and the model-gated part TEASED
     (blurred/locked → "run locally to unlock"). Needs the shared report components. **MED**
+  - **Backend audit service (WITH rate-limited LLM access) — the path to the FULL
+    audit in the demo (2026-07-22, from founder feedback).** The in-browser demo is
+    STRUCTURALLY a subset on BOTH axes: (1) DETERMINISTIC depth it can't reach —
+    linter-rule cross-referencing (`enforce()` needs the 7 catalogs + the repo's
+    config), symbol resolution (ast-grep), live MCP resolution, references INSIDE
+    markdown prose; (2) the MODEL-GATED behavioral tier — trigger-rate ("do your
+    skills actually fire?" recall/precision), the currently locked/teased column.
+    Client-side fixes DON'T work: prose-ref parsing is SEMANTIC/undecidable (a
+    code-span may be an example, not a ref — exactly why vigiles needs MARKS/a spec,
+    see `reference-verification-limits.md`); catalogs/config/ast-grep aren't feasible
+    in a browser; and the model-gated tier obviously needs a model. So the long-term
+    fix is a BACKEND with RATE-LIMITED LLM ACCESS that runs the real `vigiles audit`
+    server-side — the full deterministic depth AND the behavioral tier — and returns
+    the complete report, so the demo shows REAL trigger-rate numbers (UNLOCKING the
+    tease) instead of "run locally to see." Design constraints: PUBLIC-repo only
+    (private stays CLI-local, preserving "nothing leaves your machine" for the CLI
+    path); the demo's LLM is VIGILES-FUNDED (a marketing cost — distinct from the
+    CLI's "your own subscription, no metered API" story, which stays the pitch for
+    real use), so RATE-LIMIT per session/IP + cache aggressively to cap spend; the
+    trigger-rate run must stub skill BODIES (firing is a frontmatter property) to keep
+    each measurement cheap. HONEST CAVEAT even with the backend: UNMARKED prose
+    references stay undecidable — the backend adds linter/symbol/MCP/spec-compile +
+    the behavioral tier, NOT "verify any sentence." Interim (done 2026-07-22): scope
+    the site text so the browser grade doesn't imply the full linter cross-reference.
+    **LARGE** (infra + cost + abuse controls).
   - **Shared-component monorepo refactor** — `apps/` + `packages/report-view` (npm
     workspaces) so the report UI is genuinely shared by `report/`, the site hero, and the
     demo (no screenshots, no hacks). Root `vigiles` package + CI stay green. **MED**

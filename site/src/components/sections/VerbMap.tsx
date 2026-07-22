@@ -89,7 +89,7 @@ export function VerbMap() {
                 <span className="col-start-1 pl-[1.375rem] text-sm text-foreground sm:col-start-2 sm:pl-0">
                   {v.answers}
                 </span>
-                <span className="col-start-2 row-start-1 text-xs text-muted-foreground sm:text-right">
+                <span className="col-start-2 row-start-1 text-xs text-muted-foreground sm:col-start-3 sm:text-right">
                   {v.model}
                 </span>
               </summary>
@@ -120,9 +120,16 @@ export function VerbMap() {
         {/* Your rules → enforced — the prose-to-enforcement payoff of the hero
             pain. One compact card, not a new section. */}
         <Card className="reveal mx-auto mt-10 max-w-3xl p-6">
-          <h3 className="text-base font-semibold tracking-tight">
-            Your rules → enforced
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold tracking-tight">
+              Your rules → enforced
+            </h3>
+            {/* Clearly an ILLUSTRATION, not a scan of your repo — the example
+                below is representative, not a fabricated result (credibility). */}
+            <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              example
+            </span>
+          </div>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             <span className="font-mono text-foreground">audit</span> maps each
             prose rule you wrote to the lint rule that enforces it, and tells
