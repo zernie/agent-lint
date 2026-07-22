@@ -360,6 +360,48 @@ test("scanPlugin treats an existence-guarded hook command as optional, not missi
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin does not flag a glob pattern in a hook command as a missing script (dogfood D1)", () => {
+  // A hook command that MENTIONS a glob — `find . -name "*.js"` — must not have
+  // `"*.js"` grabbed as a script path and reported missing. The real script
+  // (present.sh) still resolves ok.
+  const dir = makeTmpDir("scan-globhook");
+  try {
+    write(dir, "hooks/present.sh", "#!/usr/bin/env bash\n");
+    write(
+      dir,
+      ".claude-plugin/plugin.json",
+      JSON.stringify({
+        name: "x",
+        hooks: {
+          PostToolUse: [
+            {
+              matcher: "Edit",
+              hooks: [
+                {
+                  type: "command",
+                  command:
+                    'bash ${CLAUDE_PLUGIN_ROOT}/hooks/present.sh && find . -name "*.js" -newer /tmp/x',
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    const r = scanPlugin(dir);
+    assert.ok(
+      !r.hooks.some((h) => h.status === "missing"),
+      "a glob pattern in the command must not be read as a missing script",
+    );
+    assert.ok(
+      r.hooks.some((h) => h.script.includes("present.sh") && h.status === "ok"),
+      "the real hook script still resolves ok",
+    );
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
 test("isManagedHookCommand: only a hook-runtime invocation is vigiles-managed", () => {
   assert.equal(
     isManagedHookCommand(

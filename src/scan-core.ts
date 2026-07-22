@@ -69,7 +69,14 @@ import type {
   ScanDelegationFinding,
 } from "./scan.js";
 
-const SCRIPT_RE = /\S+\.(?:sh|mjs|cjs|js|ts|py|rb)\b/g;
+// A script-path token inside a hook command. The token class is `\S` MINUS the
+// glob metacharacters `*` and `?` (dogfood D1): a real, resolvable hook path
+// never contains them, but a command that merely MENTIONS a glob — e.g.
+// `find . -name "*.js"` in a hook body — would otherwise have `"*.js"` grabbed as
+// a "script" and reported MISSING (a false positive). Shell vars / braces /
+// quotes / slashes ARE kept (`${CLAUDE_PLUGIN_ROOT}/hooks/x.sh`, `"$HOME"/y.sh`),
+// since resolveScript expands + strips those; only glob patterns are dropped.
+const SCRIPT_RE = /[^\s*?]+\.(?:sh|mjs|cjs|js|ts|py|rb)\b/g;
 
 // The scalar fields scan reads from a skill/agent `---` block, via the shared
 // lenient reader (core/frontmatter-read.ts) — a real YAML parse with a regex
