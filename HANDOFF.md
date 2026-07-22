@@ -40,18 +40,31 @@ still grades directly; degrades to the direct path on rate-limit; injectable sea
 api.github.com-blocked sandbox (screenshot via Playwright route-mock). Star counts are LIVE-fetched, never
 hardcoded. Two tiny hand-rolled hooks (`site/src/lib/hooks.ts`) instead of a dep.
 
-**IN FLIGHT / PENDING (founder picked "build all four" + more):**
+**ALL FOUR + MORE SHIPPED (on #101):**
 
-- **Next.js EVAL running in a subagent** (isolated worktree) — deciding whether the dedicated per-check explainer
-  pages (`/checks/<slug>`, "React-errors-have-a-page") are a signal to migrate the Vite site to Next.js / Astro /
-  Vite-MPA-or-router. Report pending; DO NOT wire routing until it lands. `site/src/checks/checks.ts` (8 finding
-  detectors + lethal-trifecta concept, plain what/why/fix) is written + committed, framework-agnostic, unwired.
-- **Findings explainer** (detector labels → `/checks/<slug>` pages) — GATED on the routing decision above.
-- **Strengthen the locked trigger-rate tease** + **leaderboard framing** ("how does your setup rank") — queued.
-- **PALETTE** (softer, "material-oceanic" vibe) — founder wants it LAST; a shared token change across
-  `site/src/index.css` and the `report-view` theme = one win for the site AND the local audit HTML report.
-- DECIDED: untested skills stay ADVISORY in the grade (don't game the score to nudge adoption — protects the
-  honest-grader trust); the locked tease is the nudge instead.
+- **Findings explainer — DEDICATED `/checks/<slug>/` PAGES** (React-errors-have-a-page). A subagent evaluated
+  Next.js and recommended AGAINST it → built as a **Vite MPA** (`scripts/gen-check-pages.ts` prebuild generates one
+  static, indexable, code-split HTML per check from `site/src/checks/checks.ts`; own title/OG/canonical). `report-view`
+  linkifies each finding's detector + the safety "what's this?" to an ABSOLUTE `vigiles.sh/checks/<slug>/` (works
+  from the CLI's local HTML report too). 8 checks: the 7 fix detectors + lethal-trifecta.
+- **Repo combobox** (owner-scoped + bare-name global search, live stars) — done.
+- **Stronger locked tease** ("Which of your skills actually fire?" + "free on your Claude subscription") + **graded
+  leaderboard chips** ("Popular plugins, graded — tap to see why", A–F tones) — done.
+- **PALETTE** — softer "material-oceanic" (deep blue-slate ground, cool ink, oceanic-cyan accent; bands softened but
+  semantic + AA). Done in a subagent worktree, ported to `site/src/index.css` + `report-view/theme.css` (both
+  surfaces + the CLI HTML report share it).
+- DECIDED: untested skills stay ADVISORY in the grade (don't game the score; the tease is the nudge).
+
+**6 CODEX REVIEW P2s CLEARED on #101 (Codex does a line-by-line pass, ~1 refinement/commit):** (1) share only real
+fetched reports, not baked featured chips (a share link only re-fetches → can't reproduce a baked example); (2) n/a
+Safety (`score:null`) must not render as a red trifecta card; (3) combobox: invalidate in-flight lookups UP FRONT
+(cache hit could let a stale request overwrite); (4) filter `(advisory)`-suffixed inherits-all out of the red
+safety cards (a broad-by-default A/100 repo isn't a hard defect); (5) DISCLOSE the GitHub API in the combobox copy
+(autocomplete sends keystrokes to GitHub Search — don't claim "nothing leaves it"; the real promise is "no vigiles
+server, nothing uploaded"); (6) scope the demo copy to Claude Code — the browser demo is CC-ONLY (Codex-only repos
+hit the no-harness state), so "Claude Code or Codex" over-promised; credit the CLI for Codex instead.
+Shared helper `safetyReviewFindings()` in `report-view/Report.tsx` gates #2 + #4 (summary + full can't diverge).
+STILL WATCHING #101 — clear new Codex/CI as they arrive; ~1hr self-check-in armed (trig via send_later).
 
 **FETCH-TAIL DOCUMENTED — do NOT keep chasing Codex's `fetchRepo` P2s.** The browser demo's `fetchRepo` does a
 BOUNDED, SELECTIVE fetch (harness-shaped paths + their refs, to respect GitHub's 60-req/hr limit), NOT the CLI's
