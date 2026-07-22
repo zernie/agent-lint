@@ -114,17 +114,18 @@ export function RepoCombobox({
   // Owner mode filters the owner's repos by the typed fragment; query mode's results
   // arrive already ranked by stars from the search API, so show them as-is. Keyed on
   // fetchMode (matches the outcome), with the LIVE fragment for instant filtering.
-  // GUARD: in owner mode, suppress hits while the live owner no longer matches the
-  // outcome's owner (`fetchOwner` lags 300ms after an owner edit) — otherwise the old
-  // owner's rows show bare repo names under the new owner input, and clicking one
-  // would submit the STALE owner/repo. The new owner's results appear after the debounce.
-  const ownerStale = fetchMode === "owner" && liveOwner !== fetchOwner;
+  // STALE GUARD (both modes): the outcome was fetched for `fetchKey`, which lags the
+  // live input by the 300ms debounce. Suppress ALL hits while the live key no longer
+  // matches — the live owner (owner mode) or the live bare query (query mode) — so a
+  // row from the PREVIOUS query can't stay clickable under the new input and submit
+  // the wrong repo. The fragment isn't part of the key, so instant owner-fragment
+  // filtering still works; the new results appear once the debounce catches up.
+  const stale =
+    fetchMode === "owner" ? liveOwner !== fetchOwner : text.trim() !== fetchKey;
   const hits: readonly RepoHit[] =
-    outcome !== null && outcome !== "loading" && outcome.kind === "ok"
+    !stale && outcome !== null && outcome !== "loading" && outcome.kind === "ok"
       ? fetchMode === "owner"
-        ? ownerStale
-          ? []
-          : rankRepos(outcome.repos, fragment)
+        ? rankRepos(outcome.repos, fragment)
         : outcome.repos.slice(0, 7)
       : [];
 
