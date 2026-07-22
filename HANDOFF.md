@@ -18,11 +18,15 @@
 **`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
 via `pages.yml` on push to main.
 
-**PR #100 (`claude/click-not-working-s9apfb`, OPEN, CI green — do NOT auto-merge, founder is live-iterating).**
-The live in-browser "grade any repo" demo + `@vigiles/report-view` shipped earlier (#80–#99 deployed; demo wired
-into CI via the `site` job — parity + interaction + grade-cache browser tests). Fetch-tail is DOCUMENTED (see below).
+**PR #100 is MERGED + released** (squash-merged to `main` as `1094720`). The live in-browser "grade any repo"
+demo + `@vigiles/report-view` shipped there (demo wired into CI via the `site` job). Fetch-tail DOCUMENTED (below).
 
-**This session (2026-07-22): founder-driven DEMO UX REDESIGN.** Shipped on the same branch:
+**PR #101 is OPEN** (`claude/click-not-working-s9apfb` → `main`, the DEMO UX REDESIGN; branch cleanly ahead of main,
+a NEW pr since #100 is merged). CI running/green when last checked (validate/describe/check/test/e2e/harness/site).
+Session is SUBSCRIBED to watch it. Branch history was filter-branch'd to strip `Claude-Session:` URL trailers
+(public-repo no-session-links rule) + force-pushed — commits are `Claude <noreply@…>`-authored (CI still triggered).
+
+**This session (2026-07-22): founder-driven DEMO UX REDESIGN (PR #101).** Shipped on the branch:
 (1) SELLING COPY — demo H2 "What's broken in your agent setup?" + benefit subhead (replaced the meaningless
 "same report / deterministic" framing). (2) SHAREABLE GRADES — `ShareRow` (native share on mobile, copy the
 `?repo=owner/repo#try` deep-link that auto-runs) — the growth loop; written into the `landing-site` skill as a
