@@ -1,11 +1,12 @@
 /**
  * The dedicated per-check explainer content — the "React errors have a page"
- * treatment for vigiles findings. Every finding the demo report surfaces links to
- * one of these (`#/checks/<slug>`), so a first-time reader can understand WHAT the
- * finding means and HOW to fix it in plain words, not jargon.
+ * treatment for vigiles findings. Each entry becomes a static, indexable page at
+ * `/checks/<slug>/` (a Vite MPA entry — see scripts/gen-check-pages.ts), so a
+ * first-time reader can understand WHAT a finding means and HOW to fix it in plain
+ * words, not jargon.
  *
  * The slugs are the report's own `detector` names (plus `lethal-trifecta` for the
- * safety finding) — `report-view` linkifies a finding to `#/checks/<detector>`, and
+ * safety finding) — `report-view` linkifies a finding to `/checks/<detector>/`, and
  * `checkSlugsWithPages` (below) is the set that gets a link. The full, exhaustive
  * rule reference lives in the repo's `docs/rules/<slug>.md`; each page links out to it.
  */
@@ -52,7 +53,7 @@ export const CHECKS: Record<string, CheckDoc> = {
     why: "If any untrusted text ever reaches this unit — a web page, an issue comment, a dependency's README — a hidden instruction in it can make the agent read a secret and send it out. It doesn't require a vulnerability in your code; the capability set IS the vulnerability.",
     fix: "Split the capability. Give the unit that reads private data no network + no shell, or the unit that reaches the web no access to secrets. Most trifecta units don't actually need all three — narrow the tool list to what the task requires. vigiles flags this as a review item, not an auto-fix, because which leg to drop is a design call.",
     example: {
-      bad: 'tools: [Read, WebFetch, Bash]   # reads secrets + reaches web + runs shell',
+      bad: "tools: [Read, WebFetch, Bash]   # reads secrets + reaches web + runs shell",
       good: "tools: [Read, Edit]             # reads + writes files, but can't phone home",
     },
     category: "Safety",
@@ -155,5 +156,10 @@ export const checkSlugsWithPages: ReadonlySet<string> = new Set(
   Object.keys(CHECKS),
 );
 
-/** Ordered list for the checks index page. */
+/** Ordered list for the checks index page + the static-page generator. */
 export const allChecks: readonly CheckDoc[] = Object.values(CHECKS);
+
+/** Look up one check by slug (the MPA page + the report link both resolve by slug). */
+export function checkBySlug(slug: string): CheckDoc | undefined {
+  return CHECKS[slug];
+}

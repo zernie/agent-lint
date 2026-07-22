@@ -33,6 +33,52 @@ export const AUDIT_PROMPT =
   "the overall grade, each category, and the top fixes in order of impact. " +
   "It's a read-only audit — don't change any files.";
 
+/** The audit checks that have a dedicated explainer page at vigiles.sh/checks/<slug>/.
+ *  Mirrors the slugs in site/src/checks/checks.ts — a finding whose detector is here
+ *  links to its plain-language page. ABSOLUTE url so the link also works from the CLI's
+ *  local HTML report (opened as a file://), not just the hosted site. */
+const CHECK_PAGE_SLUGS: ReadonlySet<string> = new Set([
+  "lethal-trifecta",
+  "subagent-tool-contract",
+  "mcp-tool-resolves",
+  "hook-events",
+  "hook-script-exists",
+  "description-overlap",
+  "skill-frontmatter",
+  "subagent-frontmatter",
+]);
+
+function checkUrl(slug: string): string {
+  return `https://vigiles.sh/checks/${slug}/`;
+}
+
+/** Render a check slug as a link to its explainer page when one exists, else plain. */
+function CheckLink({
+  slug,
+  children,
+  className,
+}: {
+  slug: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  if (!CHECK_PAGE_SLUGS.has(slug))
+    return <span className={className}>{children}</span>;
+  return (
+    <a
+      href={checkUrl(slug)}
+      target="_blank"
+      rel="noreferrer"
+      className={cn(
+        "underline decoration-dotted underline-offset-2",
+        className,
+      )}
+    >
+      {children}
+    </a>
+  );
+}
+
 /** The last path segment — the audited dir reads as a plugin name, not a path. */
 function basename(dir: string): string {
   const parts = dir.replace(/[/\\]+$/, "").split(/[/\\]/);
@@ -107,9 +153,12 @@ function FixCard({ r, points }: { r: Recommendation; points: number }) {
             +{points} pts
           </span>
         )}
-        <span className="ml-auto hidden font-mono text-xs text-muted-foreground sm:inline">
+        <CheckLink
+          slug={r.detector}
+          className="ml-auto hidden font-mono text-xs text-muted-foreground hover:text-foreground sm:inline"
+        >
           {r.detector}
-        </span>
+        </CheckLink>
       </div>
       <div className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
         {r.rationale}
@@ -137,7 +186,15 @@ function SafetyCard({ finding }: { finding: string }) {
           <ShieldAlert size={12} className="mr-1" />
           safety
         </Badge>
-        <span className="leading-relaxed text-muted-foreground">{finding}</span>
+        <span className="leading-relaxed text-muted-foreground">
+          {finding}{" "}
+          <CheckLink
+            slug="lethal-trifecta"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            what&apos;s this?
+          </CheckLink>
+        </span>
         <span className="ml-auto text-xs text-muted-foreground">
           your call — no deterministic fix
         </span>
