@@ -57,13 +57,12 @@ against the skill (READ it before touching `site/`); screenshot desktop AND full
 
 ### 🎯 DO NEXT
 
-1. **Item 4b (OG social-card) — EXPLAINED, ready to build.** IMPORTANT CORRECTION to `adoption-design.md`: an OG card
-   only works on a CRAWLABLE hosted URL (crawlers read static `<head>` meta, no JS, no `file://`) — so 4b lives on
-   `vigiles.sh` (the 4a deep-link), NOT baked into the local report file (fix that wording). Two tiers: (a) GENERIC
-   branded card = zero-infra, ships now on GitHub Pages (every 4a link previews nicely, but not per-grade); (b)
-   PER-GRADE card (`acme/widgets · F · rings`) needs a SERVERLESS OG endpoint (GitHub Pages is static, can't vary meta
-   by `?repo=`) → bundles with item 4c (hosted upload), not now. Founder OK'd (a) + the wording fix — **do those next.**
-2. **Open the PR** for the 14 commits — founder hasn't given final go; the false-positive fix is a real bug worth
+1. **Item 4b b1 (generic OG card) — SHIPPED** — `site/public/og.png` (branded 1200×630 grade card) +
+   absolute-URL `og:image`/`twitter:summary_large_image` in `site/index.html`, so vigiles.sh + the 4a `?repo=` link
+   preview as a card, not a bare link. adoption-design.md 4b wording CORRECTED (an OG card needs a crawlable hosted
+   URL — not the local `file://` report). REMAINING: **b2** = the PER-GRADE card (`owner/repo · actual grade`), which
+   needs a SERVERLESS OG endpoint (GitHub Pages is static, can't vary `<meta>` by `?repo=`) → bundles with 4c.
+2. **Open the PR** for the 17 commits — founder hasn't given final go; the false-positive fix is a real bug worth
    shipping. (Founder deprioritized item 6 GHA PR-comment grade — GHA is later-adoption AND not even guaranteed after
    gate-first init.)
 3. **Remaining adoption items** (order per `adoption-design.md`): item 3 (non-interactive `audit` writes
