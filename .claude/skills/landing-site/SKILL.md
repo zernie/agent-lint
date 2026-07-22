@@ -25,6 +25,37 @@ caption, a second button, or a reassurance line is suspect until proven necessar
 - **The wow** is the **graded report** — show the result, don't explain the mechanism.
 - **Front-door promise:** "Lighthouse for your agent harness" — a one-command,
   zero-config, nothing-uploaded grade of your skills/hooks/subagents/references.
+- **THE DEMO FRAME SERVES FOUR JOBS AT ONCE — design for all four, don't let one
+  crowd out the rest.** (1) INTRO — teach what vigiles is at a glance (the graded
+  report IS the pitch). (2) DEMO — instant real grades with zero effort (the baked
+  `FEATURED` chips). (3) RUN-IN-BROWSER — grade YOUR public repo live by typing it
+  (GitHub anonymous API; public-only). (4) COMMAND-COPY for the rest — a private or
+  local repo can't run in-browser, so the job there is a clean, obvious COPY of
+  `npx vigiles audit` (a command hand-off, NOT a fake in-browser run). Two clarity
+  rules fall out and are load-bearing: **(a) the frame must always make clear WHICH
+  repo is shown and whether it's a PREDEFINED EXAMPLE (a chip) or YOUR OWN (typed) —
+  never ambiguous; (b) the private-repo path is a first-class affordance, not an
+  afterthought jammed into a sentence — a clean labelled command-copy, verified at
+  390px.** Don't restate the command in three stacked lines (the header showing
+  `$ vigiles audit <slug>` on top of a highlighted chip that already names it is TMI
+  — the header's job is to IDENTIFY the graded repo + its source, not re-print the
+  command).
+- **COPY: concrete over clever, and NEVER plant a doubt the reader didn't arrive
+  with.** Two real misses this stops: (1) a clever headline that reads as cryptic
+  ("'Valid' is not 'true.'") — lead with the concrete pain ("Valid config. Broken
+  agent."), let the cards below carry the nuance; (2) a DEFENSIVE FAQ that spotlights
+  a weakness the reader hadn't noticed ("Is it stable enough to adopt?" draws the eye
+  to a scary version number) — replace doubt-planters with confidence-builders a
+  skeptic actually asks ("Does anything leave my machine?", "Can I grade a private
+  repo?"). Test each line as a cold skeptic: does it make me MORE or LESS likely to
+  run the command? If less, cut or reframe.
+- **CREDIBILITY: the demo report shows ONLY REAL scans — never fabricate a result.**
+  The brand is "measured, not claimed", so one hardcoded/fake number in the report
+  retroactively poisons trust in every real finding. A LOCKED tease with HONEST
+  PLACEHOLDERS (em-dash "run to fill", no digits) for a genuinely-can't-run-here thing
+  (model-gated trigger-rate) is fine — it fakes NOTHING. Fabricated "results" for a
+  thing the tool actually computes is NOT — show the REAL computed result or keep it
+  an honest explanatory card OUTSIDE the report frame.
 - **Lower the friction to try:** offer PREFILLED popular OSS repos as one-click
   "grade this" chips, so a visitor sees a real report without typing or having a repo
   of their own. **SHIPPED** — the `FEATURED` chips in `DemoAudit` render baked real

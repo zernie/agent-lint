@@ -5,7 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Check, Copy, RotateCw, Link2, Star } from "lucide-react";
+import { Check, Copy, RotateCw, Link2, Star, Lock } from "lucide-react";
 import { Report, type AuditReport } from "@vigiles/report-view";
 import { normalizeSlug } from "@/lib/deeplink";
 import { fetchStars, formatStars } from "@/demo/searchRepos";
@@ -498,11 +498,18 @@ export function DemoAudit({
       <RepoCombobox onSubmit={run} />
 
       {/* Proactive private-repo answer — the browser demo is public-only (GitHub
-          anonymous API), so tell a private-repo visitor the CLI path HERE, at the
-          moment of intent, instead of only after they type a repo and hit a 404. */}
-      <p className="mt-3 text-center text-xs leading-relaxed text-muted-foreground">
-        Private repo? Run <InlineCommand /> in it locally — it reads your
-        working copy off disk, nothing leaves your machine.
+          anonymous API). A private/local repo can't run in-browser, so the job here
+          is a clean COMMAND HAND-OFF: a labelled command-copy, not a button jammed
+          mid-sentence. Label + pill stack on mobile; the privacy note is a sub-line. */}
+      <div className="mt-4 flex flex-col items-center justify-center gap-2 sm:flex-row">
+        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Lock className="h-3 w-3" aria-hidden />
+          Private or local repo? Grade it in your terminal:
+        </span>
+        <InlineCommand />
+      </div>
+      <p className="mt-1.5 text-center text-[11px] text-muted-foreground/70">
+        Reads your working copy off disk — nothing leaves your machine.
       </p>
 
       {/* Featured chips as a lightweight LEADERBOARD — real popular plugins with
@@ -557,9 +564,23 @@ export function DemoAudit({
       {/* The report frame — one component, every state renders inside it (no
             toast, no layout jump). */}
       <div className="reveal mt-8 overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
-        <div className="flex items-center justify-between gap-3 border-b border-border bg-card/40 px-5 py-2.5 font-mono text-xs text-muted-foreground">
-          <span className="truncate">
-            $ vigiles audit {headerSlug(frameView)}
+        <div className="flex items-center justify-between gap-3 border-b border-border bg-card/40 px-5 py-2.5 text-xs text-muted-foreground">
+          {/* Identify the graded repo + its SOURCE (example chip vs your typed repo)
+              — not the redundant `$ vigiles audit <slug>` command, which just repeats
+              the highlighted chip / the input above. */}
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-mono text-foreground">
+              {headerSlug(frameView)}
+            </span>
+            {frameView.k === "featured" ? (
+              <span className="shrink-0 rounded bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
+                example
+              </span>
+            ) : frameView.k === "report" ? (
+              <span className="shrink-0 rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
+                your repo
+              </span>
+            ) : null}
           </span>
           {cachedAtOf(frameView) !== undefined && (
             <CachedBadge

@@ -106,9 +106,12 @@ describe("DemoAudit — chips stay instant", () => {
     const user = userEvent.setup();
     render(<DemoAudit />);
     // The chip's accessible name now includes its grade badge ("… A").
-    await user.click(screen.getByRole("button", { name: /oh-my-claudecode/ }));
-    // Baked report frame header updates instantly; fetch never called.
-    await screen.findByText(/vigiles audit oh-my-claudecode/);
+    const chip = screen.getByRole("button", { name: /oh-my-claudecode/ });
+    await user.click(chip);
+    // Baked report renders instantly: the chip is selected, the frame header
+    // marks it an "example" (source tag), and fetch is never called.
+    await waitFor(() => expect(chip.getAttribute("aria-pressed")).toBe("true"));
+    await screen.findByText("example");
     expect(mockFetch).not.toHaveBeenCalled();
     expect(screen.queryByText(/fetching repo tree/)).toBeNull();
   });
@@ -153,8 +156,9 @@ describe("DemoAudit — the in-frame edge states", () => {
       render(<DemoAudit />);
       await typeRepo("acme/widgets");
       await screen.findByText(c.expect);
-      // Same frame — the header still names the repo.
-      expect(screen.getByText(/vigiles audit acme\/widgets/)).toBeTruthy();
+      // Same frame — the repo is still named (the header slug, and usually the
+      // edge-state body too).
+      expect(screen.getAllByText(/acme\/widgets/).length).toBeGreaterThan(0);
     });
   }
 });
