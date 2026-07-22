@@ -93,6 +93,24 @@ test("vigiles plugin: every hook command's ${CLAUDE_PLUGIN_ROOT} script exists",
   }
 });
 
+test("vigiles marketplace.json declares owner (Claude Code v2.1.x requires it)", () => {
+  // Regression for #108: CC >= v2.1.x's marketplace schema requires a top-level
+  // `owner` object ({ name, url? }). Without it `claude plugin marketplace add
+  // zernie/vigiles` throws "owner: expected object, received undefined" and the
+  // whole plugin install (skills + hooks) fails for anyone on a recent CC — so
+  // `init`'s plugin step silently never completes. Our own inspectMarketplace is
+  // lax about it, so this is the guard that keeps the shipped manifest installable.
+  const market = JSON.parse(
+    readFileSync(join(ROOT, ".claude-plugin/marketplace.json"), "utf-8"),
+  ) as { owner?: { name?: unknown } };
+  assert.ok(
+    market.owner &&
+      typeof market.owner.name === "string" &&
+      market.owner.name.length > 0,
+    "marketplace.json must declare owner.name (required by Claude Code v2.1.x)",
+  );
+});
+
 test("vigiles plugin: every skill has a name and a non-empty description", () => {
   // The description is what the model triggers on — an empty one is a skill that
   // can never fire. This is the cheap floor under the (paid) trigger-rate eval.
