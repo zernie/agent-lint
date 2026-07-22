@@ -30,13 +30,16 @@ const QA: { q: string; a: ReactNode }[] = [
     ),
   },
   {
-    q: "Does anything leave my machine?",
+    q: "Can I grade a private repo?",
     a: (
       <>
-        No. <span className="font-mono">audit</span> and{" "}
-        <span className="font-mono">lint</span> read your local repo — no
-        upload, no account, no server. The demo above only calls GitHub&apos;s
-        public API to read a public repo you name.
+        Yes — run <span className="font-mono">npx vigiles audit</span> in it
+        locally. It reads your working copy off disk, so private repos work with{" "}
+        <span className="text-foreground">
+          no upload, no account, no server
+        </span>{" "}
+        — nothing leaves your machine. Only the browser demo above is
+        public-only (it calls GitHub&apos;s API to read a repo you name).
       </>
     ),
   },
