@@ -18,13 +18,22 @@
 **`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
 via `pages.yml` on push to main. Demo UX + real-F default MERGED (PRs #100–#106).
 
-**Branch `claude/click-not-working-s9apfb`: 21 UNMERGED commits (pushed, NO PR yet).** Restart from `main`
+**Branch `claude/click-not-working-s9apfb`: 26 UNMERGED commits (pushed, NO PR yet).** Restart from `main`
 if needed (`git fetch origin main && git checkout -B claude/click-not-working-s9apfb origin/main`). What's on it:
 earlier — percent-encoded-link false-positive fix (real bug, 92→100), blurred "preview" trigger-rate tease
-(`LockedRow`), adoption docs. **Latest adoption batch (all SHIPPED + pushed):** VerbMap red→green examples · OG card
-(4b‑b1) · 4a share deep-link · **1b** (dismissible nudge, `.vigilesrc.json` `"nudge":"dismissed"`) · **2b** (full audit
-HTML softens rules wording when no linter) · **3** (leaderboard mode-header + drill-in + "all-clean → model tier" note)
-· **`init --ci-only`** (the non-interactive gate-only opt-in — full stays default, no flip) · value-framed adoption nudge.
+(`LockedRow`), adoption docs. **Adoption batch (all SHIPPED):** VerbMap red→green · OG card (4b‑b1) · 4a share
+deep-link · **1b** (dismissible nudge `"nudge":"dismissed"`) · **2b** (full-HTML rules honesty) · **3** (leaderboard
+mode-header/drill-in/model-tier note) · value-framed adoption nudge.
+**`--ci-only` SHIPPED + made DISCOVERABLE** (renamed from `--gate` on founder's call — "gate" = jargon): the
+non-interactive gate-only opt-in (full stays default, no flip) + surfaced in help/summary/README/agent-prompt/internal-doc.
+**RULE strengthened:** `cohesive-feature-delivery` gained (8) DISCOVERY/FRONT-DOORS + (9) OUTPUT-PARITY — a capability
+isn't done until findable across every entry point (CLI/README/site/prompt/internal-doc) and rendered consistently
+(audit HTML + site demo share `@vigiles/report-view`; the CLI terminal is the drift seam). Also clarified "plugin" =
+the Claude Code plugin (skills+hooks), and fixed a stale keyFiles ref (api-docs.yml → pages.yml).
+**#108 FIXED** (marketplace.json `owner` — CC v2.1.x install was broken for everyone; + a regression guard).
+**Roadmap updated** with Vlad's dogfood issues #107–#113 + the blind-agent onboarding-dogfood idea.
+**4 DOGFOOD AGENTS RUNNING (Sonnet)** — finding MORE issues the source-traced way across compile/eject · audit/lint FPs ·
+init edge cases · config/CLI/test-eval. Synthesize + verify their findings on return, then fix/file the strong ones.
 This session (2026-07-22 cont.):
 
 - **Adoption docs DONE + signed off** — `research/adoption-goals.md` (G1–G5 + non-evil contract), `adoption-design.md`
@@ -61,18 +70,23 @@ against the skill (READ it before touching `site/`); screenshot desktop AND full
 
 ### 🎯 DO NEXT
 
-1. **Open the PR** for the 21 commits — founder hasn't given final go; the false-positive fix is a real bug worth
-   shipping. (Founder deprioritized item 6 GHA PR-comment grade — GHA is later-adoption AND not even guaranteed after
-   gate-first init.)
-2. **Item 4b b2 (per-grade OG card)** — the ONLY remaining share-loop piece: a card showing `owner/repo · actual grade`.
+0. **Synthesize the 4 dogfood agents' findings** (running now) — verify each is REAL (repro + source trace), then
+   fix the strong ones and/or FILE them as GitHub issues (Vlad's style — the user said "find more issues using this
+   way"). Confirm before mass-filing.
+1. **Fix the remaining dogfood issues** in priority: #107 (compile frontmatter data-loss — `allowed-tools`/YAML-list/
+   `context:fork`/dirty-tree), #110 (detector false-positives), #112 (`"off"` severity → normalizeSeverity), #113
+   (testGlobs docs). #108 already FIXED.
+2. **Open the PR** for the 26 commits — founder hasn't given final go; multiple real bug fixes worth shipping.
+   (Founder deprioritized item 6 GHA PR-comment grade — GHA is later-adoption AND not guaranteed after gate-first init.)
+3. **Item 4b b2 (per-grade OG card)** — the ONLY remaining share-loop piece: a card showing `owner/repo · actual grade`.
    Needs a SERVERLESS OG endpoint (GitHub Pages is static, can't vary `<meta>` by `?repo=`) → bundles with **4c**
    (time-boxed upload, needs backend). b1 (generic card) is SHIPPED (`site/public/og.png` + tags in `site/index.html`).
-3. **Item 5 (one opt-in README badge)** — after the share loop; badge-fatigue data says exactly one.
-4. **STRENGTHEN THE IN-REPORT INVITATION (the real growth lever, per adoption-design.md §1 reasoning).** The terminal
+4. **Item 5 (one opt-in README badge)** — after the share loop; badge-fatigue data says exactly one.
+5. **STRENGTHEN THE IN-REPORT INVITATION (the real growth lever, per adoption-design.md §1 reasoning).** The terminal
    nudge is now value-framed (why a spec), but the HTML report's adoption surface (Adopt/adoptability preview) deserves
    its OWN focused pass with screenshots + a Fable cold-visitor review — "make a skeptic WANT a spec/eval by showing
    what it'd catch". This is where richer-feature adoption is won (gate is opt-in, so the invitation must carry it).
-5. **davila7-F reconciliation** — featured at F but not MIT-vendored/opted-in; prefer the live `?repo=` grade or apply
+6. **davila7-F reconciliation** — featured at F but not MIT-vendored/opted-in; prefer the live `?repo=` grade or apply
    the vendoring policy before the leaderboard hardens.
 
 ### Codex trigger-rate is EXPERIMENTAL
