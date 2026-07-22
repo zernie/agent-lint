@@ -8,22 +8,35 @@ const FULL_FAQ = "https://github.com/zernie/vigiles/blob/main/docs/faq.md";
  *  so we can bold the key phrase without dangerouslySetInnerHTML. */
 const QA: { q: string; a: ReactNode }[] = [
   {
-    q: "Do I have to write TypeScript?",
+    q: "How is this different from a linter?",
     a: (
       <>
-        No — plain markdown works with zero new files, and rules run in your own
-        linter config. The typed spec is opt-in, only for the structural checks
-        a linter can&apos;t do — like TypeScript&apos;s{" "}
-        <span className="font-mono">strict</span>.
+        A linter checks your config is <em>well-formed</em>. vigiles checks
+        it&apos;s <span className="font-semibold text-foreground">true</span> —
+        that every rule, file, and tool your instructions name actually exists
+        and is enabled. Valid and correct are different failures.
       </>
     ),
   },
   {
-    q: "Is it stable enough to adopt?",
+    q: "What do I have to change to adopt it?",
     a: (
       <>
-        The CLI you run is small and rarely changes. The high version number is
-        release automation — a new major per breaking change — not age.
+        Almost nothing. Plain markdown works with zero new files, rules run in
+        your existing linter, and the agent edits the specs for you.{" "}
+        <span className="font-mono">npx vigiles init</span> wires it up; typed
+        specs are opt-in, only for checks a linter can&apos;t express.
+      </>
+    ),
+  },
+  {
+    q: "Does anything leave my machine?",
+    a: (
+      <>
+        No. <span className="font-mono">audit</span> and{" "}
+        <span className="font-mono">lint</span> read your local repo — no
+        upload, no account, no server. The demo above only calls GitHub&apos;s
+        public API to read a public repo you name.
       </>
     ),
   },

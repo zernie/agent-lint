@@ -178,8 +178,28 @@ change, not bolted onto a design pass.
      Fold this into the Fable pass below (Fable is good at holding several POVs at once);
      the `review-docs` skill is the analog for docs. The point is COHESION across the
      whole page + across audiences, caught before shipping — not per-section polish.
-4. **Run a Fable blind pass** for anything nontrivial — fresh skeptical eyes catch
-   crowding and incoherence the author is blind to, and run the multi-persona walk
-   above. **Act on the flagged cuts** — a Fable P0/P1 "delete this" is not optional;
-   don't just note it and move on.
+4. **Run a Fable blind pass as a COLD VISITOR** for anything nontrivial — the single
+   most important reviewer is **a Claude Code / Codex user who has NEVER heard of
+   vigiles** and landed here from a link. Give Fable the desktop + 390px screenshots
+   and this exact protocol (don't just say "review it"):
+   - **Walk top → bottom, section by section.** At each one note three things: (a) what
+     it actually communicates in one line, (b) anything **weird, inconsistent, broken,
+     cramped, low-contrast, or that looks like a render bug** (a full green bar above a
+     scary sentence; a blurred element that reads as failed-to-load; a `—` next to a
+     filled bar; a wrapped/misaligned rail; "1 hooks"), (c) **the question that pops
+     into their head** right there ("copy what? paste where?", "which plugins?", "why
+     92 with no visible issue?", "does this upload my repo?").
+   - **TRY the interactions, don't just look at them** — type a repo, tap the chips,
+     expand the verb rows, click every copy/share button, resize to a phone. A control
+     that's unclear, does nothing visible, or copies something unexplained is a defect.
+   - **Two verdicts, each with the SPECIFIC blocker if "no":** (1) _Would I actually
+     TRY it_ — run `npx vigiles audit` / `init`? (2) _Would I SHARE it_ — send the link
+     to a teammate? Sharing is a growth lever, so a result surface that doesn't make
+     sharing feel worth it is a miss to fix, not a nit (see the shareability goal — the
+     `ShareRow` should NUDGE the share, not just offer a quiet button).
+   - **Ranked output, most-damaging-first, each with the concrete fix.** A credibility
+     bug (the demo looks staged/broken exactly where it must feel real) outranks polish.
+     **Act on the flagged cuts** — a Fable P0/P1 "delete/fix this" is not optional; don't
+     just note it and move on. Fold the five-persona walk (step 3) into the same pass —
+     Fable holds several POVs at once — but the cold first-time visitor is the primary lens.
 5. Verify build + Prettier clean; deterministic deploy via `pages.yml` on push to main.

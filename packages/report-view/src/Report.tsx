@@ -90,6 +90,21 @@ function CheckLink({
   );
 }
 
+/** A single revealed finding, rendered as plain prose. The scorer's stable
+ *  "(advisory)" suffix is stripped for display and signalled separately. We do NOT
+ *  try to reverse-map the prose back to an explainer slug — a finding carries no
+ *  detector in the wire shape, and pattern-matching sentences to guess one is
+ *  fragile; the explainer links live on the fix cards, which carry a real detector. */
+function FindingText({ text, advisory }: { text: string; advisory: boolean }) {
+  const clean = text.replace(/\s*\(advisory\)\s*$/, "");
+  return (
+    <span>
+      <span>{clean}</span>
+      {advisory && <span className="text-na"> · advisory, not graded</span>}
+    </span>
+  );
+}
+
 /** The last path segment — the audited dir reads as a plugin name, not a path. */
 function basename(dir: string): string {
   const parts = dir.replace(/[/\\]+$/, "").split(/[/\\]/);
@@ -300,25 +315,44 @@ function CategoryCell({ c }: { c: CategoryScore }) {
   );
 }
 
-/** A borderless category row (summary variant) — label + score + a findings COUNT +
- * a thin band bar. Type and space, not a bordered box, so the five read as one clean
- * strip; full-width at 390px (grid-cols-1) fixes the mobile 2-up cramping. */
-function CategoryRow({ c }: { c: CategoryScore }) {
+/** A category row (summary variant) — label, score, a thin band bar, AND the actual
+ * finding text REVEALED beneath it (not a bare "· N" count that tells the reader
+ * nothing). This is the fix for "92 but no errors visible": every category that
+ * isn't a clean 100 shows WHY, in context, linked to its explainer. Graded findings
+ * lead (they cost points); advisory ones follow, muted; the extras fold. */
+function CategoryRow({
+  c,
+  refs,
+}: {
+  c: CategoryScore;
+  refs?: readonly string[];
+}) {
   const b: Band = c.advisory ? "na" : band(c.score);
   const pct = c.score === null ? 0 : Math.max(0, Math.min(100, c.score));
+  // A finding is advisory if the whole category is (untested surfaces) or the
+  // scorer tagged that single string "(advisory)" (an inherits-all note in an
+  // otherwise-100 category). Graded findings — the ones that moved the score — lead.
+  const findings = c.findings.map((f) => ({
+    text: f,
+    advisory: Boolean(c.advisory) || f.endsWith("(advisory)"),
+  }));
+  const ordered = [
+    ...findings.filter((f) => !f.advisory),
+    ...findings.filter((f) => f.advisory),
+  ];
+  const [lead, ...rest] = ordered;
+  const hardSafety = c.key === "Safety" && lead && !lead.advisory;
+  // Advisory categories DO have a real score (e.g. Tested 94) — it just doesn't
+  // move the grade. Show that number (muted, `na` tone) so the number and the bar
+  // AGREE; the "advisory, not graded" tag in the finding line says it doesn't count.
+  // (A "—" beside a 94%-filled bar reads as a rendering bug.)
+  const scoreLabel = c.score === null ? "n/a" : String(c.score);
   return (
-    <div>
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-xs font-medium text-muted-foreground">
-          {c.key}
-        </span>
+    <div className="py-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-sm font-medium">{c.key}</span>
         <span className={cn("font-mono text-sm font-bold", TEXT[b])}>
-          {c.advisory ? "—" : c.score === null ? "n/a" : c.score}
-          {!c.advisory && c.findings.length > 0 && (
-            <span className="ml-1.5 font-sans text-[11px] font-medium text-muted-foreground">
-              · {c.findings.length}
-            </span>
-          )}
+          {scoreLabel}
         </span>
       </div>
       <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-border">
@@ -327,90 +361,146 @@ function CategoryRow({ c }: { c: CategoryScore }) {
           style={{ width: `${pct}%` }}
         />
       </div>
+      <div className="mt-2 text-[13px] leading-snug text-muted-foreground">
+        {!lead ? (
+          <span className="inline-flex items-center gap-1 text-good">
+            <CheckCircle2 size={12} /> clean
+          </span>
+        ) : (
+          <>
+            {hardSafety && (
+              <ShieldAlert
+                size={12}
+                className={cn("mr-1 inline align-[-2px]", TEXT.bad)}
+                aria-hidden
+              />
+            )}
+            <FindingText text={lead.text} advisory={lead.advisory} />
+            {/* The CONCRETE paths behind a "N broken reference(s)" count — so the
+                report shows WHAT is broken, not just how many. */}
+            {refs && refs.length > 0 && (
+              <ul className="mt-1 space-y-0.5">
+                {refs.map((r) => (
+                  <li key={r} className="font-mono text-[11px] text-na">
+                    ↳ {r}{" "}
+                    <span className="text-muted-foreground">— missing</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {rest.length > 0 && (
+              <details className="group mt-1">
+                <summary className="flex cursor-pointer list-none items-center gap-1 text-[11px] font-medium text-muted-foreground/80 hover:text-foreground">
+                  <ChevronRight
+                    size={11}
+                    className="transition-transform group-open:rotate-90"
+                  />
+                  + {rest.length} more
+                </summary>
+                <ul className="mt-1 space-y-1 border-l border-border/50 pl-3">
+                  {rest.map((f, i) => (
+                    <li key={i}>
+                      <FindingText text={f.text} advisory={f.advisory} />
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
 
-/** The locked model-gated tease (summary variant): the deterministic rings show real
- * numbers; the ONE thing a browser can't do — measure whether skills actually fire —
- * is present but veiled, with a click-to-copy "run locally to unlock" prompt. Blurred
- * numbers are `··` placeholders, never fabricated digits. Replaces the AGradeNote +
- * the lock-row box (net fewer elements) while adding the curiosity gap. */
-function LockedTease({ onUnlock }: { onUnlock?: () => void }) {
+/** The model-gated row — FOLDED IN as the sixth line under the deterministic five,
+ * not a bolt-on card. The five categories are things a browser can measure; this is
+ * the one thing it can't (does a skill actually FIRE?), so it sits in the same strip,
+ * veiled, with an EXPLICIT "Copy prompt →" button that says exactly what it copies
+ * and where to paste it. The recall/precision numbers are honest em-dash
+ * placeholders (not a blur that reads as a render failure) — you fill them by
+ * running it locally. */
+function LockedRow({ onUnlock }: { onUnlock?: () => void }) {
   const [copied, setCopied] = useState(false);
   const unlock = (): void => {
     onUnlock?.();
     void navigator.clipboard?.writeText(TRIGGER_RATE_PROMPT).then(
       () => {
         setCopied(true);
-        setTimeout(() => setCopied(false), 1800);
+        setTimeout(() => setCopied(false), 2200);
       },
       () => undefined,
     );
   };
-  // Blurred stand-in rows — decorative (aria-hidden), sized to read as REAL per-skill
-  // trigger data behind the veil so the reader wants the actual numbers.
-  const ghostRows = [
-    { w: "w-1/3", bar: "w-[92%]" },
-    { w: "w-1/2", bar: "w-[46%]" },
-    { w: "w-2/5", bar: "w-[78%]" },
-  ];
   return (
-    <div className="relative overflow-hidden rounded-xl border border-border/50">
-      <div className="select-none px-5 py-4 opacity-50 blur-[3px]" aria-hidden>
-        <div className="flex items-baseline justify-between">
-          <span className="text-xs font-medium text-muted-foreground">
-            Trigger rate — per skill
-          </span>
-          <span className={cn("font-mono text-sm font-bold", TEXT.good)}>
-            ·· % recall · ·· % precision
-          </span>
+    <div className="rounded-xl border border-dashed border-border/70 bg-card/20 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 text-sm font-medium">
+            <Lock
+              size={13}
+              className="shrink-0 text-muted-foreground"
+              aria-hidden
+            />
+            Do your skills actually fire?
+          </div>
+          <p className="mt-1 text-[13px] leading-snug text-muted-foreground">
+            The five above are deterministic — a browser can measure them. This
+            one needs a real model: recall (does a skill fire when it should?)
+            and precision (does it stay quiet on unrelated prompts?).
+          </p>
+          {/* Honest placeholders — the shape of the result you'd get, not a blur. */}
+          <div className="mt-2 flex items-center gap-2 font-mono text-xs text-muted-foreground">
+            <span>
+              recall <span className="font-bold text-foreground">—</span>
+            </span>
+            <span>·</span>
+            <span>
+              precision <span className="font-bold text-foreground">—</span>
+            </span>
+            <span className="not-italic text-muted-foreground/70">
+              (run to fill)
+            </span>
+          </div>
         </div>
-        <div className="mt-3 space-y-2.5">
-          {ghostRows.map((r, i) => (
-            <div key={i} className="flex items-center gap-3">
-              <span className={cn("h-2 rounded bg-muted-foreground/50", r.w)} />
-              <span className="h-1 flex-1 rounded-full bg-border">
-                <span
-                  className={cn("block h-full rounded-full", BG.good, r.bar)}
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <button
+            type="button"
+            onClick={unlock}
+            title={TRIGGER_RATE_PROMPT}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-semibold transition-colors hover:border-foreground"
+          >
+            {copied ? (
+              <>
+                <Check
+                  size={13}
+                  aria-hidden
+                  className={cn("shrink-0", TEXT.good)}
                 />
-              </span>
-            </div>
-          ))}
+                <span className={TEXT.good}>
+                  Copied — paste into Claude Code
+                </span>
+              </>
+            ) : (
+              <>
+                <Copy
+                  size={13}
+                  aria-hidden
+                  className="shrink-0 text-muted-foreground"
+                />
+                Copy prompt →
+              </>
+            )}
+          </button>
+          <span className="text-[11px] text-muted-foreground/70">
+            copies a prompt for Claude Code
+          </span>
         </div>
       </div>
-      <button
-        type="button"
-        onClick={unlock}
-        title={TRIGGER_RATE_PROMPT}
-        className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-background/50 px-5 text-center"
-      >
-        {copied ? (
-          <span
-            className={cn(
-              "flex items-center gap-2 text-xs font-medium",
-              TEXT.good,
-            )}
-          >
-            {/* Claude Code only: trigger-rate runs measureTriggerRate on your
-                Claude subscription; Codex's trigger-rate path is experimental
-                (infers firing from SKILL.md reads), so this CTA doesn't claim it. */}
-            <Check size={13} aria-hidden className="shrink-0" />
-            Prompt copied — paste into Claude Code
-          </span>
-        ) : (
-          <>
-            <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <Lock size={13} aria-hidden className="shrink-0" />
-              Which of your skills actually fire?
-            </span>
-            <span className="text-xs text-muted-foreground">
-              Measure recall + precision on a real model — free on your Claude
-              subscription. Copy the prompt to run it locally.
-            </span>
-          </>
-        )}
-      </button>
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        Runs on your Claude subscription — no API key, nothing leaves your
+        machine.
+      </p>
     </div>
   );
 }
@@ -538,6 +628,7 @@ export function Report({
     observations,
     rulesInventory,
     ruleRouting,
+    brokenReferences,
   } = data;
   const overall = score.empty ? null : score.overall;
 
@@ -555,19 +646,19 @@ export function Report({
     .map((r, i) => ({ r, points: pointsFor(i) }))
     .sort((a, b) => b.points - a.points);
 
-  const safetyFindings = safetyReviewFindings(score.categories);
-
   if (variant === "summary") {
-    // NOTE: LockedTease is the SOLE clipboard copier (it writes TRIGGER_RATE_PROMPT).
+    // NOTE: LockedRow is the SOLE clipboard copier (it writes TRIGGER_RATE_PROMPT).
     // Do NOT give onUnlock a default that also writes AUDIT_PROMPT — two independent
     // clipboard writes race, and if the audit write resolves last the locked
     // trigger-rate CTA pastes a prompt that won't measure recall/precision. onUnlock
     // is a pure side-channel hook (tracking); undefined = no-op.
+    const count = (n: number, singular: string): string | 0 =>
+      n && `${n} ${singular}${n === 1 ? "" : "s"}`;
     const ships = [
-      inventory.skills && `${inventory.skills} skills`,
-      inventory.agents && `${inventory.agents} agents`,
-      inventory.hooks && `${inventory.hooks} hooks`,
-      inventory.commands && `${inventory.commands} commands`,
+      count(inventory.skills, "skill"),
+      count(inventory.agents, "agent"),
+      count(inventory.hooks, "hook"),
+      count(inventory.commands, "command"),
     ].filter(Boolean) as string[];
     const top = rankedFixes.slice(0, 3);
     const rest = rankedFixes.slice(3);
@@ -594,22 +685,31 @@ export function Report({
           }
         />
 
-        <h2 className={SECTION_H}>Categories</h2>
-        <div className="grid grid-cols-1 gap-x-10 gap-y-5 sm:grid-cols-2 lg:grid-cols-5">
+        <h2 className={SECTION_H}>Categories — and what&apos;s flagged</h2>
+        <div className="divide-y divide-border/40">
           {score.categories.map((c) => (
-            <CategoryRow key={c.key} c={c} />
+            <CategoryRow
+              key={c.key}
+              c={c}
+              refs={c.key === "Truthfulness" ? brokenReferences : undefined}
+            />
           ))}
         </div>
 
-        <div className="mt-7">
-          <LockedTease onUnlock={onUnlock} />
-        </div>
+        {/* The model-gated sixth line — folded into the SAME strip (its own dashed
+            row, captioned), not a bolt-on card floating below. */}
+        <p className="mb-2.5 mt-6 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">
+          One thing a browser can&apos;t measure
+        </p>
+        <LockedRow onUnlock={onUnlock} />
 
-        <h2 className={SECTION_H}>
-          {recommendations.length > 0 ? "Do these first" : "Fixes"}
-        </h2>
-        {top.length > 0 ? (
+        {/* The fixes section shows ONLY when it has something to say: ranked fixes,
+            or the green all-clear at a real 100. When there are graded findings but
+            no auto-fix (they're already revealed in the categories above), an empty
+            "review the findings above" section is dead weight — so it's omitted. */}
+        {recommendations.length > 0 ? (
           <>
+            <h2 className={SECTION_H}>Do these first</h2>
             <div className="flex flex-col gap-2.5">
               {top.map(({ r, points }, i) => (
                 <FixCard key={i} r={r} points={points} />
@@ -622,23 +722,12 @@ export function Report({
             </MoreFold>
           </>
         ) : (
-          <FixesEmptyState clean={score.overall === 100} />
-        )}
-
-        {safetyFindings.length > 0 && (
-          <>
-            <h2 className={SECTION_H}>Review — no auto-fix</h2>
-            <div className="flex flex-col gap-2.5">
-              {safetyFindings.slice(0, 2).map((f, i) => (
-                <SafetyCard key={i} finding={f} />
-              ))}
-            </div>
-            <MoreFold n={safetyFindings.length - 2}>
-              {safetyFindings.slice(2).map((f, i) => (
-                <SafetyCard key={i} finding={f} />
-              ))}
-            </MoreFold>
-          </>
+          score.overall === 100 && (
+            <>
+              <h2 className={SECTION_H}>Fixes</h2>
+              <FixesEmptyState clean />
+            </>
+          )
         )}
       </div>
     );

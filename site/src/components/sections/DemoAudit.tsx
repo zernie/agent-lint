@@ -5,9 +5,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Check, Copy, RotateCw, Link2 } from "lucide-react";
+import { Check, Copy, RotateCw, Link2, Star } from "lucide-react";
 import { Report, type AuditReport } from "@vigiles/report-view";
 import { normalizeSlug } from "@/lib/deeplink";
+import { fetchStars, formatStars } from "@/demo/searchRepos";
 import { RepoCombobox } from "./RepoCombobox";
 import { track } from "@/lib/track";
 import {
@@ -28,7 +29,15 @@ import superpowers from "@/demo/reports/superpowers.json";
 import wshobson from "@/demo/reports/wshobson-accessibility.json";
 import madappgang from "@/demo/reports/madappgang-frontend.json";
 
-type Featured = { slug: string; label: string; report: AuditReport };
+type Featured = {
+  slug: string;
+  label: string;
+  report: AuditReport;
+  /** The real fetchable `owner/repo` for the LIVE star count, when it differs from
+   *  the display slug (a plugin nested in a repo, or a bare-name display). Omitted
+   *  when the slug already IS the repo (superpowers, wshobson/agents). */
+  repo?: string;
+};
 
 // madappgang first — the one with a real finding + fix (a B "one fix from an A"),
 // the sharpest demonstration. The rest are clean A's (real plugins usually are).
@@ -37,11 +46,13 @@ const FEATURED: Featured[] = [
     slug: "madappgang/frontend",
     label: "madappgang/frontend",
     report: madappgang as unknown as AuditReport,
+    repo: "MadAppGang/claude-code",
   },
   {
     slug: "oh-my-claudecode",
     label: "oh-my-claudecode",
     report: ohMy as unknown as AuditReport,
+    repo: "Yeachan-Heo/oh-my-claudecode",
   },
   {
     slug: "obra/superpowers",
@@ -54,6 +65,16 @@ const FEATURED: Featured[] = [
     report: wshobson as unknown as AuditReport,
   },
 ];
+
+/** The `owner/repo` to fetch a featured chip's star count from. */
+function starRepo(f: Featured): string {
+  return f.repo ?? f.slug;
+}
+
+// Live star counts, fetched once per session and shared across remounts — the chip
+// is a mini-leaderboard, so real popularity sits beside the real grade. Module-level
+// so navigating away and back doesn't re-spend the anonymous API budget.
+const starMemo = new Map<string, number>();
 
 const AUDIT_CMD = "npx vigiles audit";
 
@@ -185,7 +206,11 @@ function EdgeState({ view }: { view: TerminalView }) {
           or any harness that lives in a repo, grade it where it lives:{" "}
           <InlineCommand />
         </p>
-        <p className="mt-3">Or try one of the featured plugins above.</p>
+        <p className="mt-3">
+          Or tap a graded example above — like{" "}
+          <span className="font-mono text-foreground">obra/superpowers</span> or{" "}
+          <span className="font-mono text-foreground">oh-my-claudecode</span>.
+        </p>
       </>
     );
   } else if (view.k === "marketplace") {
@@ -202,7 +227,11 @@ function EdgeState({ view }: { view: TerminalView }) {
           The CLI expands a marketplace and ranks every member into a
           leaderboard: <InlineCommand />
         </p>
-        <p className="mt-3">Or try one of the featured plugins above.</p>
+        <p className="mt-3">
+          Or tap a graded example above — like{" "}
+          <span className="font-mono text-foreground">obra/superpowers</span> or{" "}
+          <span className="font-mono text-foreground">oh-my-claudecode</span>.
+        </p>
       </>
     );
   } else if (view.k === "notfound") {
@@ -267,6 +296,15 @@ export function DemoAudit({
 } = {}) {
   const [view, setView] = useState<View>({ k: "featured", i: 0 });
   const [loadingVisible, setLoadingVisible] = useState(false);
+  // Live star counts per featured slug (from the module memo, filled on mount).
+  const [stars, setStars] = useState<Record<string, number>>(() =>
+    Object.fromEntries(
+      FEATURED.filter((f) => starMemo.has(starRepo(f))).map((f) => [
+        f.slug,
+        starMemo.get(starRepo(f)) as number,
+      ]),
+    ),
+  );
 
   // L1 — session cache: a repo audited once re-shows instantly (no re-fetch). Holds
   // all stable outcomes; `gradedAt` lets even a memory hit show honest age. The
@@ -392,6 +430,22 @@ export function DemoAudit({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Live star counts for the featured chips — one cheap request per chip, once per
+  // session (module memo), degraded-safe (a failure just leaves the chip star-less).
+  useEffect(() => {
+    const ac = new AbortController();
+    for (const f of FEATURED) {
+      const repo = starRepo(f);
+      if (starMemo.has(repo)) continue;
+      void fetchStars(repo, ac.signal).then((n) => {
+        if (n === null || ac.signal.aborted) return;
+        starMemo.set(repo, n);
+        setStars((prev) => ({ ...prev, [f.slug]: n }));
+      });
+    }
+    return () => ac.abort();
+  }, []);
+
   const pickChip = (i: number): void => {
     // Instant baked report — no loading, leaves input text in place.
     ++runId.current;
@@ -455,6 +509,7 @@ export function DemoAudit({
         {FEATURED.map((f, i) => {
           const active = frameView.k === "featured" && frameView.i === i;
           const grade = f.report.score.grade;
+          const starCount = stars[f.slug];
           return (
             <button
               key={f.slug}
@@ -469,6 +524,17 @@ export function DemoAudit({
               )}
             >
               {f.label}
+              {/* Live GitHub stars — social proof beside the grade. Appears only
+                  once fetched (degraded-safe), so the chip never shows a fake 0. */}
+              {starCount !== undefined && (
+                <span
+                  className="inline-flex items-center gap-1 text-muted-foreground"
+                  aria-label={`${String(starCount)} GitHub stars`}
+                >
+                  <Star className="h-3 w-3" aria-hidden />
+                  {formatStars(starCount)}
+                </span>
+              )}
               <span
                 className={cn("font-bold", gradeTone(grade))}
                 aria-label={`grade ${grade}`}
@@ -648,20 +714,28 @@ function ShareRow({ slug }: { slug: string }) {
     }
   };
   return (
-    <div className="mt-5 flex items-center justify-center">
+    <div className="mt-6 flex flex-col items-center gap-2.5 text-center">
+      <p className="text-sm text-muted-foreground">
+        Surprised by this grade?{" "}
+        <span className="text-foreground">
+          Send it to whoever owns the repo
+        </span>{" "}
+        — the link re-runs the audit live when they open it.
+      </p>
       <button
         type="button"
         onClick={share}
-        className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 text-sm text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground"
+        className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/5 px-5 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/70 hover:bg-accent/10"
       >
         {copied ? (
           <>
-            <Check className="h-3.5 w-3.5 text-good" aria-hidden />
-            <span className="text-good">Link copied — share the grade</span>
+            <Check className="h-4 w-4 text-good" aria-hidden />
+            <span className="text-good">Link copied — now share it</span>
           </>
         ) : (
           <>
-            <Link2 className="h-3.5 w-3.5" aria-hidden /> Share this grade
+            <Link2 className="h-4 w-4 text-accent" aria-hidden /> Share this
+            grade
           </>
         )}
       </button>

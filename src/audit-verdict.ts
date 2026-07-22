@@ -323,15 +323,30 @@ function buildSentence(
   if (score.empty) {
     return "No loadable harness surface — nothing to grade yet.";
   }
-  // Already an A: nothing is blocking the grade.
+  // Already an A: nothing is BLOCKING the grade — but "A" is not "flawless". Only
+  // claim "clean" at a real 100 (zero graded deductions); when graded findings
+  // pulled the score below 100, name them so the verdict never contradicts a
+  // finding the report shows (the superpowers "92 but structurally clean" bug).
   if (pointsToNextGrade === null) {
-    if (recommendations.length === 0) {
-      return "A — nothing blocking; the harness is structurally clean.";
+    if (score.overall === 100) {
+      return "A — clean. Nothing blocking, nothing flagged.";
     }
-    const n = recommendations.length;
-    return `A — nothing blocking the grade; ${numberWord(n)} deterministic ${fixNoun(
-      n,
-    )} would harden it further.`;
+    if (recommendations.length > 0) {
+      const n = recommendations.length;
+      return `A — nothing blocks the grade; ${numberWord(n)} deterministic ${fixNoun(
+        n,
+      )} would harden it further.`;
+    }
+    // Graded findings, but no auto-fix maps to them — name the dominant one so an
+    // A never reads as flawless while the report shows a real finding.
+    const dom = dominantDeduction(report);
+    if (dom !== null) {
+      return `A — nothing blocks the grade, but ${String(dom.n)} ${pluralizeLabel(
+        dom.n,
+        dom.label,
+      )} ${dom.n === 1 ? "is" : "are"} flagged — worth fixing.`;
+    }
+    return "A — nothing blocks the grade.";
   }
   // The next band's grade is gradeFor(its FLOOR); the floor is base + the gap.
   const nextGrade = gradeFor(score.overall + pointsToNextGrade);

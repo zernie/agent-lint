@@ -181,6 +181,32 @@ export function rankRepos(
   return scored.slice(0, limit).map((s) => s.r);
 }
 
+/**
+ * Fetch ONE repo's star count (`owner/repo`) — the featured chips' live social
+ * proof. One cheap `/repos/{owner}/{repo}` call per chip, cached by the caller.
+ * DEGRADED-SAFE: any failure (rate-limit, offline, 404, the api.github.com block in
+ * a sandboxed preview) returns null and the chip simply shows no star count — the
+ * grade + tap-to-grade path never depend on it.
+ */
+export async function fetchStars(
+  fullName: string,
+  signal?: AbortSignal,
+): Promise<number | null> {
+  try {
+    const res = await fetch(`${API}/repos/${fullName}`, {
+      signal,
+      headers: { Accept: "application/vnd.github+json" },
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { stargazers_count?: number };
+    return typeof body.stargazers_count === "number"
+      ? body.stargazers_count
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Compact star count for a chip — `1234` → `1.2k`, `999` stays `999`. */
 export function formatStars(n: number): string {
   if (n < 1000) return String(n);
