@@ -18,10 +18,14 @@
 **`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
 via `pages.yml` on push to main. Demo UX + real-F default MERGED (PRs #100–#106).
 
-**Branch `claude/click-not-working-s9apfb`: 14 UNMERGED commits (pushed, NO PR yet).** Restart from `main`
+**Branch `claude/click-not-working-s9apfb`: 21 UNMERGED commits (pushed, NO PR yet).** Restart from `main`
 if needed (`git fetch origin main && git checkout -B claude/click-not-working-s9apfb origin/main`). What's on it:
 earlier — percent-encoded-link false-positive fix (real bug, 92→100), blurred "preview" trigger-rate tease
-(`LockedRow`), adoption docs. This session (2026-07-22 cont.):
+(`LockedRow`), adoption docs. **Latest adoption batch (all SHIPPED + pushed):** VerbMap red→green examples · OG card
+(4b‑b1) · 4a share deep-link · **1b** (dismissible nudge, `.vigilesrc.json` `"nudge":"dismissed"`) · **2b** (full audit
+HTML softens rules wording when no linter) · **3** (leaderboard mode-header + drill-in + "all-clean → model tier" note)
+· **`init --gate`** (the non-interactive gate-only opt-in — full stays default, no flip) · value-framed adoption nudge.
+This session (2026-07-22 cont.):
 
 - **Adoption docs DONE + signed off** — `research/adoption-goals.md` (G1–G5 + non-evil contract), `adoption-design.md`
   (6 build items + reputation-safe grading checklist), `adoption-personas.md`, `cli-command-model.md`; the
@@ -57,19 +61,19 @@ against the skill (READ it before touching `site/`); screenshot desktop AND full
 
 ### 🎯 DO NEXT
 
-1. **Item 4b b1 (generic OG card) — SHIPPED** — `site/public/og.png` (branded 1200×630 grade card) +
-   absolute-URL `og:image`/`twitter:summary_large_image` in `site/index.html`, so vigiles.sh + the 4a `?repo=` link
-   preview as a card, not a bare link. adoption-design.md 4b wording CORRECTED (an OG card needs a crawlable hosted
-   URL — not the local `file://` report). REMAINING: **b2** = the PER-GRADE card (`owner/repo · actual grade`), which
-   needs a SERVERLESS OG endpoint (GitHub Pages is static, can't vary `<meta>` by `?repo=`) → bundles with 4c.
-2. **Open the PR** for the 17 commits — founder hasn't given final go; the false-positive fix is a real bug worth
+1. **Open the PR** for the 21 commits — founder hasn't given final go; the false-positive fix is a real bug worth
    shipping. (Founder deprioritized item 6 GHA PR-comment grade — GHA is later-adoption AND not even guaranteed after
    gate-first init.)
-3. **Remaining adoption items** (order per `adoption-design.md`): item 3 (non-interactive `audit` writes
-   `vigiles-report.html` + prints path; leaderboard worst-finding + per-plugin link); 4c (time-boxed upload, needs
-   backend); item 5 (one opt-in README badge). Item 2b full-variant half (soften rule-enforcement wording in the REAL
-   audit HTML when no linter detected) is a small follow-on.
-4. **Non-interactive gate-only `init`** — the deferred founder call (`--gate` flag vs default-flip).
+2. **Item 4b b2 (per-grade OG card)** — the ONLY remaining share-loop piece: a card showing `owner/repo · actual grade`.
+   Needs a SERVERLESS OG endpoint (GitHub Pages is static, can't vary `<meta>` by `?repo=`) → bundles with **4c**
+   (time-boxed upload, needs backend). b1 (generic card) is SHIPPED (`site/public/og.png` + tags in `site/index.html`).
+3. **Item 5 (one opt-in README badge)** — after the share loop; badge-fatigue data says exactly one.
+4. **STRENGTHEN THE IN-REPORT INVITATION (the real growth lever, per adoption-design.md §1 reasoning).** The terminal
+   nudge is now value-framed (why a spec), but the HTML report's adoption surface (Adopt/adoptability preview) deserves
+   its OWN focused pass with screenshots + a Fable cold-visitor review — "make a skeptic WANT a spec/eval by showing
+   what it'd catch". This is where richer-feature adoption is won (gate is opt-in, so the invitation must carry it).
+5. **davila7-F reconciliation** — featured at F but not MIT-vendored/opted-in; prefer the live `?repo=` grade or apply
+   the vendoring policy before the leaderboard hardens.
 
 ### Codex trigger-rate is EXPERIMENTAL
 
