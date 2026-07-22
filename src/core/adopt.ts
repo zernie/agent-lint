@@ -343,12 +343,35 @@ const AGENT_KNOWN_KEYS = new Set([
   "disallowed-tools",
 ]);
 
+/**
+ * Top-level `key:` names from a raw frontmatter block (column-0 only, so nested
+ * map entries and `- list` items are ignored). The fallback for a MALFORMED block
+ * where js-yaml gave us no parsed map — without it every key would be silently
+ * dropped from the NOTE (dogfood E3).
+ */
+function rawTopLevelKeys(block: string): string[] {
+  const keys: string[] = [];
+  for (const line of block.split("\n")) {
+    const m = /^([A-Za-z0-9_-]+)\s*:/.exec(line);
+    if (m) keys.push(m[1]);
+  }
+  return [...new Set(keys)];
+}
+
 function unmappedFrontmatterKeys(
   fm: FrontmatterRead,
   known: Set<string>,
 ): string[] {
-  if (!fm.data) return [];
-  return Object.keys(fm.data).filter((k) => !known.has(k));
+  // Valid YAML → the parsed keys.
+  if (fm.data) return Object.keys(fm.data).filter((k) => !known.has(k));
+  // Malformed YAML (data === null but a block is present): the parsed map is
+  // empty, so EVERY unmapped key would otherwise vanish silently from the NOTE
+  // (dogfood E3). Recover the top-level key names from the raw block so the user
+  // is told which frontmatter didn't survive adoption.
+  if (fm.block !== null) {
+    return rawTopLevelKeys(fm.block).filter((k) => !known.has(k));
+  }
+  return [];
 }
 
 /** A `// NOTE:` banner naming any frontmatter keys we couldn't represent. */

@@ -93,6 +93,24 @@ Body.
     expect(r.source).toContain("license");
   });
 
+  it("still reports unmapped keys when the frontmatter YAML is MALFORMED (dogfood E3)", () => {
+    // An unquoted `: ` in a value makes the block invalid YAML, so js-yaml gives
+    // no parsed map — the custom key would otherwise vanish silently. The raw
+    // key-scan fallback must still surface it in the NOTE.
+    const md = `---
+name: x
+description: breaks yaml: an unquoted colon
+custom-key: keep me
+---
+
+Body.
+`;
+    const r = adoptSkill(md, "x");
+    expect(r.unmappedKeys).toContain("custom-key");
+    expect(r.source).toContain("NOTE:");
+    expect(r.source).toContain("custom-key");
+  });
+
   it("uses the directory name when frontmatter has no name", () => {
     const spec = adoptSkill("Just a body, no frontmatter.\n", "from-dir")
       .spec as SkillSpec;
