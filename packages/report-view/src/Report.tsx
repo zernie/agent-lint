@@ -117,6 +117,29 @@ function safetyReviewFindings(
   return safety.findings.filter((f) => !f.endsWith("(advisory)"));
 }
 
+/**
+ * The fixes-section empty state (shown when there are no auto-fix recommendations).
+ * A GREEN "structure is clean" all-clear is ONLY honest when the report is TRULY
+ * clean — `overall === 100`, i.e. zero graded deductions. Many graded detectors are
+ * intentionally NOT turned into recommendations (invalid model/color, disallowedTools
+ * typo, MCP-config failure, skill-resource ref, a hard lethal-trifecta), so
+ * "no recommendations" does NOT mean "clean": those findings lower the score and show
+ * in the rings/verdict (and, for safety, the review cards below). In that case show
+ * NEUTRAL "no auto-fix" wording instead of a green all-clear.
+ */
+function FixesEmptyState({ clean }: { clean: boolean }) {
+  return clean ? (
+    <Card className="flex items-center gap-2 p-4 text-sm text-good">
+      <CheckCircle2 size={16} /> No deterministic fixes — the structure is
+      clean.
+    </Card>
+  ) : (
+    <Card className="p-4 text-sm text-muted-foreground">
+      No deterministic auto-fixes — review the flagged findings above.
+    </Card>
+  );
+}
+
 /** Impact band for a fix: bigger score gain ⇒ hotter. Never green (green =
  * passing only), so a fix card never masquerades as a clean signal. */
 function impactBand(points: number): Band {
@@ -369,8 +392,11 @@ function LockedTease({ onUnlock }: { onUnlock?: () => void }) {
               TEXT.good,
             )}
           >
+            {/* Claude Code only: trigger-rate runs measureTriggerRate on your
+                Claude subscription; Codex's trigger-rate path is experimental
+                (infers firing from SKILL.md reads), so this CTA doesn't claim it. */}
             <Check size={13} aria-hidden className="shrink-0" />
-            Prompt copied — paste into Claude Code or Codex
+            Prompt copied — paste into Claude Code
           </span>
         ) : (
           <>
@@ -595,12 +621,9 @@ export function Report({
               ))}
             </MoreFold>
           </>
-        ) : safetyFindings.length === 0 ? (
-          <Card className="flex items-center gap-2 p-4 text-sm text-good">
-            <CheckCircle2 size={16} /> No deterministic fixes — the structure is
-            clean.
-          </Card>
-        ) : null}
+        ) : (
+          <FixesEmptyState clean={score.overall === 100} />
+        )}
 
         {safetyFindings.length > 0 && (
           <>
@@ -648,12 +671,9 @@ export function Report({
             <FixCard key={i} r={r} points={points} />
           ))}
         </div>
-      ) : safetyFindings.length === 0 ? (
-        <Card className="flex items-center gap-2 p-4 text-sm text-good">
-          <CheckCircle2 size={16} /> No deterministic fixes — the structure is
-          clean.
-        </Card>
-      ) : null}
+      ) : (
+        <FixesEmptyState clean={score.overall === 100} />
+      )}
 
       {/* Safety findings have no auto-fix (the lethal-trifecta exfil path is a
           design call, not a typo) — so they never appear as a ranked +N-pts card.
