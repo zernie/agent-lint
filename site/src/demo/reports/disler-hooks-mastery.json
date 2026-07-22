@@ -1,0 +1,105 @@
+{
+  "meta": {
+    "schemaVersion": 2,
+    "tool": "vigiles",
+    "kind": "audit",
+    "vigilesVersion": "0.0.0-semantically-released",
+    "harness": "claude-code",
+    "dir": "claude-code-hooks-mastery"
+  },
+  "score": {
+    "overall": 75,
+    "grade": "C",
+    "categories": [
+      {
+        "key": "Truthfulness",
+        "score": 100,
+        "weight": 1,
+        "findings": []
+      },
+      {
+        "key": "Triggering",
+        "score": 100,
+        "weight": 1,
+        "findings": []
+      },
+      {
+        "key": "Structure",
+        "score": 85,
+        "weight": 1,
+        "findings": ["1 hook on an unknown event (never fire)"]
+      },
+      {
+        "key": "Safety",
+        "score": 90,
+        "weight": 1,
+        "findings": [
+          "1 unit can read data, reach the web, and run commands — the \"lethal trifecta\", so a prompt injection could exfiltrate secrets"
+        ]
+      },
+      {
+        "key": "Tested",
+        "score": 88,
+        "weight": 1,
+        "advisory": true,
+        "findings": ["4 untested surfaces"]
+      }
+    ],
+    "empty": false
+  },
+  "verdict": {
+    "sentence": "One fix away from a B.",
+    "grade": "C",
+    "pointsToNextGrade": 5,
+    "fixesToNextGrade": 1,
+    "perRecommendation": [
+      {
+        "index": 0,
+        "pointsIfFixed": 15
+      }
+    ]
+  },
+  "recommendations": [
+    {
+      "surface": "Setup",
+      "action": "fix",
+      "rationale": "Unknown hook event \"Setup\" — a hook here never fires. Valid events: PreToolUse, PostToolUse, UserPromptSubmit, Notification, Stop, SubagentStop, PreCompact, SessionStart, SessionEnd. Did you mean \"Stop\"?",
+      "fix": "Change the hook event \"Setup\" to \"Stop\" — the harness doesn't define \"Setup\", so the hook never fires.",
+      "detector": "hook-events",
+      "confidence": "likely"
+    }
+  ],
+  "inventory": {
+    "skills": 0,
+    "agents": 4,
+    "hooks": 13,
+    "commands": 21,
+    "mcp": false,
+    "untested": 4
+  },
+  "adoptable": {
+    "surfaces": [
+      {
+        "path": "CLAUDE.md",
+        "command": "npx vigiles init --target=CLAUDE.md"
+      },
+      {
+        "path": ".claude/agents/hello-world-agent.md",
+        "command": "npx vigiles init --target=.claude/agents/hello-world-agent.md"
+      },
+      {
+        "path": ".claude/agents/llm-ai-agents-and-eng-research.md",
+        "command": "npx vigiles init --target=.claude/agents/llm-ai-agents-and-eng-research.md"
+      },
+      {
+        "path": ".claude/agents/meta-agent.md",
+        "command": "npx vigiles init --target=.claude/agents/meta-agent.md"
+      },
+      {
+        "path": ".claude/agents/work-completion-summary.md",
+        "command": "npx vigiles init --target=.claude/agents/work-completion-summary.md"
+      }
+    ],
+    "createAllCommand": "npx vigiles init"
+  }
+}

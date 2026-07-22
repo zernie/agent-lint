@@ -105,8 +105,11 @@ describe("DemoAudit — chips stay instant", () => {
   it("tapping a chip shows its baked report with NO fetch and NO loading", async () => {
     const user = userEvent.setup();
     render(<DemoAudit />);
-    // The chip's accessible name now includes its grade badge ("… A").
-    const chip = screen.getByRole("button", { name: /oh-my-claudecode/ });
+    // The chip's accessible name includes its grade badge; pick a non-default chip
+    // so clicking it is a real selection change (davila7 is FEATURED[0], the default).
+    const chip = screen.getByRole("button", {
+      name: /disler\/claude-code-hooks-mastery/,
+    });
     await user.click(chip);
     // Baked report renders instantly: the chip is selected, the frame header
     // marks it an "example" (source tag), and fetch is never called.

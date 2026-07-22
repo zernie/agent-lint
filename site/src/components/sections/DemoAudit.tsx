@@ -24,10 +24,10 @@ import { cn } from "@/lib/utils";
 // plugins and baked at build time — the INSTANT one-tap examples. They render
 // through the SAME @vigiles/report-view component a live typed run does, so a
 // featured report and a repo you type are indistinguishable in authority.
-import ohMy from "@/demo/reports/oh-my-claudecode.json";
-import superpowers from "@/demo/reports/superpowers.json";
-import wshobson from "@/demo/reports/wshobson-accessibility.json";
+import davila7 from "@/demo/reports/davila7-templates.json";
+import disler from "@/demo/reports/disler-hooks-mastery.json";
 import madappgang from "@/demo/reports/madappgang-frontend.json";
+import superpowers from "@/demo/reports/superpowers.json";
 
 type Featured = {
   slug: string;
@@ -39,9 +39,22 @@ type Featured = {
   repo?: string;
 };
 
-// madappgang first — the one with a real finding + fix (a B "one fix from an A"),
-// the sharpest demonstration. The rest are clean A's (real plugins usually are).
+// A real F → C → B → A scale on repos people recognize — so the default shows
+// vigiles CATCHING something (not a wall of A's that reads as "everything's fine"),
+// and the A at the end proves the grade is earnable. davila7 (F) leads: its skills/
+// dir is hidden inside .claude-plugin/ where the harness can't load it, and two
+// subagents list a tool that doesn't exist — "valid files, silently broken".
 const FEATURED: Featured[] = [
+  {
+    slug: "davila7/claude-code-templates",
+    label: "davila7/claude-code-templates",
+    report: davila7 as unknown as AuditReport,
+  },
+  {
+    slug: "disler/claude-code-hooks-mastery",
+    label: "disler/claude-code-hooks-mastery",
+    report: disler as unknown as AuditReport,
+  },
   {
     slug: "madappgang/frontend",
     label: "madappgang/frontend",
@@ -49,20 +62,9 @@ const FEATURED: Featured[] = [
     repo: "MadAppGang/claude-code",
   },
   {
-    slug: "oh-my-claudecode",
-    label: "oh-my-claudecode",
-    report: ohMy as unknown as AuditReport,
-    repo: "Yeachan-Heo/oh-my-claudecode",
-  },
-  {
     slug: "obra/superpowers",
     label: "obra/superpowers",
     report: superpowers as unknown as AuditReport,
-  },
-  {
-    slug: "wshobson/agents",
-    label: "wshobson/agents",
-    report: wshobson as unknown as AuditReport,
   },
 ];
 
