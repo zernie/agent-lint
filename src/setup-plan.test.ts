@@ -15,6 +15,7 @@ import {
   gateOnlyInvitation,
   STRUCTURAL_RULES,
   WORKFLOW_RULES,
+  SHIPPED_SKILLS,
   type AskFn,
 } from "./setup-plan.js";
 
@@ -189,7 +190,13 @@ test("planPluginInstall: codex installs skills GLOBALLY (-g) + wires repo hooks"
   const [codex] = planPluginInstall(["codex"], { hasClaude: false });
   assert.equal(codex.harness, "codex");
   // The cross-agent skills CLI with -g → ~/.agents/skills/, not the repo.
-  assert.ok(codex.commands.some((c) => /skills add .* -a codex -g/.test(c)));
+  assert.ok(codex.commands.some((c) => /skills add .* -a codex .* -g/.test(c)));
+  // #dogfood-I2: MUST scope with `-s <shipped>` so it doesn't leak the repo's
+  // contributor-only .claude/skills/ into the user's global store.
+  assert.ok(
+    codex.commands.some((c) => c.includes(`-s ${SHIPPED_SKILLS.join(",")}`)),
+    "codex install must scope to the shipped skills with -s",
+  );
   // Skills are global, but the nudge hooks are written to .codex/config.toml
   // (repo-committed, the Codex norm) → this method now touches the repo.
   assert.equal(codex.vendors, true);

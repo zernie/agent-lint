@@ -404,6 +404,24 @@ export interface InstallPlan {
  * with `-g -y` (the global store ~/.agents/skills/, which Codex reads). Codex
  * gets the skills but NOT hooks — Codex hook wiring (.codex/config.toml [hooks])
  * is not automated yet. */
+/**
+ * The SHIPPED consumer skills (the `skills/` dir, published via `plugin.json`) —
+ * the ONLY ones a user's install should get. The cross-agent `skills` CLI would
+ * otherwise clone the whole repo and install EVERY skill dir it finds, including
+ * this repo's CONTRIBUTOR-only `.claude/skills/` (generate-logo, landing-site,
+ * pr-to-lint-rule, …) — internal tooling users never asked for. So the Codex
+ * install is scoped with `-s`. Kept in lockstep with `skills/` on disk by the
+ * dogfood test in `src/adapters/claude-code/skills-dogfood.test.ts`.
+ */
+export const SHIPPED_SKILLS = [
+  "adopt-spec",
+  "debug-my-harness",
+  "edit-spec",
+  "linter-docs",
+  "strengthen",
+  "test-harness",
+] as const;
+
 export function planPluginInstall(
   harnesses: readonly string[],
   opts: { hasClaude: boolean },
@@ -437,12 +455,20 @@ export function planPluginInstall(
       // (eval-lock + refs) are wired into the repo's .codex/config.toml by
       // `init` (see codexPluginHooks / wireCodexHooks) — Codex config is
       // repo-committed, so that's the idiomatic place.
+      // Scope to the SHIPPED skills with `-s` — without it the `skills` CLI
+      // installs every skill dir in the repo, leaking the contributor-only
+      // .claude/skills/ into the user's global store (#dogfood-I2).
+      const skillScope = `-s ${SHIPPED_SKILLS.join(",")}`;
       return {
         harness,
-        commands: ["npx --yes skills add zernie/vigiles -a codex -g -y"],
+        commands: [
+          `npx --yes skills add zernie/vigiles -a codex ${skillScope} -g -y`,
+        ],
         successMessage:
           "✓ Installed the vigiles skills into ~/.agents/skills/ (global, not vendored)",
-        manualSteps: ["npx skills add zernie/vigiles -a codex -g -y"],
+        manualSteps: [
+          `npx skills add zernie/vigiles -a codex ${skillScope} -g -y`,
+        ],
         notes: [
           "Codex reads AGENTS.md directly; the skills install globally to ~/.agents/skills/ (not the repo).",
           "The eval-lock + refs NUDGE hooks are wired into .codex/config.toml (repo-committed, the Codex norm).",
