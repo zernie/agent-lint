@@ -66,7 +66,7 @@ export function RepoCombobox({
   const abort = useRef<AbortController | null>(null);
 
   // Live split — used by the render (instant fragment filtering) + submit.
-  const { fragment } = splitOwnerFragment(text);
+  const { owner: liveOwner, fragment } = splitOwnerFragment(text);
   // The FETCH target (mode + key) is derived from ONE debounced text, so mode and key
   // can never desync across the "/" boundary — a live mode paired with a stale
   // debounced key would fire a wrong-owner lookup (owner mode with the previous
@@ -114,10 +114,17 @@ export function RepoCombobox({
   // Owner mode filters the owner's repos by the typed fragment; query mode's results
   // arrive already ranked by stars from the search API, so show them as-is. Keyed on
   // fetchMode (matches the outcome), with the LIVE fragment for instant filtering.
+  // GUARD: in owner mode, suppress hits while the live owner no longer matches the
+  // outcome's owner (`fetchOwner` lags 300ms after an owner edit) — otherwise the old
+  // owner's rows show bare repo names under the new owner input, and clicking one
+  // would submit the STALE owner/repo. The new owner's results appear after the debounce.
+  const ownerStale = fetchMode === "owner" && liveOwner !== fetchOwner;
   const hits: readonly RepoHit[] =
     outcome !== null && outcome !== "loading" && outcome.kind === "ok"
       ? fetchMode === "owner"
-        ? rankRepos(outcome.repos, fragment)
+        ? ownerStale
+          ? []
+          : rankRepos(outcome.repos, fragment)
         : outcome.repos.slice(0, 7)
       : [];
 

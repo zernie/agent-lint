@@ -532,9 +532,11 @@ export function Report({
   const safetyFindings = safetyReviewFindings(score.categories);
 
   if (variant === "summary") {
-    const unlock =
-      onUnlock ??
-      (() => void navigator.clipboard?.writeText(AUDIT_PROMPT).catch(() => {}));
+    // NOTE: LockedTease is the SOLE clipboard copier (it writes TRIGGER_RATE_PROMPT).
+    // Do NOT give onUnlock a default that also writes AUDIT_PROMPT — two independent
+    // clipboard writes race, and if the audit write resolves last the locked
+    // trigger-rate CTA pastes a prompt that won't measure recall/precision. onUnlock
+    // is a pure side-channel hook (tracking); undefined = no-op.
     const ships = [
       inventory.skills && `${inventory.skills} skills`,
       inventory.agents && `${inventory.agents} agents`,
@@ -574,7 +576,7 @@ export function Report({
         </div>
 
         <div className="mt-7">
-          <LockedTease onUnlock={unlock} />
+          <LockedTease onUnlock={onUnlock} />
         </div>
 
         <h2 className={SECTION_H}>
