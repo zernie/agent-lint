@@ -114,26 +114,26 @@ type/paste a public repo or tap a featured chip, it fetches the harness files
 client-side and runs the SAME compiled engine the CLI does. The rules below are now
 INVARIANTS to preserve, not future direction.
 
-* **Every result is shareable (see the shareability goal above).** A completed grade
+- **Every result is shareable (see the shareability goal above).** A completed grade
   carries a one-tap share + a stable auto-running `?repo=` deep-link. This is a hard
   requirement of the demo, not a nice-to-have — don't ship a result surface without it.
-* **In-browser, NOT hosted.** The audit compute runs entirely CLIENT-SIDE in the
+- **In-browser, NOT hosted.** The audit compute runs entirely CLIENT-SIDE in the
   visitor's browser (fetch the repo's files via the GitHub API, run the pure
   detectors in JS) → reinforces "nothing leaves your machine"; zero backend/cost.
   The only "hosting" is static file serving on vigiles.sh, like the current site.
   A cached-serverless backend is explicitly NOT the plan.
-* **Deterministic-only compute.** Run the model-free rings (Truthfulness / Structure /
+- **Deterministic-only compute.** Run the model-free rings (Truthfulness / Structure /
   Safety-via-lethal-trifecta / description-overlap). Skip the model-gated
   trigger-rate — that's the part that needs an LLM + quota.
-* **A real progress bar / streaming state** while the audit runs — fetching files,
+- **A real progress bar / streaming state** while the audit runs — fetching files,
   running each ring — never a dead spinner. It should feel like work is happening.
-* **TEASE the locked LLM part, don't just label it "limited."** Render the
+- **TEASE the locked LLM part, don't just label it "limited."** Render the
   trigger-rate / model-gated section in the result as **blurred / locked** (a
   gated-content pattern) with an "unlock by running it locally" affordance — make
   people _curious_ to run `npx vigiles audit` for the full report (trigger-rate,
   linter cross-ref, private repos). The deterministic rings show real numbers; the
   model-gated section is present but veiled.
-* **Reuse the real report components** (render from the `AuditReport` JSON) — never a
+- **Reuse the real report components** (render from the `AuditReport` JSON) — never a
   screenshot. This is why the report view must live in a SHARED package (see below).
 
 ## Repo structure for shared UI (no hacks)
