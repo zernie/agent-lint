@@ -5,9 +5,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { CornerDownLeft, Check, Copy, RotateCw, Link2 } from "lucide-react";
+import { Check, Copy, RotateCw, Link2 } from "lucide-react";
 import { Report, type AuditReport } from "@vigiles/report-view";
 import { normalizeSlug } from "@/lib/deeplink";
+import { RepoCombobox } from "./RepoCombobox";
 import { track } from "@/lib/track";
 import {
   fetchRepo,
@@ -85,69 +86,6 @@ function headerSlug(view: View): string {
 }
 
 // ---------------------------------------------------------------------------
-
-/** The typed-repo input — `$ vigiles audit ‹your-org/your-repo›`, Enter to grade. */
-function RepoInput({ onSubmit }: { onSubmit: (slug: string) => void }) {
-  const [text, setText] = useState("");
-  const [hint, setHint] = useState(false);
-
-  const submit = (): void => {
-    const slug = normalizeSlug(text);
-    if (slug === null) {
-      setHint(true);
-      return;
-    }
-    setHint(false);
-    onSubmit(slug);
-  };
-
-  const hasText = text.trim().length > 0;
-  return (
-    <div className="mx-auto mt-8 w-full max-w-[28rem]">
-      <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-4 py-3 font-mono text-base focus-within:border-accent/60">
-        <span className="shrink-0 select-none text-muted-foreground">
-          $ vigiles audit
-        </span>
-        <input
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            if (hint) setHint(false);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") submit();
-          }}
-          placeholder="your-org/your-repo"
-          aria-label="GitHub repo to grade (owner/repo or URL)"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          // 16px min (text-base) so iOS doesn't zoom the viewport on focus.
-          className="min-w-0 flex-1 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground/60"
-        />
-        {hasText && (
-          <button
-            type="button"
-            onClick={submit}
-            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:text-accent"
-          >
-            <CornerDownLeft className="h-3.5 w-3.5" aria-hidden /> Grade
-          </button>
-        )}
-      </div>
-      <p className="mt-2 text-center text-xs text-muted-foreground">
-        {hint ? (
-          <span>
-            Use <span className="font-mono text-foreground">owner/repo</span> or
-            paste a GitHub URL.
-          </span>
-        ) : (
-          "Runs in your browser via the GitHub API — nothing leaves it."
-        )}
-      </p>
-    </div>
-  );
-}
 
 /** A quiet inline copy affordance for `npx vigiles audit` (edge-state frames). */
 function InlineCommand() {
@@ -480,7 +418,7 @@ export function DemoAudit() {
           </p>
         </div>
 
-        <RepoInput onSubmit={run} />
+        <RepoCombobox onSubmit={run} />
 
         {/* Featured chips — one-tap examples. Wrap + centered on every width so a
             chip never clips at the mobile viewport edge (only four, so mobile is
