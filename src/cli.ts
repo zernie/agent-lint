@@ -3435,7 +3435,8 @@ async function setup(args: string[]): Promise<void> {
 
   // Plan: defaults → flags → interactive prompts (only a human at a TTY).
   let plan = resolvePlan(parsed);
-  if (shouldPrompt(parsed, process.stdin.isTTY ?? false)) {
+  const prompted = shouldPrompt(parsed, process.stdin.isTTY ?? false);
+  if (prompted) {
     plan = resolvePlan(parsed, await promptSetup());
   }
   // Read strict from the RESOLVED plan, not the raw flag — an interactive "yes"
@@ -3525,12 +3526,22 @@ async function setup(args: string[]): Promise<void> {
 
   printSetupSummary({ plan, strict, targets, adopted, written });
 
-  // Non-evil invitation: a gate-only setup gets a ONE-LINE nudge to graduate to the
-  // full layer (skills + specs). Informational — never a prompt (the wizard already
-  // asked; a headless run must not hang), and the gate above is fully functional so
-  // ignoring it costs nothing. See `gate-first-adoption`.
+  // Surface the OTHER mode so both directions are discoverable — the two branches
+  // are mutually exclusive (a run is either gate-only or full):
+  //   • a gate-only setup → a ONE-LINE nudge to graduate to the full layer;
+  //   • a NON-INTERACTIVE full setup → name `--gate`, because an agent/CI took the
+  //     full default WITHOUT seeing the wizard's "gate vs full" fork, so it would
+  //     otherwise never learn the flag exists (the discovery gap for the agent path).
+  // Both are informational, never a prompt (a headless run must not hang), and the
+  // interactive human who already chose "full" isn't re-nudged. See `gate-first-adoption`.
   const invite = gateOnlyInvitation(plan);
-  if (invite) console.log(`\n${invite}`);
+  if (invite) {
+    console.log(`\n${invite}`);
+  } else if (!prompted) {
+    console.log(
+      "\nℹ Ran the standard setup. Already have a harness, or not a JS/Python repo, and want only the CI integrity gate (nothing installed)? Re-run `npx vigiles init --gate`.",
+    );
+  }
 }
 
 /** Canonical, de-duplicated harness list → a config value (string when one). */
@@ -5215,7 +5226,7 @@ function printUsage(command: string | undefined): void {
   console.log("");
   console.log("Commands:");
   console.log(
-    "  vigiles init [flags]           Setup project (--lint, --test, --harness=, --strict, --report-only, --no-gha, --force)",
+    "  vigiles init [flags]           Setup project (--gate for the CI gate only; --lint, --test, --harness=, --strict, --report-only, --no-gha, --force)",
   );
   console.log("  vigiles compile [files...]     Compile .spec.ts → .md");
   console.log(

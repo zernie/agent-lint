@@ -1129,6 +1129,12 @@ describe("CLI: vigiles init (full setup)", () => {
     assert.equal(exitCode, 0);
     assert.ok(stdout.includes("Created CLAUDE.md.spec.ts"));
     assert.ok(stdout.includes("Setup complete"));
+    // Discovery: a non-interactive (agent/CI) run never saw the wizard's
+    // "gate vs full" fork, so the summary names `--gate` so the flag is findable.
+    assert.ok(
+      stdout.includes("npx vigiles init --gate"),
+      "non-interactive setup surfaces the --gate alternative",
+    );
     assert.ok(existsSync(join(tmpDir, "CLAUDE.md.spec.ts")));
     assert.ok(existsSync(join(tmpDir, ".vigiles/generated.d.ts")));
   });
