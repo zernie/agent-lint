@@ -454,21 +454,23 @@ function LockedRow({ onUnlock }: { onUnlock?: () => void }) {
             and precision (does it stay quiet on unrelated prompts?).
           </p>
           {/* A LOCKED PREVIEW (the gated-content pattern): representative numbers,
-              BLURRED and tagged "example", so it teases the SHAPE of the result you'd
+              BLURRED and tagged "preview", so it teases the SHAPE of the result you'd
               get without reading as this repo's real measured finding — you unlock the
               real ones by running it. Blurred + labelled = clearly illustrative, not a
-              fabricated claim. Screen readers get the honest description, not digits. */}
+              fabricated claim. Screen readers get the honest description, not digits.
+              ("preview", not "example", also disambiguates from the frame's example-chip
+              source tag.) */}
           <div className="mt-2 flex items-center gap-2 font-mono text-xs text-muted-foreground">
             <span
               className="select-none blur-[2.5px]"
               aria-hidden
-              title="example — run it to see your real numbers"
+              title="preview — run it to see your real numbers"
             >
               recall <span className="font-bold text-foreground">92%</span> ·
               precision <span className="font-bold text-foreground">100%</span>
             </span>
             <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium uppercase not-italic tracking-wide text-muted-foreground/80">
-              example
+              preview
             </span>
             <span className="sr-only">
               Example preview only — run vigiles to measure your skills&apos; real
