@@ -62,6 +62,16 @@ describe("skillResourceIssues", () => {
     expect(run(body, existsOnly())).toEqual([]);
   });
 
+  it("skips a percent-encoded link (a URL / space-handling EXAMPLE, not a real file)", () => {
+    // Regression: a skill documenting how to handle spaces in paths shows an inline
+    // markdown-link EXAMPLE like `[a report](docs/My%20File.pdf)`. `%20` is URL
+    // encoding — a real bundled file on disk is never percent-encoded — so flagging
+    // it "missing" is a false positive on a prose example, not a real broken ref.
+    const body =
+      "To handle spaces, reference [a report](docs/My%20File.pdf) — encode the space.";
+    expect(run(body, existsOnly())).toEqual([]);
+  });
+
   it("skips a ../ escape out of the skill dir", () => {
     const body =
       "See [sibling](../other-skill/scripts/run.sh) and [up](../shared.md).";

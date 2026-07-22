@@ -135,6 +135,13 @@ function localResourceTarget(rawTarget: string): string | null {
   const path = target.replace(/[?#].*$/, "");
   if (path.length === 0) return null;
 
+  // SKIP: percent-encoded paths (`%20`, `%2F`, …) — a LOCAL bundled file on disk is
+  // never URL-encoded; a `%NN` sequence marks a URL or a documentation EXAMPLE about
+  // encoding spaces/paths (`[a file](docs/My%20File.pdf)` demonstrating space handling),
+  // not a real resource. Prefer missing a (vanishingly rare) literal `%`-named file over
+  // the false positive of flagging a prose example as a broken ref (don't-cry-wolf).
+  if (/%[0-9A-Fa-f]{2}/.test(path)) return null;
+
   // SKIP: globs and template placeholders — a ref carrying a glob metacharacter
   // (`*`) or a brace/angle-bracket placeholder (`{trivial,…}`, `<linter>`) is a
   // directory CONVENTION or an example, not a concrete file (`references/*.md`,
