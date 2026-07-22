@@ -25,15 +25,29 @@ caption, a second button, or a reassurance line is suspect until proven necessar
 - **The wow** is the **graded report** — show the result, don't explain the mechanism.
 - **Front-door promise:** "Lighthouse for your agent harness" — a one-command,
   zero-config, nothing-uploaded grade of your skills/hooks/subagents/references.
-- **Lower the friction to try:** offer PREFILLED popular OSS repos (e.g. an official
-  Anthropic plugin) as one-click "grade this" chips, so a visitor can see a real
-  report without typing or having a repo of their own. (Idea — not yet built.)
-- **Instrument conversion:** we need analytics on the funnel (command copies, "Grade
-  it"/deeplink clicks, prefilled-repo tries). The site is on GitHub Pages, NOT Vercel
-  — so **Vercel Analytics does NOT apply**. Use a lightweight, privacy-friendly,
-  script-tag analytics that works on static hosting: **Plausible / Fathom / GoatCounter**
-  (or GTM if a tag manager is wanted). Pick one, add the snippet, define the events.
-  (Not yet built — see the roadmap.)
+- **Lower the friction to try:** offer PREFILLED popular OSS repos as one-click
+  "grade this" chips, so a visitor sees a real report without typing or having a repo
+  of their own. **SHIPPED** — the `FEATURED` chips in `DemoAudit` render baked real
+  reports instantly.
+- **SHAREABILITY IS THE GROWTH LOOP — a graded result must be a shareable PUBLIC
+  LINK, and sharing must be one tap.** The conversion metric (run `npx vigiles audit`)
+  is served not only by the visitor in front of you but by the ones they PULL IN: a
+  grade spreads when people post a repo's _report_, not the landing page. So (1) every
+  completed grade is a copyable deep-link (`vigiles.sh/?repo=owner/repo#try`) that
+  AUTO-RUNS the audit on load — the URL IS the share unit; (2) surface a one-tap share
+  on any result (native share sheet on mobile, copy-link elsewhere — the `ShareRow` in
+  `DemoAudit`); (3) the deep-link is the same slug the input/chips use, so a shared
+  link, a typed repo, and a chip all resolve to one code path. When you add a new
+  result surface, it MUST carry the share affordance + a stable `?repo=` link — a
+  result you can't share is a dead end in the loop. **SHIPPED** — keep it working.
+- **Instrument conversion:** analytics on the funnel (command copies, typed submits,
+  chip tries, re-grades, share clicks). The site is on GitHub Pages, NOT Vercel — so
+  **Vercel Analytics does NOT apply**. Use a lightweight, privacy-friendly, script-tag
+  analytics for static hosting: **Plausible / Fathom / GoatCounter**. The funnel is
+  already INSTRUMENTED — `track()` (`site/src/lib/track.ts`) fires `demo_*` events and
+  is a safe no-op until a provider is wired. REMAINING: add the provider script tag to
+  `index.html` and confirm events land. Analytics carries the OUTCOME kind only, never
+  a typed slug (a private repo name must not leak).
 
 ## UX requirements
 
@@ -88,30 +102,39 @@ few words, one clear focal point per section. NOT a feature-stuffed template.
 - Adding a notice/button _per problem_ instead of rethinking the flow.
 - Two competing primary CTAs (deeplink + command) with no hierarchy.
 - CC-first framing ("runs in your own Claude Code…") as the headline reassurance.
-- A desktop-only flow (repo-picker/deeplink) left visible on mobile as a fallback
+- A desktop-only flow (the Claude Code `claude-cli://` deeplink) left visible on mobile as a fallback
   that just repeats the command another section already shows — the same
   `npx vigiles audit` block in back-to-back sections on the phone. (Fix:
   `hidden sm:block` the whole desktop-only section; the hero + CTA already carry it.)
 
-## In-browser demo (direction, when built)
+## In-browser demo (SHIPPED — the invariants to keep)
 
-- **In-browser, NOT hosted.** The audit compute runs entirely CLIENT-SIDE in the
+The live "grade any repo" demo is BUILT (`site/src/components/sections/DemoAudit.tsx`
+
+- `site/src/demo/`): type/paste a public repo or tap a featured chip, it fetches the
+  harness files client-side and runs the SAME compiled engine the CLI does. The rules
+  below are now INVARIANTS to preserve, not future direction.
+
+* **Every result is shareable (see the shareability goal above).** A completed grade
+  carries a one-tap share + a stable auto-running `?repo=` deep-link. This is a hard
+  requirement of the demo, not a nice-to-have — don't ship a result surface without it.
+* **In-browser, NOT hosted.** The audit compute runs entirely CLIENT-SIDE in the
   visitor's browser (fetch the repo's files via the GitHub API, run the pure
   detectors in JS) → reinforces "nothing leaves your machine"; zero backend/cost.
   The only "hosting" is static file serving on vigiles.sh, like the current site.
   A cached-serverless backend is explicitly NOT the plan.
-- **Deterministic-only compute.** Run the model-free rings (Truthfulness / Structure /
+* **Deterministic-only compute.** Run the model-free rings (Truthfulness / Structure /
   Safety-via-lethal-trifecta / description-overlap). Skip the model-gated
   trigger-rate — that's the part that needs an LLM + quota.
-- **A real progress bar / streaming state** while the audit runs — fetching files,
+* **A real progress bar / streaming state** while the audit runs — fetching files,
   running each ring — never a dead spinner. It should feel like work is happening.
-- **TEASE the locked LLM part, don't just label it "limited."** Render the
+* **TEASE the locked LLM part, don't just label it "limited."** Render the
   trigger-rate / model-gated section in the result as **blurred / locked** (a
   gated-content pattern) with an "unlock by running it locally" affordance — make
   people _curious_ to run `npx vigiles audit` for the full report (trigger-rate,
   linter cross-ref, private repos). The deterministic rings show real numbers; the
   model-gated section is present but veiled.
-- **Reuse the real report components** (render from the `AuditReport` JSON) — never a
+* **Reuse the real report components** (render from the `AuditReport` JSON) — never a
   screenshot. This is why the report view must live in a SHARED package (see below).
 
 ## Repo structure for shared UI (no hacks)
@@ -138,9 +161,10 @@ change, not bolted onto a design pass.
      what the hero or CTA already shows, that IS the duplication — hide the section on
      mobile, don't repeat the command.
    - **No desktop-only flow dead-ending on mobile.** A desktop-only interaction (the
-     repo-picker + Claude Code deeplink) collapsed to a near-empty or command-only card
+     Claude Code `claude-cli://` deeplink) collapsed to a near-empty or command-only card
      on a phone is noise — `hidden sm:block` the WHOLE section rather than show a stub
-     that promises a desktop feature the phone can't use.
+     that promises a desktop feature the phone can't use. (The in-browser demo itself
+     works on mobile — it's the deeplink handoff that's desktop-only.)
      (Global playwright + `vite preview`; or the `screenshot` skill.)
 3. **Read the WHOLE page cohesively from multiple USER POVs — not just the changed
    section in isolation.** A change can be locally fine yet break the flow/cohesion of
