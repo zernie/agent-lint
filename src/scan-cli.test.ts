@@ -218,7 +218,11 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
   it("marketplace root: expands members into a ranked leaderboard", () => {
     const r = run(`audit ${join(root, "mp")}`);
     assert.equal(r.exitCode, 0);
-    assert.match(r.stdout, /Plugin health leaderboard \(2 scanned\)/);
+    assert.match(r.stdout, /2 plugins detected → leaderboard mode/);
+    assert.match(
+      r.stdout,
+      /Full report for any plugin: npx vigiles audit <dir>/,
+    );
     assert.match(r.stdout, /alpha/);
     assert.match(r.stdout, /beta/);
   });
@@ -412,8 +416,8 @@ describe("audit → adoption — adoptable-surfaces nudge + JSON data", () => {
   it("the terminal audit prints the adoptable-surfaces nudge + a behavioral nudge", () => {
     const r = run(`audit ${join(root, "demo")}`);
     assert.equal(r.exitCode, 0);
-    // The adoption nudge with the create-all + per-surface command.
-    assert.match(r.stdout, /not yet spec-managed/);
+    // The adoption nudge — value-framed (why a spec), with the per-surface command.
+    assert.match(r.stdout, /could be spec-managed/);
     assert.match(r.stdout, /npx vigiles init/);
     assert.match(r.stdout, /--target=skills\/deploy\/SKILL\.md/);
     // The small behavioral "do your skills fire?" nudge.
@@ -445,7 +449,7 @@ describe("audit → adoption — adoptable-surfaces nudge + JSON data", () => {
       "npx vigiles init --target=skills/deploy/SKILL.md",
     );
     // JSON stays machine-clean — no human nudge text.
-    assert.doesNotMatch(r.stdout, /not yet spec-managed/);
+    assert.doesNotMatch(r.stdout, /could be spec-managed/);
     assert.doesNotMatch(r.stdout, /actually fire/);
   });
 });

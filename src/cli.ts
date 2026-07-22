@@ -2299,9 +2299,13 @@ function computeRuleRouting(
 function formatAdoptableNudge(surfaces: readonly string[]): string {
   if (surfaces.length === 0) return "";
   const n = surfaces.length;
+  // Lead with the VALUE, not the chore: a spec is the pull up from the gate to
+  // the richer layer, so say what it BUYS (drift-proof references + testable),
+  // not just "create one". The invitation is where richer-feature adoption is
+  // won — keep it compelling, never a bare to-do (research/adoption-design.md §1).
   const lines = [
-    `ℹ ${String(n)} surface${n === 1 ? "" : "s"} not yet spec-managed — create specs with \`npx vigiles init\``,
-    `  (or one at a time: \`npx vigiles init --target=<path>\`)`,
+    `ℹ ${String(n)} surface${n === 1 ? "" : "s"} could be spec-managed — a spec re-verifies its references on every change (a hand-edit can't silently break them) and makes it testable.`,
+    `  Adopt now, or one at a time with \`npx vigiles init --target=<path>\`:`,
   ];
   const shown = surfaces.slice(0, 5);
   for (const s of shown) lines.push(`    • npx vigiles init --target=${s}`);
