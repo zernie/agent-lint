@@ -267,7 +267,11 @@ export function RepoCombobox({
             paste a GitHub URL.
           </span>
         ) : (
-          "Public repos, graded in your browser — nothing leaves it."
+          // Honest disclosure: autocomplete + grading both query GitHub's API
+          // directly from the browser (so what you type reaches GitHub), and the
+          // trust pillar is that NO vigiles server is ever involved. Don't claim
+          // "nothing leaves the browser" — the GitHub calls do.
+          "Public repos, via the GitHub API — no vigiles server, nothing uploaded."
         )}
       </p>
     </div>
