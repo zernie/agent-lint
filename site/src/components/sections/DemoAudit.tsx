@@ -497,6 +497,14 @@ export function DemoAudit({
 
       <RepoCombobox onSubmit={run} />
 
+      {/* Proactive private-repo answer — the browser demo is public-only (GitHub
+          anonymous API), so tell a private-repo visitor the CLI path HERE, at the
+          moment of intent, instead of only after they type a repo and hit a 404. */}
+      <p className="mt-3 text-center text-xs leading-relaxed text-muted-foreground">
+        Private repo? Run <InlineCommand /> in it locally — it reads your
+        working copy off disk, nothing leaves your machine.
+      </p>
+
       {/* Featured chips as a lightweight LEADERBOARD — real popular plugins with
             their real grades. Reframes the one-tap examples as "here's how the
             ecosystem scores; where does yours land?" (social proof + the ranking
