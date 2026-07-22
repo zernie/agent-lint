@@ -104,5 +104,6 @@
     "commands": 0,
     "mcp": false,
     "untested": 3
-  }
+  },
+  "brokenReferences": ["hooks/guard.sh"]
 }

@@ -5,9 +5,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Check, Copy, RotateCw, Link2 } from "lucide-react";
+import { Check, Copy, RotateCw, Link2, Star } from "lucide-react";
 import { Report, type AuditReport } from "@vigiles/report-view";
 import { normalizeSlug } from "@/lib/deeplink";
+import { fetchStars, formatStars } from "@/demo/searchRepos";
 import { RepoCombobox } from "./RepoCombobox";
 import { track } from "@/lib/track";
 import {
@@ -28,7 +29,15 @@ import superpowers from "@/demo/reports/superpowers.json";
 import wshobson from "@/demo/reports/wshobson-accessibility.json";
 import madappgang from "@/demo/reports/madappgang-frontend.json";
 
-type Featured = { slug: string; label: string; report: AuditReport };
+type Featured = {
+  slug: string;
+  label: string;
+  report: AuditReport;
+  /** The real fetchable `owner/repo` for the LIVE star count, when it differs from
+   *  the display slug (a plugin nested in a repo, or a bare-name display). Omitted
+   *  when the slug already IS the repo (superpowers, wshobson/agents). */
+  repo?: string;
+};
 
 // madappgang first — the one with a real finding + fix (a B "one fix from an A"),
 // the sharpest demonstration. The rest are clean A's (real plugins usually are).
@@ -37,11 +46,13 @@ const FEATURED: Featured[] = [
     slug: "madappgang/frontend",
     label: "madappgang/frontend",
     report: madappgang as unknown as AuditReport,
+    repo: "MadAppGang/claude-code",
   },
   {
     slug: "oh-my-claudecode",
     label: "oh-my-claudecode",
     report: ohMy as unknown as AuditReport,
+    repo: "Yeachan-Heo/oh-my-claudecode",
   },
   {
     slug: "obra/superpowers",
@@ -54,6 +65,16 @@ const FEATURED: Featured[] = [
     report: wshobson as unknown as AuditReport,
   },
 ];
+
+/** The `owner/repo` to fetch a featured chip's star count from. */
+function starRepo(f: Featured): string {
+  return f.repo ?? f.slug;
+}
+
+// Live star counts, fetched once per session and shared across remounts — the chip
+// is a mini-leaderboard, so real popularity sits beside the real grade. Module-level
+// so navigating away and back doesn't re-spend the anonymous API budget.
+const starMemo = new Map<string, number>();
 
 const AUDIT_CMD = "npx vigiles audit";
 
@@ -185,7 +206,11 @@ function EdgeState({ view }: { view: TerminalView }) {
           or any harness that lives in a repo, grade it where it lives:{" "}
           <InlineCommand />
         </p>
-        <p className="mt-3">Or try one of the featured plugins above.</p>
+        <p className="mt-3">
+          Or tap a graded example above — like{" "}
+          <span className="font-mono text-foreground">obra/superpowers</span> or{" "}
+          <span className="font-mono text-foreground">oh-my-claudecode</span>.
+        </p>
       </>
     );
   } else if (view.k === "marketplace") {
@@ -202,7 +227,11 @@ function EdgeState({ view }: { view: TerminalView }) {
           The CLI expands a marketplace and ranks every member into a
           leaderboard: <InlineCommand />
         </p>
-        <p className="mt-3">Or try one of the featured plugins above.</p>
+        <p className="mt-3">
+          Or tap a graded example above — like{" "}
+          <span className="font-mono text-foreground">obra/superpowers</span> or{" "}
+          <span className="font-mono text-foreground">oh-my-claudecode</span>.
+        </p>
       </>
     );
   } else if (view.k === "notfound") {
@@ -252,9 +281,30 @@ function EdgeState({ view }: { view: TerminalView }) {
 
 // ---------------------------------------------------------------------------
 
-export function DemoAudit() {
+/**
+ * `variant`:
+ *  - "section" (default) — the standalone lower-page section, with its own heading +
+ *    top border + card bg.
+ *  - "hero" — dropped into the hero as the product shot: no heading (the hero tagline
+ *    covers it) and no section chrome, just the live combobox + report. First paint is
+ *    still instant because the default view is a baked featured grade (no network).
+ */
+export function DemoAudit({
+  variant = "section",
+}: {
+  variant?: "section" | "hero";
+} = {}) {
   const [view, setView] = useState<View>({ k: "featured", i: 0 });
   const [loadingVisible, setLoadingVisible] = useState(false);
+  // Live star counts per featured slug (from the module memo, filled on mount).
+  const [stars, setStars] = useState<Record<string, number>>(() =>
+    Object.fromEntries(
+      FEATURED.filter((f) => starMemo.has(starRepo(f))).map((f) => [
+        f.slug,
+        starMemo.get(starRepo(f)) as number,
+      ]),
+    ),
+  );
 
   // L1 — session cache: a repo audited once re-shows instantly (no re-fetch). Holds
   // all stable outcomes; `gradedAt` lets even a memory hit show honest age. The
@@ -380,6 +430,22 @@ export function DemoAudit() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Live star counts for the featured chips — one cheap request per chip, once per
+  // session (module memo), degraded-safe (a failure just leaves the chip star-less).
+  useEffect(() => {
+    const ac = new AbortController();
+    for (const f of FEATURED) {
+      const repo = starRepo(f);
+      if (starMemo.has(repo)) continue;
+      void fetchStars(repo, ac.signal).then((n) => {
+        if (n === null || ac.signal.aborted) return;
+        starMemo.set(repo, n);
+        setStars((prev) => ({ ...prev, [f.slug]: n }));
+      });
+    }
+    return () => ac.abort();
+  }, []);
+
   const pickChip = (i: number): void => {
     // Instant baked report — no loading, leaves input text in place.
     ++runId.current;
@@ -409,12 +475,9 @@ export function DemoAudit() {
   // always came from a live fetch, so its share link reproduces faithfully.
   const canShare = frameView.k === "report";
 
-  return (
-    <section
-      id="try"
-      className="scroll-mt-20 border-t border-border bg-card/30"
-    >
-      <div className="mx-auto w-full max-w-4xl px-6 py-20 sm:py-28">
+  const inner = (
+    <>
+      {variant === "section" && (
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
             What&apos;s broken in your agent setup?
@@ -430,85 +493,118 @@ export function DemoAudit() {
             grades Codex too.
           </p>
         </div>
+      )}
 
-        <RepoCombobox onSubmit={run} />
+      <RepoCombobox onSubmit={run} />
 
-        {/* Featured chips as a lightweight LEADERBOARD — real popular plugins with
+      {/* Featured chips as a lightweight LEADERBOARD — real popular plugins with
             their real grades. Reframes the one-tap examples as "here's how the
             ecosystem scores; where does yours land?" (social proof + the ranking
             nudge), and the grade letters explain themselves. Wrap + centered so a
             chip never clips at the mobile edge. */}
-        <p className="mt-8 text-center text-xs text-muted-foreground">
-          Popular plugins, graded — tap to see why:
-        </p>
-        <div className="mt-3 flex flex-wrap justify-center gap-2">
-          {FEATURED.map((f, i) => {
-            const active = frameView.k === "featured" && frameView.i === i;
-            const grade = f.report.score.grade;
-            return (
-              <button
-                key={f.slug}
-                type="button"
-                onClick={() => pickChip(i)}
-                aria-pressed={active}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-sm transition-colors",
-                  active
-                    ? "border-accent/60 bg-accent/10 text-foreground"
-                    : "border-border text-muted-foreground hover:border-accent/40 hover:text-foreground",
-                )}
-              >
-                {f.label}
+      <p className="mt-8 text-center text-xs text-muted-foreground">
+        Popular plugins, graded — tap to see why:
+      </p>
+      <div className="mt-3 flex flex-wrap justify-center gap-2">
+        {FEATURED.map((f, i) => {
+          const active = frameView.k === "featured" && frameView.i === i;
+          const grade = f.report.score.grade;
+          const starCount = stars[f.slug];
+          return (
+            <button
+              key={f.slug}
+              type="button"
+              onClick={() => pickChip(i)}
+              aria-pressed={active}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-sm transition-colors",
+                active
+                  ? "border-accent/60 bg-accent/10 text-foreground"
+                  : "border-border text-muted-foreground hover:border-accent/40 hover:text-foreground",
+              )}
+            >
+              {f.label}
+              {/* Live GitHub stars — social proof beside the grade. Appears only
+                  once fetched (degraded-safe), so the chip never shows a fake 0. */}
+              {starCount !== undefined && (
                 <span
-                  className={cn("font-bold", gradeTone(grade))}
-                  aria-label={`grade ${grade}`}
+                  className="inline-flex items-center gap-1 text-muted-foreground"
+                  aria-label={`${String(starCount)} GitHub stars`}
                 >
-                  {grade}
+                  <Star className="h-3 w-3" aria-hidden />
+                  {formatStars(starCount)}
                 </span>
-              </button>
-            );
-          })}
-        </div>
+              )}
+              <span
+                className={cn("font-bold", gradeTone(grade))}
+                aria-label={`grade ${grade}`}
+              >
+                {grade}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
-        {/* The report frame — one component, every state renders inside it (no
+      {/* The report frame — one component, every state renders inside it (no
             toast, no layout jump). */}
-        <div className="reveal mt-8 overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
-          <div className="flex items-center justify-between gap-3 border-b border-border bg-card/40 px-5 py-2.5 font-mono text-xs text-muted-foreground">
-            <span className="truncate">
-              $ vigiles audit {headerSlug(frameView)}
-            </span>
-            {cachedAtOf(frameView) !== undefined && (
-              <CachedBadge
-                gradedAt={cachedAtOf(frameView) as number}
-                onRegrade={() => run(headerSlug(frameView), { force: true })}
-              />
-            )}
-          </div>
-          {frameView.k === "loading" ? (
-            <StepLog detail={frameView.detail} />
-          ) : isEdge ? (
-            <EdgeState view={frameView as TerminalView} />
-          ) : (
-            <div className="px-5 py-7 sm:px-9 sm:py-9">
-              {/* The summary variant owns its own declutter (compact header,
-                  borderless category strip, top-3 fixes, and the model-gated
-                  locked tease that replaces the old AGradeNote + lock-row). */}
-              <Report
-                variant="summary"
-                showFooter={false}
-                data={
-                  frameView.k === "report"
-                    ? frameView.audit
-                    : FEATURED[(frameView as { i: number }).i].report
-                }
-              />
-            </div>
+      <div className="reveal mt-8 overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+        <div className="flex items-center justify-between gap-3 border-b border-border bg-card/40 px-5 py-2.5 font-mono text-xs text-muted-foreground">
+          <span className="truncate">
+            $ vigiles audit {headerSlug(frameView)}
+          </span>
+          {cachedAtOf(frameView) !== undefined && (
+            <CachedBadge
+              gradedAt={cachedAtOf(frameView) as number}
+              onRegrade={() => run(headerSlug(frameView), { force: true })}
+            />
           )}
         </div>
+        {frameView.k === "loading" ? (
+          <StepLog detail={frameView.detail} />
+        ) : isEdge ? (
+          <EdgeState view={frameView as TerminalView} />
+        ) : (
+          <div className="px-5 py-7 sm:px-9 sm:py-9">
+            {/* The summary variant owns its own declutter (compact header,
+                  borderless category strip, top-3 fixes, and the model-gated
+                  locked tease that replaces the old AGradeNote + lock-row). */}
+            <Report
+              variant="summary"
+              showFooter={false}
+              data={
+                frameView.k === "report"
+                  ? frameView.audit
+                  : FEATURED[(frameView as { i: number }).i].report
+              }
+            />
+          </div>
+        )}
+      </div>
 
-        {/* Shareability is the growth loop — a graded result is a public link that
-            auto-runs. Surface a one-tap share on any report/featured view. */}
-        {canShare && <ShareRow slug={headerSlug(frameView)} />}
+      {/* Shareability is the growth loop — a graded result is a public link that
+          auto-runs. Surface a one-tap share on any report/featured view. */}
+      {canShare && <ShareRow slug={headerSlug(frameView)} />}
+    </>
+  );
+
+  // In the hero: no section chrome / heading — just the live demo as the product
+  // shot, in a container the hero places on the fold.
+  if (variant === "hero") {
+    return (
+      <div className="mx-auto w-full max-w-3xl scroll-mt-24 px-6" id="try">
+        {inner}
+      </div>
+    );
+  }
+
+  return (
+    <section
+      id="try"
+      className="scroll-mt-20 border-t border-border bg-card/30"
+    >
+      <div className="mx-auto w-full max-w-4xl px-6 py-20 sm:py-28">
+        {inner}
       </div>
     </section>
   );
@@ -618,20 +714,28 @@ function ShareRow({ slug }: { slug: string }) {
     }
   };
   return (
-    <div className="mt-5 flex items-center justify-center">
+    <div className="mt-6 flex flex-col items-center gap-2.5 text-center">
+      <p className="text-sm text-muted-foreground">
+        Surprised by this grade?{" "}
+        <span className="text-foreground">
+          Send it to whoever owns the repo
+        </span>{" "}
+        — the link re-runs the audit live when they open it.
+      </p>
       <button
         type="button"
         onClick={share}
-        className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 text-sm text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground"
+        className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/5 px-5 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/70 hover:bg-accent/10"
       >
         {copied ? (
           <>
-            <Check className="h-3.5 w-3.5 text-good" aria-hidden />
-            <span className="text-good">Link copied — share the grade</span>
+            <Check className="h-4 w-4 text-good" aria-hidden />
+            <span className="text-good">Link copied — now share it</span>
           </>
         ) : (
           <>
-            <Link2 className="h-3.5 w-3.5" aria-hidden /> Share this grade
+            <Link2 className="h-4 w-4 text-accent" aria-hidden /> Share this
+            grade
           </>
         )}
       </button>

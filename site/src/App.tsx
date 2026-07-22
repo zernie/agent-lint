@@ -4,7 +4,6 @@ import { Hero } from "@/components/sections/Hero";
 import { Wedge } from "@/components/sections/Wedge";
 import { VerbMap } from "@/components/sections/VerbMap";
 import { Debunk } from "@/components/sections/Debunk";
-import { DemoAudit } from "@/components/sections/DemoAudit";
 import { Adoption } from "@/components/sections/Adoption";
 import { FAQ } from "@/components/sections/FAQ";
 import { CTA } from "@/components/sections/CTA";
@@ -19,7 +18,6 @@ export function App() {
         <Wedge />
         <VerbMap />
         <Debunk />
-        <DemoAudit />
         <Adoption />
         <FAQ />
         <CTA />

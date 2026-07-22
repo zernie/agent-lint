@@ -77,9 +77,20 @@ describe("computeVerdict", () => {
     expect(v.pointsToNextGrade).toBeNull();
     expect(v.fixesToNextGrade).toBeNull();
     expect(v.perRecommendation).toEqual([]);
-    expect(v.sentence).toBe(
-      "A — nothing blocking; the harness is structurally clean.",
-    );
+    expect(v.sentence).toBe("A — clean. Nothing blocking, nothing flagged.");
+  });
+
+  it("an A that carries a graded finding names it (never 'clean')", () => {
+    // One broken intra-plugin reference: 100 − 8 = 92 (A), but NOT a recommendation.
+    // The verdict must not claim clean while the report shows the finding.
+    const report = makeReport({
+      danglingRefs: ["skills/x/SKILL.md → ./missing.md (MISSING)"],
+    });
+    expect(auditScore(report).overall).toBe(92);
+    const v = verdictFor(report);
+    expect(v.grade).toBe("A");
+    expect(v.sentence).not.toMatch(/clean/);
+    expect(v.sentence).toMatch(/broken intra-plugin reference is flagged/);
   });
 
   it("names the fix COUNT + target grade when fixing recs raises the grade (one fix)", () => {

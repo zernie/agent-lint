@@ -187,6 +187,9 @@ export interface AuditReport {
   verdict: Verdict;
   recommendations: Recommendation[];
   inventory: AuditInventory;
+  /** The concrete intra-plugin references that don't resolve — the actual paths
+   *  behind the Truthfulness "N broken reference(s)" count. Present only when ≥1. */
+  brokenReferences?: string[];
   /** The adoption preview — present only when the model-gated tier ran. */
   adoptability?: AdoptabilityResult;
   /**
