@@ -105,6 +105,14 @@ export interface AuditReport {
   readonly recommendations: readonly Recommendation[];
   readonly inventory: AuditInventory;
   /**
+   * The CONCRETE intra-plugin references that don't resolve on disk — the actual
+   * paths behind the Truthfulness category's "N broken intra-plugin reference(s)"
+   * count, so the report can show WHAT is broken (a file path), not just how many.
+   * Present only when at least one dangling ref exists. Additive/optional — schema
+   * version unchanged.
+   */
+  readonly brokenReferences?: readonly string[];
+  /**
    * The adoption preview — "what would vigiles catch in your repo?" Present only
    * when the model-gated tier ran (behind consent); a deterministic read omits it.
    * Additive/optional, so the schema version is unchanged.
@@ -229,6 +237,9 @@ export function buildAuditReport(
       mcp: report.mcp,
       untested: report.untested,
     },
+    ...(report.danglingRefs.length
+      ? { brokenReferences: report.danglingRefs }
+      : {}),
     ...(adoptable ? { adoptable } : {}),
     ...(opts.observations ? { observations: opts.observations } : {}),
     ...(opts.rulesInventory && opts.rulesInventory.length

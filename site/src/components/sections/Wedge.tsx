@@ -66,12 +66,13 @@ export function Wedge() {
             The problem
           </Badge>
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            &ldquo;Valid&rdquo; is not &ldquo;true.&rdquo;
+            Valid config. Broken agent.
           </h2>
           <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
-            Every other tool checks whether your config is well-formed.
-            That&apos;s the wrong question — the failures that bite are
-            references that parse perfectly and don&apos;t resolve.
+            Every other tool checks your config is well-formed. But the failures
+            that actually bite parse perfectly and point at nothing — a hook on
+            an event that doesn&apos;t exist, a tool the harness silently drops,
+            a script that was never committed.
           </p>
         </div>
 

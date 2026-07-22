@@ -38,6 +38,15 @@ export function Footer() {
               github.com/zernie/vigiles
             </a>
             <a
+              href={`${REPO}/blob/main/docs/README.md`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-muted-foreground no-underline transition-colors hover:text-foreground"
+            >
+              <BookText className="h-4 w-4" aria-hidden />
+              Docs
+            </a>
+            <a
               href="./api/"
               className="inline-flex items-center gap-2 text-muted-foreground no-underline transition-colors hover:text-foreground"
             >

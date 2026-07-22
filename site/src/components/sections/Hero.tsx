@@ -1,6 +1,5 @@
 import { Star } from "lucide-react";
-import { AuditWidget } from "@/components/AuditWidget";
-import { HeroReport } from "@/components/HeroReport";
+import { DemoAudit } from "@/components/sections/DemoAudit";
 
 const REPO = "https://github.com/zernie/vigiles";
 
@@ -47,16 +46,16 @@ export function Hero() {
 
         <p className="mt-5 max-w-2xl text-balance text-lg leading-relaxed text-muted-foreground sm:text-xl">
           Your skills, hooks, and subagents are full of references nothing
-          verifies. One command grades what&apos;s silently broken.
+          verifies. One command grades what&apos;s silently broken — try any
+          public repo right here.
         </p>
-
-        <AuditWidget className="mt-8" />
       </div>
 
-      {/* Product shot on the fold — a native slice of the real report (crisp at
-          any width, driven by data, so one component serves desktop + mobile). */}
-      <div className="mx-auto w-full max-w-3xl px-6 pb-20 sm:pb-28">
-        <HeroReport className="reveal shadow-2xl" />
+      {/* Product shot on the fold — the LIVE demo (combobox + real grading), not a
+          static sample. Its default view is an instant baked featured grade, so the
+          first paint has no spinner; type a repo to grade your own. */}
+      <div className="mx-auto w-full max-w-3xl pb-20 sm:pb-28">
+        <DemoAudit variant="hero" />
       </div>
     </header>
   );

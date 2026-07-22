@@ -1,7 +1,8 @@
 # Documentation — index
 
 How-to and reference docs for using vigiles. **New here? Start with the
-[README](../README.md)** for the pitch and a 5-minute quick start.
+[README](../README.md)** for the pitch and a 5-minute quick start, or try the
+**[live demo at vigiles.sh](https://vigiles.sh)** — grade any repo in your browser.
 
 The docs are grouped by what you're trying to do:
 
