@@ -85,6 +85,23 @@ linking to the methodology page. **Guard:** do NOT ship a badge kit — npm badg
 data shows >~5 badges correlates with LOWER perceived credibility on popular repos. One
 badge, one link.
 
+### 6. Enrich the GHA sticky PR comment → G4, G5 (the best + safest share surface)
+
+**Why:** the research is unanimous — the CI status check / sticky PR comment (Lighthouse
+CI, Socket.dev) is the SINGLE lowest-risk, highest-adoption "share" channel: it's seen
+only by the PR's own participants (who already have context), nobody has to _decide_ to
+share it, and it never touches a public audience — so it drives adoption with zero
+reputational risk. It's already shipped (`action.yml`, sticky-by-marker comment, job
+summary, annotations — `prod-grade-gha-cli`), but today it posts the raw `lint`
+pass/fail; the GRADE isn't visible where the team actually works.
+**How:** enrich the comment CONTENT (not the infra) with the graded summary — the A–F
+grade + the four rings + the top fixable findings + a link to the full report — so a
+teammate opening the PR sees the harness's health at a glance. Keep it the SAME sticky
+comment (found-by-marker, updated-in-place, never a new comment per run). Optionally a
+grade-delta vs the base branch ("Structure B→A this PR"), the give-value-at-the-good-
+moment mechanic. **Guard:** scoped to the PR (non-negotiable 4/5) — no public exposure,
+best-effort on a fork without write access (degrade to the job summary, never fail).
+
 ## Reputation-safe grading (the public leaderboard/demo — highest-risk surface) → G4, non-negotiable 4
 
 Featuring real repos' (sometimes low) grades is the biggest reputational risk. The rules,
@@ -126,7 +143,8 @@ re-scorable) over a baked low grade, or apply the vendoring policy.
 
 ## Build sequence
 
-1 (init gate-only + nudge) → 2 (Tested/rules honesty) → 3 (audit output) → 4a (public
+1 (init gate-only + nudge) → 6 (PR-comment grade — quick, already-shipped infra, the
+best+safest share surface) → 2 (Tested/rules honesty) → 3 (audit output) → 4a (public
 deep-link) → 4b (OG image) → 5 (badge). 4c/Wrapped/percentile gated on the backend +
 corpus. Each ships behind the `adoption-goals.md` non-negotiables; the public-grading
 checklist is a hard gate on anything that features a repo vigiles doesn't own.
