@@ -252,7 +252,19 @@ function EdgeState({ view }: { view: TerminalView }) {
 
 // ---------------------------------------------------------------------------
 
-export function DemoAudit() {
+/**
+ * `variant`:
+ *  - "section" (default) — the standalone lower-page section, with its own heading +
+ *    top border + card bg.
+ *  - "hero" — dropped into the hero as the product shot: no heading (the hero tagline
+ *    covers it) and no section chrome, just the live combobox + report. First paint is
+ *    still instant because the default view is a baked featured grade (no network).
+ */
+export function DemoAudit({
+  variant = "section",
+}: {
+  variant?: "section" | "hero";
+} = {}) {
   const [view, setView] = useState<View>({ k: "featured", i: 0 });
   const [loadingVisible, setLoadingVisible] = useState(false);
 
@@ -409,12 +421,9 @@ export function DemoAudit() {
   // always came from a live fetch, so its share link reproduces faithfully.
   const canShare = frameView.k === "report";
 
-  return (
-    <section
-      id="try"
-      className="scroll-mt-20 border-t border-border bg-card/30"
-    >
-      <div className="mx-auto w-full max-w-4xl px-6 py-20 sm:py-28">
+  const inner = (
+    <>
+      {variant === "section" && (
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
             What&apos;s broken in your agent setup?
@@ -430,85 +439,106 @@ export function DemoAudit() {
             grades Codex too.
           </p>
         </div>
+      )}
 
-        <RepoCombobox onSubmit={run} />
+      <RepoCombobox onSubmit={run} />
 
-        {/* Featured chips as a lightweight LEADERBOARD — real popular plugins with
+      {/* Featured chips as a lightweight LEADERBOARD — real popular plugins with
             their real grades. Reframes the one-tap examples as "here's how the
             ecosystem scores; where does yours land?" (social proof + the ranking
             nudge), and the grade letters explain themselves. Wrap + centered so a
             chip never clips at the mobile edge. */}
-        <p className="mt-8 text-center text-xs text-muted-foreground">
-          Popular plugins, graded — tap to see why:
-        </p>
-        <div className="mt-3 flex flex-wrap justify-center gap-2">
-          {FEATURED.map((f, i) => {
-            const active = frameView.k === "featured" && frameView.i === i;
-            const grade = f.report.score.grade;
-            return (
-              <button
-                key={f.slug}
-                type="button"
-                onClick={() => pickChip(i)}
-                aria-pressed={active}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-sm transition-colors",
-                  active
-                    ? "border-accent/60 bg-accent/10 text-foreground"
-                    : "border-border text-muted-foreground hover:border-accent/40 hover:text-foreground",
-                )}
+      <p className="mt-8 text-center text-xs text-muted-foreground">
+        Popular plugins, graded — tap to see why:
+      </p>
+      <div className="mt-3 flex flex-wrap justify-center gap-2">
+        {FEATURED.map((f, i) => {
+          const active = frameView.k === "featured" && frameView.i === i;
+          const grade = f.report.score.grade;
+          return (
+            <button
+              key={f.slug}
+              type="button"
+              onClick={() => pickChip(i)}
+              aria-pressed={active}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-sm transition-colors",
+                active
+                  ? "border-accent/60 bg-accent/10 text-foreground"
+                  : "border-border text-muted-foreground hover:border-accent/40 hover:text-foreground",
+              )}
+            >
+              {f.label}
+              <span
+                className={cn("font-bold", gradeTone(grade))}
+                aria-label={`grade ${grade}`}
               >
-                {f.label}
-                <span
-                  className={cn("font-bold", gradeTone(grade))}
-                  aria-label={`grade ${grade}`}
-                >
-                  {grade}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+                {grade}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
-        {/* The report frame — one component, every state renders inside it (no
+      {/* The report frame — one component, every state renders inside it (no
             toast, no layout jump). */}
-        <div className="reveal mt-8 overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
-          <div className="flex items-center justify-between gap-3 border-b border-border bg-card/40 px-5 py-2.5 font-mono text-xs text-muted-foreground">
-            <span className="truncate">
-              $ vigiles audit {headerSlug(frameView)}
-            </span>
-            {cachedAtOf(frameView) !== undefined && (
-              <CachedBadge
-                gradedAt={cachedAtOf(frameView) as number}
-                onRegrade={() => run(headerSlug(frameView), { force: true })}
-              />
-            )}
-          </div>
-          {frameView.k === "loading" ? (
-            <StepLog detail={frameView.detail} />
-          ) : isEdge ? (
-            <EdgeState view={frameView as TerminalView} />
-          ) : (
-            <div className="px-5 py-7 sm:px-9 sm:py-9">
-              {/* The summary variant owns its own declutter (compact header,
-                  borderless category strip, top-3 fixes, and the model-gated
-                  locked tease that replaces the old AGradeNote + lock-row). */}
-              <Report
-                variant="summary"
-                showFooter={false}
-                data={
-                  frameView.k === "report"
-                    ? frameView.audit
-                    : FEATURED[(frameView as { i: number }).i].report
-                }
-              />
-            </div>
+      <div className="reveal mt-8 overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+        <div className="flex items-center justify-between gap-3 border-b border-border bg-card/40 px-5 py-2.5 font-mono text-xs text-muted-foreground">
+          <span className="truncate">
+            $ vigiles audit {headerSlug(frameView)}
+          </span>
+          {cachedAtOf(frameView) !== undefined && (
+            <CachedBadge
+              gradedAt={cachedAtOf(frameView) as number}
+              onRegrade={() => run(headerSlug(frameView), { force: true })}
+            />
           )}
         </div>
+        {frameView.k === "loading" ? (
+          <StepLog detail={frameView.detail} />
+        ) : isEdge ? (
+          <EdgeState view={frameView as TerminalView} />
+        ) : (
+          <div className="px-5 py-7 sm:px-9 sm:py-9">
+            {/* The summary variant owns its own declutter (compact header,
+                  borderless category strip, top-3 fixes, and the model-gated
+                  locked tease that replaces the old AGradeNote + lock-row). */}
+            <Report
+              variant="summary"
+              showFooter={false}
+              data={
+                frameView.k === "report"
+                  ? frameView.audit
+                  : FEATURED[(frameView as { i: number }).i].report
+              }
+            />
+          </div>
+        )}
+      </div>
 
-        {/* Shareability is the growth loop — a graded result is a public link that
-            auto-runs. Surface a one-tap share on any report/featured view. */}
-        {canShare && <ShareRow slug={headerSlug(frameView)} />}
+      {/* Shareability is the growth loop — a graded result is a public link that
+          auto-runs. Surface a one-tap share on any report/featured view. */}
+      {canShare && <ShareRow slug={headerSlug(frameView)} />}
+    </>
+  );
+
+  // In the hero: no section chrome / heading — just the live demo as the product
+  // shot, in a container the hero places on the fold.
+  if (variant === "hero") {
+    return (
+      <div className="mx-auto w-full max-w-3xl scroll-mt-24 px-6" id="try">
+        {inner}
+      </div>
+    );
+  }
+
+  return (
+    <section
+      id="try"
+      className="scroll-mt-20 border-t border-border bg-card/30"
+    >
+      <div className="mx-auto w-full max-w-4xl px-6 py-20 sm:py-28">
+        {inner}
       </div>
     </section>
   );
