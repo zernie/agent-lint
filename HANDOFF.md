@@ -24,6 +24,7 @@ demo + `@vigiles/report-view` + the founder-driven cohesive overhaul all shipped
 (`git fetch origin main && git checkout -B claude/click-not-working-s9apfb origin/main`).
 
 **This session (2026-07-22): the cohesive demo overhaul + CI-hardening (landed via #102–#105).**
+
 - **Credibility fix** — the report REVEALS every finding (not just names it) + a real verdict engine
   (`src/audit-verdict.ts`): only claims "clean" at `overall===100`, else "A — nothing blocks, but N X flagged".
   Added an additive `brokenReferences?: string[]` (from `report.danglingRefs`) so the report shows the concrete
@@ -56,8 +57,9 @@ those bodies are clean. If a PR is opened another way, edit the body to end at t
 **FETCH-TAIL DOCUMENTED — do NOT keep chasing Codex's `fetchRepo` P2s.** The browser demo's `fetchRepo` does a
 BOUNDED, SELECTIVE fetch (harness-shaped paths + refs, to respect GitHub's 60-req/hr limit), NOT the CLI's
 whole-repo read. The safety invariant (NEVER GRADE PARTIAL DATA → bail to `too-large`/`error`) + closed edge cases
-+ non-goals are in the `fetchRepo.ts` header + `research/browser-demo-fetch-limits.md` (canonical). Founder's call:
-DOCUMENT, don't fix piecemeal — unless a new case is a genuine WRONG GRADE not covered by the bail-outs.
+
+- non-goals are in the `fetchRepo.ts` header + `research/browser-demo-fetch-limits.md` (canonical). Founder's call:
+  DOCUMENT, don't fix piecemeal — unless a new case is a genuine WRONG GRADE not covered by the bail-outs.
 
 **TOP GOAL (codified in `.claude/skills/landing-site`): maximize the % of visitors who RUN `npx vigiles audit`.**
 Every site decision serves that ONE conversion. HOLD every `site/` change against the skill; **screenshot desktop
