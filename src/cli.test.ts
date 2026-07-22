@@ -300,6 +300,27 @@ describe("CLI: vigiles lint", () => {
     );
   });
 
+  it("default lint integrity-checks a compiled subagent (dogfood E2)", () => {
+    // A compiled agents/<name>.md carries a vigiles hash, but the default glob
+    // only matched CLAUDE/AGENTS/SKILL — so a hand-edit of a compiled subagent
+    // slipped past lint. A tampered compiled agent must now be flagged.
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-lint-agent-"));
+    try {
+      mkdirSync(join(dir, "agents"), { recursive: true });
+      // A vigiles hash header whose body no longer matches (tampered).
+      writeFileSync(
+        join(dir, "agents", "reviewer.md"),
+        "<!-- vigiles:sha256:deadbeef compiled from agents/reviewer.md.spec.ts -->\n---\nname: reviewer\n---\nedited body\n",
+      );
+      const { stdout, exitCode } = run("lint", dir);
+      assert.match(stdout, /agents\/reviewer\.md/);
+      assert.match(stdout, /hash mismatch|modified directly/);
+      assert.equal(exitCode, 2, "a tampered compiled subagent fails lint");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("should detect duplicate rules via NCD", () => {
     const dupDir = mkdtempSync(join(tmpdir(), "vigiles-lint-dup-"));
     try {

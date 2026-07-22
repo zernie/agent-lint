@@ -1428,8 +1428,6 @@ async function runLint(
   const json = flags.includes("--json");
   const silent = summary || json;
 
-  const files = findInstructionFiles(restArgs, config?.exclude);
-
   // P0-2: scope the surface checks (subagent contracts, skill resources, MCP, …)
   // to an explicit DIRECTORY target when one is given, instead of always scanning
   // the whole working dir and reporting surfaces the user didn't point at. Only a
@@ -1451,7 +1449,8 @@ async function runLint(
   // not a hard-coded Claude Code default. A subagent-surface rule reports n/a
   // on a harness without subagents (Codex) rather than scanning nothing. Detect
   // against `scanRoot` (the target), so a scoped scan of another-harness repo
-  // uses that repo's layout/dialect.
+  // uses that repo's layout/dialect. Resolved BEFORE discovering instruction
+  // files so the integrity sweep can include the harness's subagent dir (E2).
   const harnessFlag = harnessFlagFrom(flags);
   const lintSelection = resolveHarnessSelection({
     root: scanRoot,
@@ -1459,6 +1458,18 @@ async function runLint(
     configHarness: normalizeHarnessList(config?.harness),
   });
   const adapter = lintSelection.adapter;
+
+  // Discover the compiled files whose integrity is verified. Include the active
+  // harness's subagent dir (dogfood E2): a compiled `agents/<name>.md` carries a
+  // vigiles hash, but the default glob only matched CLAUDE/AGENTS/SKILL, so a
+  // hand-edit of a compiled subagent slipped past `lint`. A hand-written agent
+  // (no hash header) stays a no-op, and require-instructions-spec is filename-
+  // scoped to CLAUDE/AGENTS so agents are never falsely flagged as spec-less.
+  const files = findInstructionFiles(
+    restArgs,
+    config?.exclude,
+    adapter.layout.agentDir,
+  );
 
   // 1. Verify hashes and structure
   if (!silent) {
@@ -4643,8 +4654,13 @@ async function countGuidanceRules(silent = false): Promise<number> {
 function findInstructionFiles(
   restArgs: string[],
   exclude: readonly string[] = [],
+  agentDir = "",
 ): string[] {
   const patterns = ["**/CLAUDE.md", "**/AGENTS.md", "**/SKILL.md"];
+  // Include the active harness's subagent dir so a COMPILED `agents/<name>.md`
+  // (a vigiles-hashed file) is integrity-checked (dogfood E2). Empty for a
+  // harness without subagents (Codex agentDir === ""), so nothing is added there.
+  if (agentDir !== "") patterns.push(`**/${agentDir}/*.md`);
   // `exclude` (from .vigilesrc.json) drops vendored/benchmark fixtures the repo's
   // own lint shouldn't police — a third-party CLAUDE.md isn't held to require-instructions-spec.
   // node_modules/dist/.git stay always-excluded.
