@@ -453,17 +453,26 @@ function LockedRow({ onUnlock }: { onUnlock?: () => void }) {
             one needs a real model: recall (does a skill fire when it should?)
             and precision (does it stay quiet on unrelated prompts?).
           </p>
-          {/* Honest placeholders — the shape of the result you'd get, not a blur. */}
+          {/* A LOCKED PREVIEW (the gated-content pattern): representative numbers,
+              BLURRED and tagged "example", so it teases the SHAPE of the result you'd
+              get without reading as this repo's real measured finding — you unlock the
+              real ones by running it. Blurred + labelled = clearly illustrative, not a
+              fabricated claim. Screen readers get the honest description, not digits. */}
           <div className="mt-2 flex items-center gap-2 font-mono text-xs text-muted-foreground">
-            <span>
-              recall <span className="font-bold text-foreground">—</span>
+            <span
+              className="select-none blur-[2.5px]"
+              aria-hidden
+              title="example — run it to see your real numbers"
+            >
+              recall <span className="font-bold text-foreground">92%</span> ·
+              precision <span className="font-bold text-foreground">100%</span>
             </span>
-            <span>·</span>
-            <span>
-              precision <span className="font-bold text-foreground">—</span>
+            <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium uppercase not-italic tracking-wide text-muted-foreground/80">
+              example
             </span>
-            <span className="not-italic text-muted-foreground/70">
-              (run to fill)
+            <span className="sr-only">
+              Example preview only — run vigiles to measure your skills&apos; real
+              recall and precision.
             </span>
           </div>
         </div>
