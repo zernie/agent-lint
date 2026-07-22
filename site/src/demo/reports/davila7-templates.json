@@ -25,10 +25,11 @@
       },
       {
         "key": "Structure",
-        "score": 84,
+        "score": 74,
         "weight": 1,
         "findings": [
           "2 unavailable agent tools (typo / never-available)",
+          "1 functional dir misplaced inside `.claude-plugin/` (invisible)",
           "6 agent(s) inherit all tools (no contract) (advisory)"
         ]
       },

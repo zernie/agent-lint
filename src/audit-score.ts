@@ -205,6 +205,32 @@ function structure(r: ScanReport): CategoryScore {
       weight: W_NO_CONTRACT,
       label: "disallowedTools typo(s) that block nothing",
     },
+    // These four are graded in the overall (reportDeductions) but were previously
+    // attributed to NO ring — so the Structure ring didn't sum to the headline and a
+    // real finding (e.g. a `skills/` dir misplaced inside `.claude-plugin/`, invisible
+    // to the harness) went unexplained. They're structural-malformation defects, so
+    // they belong on the Structure ring — keep the labels/weights identical to
+    // reportDeductions so the ring and the headline agree.
+    {
+      n: r.pluginLayoutIssues.length,
+      weight: W_NO_DESCRIPTION,
+      label: "functional dir(s) misplaced inside `.claude-plugin/` (invisible)",
+    },
+    {
+      n: r.skillFenceIssues.length,
+      weight: W_NO_DESCRIPTION,
+      label: "invisible skill(s) (frontmatter with no opening `---` fence)",
+    },
+    {
+      n: r.hookBlockFindings.length,
+      weight: W_MISSING_HOOK,
+      label: "hook(s) that look like they block but silently don't",
+    },
+    {
+      n: r.hookMatcherFindings.length,
+      weight: W_MISSING_HOOK,
+      label: "hook matcher(s) that never fire (typo / wrong MCP form)",
+    },
   ]);
   // inherit-all (no `tools:` line) is ADVISORY, not graded: it's surfaced as a
   // least-privilege NUDGE but never lowers the Structure ring. WHY: omitting the
