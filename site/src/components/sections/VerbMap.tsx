@@ -99,7 +99,7 @@ export function VerbMap() {
                 <p className="text-sm leading-relaxed text-muted-foreground">
                   {v.detail}
                 </p>
-                <pre className="mt-3 overflow-x-auto rounded-md border border-border bg-card/50 px-3 py-2 font-mono text-xs leading-relaxed text-foreground">
+                <pre className="mt-3 whitespace-pre-wrap break-words rounded-md border border-border bg-card/50 px-3 py-2 font-mono text-xs leading-relaxed text-foreground">
                   {v.example}
                 </pre>
               </div>
@@ -133,7 +133,7 @@ export function VerbMap() {
             </span>{" "}
             Deterministic, no model.
           </p>
-          <pre className="mt-4 overflow-x-auto rounded-md border border-signal/25 bg-signal/[0.06] px-3 py-2.5 font-mono text-xs leading-relaxed text-signal">
+          <pre className="mt-4 whitespace-pre-wrap break-words rounded-md border border-signal/25 bg-signal/[0.06] px-3 py-2.5 font-mono text-xs leading-relaxed text-signal">
             {`"always use ===" → eqeqeq is "off" in your ESLint config
    your CLAUDE.md says enforce it; your config quietly turns it off`}
           </pre>
