@@ -416,6 +416,17 @@ export interface VigilesConfig {
    * recorded as provenance but deliberately NOT hashed.
    */
   eval?: { apiVersion?: number };
+
+  /**
+   * Suppress the adoption nudges `audit` prints (the "N surfaces not yet
+   * spec-managed → create specs" invitation). Set `"dismissed"` to hide them —
+   * the "remembered decline" half of the non-evil adoption contract, so a team
+   * that deliberately runs the integrity GATE alone (no specs/plugin) isn't
+   * nagged on every run. USER-SET only: `audit`/`lint` are pure reads and never
+   * write this (a read never writes). The deterministic findings + fixes are
+   * unaffected — this silences only the invitation, never a real finding.
+   */
+  nudge?: "dismissed";
 }
 
 /** Valid marker types for rule detection. */

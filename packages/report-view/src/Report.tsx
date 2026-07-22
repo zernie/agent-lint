@@ -885,11 +885,24 @@ export function Report({
             Your rules → enforced
             <Badge className="border-warn text-warn">experimental</Badge>
           </h2>
-          <p className="mb-3 text-xs text-muted-foreground">
-            Prose rules in your instruction file that map to an off-the-shelf
-            lint rule — and whether it's actually enforced. Detection is a
-            heuristic, precision-first preview: it won't catch every rule.
-          </p>
+          {(rulesInventory?.length ?? 0) === 0 ? (
+            // No documented rule resolved to an off-the-shelf linter rule — so
+            // don't imply enforcement (the honest non-JS / no-linter case).
+            // The routed rules below are still shown; references, structure &
+            // safety are verified regardless of the linter.
+            <p className="mb-3 text-xs text-muted-foreground">
+              No supported linter resolved here. Rule cross-referencing covers
+              ESLint, Ruff, Pylint, Clippy &amp; RuboCop — on other stacks your
+              references, structure &amp; safety are still verified; enforcing a
+              documented rule just needs one of those linters.
+            </p>
+          ) : (
+            <p className="mb-3 text-xs text-muted-foreground">
+              Prose rules in your instruction file that map to an off-the-shelf
+              lint rule — and whether it's actually enforced. Detection is a
+              heuristic, precision-first preview: it won't catch every rule.
+            </p>
+          )}
           <RuleInventory data={rulesInventory ?? []} routing={ruleRouting} />
         </>
       )}

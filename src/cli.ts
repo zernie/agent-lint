@@ -2307,6 +2307,9 @@ function formatAdoptableNudge(surfaces: readonly string[]): string {
   for (const s of shown) lines.push(`    • npx vigiles init --target=${s}`);
   const more = n - shown.length;
   if (more > 0) lines.push(`    • +${String(more)} more`);
+  // The remembered-decline affordance (non-evil contract): one keystroke to
+  // silence, stated where it's shown so it's never a surprise nag.
+  lines.push(`  (set "nudge": "dismissed" in .vigilesrc.json to hide this)`);
   return lines.join("\n");
 }
 
@@ -6977,7 +6980,12 @@ async function main(): Promise<void> {
           // Adoption nudge: surfaces that exist but aren't spec-managed yet, with
           // the create-all + per-surface `init` commands (the JSON carries the
           // data in `adoptable` instead — the terminal stays human-readable).
-          const adoptNudge = formatAdoptableNudge(adoptableSurfaces);
+          // Suppressed by `nudge: "dismissed"` — the remembered-decline half of
+          // the non-evil adoption contract (a gate-only team isn't nagged).
+          const adoptNudge =
+            config.nudge === "dismissed"
+              ? ""
+              : formatAdoptableNudge(adoptableSurfaces);
           if (adoptNudge) console.log("\n" + adoptNudge);
           // A small behavioral nudge — the deterministic read can't tell whether
           // skills actually FIRE; point at the interactive measure + the API.
