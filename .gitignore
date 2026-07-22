@@ -38,3 +38,6 @@ scratchpad/
 
 # local screenshot scratch (screenshot skill output)
 scratch-shots/
+
+# subagent isolated worktrees (transient, never committed)
+.claude/worktrees/
