@@ -35,14 +35,18 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0b0f17;
-    --card: #121826;
-    --border: #1e2636;
-    --foreground: #e6e9ef;
-    --muted: #9aa4b2;
-    --good: #16c784;
-    --warn: #ffb020;
-    --bad: #ff5c5c;
-    --na: #6b7280;
+    /* "Material oceanic" dark — soft deep blue-slate, shared with the landing
+       site (site/src/index.css) so the CLI report + the site demo read as one
+       softened palette. Cool off-white ink cuts pure-white glare; band colors
+       softened for calm but kept clearly semantic + AA-legible on the slate. */
+    --background: #10151e;
+    --card: #171d28;
+    --border: #232c3a;
+    --foreground: #dbe1ea;
+    --muted: #8b96a7;
+    --good: #35c98a;
+    --warn: #f2b34d;
+    --bad: #f0726c;
+    --na: #6b7688;
   }
 }

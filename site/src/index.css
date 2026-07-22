@@ -8,11 +8,11 @@
 @source "../../packages/report-view/src";
 
 /*
-  Theme echoes zernie.com (the author's dark, warm, typographic developer
-  aesthetic): a warm near-black ground + warm off-white ink, a single purple
-  accent, and one signal red that means "a violated invariant / the failure".
-  Dark-only, like zernie.com — no light palette. Band colors (good/warn/bad)
-  are borrowed from @vigiles/report for the four Lighthouse rings.
+  Theme: "material oceanic" — a soft, premium deep-slate dark with a blue-teal
+  tint (Linear / JetBrains Darcula-oceanic calm), a single oceanic cyan accent,
+  and one signal red that means "a violated invariant / the failure". Dark-only —
+  no light palette. Band colors (good/warn/bad) are shared with
+  @vigiles/report-view for the four Lighthouse rings and stay semantic.
 
   Tailwind v4: raw HSL/hex tokens on :root, mapped to `--color-*` via @theme
   inline so `bg-background`, `text-muted-foreground`, `border-border`,
@@ -51,26 +51,29 @@
 :root {
   color-scheme: dark;
 
-  /* Warm near-black ground + warm off-white ink (zernie.com dark tokens). */
-  --background: 30 8% 7%;
-  --foreground: 40 12% 90%;
-  --card: 30 8% 11%;
-  --card-foreground: 40 12% 90%;
-  --muted: 34 8% 17%;
-  --muted-foreground: 36 8% 64%;
-  --accent: 263 83% 70%;
-  --accent-foreground: 30 8% 8%;
-  --border: 34 9% 22%;
+  /* Deep blue-slate ground + cool off-white ink (material-oceanic dark tokens).
+     Softer than pure near-black: a hint of blue in bg/card/border, and the ink
+     is a cool off-white (not pure #fff) to cut max-contrast glare. */
+  --background: 219 30% 9%;
+  --foreground: 216 26% 89%;
+  --card: 219 27% 12%;
+  --card-foreground: 216 26% 89%;
+  --muted: 216 24% 18%;
+  --muted-foreground: 216 14% 60%;
+  --accent: 197 58% 60%;
+  --accent-foreground: 219 30% 9%;
+  --border: 216 25% 18%;
 
-  /* The one signal color — a warm, softened red: a failure, a broken reference. */
-  --signal: #f0776a;
-  --signal-soft: rgba(240, 119, 106, 0.14);
+  /* The one signal color — a soft coral red: a failure, a broken reference. */
+  --signal: #ec7a70;
+  --signal-soft: rgba(236, 122, 112, 0.14);
 
-  /* Lighthouse-ring band colors (from @vigiles/report, dark treatment). */
-  --good: #16c784;
-  --warn: #ffb020;
-  --bad: #ff5c5c;
-  --na: #6b7280;
+  /* Lighthouse-ring band colors (shared with @vigiles/report-view dark theme),
+     softened for calm but kept clearly semantic + legible on the slate ground. */
+  --good: #35c98a;
+  --warn: #f2b34d;
+  --bad: #f0726c;
+  --na: #6b7688;
 }
 
 @layer base {
@@ -86,17 +89,17 @@
   }
 }
 
-/* A quiet radial glow behind the hero, warm-amber like the vigiles flame mark. */
+/* A quiet oceanic glow behind the hero — soft cyan + teal, matching the accent. */
 .hero-glow {
   background:
     radial-gradient(
       60rem 40rem at 50% -10%,
-      rgba(240, 150, 90, 0.09),
+      rgba(95, 179, 212, 0.1),
       transparent 60%
     ),
     radial-gradient(
       40rem 30rem at 80% 10%,
-      rgba(150, 110, 245, 0.08),
+      rgba(80, 200, 190, 0.07),
       transparent 60%
     );
 }
