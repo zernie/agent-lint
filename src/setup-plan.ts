@@ -25,9 +25,13 @@ export interface SetupPlan {
    * INTEGRITY GATE (structural rules on your raw files + CI + devDep) is the
    * universal floor and needs NO spec — the `structural` rule group reads
    * skills/agents/hooks as-is, and `require-instructions-spec` is itself opt-in. So
-   * scaffolding a spec (extra maintenance + a compiled artifact to keep fresh) is
-   * INVITED, not forced: off by default, on under `--strict` or the wizard's "full"
-   * choice. `init --no-plugin --no-test` then yields a pure gate — no new flag.
+   * scaffolding a spec (extra maintenance + a compiled artifact) is the INVITED
+   * layer, gated on this flag (`setupPillar1` runs iff `lint && scaffoldSpecs`).
+   * Default: TRACKS the lint pillar (`resolvePlan` sets it to `plan.lint`), so bare
+   * `init` / `--lint` scaffold as before — non-interactive behaviour is unchanged.
+   * The ONE thing that turns it off with lint on is the wizard's "gate" choice: a
+   * pure lint gate on your raw files, nothing installed, no spec. No new CLI flag —
+   * a non-interactive gate is a documented follow-up (research/adoption-design.md §1).
    */
   scaffoldSpecs: boolean;
   /** Strict rule severities in `.vigilesrc.json`. */
