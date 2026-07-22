@@ -44,8 +44,8 @@ hardcoded. Two tiny hand-rolled hooks (`site/src/lib/hooks.ts`) instead of a dep
   detectors + lethal-trifecta concept, plain what/why/fix) is written + committed, framework-agnostic, unwired.
 - **Findings explainer** (detector labels → `/checks/<slug>` pages) — GATED on the routing decision above.
 - **Strengthen the locked trigger-rate tease** + **leaderboard framing** ("how does your setup rank") — queued.
-- **PALETTE** (softer, "material-oceanic" vibe) — founder wants it LAST; shared token change (`site/src/index.css`
-  - `report-view` theme) = one win for the site AND the local audit HTML report.
+- **PALETTE** (softer, "material-oceanic" vibe) — founder wants it LAST; a shared token change across
+  `site/src/index.css` and the `report-view` theme = one win for the site AND the local audit HTML report.
 - DECIDED: untested skills stay ADVISORY in the grade (don't game the score to nudge adoption — protects the
   honest-grader trust); the locked tease is the nudge instead.
 
@@ -72,38 +72,11 @@ source-only shared report components + `AuditReport` schema + `theme.css`, wired
 (`/* v8 ignore next -- reason */` → `start/stop`, the reliable form) recorded in
 `research/report-view-and-browser-demo.md`.
 
-### 🎯 DO NEXT
+### 🎯 DO NEXT — see the "IN FLIGHT / PENDING" list above (top of RESUME HERE)
 
-- **PR #100 IS OPEN + AUTO-MERGING** (`feat(site): live in-browser "Grade any repo" audit demo + README-parity
-content`, base `main`). Node-free engine + live demo + site content + 4 rounds of Codex-bot review fixes. CI
-  green (validate/describe/harness/e2e/check/test). A `send_later` merge check squash-merges when the last CI
-  run is green, then unsubscribes. **If picking up post-merge:** the branch is finished — new work restarts from
-  `main` (see the merged-PR rule). Review fixes shipped: hook-script fetch (token + relative + manifest-declared)
-  · dir-aware browser `mapExists` · Codex-scoped demo (CC-only) · harness-marker gate (git-hooks/src-hooks FP) ·
-  truncated-tree state · `pages.yml` builds root `dist/` before the site (deploy-blocker). DEFERRED w/ rationale
-  on the PR: `sharedDirs` in-browser (rare; needs a `scanFiles` param) + Windows path-ops (unsupported OS).
-- **WIRE THE SITE TEST JOB INTO CI (only remaining loose end):** `site/` now has `test:browser` (vitest
-  browser-mode: parity + interaction), `test:e2e` (playwright), `gen:parity`. `ci.yml` was NOT touched. Rec (from
-  the wiring build): `test:browser` in the MAIN gate (fast, deterministic, closes the pako-vs-node gap) after
-  `npx playwright install --with-deps chromium`; keep `test:e2e` opt-in/browser-gated. Regen the parity fixture
-  after any intentional engine change: `npm run gen:parity`.
-- **NODE-FREE ENGINE — DONE + PUSHED:** both browser entry points (`scanFiles` AND `buildAuditReport`) reach ZERO
-  node builtins except `node:zlib`→pako. MODULE-SPLITTING, not stubs/dynamic-imports (decision +
-  graph-trace method in `research/report-view-and-browser-demo.md`): leaves `scan-core.ts`, `core/ncd.ts`,
-  `posix-path.ts`, `core/mcp-contract-message.ts`, `core/assert-never.ts`, `agent-tools.ts`, `score-core.ts`
-  (the audit-report re-taint via leaderboard→scan→ast-grep, caught by the STEP-0 build gate). GATED by the
-  byte-identical parity test `src/scan-files.test.ts` (unchanged + green; 100% cov; api no drift).
-- **LIVE-ANY-REPO demo — SHIPPED + VERIFIED:** `DemoAudit.tsx` type-any-repo → live grade via built `dist/` CJS +
-  pako. `site/src/demo/{fetchRepo,runAudit}.ts` (Trees API + `raw.githubusercontent.com`, harness paths only).
-  3 test layers pass (browser-parity closes pako gap, interaction, one e2e); byte-identical to the CLI. Baked
-  chips kept. Verified desktop + 390px.
-- **SITE CONTENT — SHIPPED (README parity):** VerbMap ("One tool. Four questions." verb table + "your rules →
-  enforced" card), Adoption (skills + hooks + copy-paste agent prompt), FAQ (3 net-new objections), promptfoo
-  cost contrast in Debunk. Fable-reviewed + cut (dropped 2 restating FAQs + the 4th audit-command surface).
-  Order Hero→Wedge→VerbMap→Debunk→DemoAudit→Adoption→FAQ→CTA.
-- **Analytics (NOT built):** founder decision. GH Pages → GoatCounter rec (free, privacy-friendly). Prefilled-OSS
-  chips are now moot (live-any-repo shipped). Fable's remaining P1/P2 on PRE-EXISTING sections (Wedge category
-  trim, 3× reassurance, hero-subhead "references that nothing verifies") are un-actioned — optional polish.
+Current next-steps live in RESUME HERE. Durable historical record of #100 (node-free engine, live demo, site
+content, README parity, the site CI job) is in `research/report-view-and-browser-demo.md`. Analytics: `track()`
+funnel is instrumented, no provider script wired yet (GoatCounter/Plausible rec).
 
 ### Codex trigger-rate is EXPERIMENTAL (shipped earlier)
 
