@@ -230,7 +230,9 @@ jobs:
   # real gate: parity (pako === node:zlib on real Chromium), the DemoAudit
   # interaction states, and the idb-keyval grade-cache (real IndexedDB). No API key,
   # deterministic. This closes the gap where demo/engine-parity regressions were
-  # only caught locally. `test:e2e` (Playwright) stays manual/browser-gated.
+  # only caught locally. The Playwright e2e (`test:e2e`) runs here too — it serves
+  # the REAL built bundle and drives it, incl. the 390px mobile-overflow gate that
+  # catches layout bleed a component-level test can't (no viewport in @vitest/browser).
   site:
     runs-on: ubuntu-latest
     steps:
@@ -254,6 +256,13 @@ jobs:
 
       - name: Run site browser tests (parity + interaction + grade-cache)
         run: npm run test:browser
+        working-directory: site
+
+      # Playwright e2e over the real built bundle (serves dist/, network mocked
+      # per-test) — the in-frame report/empty states AND the 390px mobile-overflow
+      # gate. Chromium is already installed above; the webServer builds engine+site.
+      - name: Run site e2e (Playwright — incl. mobile-overflow gate)
+        run: npm run test:e2e
         working-directory: site
 
   # Dogfood the per-level CI action for the e2e tier (allowlisted REAL egress).

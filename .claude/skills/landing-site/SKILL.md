@@ -214,6 +214,18 @@ change, not bolted onto a design pass.
      shorten the example. Check EVERY `<pre>` and monospace example at 390px.
    - **Text touching / bleeding past edges**, and any element that reads as a render bug
      (ghosting through a sticky bar, a blurred block that looks failed-to-load).
+   - **Responsive-grid cell collision (check BOTH breakpoints, not just 390px).** A CSS
+     grid whose column count changes across `sm:` (e.g. `grid-cols-[1fr_auto]` →
+     `sm:grid-cols-[10.5rem_1fr_auto]`) will SILENTLY BUMP an auto-placed child to the
+     next ROW if another child is pinned to the same `col-start`/`row-start` cell — so a
+     label meant to sit inline after its command lands on a second line, indented to the
+     middle, reading as "why is this centered?". This shipped in the VerbMap: the model
+     note kept `col-start-2 row-start-1` from the 2-col mobile layout but never got a
+     `sm:col-start-3`, so at desktop it collided with the answer and pushed it to row 2.
+     Fix: give EVERY explicitly-placed grid child its `sm:col-start` for the wider grid,
+     and verify alignment on the DESKTOP shot too (this class hides at 390px — the mobile
+     grid is fine; it's the `sm:` layout that breaks). When you change a grid's template
+     across a breakpoint, re-check that every child's placement is set for BOTH.
      Then, two more things to scan for on the mobile scroll (both have also bitten us):
    - **No cross-section duplication.** The same command block / CTA / trust line must
      not appear in two adjacent sections. If a section's mobile fallback just repeats

@@ -45,6 +45,7 @@ The docs are grouped by what you're trying to do:
 ## Reference — "the exact flag, symbol, or rule"
 
 - [`cli.md`](cli.md) — the full CLI: every verb and flag, the Claude Code plugin, `lint` vs `audit`.
+- [`commands-and-how-they-relate.md`](commands-and-how-they-relate.md) — the mental model: how `audit` / `lint` / `test` / `eval` / `init` fit together, and why measuring "do my skills fire?" uses `init`, not `audit`.
 - [`testing-api.md`](testing-api.md) — the full harness-testing API: every predicate, assertion, `check`, matcher, and option (`measureTriggerRate` / `runEval` / significance).
 - [`spec-format.md`](spec-format.md) — the typed `.spec.ts` format (target, sections, rules, verified references) — the source of truth.
 - [`linter-support.md`](linter-support.md) — the 7 linter catalogs + `generate-types` / `generate-schema`.
