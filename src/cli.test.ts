@@ -1191,6 +1191,24 @@ describe("CLI: vigiles init auto-detection", () => {
     assert.ok(stdout.includes("Claude Code"));
     rmSync(dir, { recursive: true, force: true });
   });
+
+  it("honors an existing .vigilesrc.json `harness` over auto-detection (dogfood I3)", () => {
+    // The repo would auto-detect as Claude Code (a CLAUDE.md), but config
+    // already declares codex — re-running init must target codex, not re-detect.
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-detect-cfg-"));
+    writeFileSync(
+      join(dir, "package.json"),
+      JSON.stringify({ name: "test", scripts: {} }),
+    );
+    writeFileSync(join(dir, "CLAUDE.md"), "# Hand-written\n");
+    writeFileSync(
+      join(dir, ".vigilesrc.json"),
+      JSON.stringify({ harness: "codex" }),
+    );
+    const { stdout } = run("init --no-plugin", dir);
+    assert.match(stdout, /Harness: codex/);
+    rmSync(dir, { recursive: true, force: true });
+  });
 });
 
 describe("CLI: vigiles init — both pillars + workflow", () => {

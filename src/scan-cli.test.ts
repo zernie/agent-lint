@@ -139,6 +139,12 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
     mk("mixed/CLAUDE.md", "# CC\nRun `npm test`.\n");
     mk("mixed/AGENTS.md", "# Codex\nRun `make`.\n");
 
+    // 3b. A repo that AUTO-DETECTS as claude-code (only a CLAUDE.md) but
+    // config-DECLARES codex. Audit must honor the `.vigilesrc.json` `harness`
+    // key (dogfood A: it used to ignore it and scan as Claude Code).
+    mk("cfgharness/CLAUDE.md", "# CC file\nRun `npm test`.\n");
+    mk("cfgharness/.vigilesrc.json", JSON.stringify({ harness: "codex" }));
+
     // 4. A marketplace: a marketplace.json over two member plugins.
     mk(
       "mp/.claude-plugin/marketplace.json",
@@ -208,11 +214,26 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
     const auto = run(`audit ${join(root, "mixed")}`);
     assert.equal(auto.exitCode, 0);
     assert.match(auto.stdout, /Detected harness: claude-code/);
-    assert.match(auto.stdout, /repo also matches: codex/);
+    // The ambiguity notice now flows through the SAME resolveHarnessSelection
+    // path as lint/compile (dogfood A) — it names both harnesses and points at
+    // the config key / --harness override.
+    assert.match(auto.stdout, /repo matches claude-code, codex/);
 
     const forced = run(`audit ${join(root, "mixed")} --harness=codex`);
     assert.match(forced.stdout, /Detected harness: codex/);
-    assert.doesNotMatch(forced.stdout, /repo also matches/); // override silences it
+    assert.doesNotMatch(forced.stdout, /repo matches/); // override silences it
+  });
+
+  it("honors the .vigilesrc.json `harness` key (audit no longer ignores config)", () => {
+    // dogfood A: this repo auto-detects as claude-code (only a CLAUDE.md), but
+    // config declares codex. Audit must scan as codex — before the fix it
+    // ignored config.harness and reported claude-code. Config resolves from the
+    // cwd (like `lint`), so run audit from INSIDE the fixture.
+    const r = run("audit .", join(root, "cfgharness"));
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout, /Detected harness: codex/);
+    // A single configured harness is unambiguous → no override notice.
+    assert.doesNotMatch(r.stdout, /repo matches/);
   });
 
   it("marketplace root: expands members into a ranked leaderboard", () => {

@@ -3318,18 +3318,34 @@ function ensureVigilesDevDep(): string[] {
   return ["package.json"];
 }
 
-/** Which harnesses to set up: an explicit `--harness=` list, else auto-detected
+/** Map a canonical harness name (as stored in `.vigilesrc.json`, e.g.
+ * `claude-code`) back to the SHORT working form the install/plan path keys on
+ * (`claude`). Everything else passes through trimmed + lowercased. */
+function shortHarness(name: string): string {
+  const n = name.trim().toLowerCase();
+  return n === "claude-code" ? "claude" : n;
+}
+
+/** Which harnesses to set up, in precedence order: an explicit `--harness=`
+ * list, else an EXISTING `.vigilesrc.json` `harness` key, else auto-detected
  * from the repo (Claude Code / Codex), defaulting to Claude Code. */
 function resolveHarnesses(
   parsed: ParsedSetupArgs,
   detected: DetectedProject,
+  configHarness?: string | readonly string[],
 ): string[] {
   if (parsed.harness) {
-    return parsed.harness
-      .split(",")
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
+    return parsed.harness.split(",").map(shortHarness).filter(Boolean);
   }
+  // Honor an EXISTING config `harness` before re-detecting (dogfood I3):
+  // re-running `init` on a repo that already declares its harness must target
+  // that, not silently re-detect a different set. Config stores the CANONICAL
+  // name (`claude-code`); the install/plan path keys on the SHORT form
+  // (`claude`), so map it back.
+  const fromConfig = [
+    ...new Set(normalizeHarnessList(configHarness).map(shortHarness)),
+  ];
+  if (fromConfig.length > 0) return fromConfig;
   const set = new Set<string>();
   if (
     detected.hasClaude ||
@@ -3451,9 +3467,10 @@ async function setup(args: string[]): Promise<void> {
     `vigiles setup${strict ? " (strict)" : ""} — pillars: ${pillars}\n`,
   );
 
-  // Detect project.
+  // Detect project. An existing `.vigilesrc.json` `harness` (from a prior init /
+  // a hand-authored config) wins over auto-detection (dogfood I3).
   const detected = detectProject();
-  const harnesses = resolveHarnesses(parsed, detected);
+  const harnesses = resolveHarnesses(parsed, detected, loadConfig().harness);
   printDetection(detected, harnesses);
 
   // Files actually written, accumulated for an honest commit hint.
@@ -6923,20 +6940,26 @@ async function main(): Promise<void> {
       } else {
         const root = resolve(targets[0]);
         const harnessFlag = harnessFlagFrom(args);
-        const det = detectAdapterResult(root);
-        const adapter = harnessFlag
-          ? resolveAdapter(root, harnessFlag)
-          : det.adapter;
+        // Honor the SAME precedence as lint/compile (dogfood A): --harness= flag,
+        // else the `.vigilesrc.json` `harness` key, else auto-detect. Previously
+        // audit auto-detected and IGNORED config.harness, so a repo that
+        // config-declares `"harness": "codex"` but carries a CLAUDE.md was still
+        // scanned as Claude Code. `resolveHarnessSelection` also carries the
+        // ambiguity/multi-target `notice` so the warning stays consistent.
+        const selection = resolveHarnessSelection({
+          root,
+          flag: harnessFlag,
+          configHarness: normalizeHarnessList(config.harness),
+        });
+        const adapter = selection.adapter;
         const report = scanPlugin(targets[0], adapter.layout, adapter.dialect, {
           sharedDirs: config.sharedDirs,
           sharedDirsRoot: sharedDirsRootFor(targets[0]),
         });
         if (!json) {
           console.log(`Detected harness: ${adapter.name}`);
-          if (!harnessFlag && det.ambiguousWith.length > 0) {
-            console.log(
-              `⚠ repo also matches: ${det.ambiguousWith.join(", ")} — override with --harness=<name>`,
-            );
+          if (selection.kind === "notice") {
+            console.log(`⚠ ${selection.notice}`);
           }
           // Freshness: warn if our hand-maintained CC catalog drifted from the
           // user's INSTALLED claude-code (read-local, best-effort, never throws).
