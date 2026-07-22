@@ -653,6 +653,10 @@ bodies so no procedure runs. (The safety battery — which executes arbitrary ho
 and so needs cross-platform confinement that isn't shipped — is not here; it's a
 `vigiles/testing` capability you invoke explicitly.)
 
+For how all five verbs (`audit` / `lint` / `test` / `eval` / `init`) fit together —
+and why measuring "do my skills fire?" from an agent uses `init`, not `audit` — see
+[Commands & how they relate](commands-and-how-they-relate.md).
+
 ## GitHub Action
 
 Run vigiles in CI via a composite action over the published `npx vigiles` CLI.
