@@ -18,42 +18,26 @@
 **`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
 via `pages.yml` on push to main. Demo UX + real-F default MERGED (PRs #100–#106).
 
-**Branch `claude/click-not-working-s9apfb`: 30+ UNMERGED commits (pushed, NO PR yet).** Restart from `main`
-if needed (`git fetch origin main && git checkout -B claude/click-not-working-s9apfb origin/main`). What's on it:
-earlier — percent-encoded-link false-positive fix (real bug, 92→100), blurred "preview" trigger-rate tease
-(`LockedRow`), adoption docs. **Adoption batch (all SHIPPED):** VerbMap red→green · OG card (4b‑b1) · 4a share
-deep-link · **1b** (dismissible nudge `"nudge":"dismissed"`) · **2b** (full-HTML rules honesty) · **3** (leaderboard
-mode-header/drill-in/model-tier note) · value-framed adoption nudge.
-**`--ci-only` SHIPPED + made DISCOVERABLE** (renamed from `--gate` on founder's call — "gate" = jargon): the
-non-interactive gate-only opt-in (full stays default, no flip) + surfaced in help/summary/README/agent-prompt/internal-doc.
-**RULE strengthened:** `cohesive-feature-delivery` gained (8) DISCOVERY/FRONT-DOORS + (9) OUTPUT-PARITY — a capability
-isn't done until findable across every entry point (CLI/README/site/prompt/internal-doc) and rendered consistently
-(audit HTML + site demo share `@vigiles/report-view`; the CLI terminal is the drift seam). Also clarified "plugin" =
-the Claude Code plugin (skills+hooks), and fixed a stale keyFiles ref (api-docs.yml → pages.yml).
-**#108 FIXED** (marketplace.json `owner` — CC v2.1.x install was broken for everyone; + a regression guard).
-**Roadmap updated** with Vlad's dogfood issues #107–#113 + the blind-agent onboarding-dogfood idea.
-**4 DOGFOOD AGENTS RUNNING (Sonnet)** — finding MORE issues the source-traced way across compile/eject · audit/lint FPs ·
-init edge cases · config/CLI/test-eval. Synthesize + verify their findings on return, then fix/file the strong ones.
-This session (2026-07-22 cont.):
+**Branch `claude/click-not-working-s9apfb`: 31 UNMERGED commits (pushed, NO PR yet).** Restart from `main`
+if needed (`git fetch origin main && git checkout -B claude/click-not-working-s9apfb origin/main`). It carries an
+adoption batch (VerbMap red→green · OG card b1 · 4a share deep-link · dismissible nudge · full-HTML rules honesty ·
+leaderboard drill-in · value-framed nudge), the `--ci-only` opt-in + discoverability, the `cohesive-feature-delivery`
+rule's (8) DISCOVERY + (9) OUTPUT-PARITY additions, and the DOGFOOD batch below.
 
-- **Adoption docs DONE + signed off** — `research/adoption-goals.md` (G1–G5 + non-evil contract), `adoption-design.md`
-  (6 build items + reputation-safe grading checklist), `adoption-personas.md`, `cli-command-model.md`; the
-  `gate-first-adoption` rule distills the goals into root `CLAUDE.md`. Ethical-viral research → PRIVATE `zernie/mine`
-  `vigiles/s50.md` (NOT here — strategy). davila7-F reconciliation noted (design item, not blocking).
-- **Item 1 (gate-first `init`) — PARTIAL/SHIPPED** — `SetupPlan.scaffoldSpecs` decouples the lint GATE from the SPEC
-  scaffold; wizard's new FIRST question is "gate vs full"; `gateOnlyInvitation` one-liner. NO new CLI surface (honors
-  the high-bar). NON-INTERACTIVE gate is the DEFERRED half (needs a founder call: `--ci-only` flag vs default-flip that
-  breaks ~16 "specs by default" tests).
-- **Item 2 (Tested + rules honesty) — SHIPPED** — `detectOwnTestSignal` in `scan.ts` (`ScanReport.ownTestSignal`) +
-  `audit-score.ts tested()` re-worded to "N surfaces with no vigiles test/eval" + credits your own test setup as
-  OPTIONAL. `CliRulesRow` (demo/summary variant ONLY — NOT the real CLI report) notes rule-xref covers
-  ESLint/Ruff/Pylint/Clippy/RuboCop.
-- **VerbMap red→green — SHIPPED** (Vlad's idea, founder-approved) — each verb shows ✗ broken → ✓ green fix (honest:
-  green = the fix, NOT an auto-fix). Site-only; 390px gate green.
-- **Item 4a (share deep-link) — SHIPPED** — `audit` prints `Share this grade → vigiles.sh/?repo=owner/repo` for a
-  GitHub `origin` remote (the demo re-runs live; zero upload/backend, closes "can't share from localhost"). Pure
-  `src/share-link.ts` (100% cov, in the allowlist) + thin `readOriginRemote` in cli.ts. Offline — no public/private
-  check, captioned "public repos". No new CLI surface.
+**DOGFOOD BATCH is the LIVE WORK.** A 4-agent Sonnet fan-out found **14 verified, source-traced bugs**; founder's
+call is **FIX, not file** (a deterministic traced bug needs no issue — file only when the fix is ambiguous).
+**8/14 FIXED + pushed** (see DO NEXT for the exact remaining 6 + Vlad's #107/#109–#113, all traced with the fix):
+
+- **#108** — `marketplace.json` `owner` field (CC v2.1.x install was broken for EVERYONE) + a regression guard.
+- **#112 + C3/C4/C5** — one config fix: `loadConfig` now parses-don't-validates via `normalizeSeverity`
+  (`"off"`/`0`/`1`/`2` → canonical) + `asStringArray` (`exclude`/`sharedDirs`/`orphans.include|exclude`) in
+  `src/core/validate.ts`; unit-tested in `validate.test.ts`. No more silent no-ops / garbage "orphan" output.
+- **I2** — the Codex skills install is `-s`-scoped to `SHIPPED_SKILLS` (`src/setup-plan.ts`), so it no longer leaks
+  the 11 contributor skills; a drift-guard test (`skills-dogfood.test.ts`) keeps the list == the `skills/` dirs.
+- **D2** — `hook-block-ineffective` strips full-line comments before scanning, so an `exit 2` merely MENTIONED in a
+  comment/shebang isn't a false "block" (`src/core/hook-block-ineffective.ts` `stripFullLineComments`).
+
+Each fix has a regression test; all suites green; working tree clean.
 
 **GATE-FAILURE RULE (founder, standing): if a skill/hook/rule DIDN'T CATCH an issue the founder had to spot,
 FIX THE GATE FIRST.** (e.g. the mobile-overflow CI gate + the responsive-grid lesson in `.claude/skills/landing-site`.)
@@ -70,11 +54,7 @@ against the skill (READ it before touching `site/`); screenshot desktop AND full
 
 ### 🎯 DO NEXT
 
-0. **DOGFOOD BATCH — finish the remaining fixes.** The 4 agents found 14 verified bugs; founder said FIX (not file) —
-   deterministic traced bugs don't need an issue, fix directly (codified: file only when the fix is ambiguous).
-   **FIXED + pushed this session:** #108 (marketplace owner) · #112+C3/C4/C5 (config parse-don't-validate:
-   normalizeSeverity + asStringArray in `loadConfig`) · I2 (Codex install `-s`-scoped to SHIPPED_SKILLS) · D2
-   (hook-block exit-2-in-comment). **REMAINING (all traced, fixes known):**
+0. **DOGFOOD BATCH — finish the remaining 6 fixes** (all traced to file:line, fix known; FIX directly, don't file):
    - **A / C1+I3** — `audit` AND `init` ignore `.vigilesrc.json` `harness` (route both through `resolveHarnessSelection`
      like lint/compile). cli.ts audit case (~6926) + `resolveHarnesses` (~3323).
    - **E1 (P0)** — agent/skill diagnostics + GH annotations print a phantom `.claude/<surface>/…` path (thread
@@ -90,7 +70,7 @@ against the skill (READ it before touching `site/`); screenshot desktop AND full
    - Vlad's #107 (compile frontmatter data-loss) + #110 (skill-resource/dangling FPs) + #113 (testGlobs docs) + #109/#111 remain too.
 1. **Codify the dogfood process as a skill** (`.claude/skills/dogfood-cli`) — the expert find+fix fan-out, with the
    lesson: worktree-isolate, and serialize/merge fixes that touch shared files (cli.ts/scan-core.ts). Founder asked for this.
-2. **Open the PR** for the 26 commits — founder hasn't given final go; multiple real bug fixes worth shipping.
+2. **Open the PR** for the 31 commits — founder hasn't given final go; multiple real bug fixes worth shipping.
    (Founder deprioritized item 6 GHA PR-comment grade — GHA is later-adoption AND not guaranteed after gate-first init.)
 3. **Item 4b b2 (per-grade OG card)** — the ONLY remaining share-loop piece: a card showing `owner/repo · actual grade`.
    Needs a SERVERLESS OG endpoint (GitHub Pages is static, can't vary `<meta>` by `?repo=`) → bundles with **4c**
