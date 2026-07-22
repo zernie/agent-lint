@@ -74,6 +74,7 @@ import {
   summarizePurity,
   preferCompiledHooksMessage,
   detectOwnTestSignal,
+  remapFindingPaths,
 } from "./scan-core.js";
 
 // Re-export the pure detectors (and their public types: SurfaceClassifier,
@@ -484,6 +485,14 @@ export function scanPlugin(
   const puritySummary = summarizePurity(agents);
   const { trifectaFindings, skillResourceFindings, skillFenceFindings } =
     collectSurfaceFindings(agents, skills);
+  // Remap frontmatter-family finding paths from the synthetic materialize key to
+  // the real on-disk path (dogfood E1), so diagnostics + GitHub annotations point
+  // at a file that exists (the same fix ScanAgent/ScanSkill.path already got).
+  const remap = <
+    T extends { readonly path: string; readonly message?: string },
+  >(
+    findings: readonly T[],
+  ): T[] => remapFindingPaths(findings, loaded.sources, resolve(dir));
   return {
     dir,
     instructions,
@@ -496,9 +505,9 @@ export function scanPlugin(
     mcp: loaded.warnings.some((w) => w.includes("MCP server")),
     danglingRefs: danglingRefs(resolve(dir), lay),
     hookEventIssues,
-    frontmatterIssues: frontmatterIssuesFor(loaded.files, cls),
-    frontmatterValueIssues: frontmatterValueIssuesFor(loaded.files, cls),
-    skillMetaIssues: skillMetaIssuesFor(loaded.files, cls),
+    frontmatterIssues: remap(frontmatterIssuesFor(loaded.files, cls)),
+    frontmatterValueIssues: remap(frontmatterValueIssuesFor(loaded.files, cls)),
+    skillMetaIssues: remap(skillMetaIssuesFor(loaded.files, cls)),
     mcpIssues: verifyMcpServers(mcpServers),
     mcpHookIssues: verifyMcpHookTargets(
       loaded.settings.hooks,
@@ -541,7 +550,7 @@ export function scanPlugin(
       declaredServers,
       dialect,
     ),
-    malformedFrontmatter: malformedFrontmatterFor(loaded.files, cls),
+    malformedFrontmatter: remap(malformedFrontmatterFor(loaded.files, cls)),
     warnings: loaded.warnings,
     untested: findUntestedSurfaces({ basePath: dir, layout: lay }).untested
       .length,

@@ -259,6 +259,30 @@ function reportedSurfacePath(
 }
 
 /**
+ * Remap a batch of path-tagged findings from the synthetic materialize key to the
+ * real on-disk path (dogfood E1) — in BOTH the `path` field AND any embedded
+ * `message` (the detectors interpolate the key into their message text). Applied
+ * at report assembly to the frontmatter-family findings, which iterate the loaded
+ * file map's canonical keys directly (unlike ScanAgent/ScanSkill, whose `.path`
+ * is already remapped). No-op for a finding whose key IS the real path.
+ */
+export function remapFindingPaths<
+  T extends { readonly path: string; readonly message?: string },
+>(findings: readonly T[], sources: Record<string, string>, root: string): T[] {
+  return findings.map((f) => {
+    const real = reportedSurfacePath(f.path, sources[f.path], root);
+    if (real === f.path) return f;
+    return {
+      ...f,
+      path: real,
+      ...(typeof f.message === "string"
+        ? { message: f.message.split(f.path).join(real) }
+        : {}),
+    };
+  });
+}
+
+/**
  * Does the repo already ship its OWN test setup — a real `package.json` `test`
  * script, or a conventional test dir? Used by `audit` to credit an existing
  * testing story as OPTIONAL (a repo isn't scolded for surfaces with no vigiles

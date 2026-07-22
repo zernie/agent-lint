@@ -70,6 +70,7 @@ import {
   collectHookMatchers,
   summarizePurity,
   detectOwnTestSignal,
+  remapFindingPaths,
 } from "./scan-core.js";
 // TYPE-ONLY from ./scan.js (the report shapes) — elided at build, so the
 // node-only runtime deps of scan.ts (plugin-loader/mcp/test-coverage/node:fs)
@@ -607,6 +608,13 @@ export function scanFiles(
   const puritySummary = summarizePurity(agents);
   const { trifectaFindings, skillResourceFindings, skillFenceFindings } =
     collectSurfaceFindings(agents, skills);
+  // Remap frontmatter-family finding paths to the real on-disk path (dogfood E1),
+  // same as the disk scanner — keeps the demo report byte-identical.
+  const remap = <
+    T extends { readonly path: string; readonly message?: string },
+  >(
+    findings: readonly T[],
+  ): T[] => remapFindingPaths(findings, loaded.sources, BROWSER_ROOT);
   return {
     dir: BROWSER_ROOT,
     instructions,
@@ -620,9 +628,9 @@ export function scanFiles(
     mcp: loaded.warnings.some((w) => w.includes("MCP server")),
     danglingRefs: danglingRefs(files, lay),
     hookEventIssues,
-    frontmatterIssues: frontmatterIssuesFor(loaded.files, cls),
-    frontmatterValueIssues: frontmatterValueIssuesFor(loaded.files, cls),
-    skillMetaIssues: skillMetaIssuesFor(loaded.files, cls),
+    frontmatterIssues: remap(frontmatterIssuesFor(loaded.files, cls)),
+    frontmatterValueIssues: remap(frontmatterValueIssuesFor(loaded.files, cls)),
+    skillMetaIssues: remap(skillMetaIssuesFor(loaded.files, cls)),
     mcpIssues: verifyMcpServers(mcpServers),
     mcpHookIssues: verifyMcpHookTargets(
       loaded.settings.hooks,
@@ -662,7 +670,7 @@ export function scanFiles(
       declaredServers,
       dialect,
     ),
-    malformedFrontmatter: malformedFrontmatterFor(loaded.files, cls),
+    malformedFrontmatter: remap(malformedFrontmatterFor(loaded.files, cls)),
     warnings: loaded.warnings,
     untested: findUntestedSurfacesInFiles(files, lay).untested.length,
     puritySummary,

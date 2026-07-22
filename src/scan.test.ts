@@ -263,6 +263,25 @@ test("scanPlugin reports the REAL on-disk surface path, not the phantom .claude/
         `skill path should be the real skills/… path, got "${s.path}"`,
       );
     }
+    // The frontmatter-family findings must ALSO carry the real path, in both the
+    // path field and the embedded message (nodesc has no description → skillMeta).
+    const allFindingPaths = [
+      ...r.frontmatterIssues,
+      ...r.frontmatterValueIssues,
+      ...r.skillMetaIssues,
+      ...r.malformedFrontmatter,
+    ];
+    assert.ok(allFindingPaths.length > 0, "the fixture produces such findings");
+    for (const f of allFindingPaths) {
+      assert.ok(
+        !f.path.startsWith(".claude/"),
+        `finding path should not be the phantom .claude/ key, got "${f.path}"`,
+      );
+      assert.ok(
+        !("message" in f && f.message?.includes(".claude/")),
+        `finding message should not embed the phantom .claude/ path: "${String((f as { message?: string }).message)}"`,
+      );
+    }
   } finally {
     cleanupTmpDir(dir);
   }
