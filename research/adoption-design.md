@@ -87,10 +87,19 @@ share must be a deliberate act on a standalone-useful artifact, never auto/coerc
   offline and deliberately don't (audit stays network-free) — the line is captioned
   "public repos … no upload", honest about the requirement. Non-evil: a suggestion,
   never an auto-share, only on the human (`!json`) path.
-- **(b) OG/social-card image in the HTML report:** bake a self-contained grade + four-ring
-  social-preview image into the single-file report (SVG/canvas, no network) so a pasted
-  link previews as a scannable card, not a screenshot — the exact gap that made a third
-  party build page-speed.dev over Google's own tool. Fixes "shared via screenshot".
+- **(b) OG/social-card preview on the SHARED LINK** (corrected 2026-07-22 — the earlier
+  "bake into the single-file report" was wrong): an OG card is rendered by a crawler that
+  FETCHES a URL and reads STATIC `<head>` meta — no JS, no `file://`. So an image baked
+  into the local `vigiles-report.html` on disk is NEVER crawled; the card belongs on the
+  HOSTED `vigiles.sh/?repo=` deep-link (4a), a SITE change, not a report change. It fixes
+  "shared via screenshot" — the exact gap that made a third party build page-speed.dev
+  over Google's own tool. Two tiers: **(b1) GENERIC branded card** — one static image +
+  fixed `<meta>` on the Pages site, ZERO infra, ships now, so every 4a link previews as a
+  vigiles card (but not the viewer's actual grade); **(b2) PER-GRADE card**
+  (`owner/repo · F · rings`) — needs a SERVERLESS OG endpoint (Vercel OG / Satori render
+  SVG→PNG per `?repo=`), because GitHub Pages is static and can't vary `<meta>` by query
+  string (crawlers don't run JS to rewrite it). b2 bundles with 4c (both need the backend);
+  b1 is the near-term ship.
 - **(c) Explicit upload (later, needs the roadmap backend):** a "Copy shareable link"
   ACTION (never automatic), time-boxed (PageSpeed's 30-day model), uploads the
   `AuditReport` JSON only — never source/env/file contents — with a plain pre-upload
