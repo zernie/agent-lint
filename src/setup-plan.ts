@@ -19,6 +19,17 @@ export interface SetupPlan {
   gha: boolean;
   /** Install the Claude Code plugin (hooks + skills). */
   plugin: boolean;
+  /**
+   * Adopt/scaffold the instruction file(s) into typed `.spec.ts` (the compiled
+   * `CLAUDE.md` + integrity hash). GATE-FIRST (see `gate-first-adoption`): the
+   * INTEGRITY GATE (structural rules on your raw files + CI + devDep) is the
+   * universal floor and needs NO spec — the `structural` rule group reads
+   * skills/agents/hooks as-is, and `require-instructions-spec` is itself opt-in. So
+   * scaffolding a spec (extra maintenance + a compiled artifact to keep fresh) is
+   * INVITED, not forced: off by default, on under `--strict` or the wizard's "full"
+   * choice. `init --no-plugin --no-test` then yields a pure gate — no new flag.
+   */
+  scaffoldSpecs: boolean;
   /** Strict rule severities in `.vigilesrc.json`. */
   strict: boolean;
   /** Rewrite an existing STALE CI workflow in place (instead of only warning). */
@@ -77,13 +88,18 @@ export function parseSetupArgs(args: readonly string[]): ParsedSetupArgs {
   };
 }
 
-/** The non-interactive defaults: both pillars, CI, and the plugin. */
+/** The non-interactive defaults: both pillars, CI, and the plugin. `scaffoldSpecs`
+ * tracks the lint pillar (specs are created when the lint layer is set up) — the
+ * ONE exception is the wizard's "gate" choice, which sets up the lint GATE on your
+ * raw files WITHOUT scaffolding a spec (gate-first-adoption). Non-interactive
+ * behaviour is unchanged: bare `init` (lint on) scaffolds as before. */
 export function defaultPlan(strict = false): SetupPlan {
   return {
     lint: true,
     test: true,
     gha: true,
     plugin: true,
+    scaffoldSpecs: true,
     strict,
     force: false,
   };
@@ -226,7 +242,10 @@ export function shouldPrompt(parsed: ParsedSetupArgs, isTTY: boolean): boolean {
 
 /** Interactive answers (only the fields the prompts cover). */
 export type SetupAnswers = Partial<
-  Pick<SetupPlan, "lint" | "test" | "gha" | "plugin" | "strict">
+  Pick<
+    SetupPlan,
+    "lint" | "test" | "gha" | "plugin" | "strict" | "scaffoldSpecs"
+  >
 >;
 
 /** Ask one question with a default — injected so the interactive Q&A is pure +
@@ -243,6 +262,29 @@ const isYesAnswer = (s: string): boolean => /^y(es)?$/i.test(s);
  * (the questions can't silently break) without a terminal.
  */
 export async function collectSetupAnswers(ask: AskFn): Promise<SetupAnswers> {
+  // GATE-FIRST fork (gate-first-adoption): the FIRST question is the shape of the
+  // setup, not a pillar list — because the integrity GATE is the universal floor and
+  // everything richer is invited. "gate" = lint your files in CI, nothing installed,
+  // zero conflict (the existing-harness / non-JS path). "full" = also scaffold specs
+  // + install the skills/hooks. Default "full" keeps the newcomer experience; an
+  // existing-harness user picks "gate" (and its tradeoff is stated inline).
+  const mode = (
+    await ask(
+      "Setup mode — [gate] lint your files in CI, nothing installed (best if you already have a harness) · [full] also scaffold specs + install skills/hooks? [gate/full] (full): ",
+      "full",
+    )
+  ).toLowerCase();
+  if (mode === "gate" || mode === "g") {
+    // Pure gate: the structural rules on your raw files + CI + devDep. No spec, no
+    // plugin, no test scaffold — nothing installed, nothing to maintain.
+    return {
+      lint: true,
+      test: false,
+      plugin: false,
+      scaffoldSpecs: false,
+      strict: false,
+    };
+  }
   const pillars = (
     await ask("Set up which pillars? [both/lint/test] (both): ", "both")
   ).toLowerCase();
@@ -253,7 +295,8 @@ export async function collectSetupAnswers(ask: AskFn): Promise<SetupAnswers> {
   // Structural gating (broken tools/hooks/MCP/collisions) is always on. This asks
   // about the WORKFLOW tier — a spec per file + a test per surface — which a clean
   // repo can fail just for not having done the work yet, so it's the recommended
-  // default a human opts OUT of (never forced on a silent run).
+  // default a human opts OUT of (never forced on a silent run). "yes" also turns on
+  // the spec scaffold (the workflow tier's `require-instructions-spec`).
   const strict = isYesAnswer(
     await ask(
       "Also enforce specs + a test per surface (recommended)? [Y/n]: ",
@@ -266,6 +309,10 @@ export async function collectSetupAnswers(ask: AskFn): Promise<SetupAnswers> {
     gha,
     plugin,
     strict,
+    // "full" scaffolds specs whenever the lint pillar is on (specs are how the full
+    // setup works); `strict` is a separate axis (it gates the workflow RULES, not
+    // whether a spec exists).
+    scaffoldSpecs: pillars !== "test",
   };
 }
 
@@ -290,6 +337,23 @@ function applyAnswers(plan: SetupPlan, answers: SetupAnswers): void {
   if (answers.gha !== undefined) plan.gha = answers.gha;
   if (answers.plugin !== undefined) plan.plugin = answers.plugin;
   if (answers.strict !== undefined) plan.strict = answers.strict;
+  if (answers.scaffoldSpecs !== undefined)
+    plan.scaffoldSpecs = answers.scaffoldSpecs;
+}
+
+/**
+ * The NON-EVIL invitation to graduate a gate-only setup to the full layer (skills
+ * + typed specs) — `gate-first-adoption`'s "invite the rest". Pure: returns the
+ * one-line invitation when the setup landed as a pure gate (no plugin, no specs),
+ * else null. It's INFORMATIONAL — a printed line, never a second prompt (the TTY
+ * wizard already asked; a headless run must never hang), and declining costs
+ * nothing (the gate is fully functional). The IO (printing it, and the optional
+ * later reminder on `audit`/`lint`) lives in cli.ts.
+ */
+export function gateOnlyInvitation(plan: SetupPlan): string | null {
+  const gateOnly = !plan.plugin && !plan.scaffoldSpecs;
+  if (!gateOnly) return null;
+  return "→ Want your agent to maintain this + measure whether your skills fire? Run `npx vigiles init` and choose 'full' (installs the skills). Optional — the gate above already works.";
 }
 
 /**
@@ -477,6 +541,10 @@ export function resolvePlan(
   if (parsed.plugin === false) plan.plugin = false;
   if (parsed.force) plan.force = true;
   if (parsed.target) plan.test = false;
+  // Specs track the lint pillar (created when the lint layer is set up); the wizard's
+  // "gate" answer is the one thing that overrides this to false (a lint gate with no
+  // spec). So `--no-lint` also stops the scaffold, and everything else is unchanged.
+  plan.scaffoldSpecs = plan.lint;
   if (answers) applyAnswers(plan, answers);
   return plan;
 }

@@ -16,20 +16,34 @@ address-book, Duolingo guilt-streaks, GitHub's move away from public "name & sha
 
 ## Build items (priority order)
 
-### 1. `init` gate-only + non-evil spec nudge → G1, G2
+### 1. `init` gate-only + non-evil spec nudge → G1, G2 — **PARTIALLY SHIPPED**
 
 **Why:** existing-harness / non-JS teams want the integrity GATE, not the plugin+spec
 SETUP (`adoption-personas.md` case 3). Full `init` is friction/conflict for them.
-**How:** add `gateOnly: boolean` to `SetupPlan` (`src/setup-plan.ts` `resolvePlan`) —
-writes ONLY the `zernie/vigiles@v1` workflow + devDep; skips plugin install, spec
-scaffold, skill install. Surface it as a first wizard choice ("Gate only — lint in CI"
-vs "Full setup") and a `--gate-only` / `--ci` flag. The nudge: `nudgeSpecAdoption()` —
-at a TTY an `AskUserQuestion`-style ask ("install the skills so your agent maintains
-this + can measure whether your skills fire? [y/N]"); headless a one-line print; writes
-`.vigilesrc.json` `nudge: "dismissed"` so a "no" is remembered and NOT re-asked.
+
+**SHIPPED (no new CLI surface — honors the no-flag bar):** `SetupPlan.scaffoldSpecs`
+(`src/setup-plan.ts`) decouples the lint GATE (structural rules on raw files + CI +
+devDep, all written outside `setupPillar1`) from the SPEC SCAFFOLD (`setupPillar1`,
+now gated on `plan.scaffoldSpecs`). `scaffoldSpecs` tracks the lint pillar by default
+(so bare `init` / `--lint` / `--no-plugin` are UNCHANGED — no test breakage, no
+default flip), and the wizard's NEW FIRST QUESTION is the fork: **"gate" → a pure
+lint gate (no plugin, no test, no spec) · "full" → specs + skills + hooks**. The
+non-evil invitation is `gateOnlyInvitation(plan)` — a pure one-liner printed after a
+pure-gate setup ("run `init` and choose 'full' … optional, the gate already works");
+INFORMATIONAL, never a second prompt (the wizard already asked; a headless run never
+hangs). Unit-tested in `setup-plan.test.ts`.
+
+**FOLLOW-UP (needs a founder call):** a NON-INTERACTIVE gate (an agent/CI reaching
+gate-only without the wizard) is not wired — `--no-plugin --no-test` is ambiguous with
+`--lint` (both resolve to lint-only, and `--lint` historically = specs), so a true
+non-interactive gate needs either the default-flip (`scaffoldSpecs = strict`, which
+breaks ~16 "specs by default" tests + the current `--lint` contract) OR a `--gate`
+flag (surface the founder resists). Deferred to that decision; the interactive path
+covers the actual human-setting-up scenario. The "gently later" nudge (a `.vigilesrc.json`
+`nudge:"dismissed"` flag + a one-time reminder on the next `audit`/`lint`) is also a
+follow-up.
 **Ethical guard (non-negotiables 1–2):** declining is one keystroke, no grade penalty,
-agent/CI/piped never hangs. The plugin install is opt-in with an honest heads-up
-("installs model-invocable skills that may overlap your existing triggers").
+agent/CI/piped never hangs (the invitation is a print, not a prompt).
 
 ### 2. `Tested` + `rules → enforced` HONESTY → G3
 

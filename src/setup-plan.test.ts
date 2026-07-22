@@ -12,6 +12,7 @@ import {
   applyCodexPluginHooks,
   mergeProjectConfig,
   collectSetupAnswers,
+  gateOnlyInvitation,
   STRUCTURAL_RULES,
   WORKFLOW_RULES,
   type AskFn,
@@ -23,9 +24,21 @@ test("defaults: both pillars, CI, plugin, non-strict", () => {
     test: true,
     gha: true,
     plugin: true,
+    scaffoldSpecs: true, // tracks the lint pillar; only the wizard "gate" turns it off
     strict: false,
     force: false,
   });
+});
+
+test("resolvePlan: scaffoldSpecs tracks the lint pillar (off when --no-lint)", () => {
+  assert.equal(resolvePlan(parseSetupArgs([])).scaffoldSpecs, true);
+  assert.equal(resolvePlan(parseSetupArgs(["--no-lint"])).scaffoldSpecs, false);
+  // The wizard "gate" answer overrides it to false even with lint on.
+  assert.equal(
+    resolvePlan(parseSetupArgs([]), { lint: true, scaffoldSpecs: false })
+      .scaffoldSpecs,
+    false,
+  );
 });
 
 test("parseSetupArgs reads --force; resolvePlan carries it", () => {
@@ -82,6 +95,7 @@ test("resolvePlan: a positive pillar flag selects exactly that pillar", () => {
     test: false,
     gha: true,
     plugin: true,
+    scaffoldSpecs: true,
     strict: false,
     force: false,
   });
@@ -384,7 +398,7 @@ function fakeAsk(scripted: Record<string, string>): {
   return { ask, asked };
 }
 
-test("collectSetupAnswers: all defaults (user hits Enter) → both pillars, all on, strict", async () => {
+test("collectSetupAnswers: all defaults (user hits Enter) → full mode, both pillars, all on, strict", async () => {
   const { ask, asked } = fakeAsk({});
   assert.deepEqual(await collectSetupAnswers(ask), {
     lint: true,
@@ -392,8 +406,45 @@ test("collectSetupAnswers: all defaults (user hits Enter) → both pillars, all 
     gha: true,
     plugin: true,
     strict: true,
+    scaffoldSpecs: true, // "full" + strict scaffolds the invited spec
   });
-  assert.equal(asked.length, 4, "asks pillars, CI, plugin, strict");
+  assert.equal(asked.length, 5, "asks mode, pillars, CI, plugin, strict");
+});
+
+test("gateOnlyInvitation: fires only for a pure gate (no plugin, no specs)", () => {
+  // A pure gate (the wizard "gate" choice) → the one-line invitation to graduate.
+  const gate = { ...defaultPlan(false), plugin: false, scaffoldSpecs: false };
+  assert.match(gateOnlyInvitation(gate) ?? "", /choose 'full'/);
+  // Plugin installed → not a pure gate → no invitation.
+  assert.equal(gateOnlyInvitation(defaultPlan(false)), null);
+  // Specs scaffolded but no plugin → still not a pure gate → no invitation.
+  assert.equal(
+    gateOnlyInvitation({ ...defaultPlan(false), plugin: false }),
+    null,
+  );
+});
+
+test("collectSetupAnswers: 'gate' mode → lint-only gate, nothing installed, one question", async () => {
+  const { ask, asked } = fakeAsk({ "Setup mode": "gate" });
+  assert.deepEqual(await collectSetupAnswers(ask), {
+    lint: true,
+    test: false,
+    plugin: false,
+    scaffoldSpecs: false,
+    strict: false,
+  });
+  // Gate short-circuits: only the mode question is asked (no pillar/plugin/strict).
+  assert.equal(asked.length, 1, "gate mode asks nothing further");
+});
+
+test("collectSetupAnswers: 'full' + declining strict → plugin + specs on, gate rules off", async () => {
+  const { ask } = fakeAsk({ "Setup mode": "full", "enforce specs": "n" });
+  const a = await collectSetupAnswers(ask);
+  assert.equal(a.plugin, true);
+  assert.equal(a.strict, false, "the workflow RULES are opt-out");
+  // strict is a separate axis from whether a spec is scaffolded — full mode always
+  // creates the spec (that's the full setup); strict only gates the workflow rules.
+  assert.equal(a.scaffoldSpecs, true);
 });
 
 test("collectSetupAnswers: 'lint' pillar → test off", async () => {

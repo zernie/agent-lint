@@ -58,6 +58,7 @@ import {
   applyCodexPluginHooks,
   mergeProjectConfig,
   collectSetupAnswers,
+  gateOnlyInvitation,
   type SetupPlan,
   type SetupAnswers,
   type AskFn,
@@ -3449,10 +3450,15 @@ async function setup(args: string[]): Promise<void> {
   // Files actually written, accumulated for an honest commit hint.
   const written: string[] = [];
 
-  // Lint pillar — verify instruction-file references.
+  // Lint pillar. The integrity GATE (structural rules on your raw files + CI +
+  // devDep, written below) is what `lint` needs — it reads skills/agents/hooks
+  // as-is, no spec required. Scaffolding typed specs (setupPillar1) is the INVITED
+  // layer (`scaffoldSpecs`, on under `--strict` / the wizard's "full"), so a
+  // gate-first `init` (or `init --no-plugin --no-test`) never forces a spec + a
+  // compiled artifact on an existing harness. See `gate-first-adoption`.
   let targets: string[] = [];
   let adopted: string[] = [];
-  if (plan.lint) {
+  if (plan.lint && plan.scaffoldSpecs) {
     console.log("");
     const p1 = await setupPillar1(detected, parsed.target, harnesses);
     targets = p1.specTargets;
@@ -3510,6 +3516,13 @@ async function setup(args: string[]): Promise<void> {
   });
 
   printSetupSummary({ plan, strict, targets, adopted, written });
+
+  // Non-evil invitation: a gate-only setup gets a ONE-LINE nudge to graduate to the
+  // full layer (skills + specs). Informational — never a prompt (the wizard already
+  // asked; a headless run must not hang), and the gate above is fully functional so
+  // ignoring it costs nothing. See `gate-first-adoption`.
+  const invite = gateOnlyInvitation(plan);
+  if (invite) console.log(`\n${invite}`);
 }
 
 /** Canonical, de-duplicated harness list → a config value (string when one). */
