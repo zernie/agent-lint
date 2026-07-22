@@ -336,6 +336,16 @@ export interface ScanReport {
   readonly warnings: readonly string[];
   readonly untested: number;
   /**
+   * Whether the repo has its OWN test setup (a real `package.json` `test` script or
+   * a conventional test dir). When true, the `untested` count — which only counts
+   * vigiles-native `.eval.mjs`/`.harness.mjs` — is misleading: the team clearly
+   * tests, they just don't use vigiles's skill-trigger tier. So the `Tested` ring is
+   * contextualized as OPTIONAL rather than reading as a failure (it's advisory /
+   * ungraded either way). Optional — the browser `scanFiles` path leaves it unset
+   * (false); only the fs-based CLI scan detects it. See gate-first-adoption G3.
+   */
+  readonly ownTestSignal?: boolean;
+  /**
    * Harness-level purity summary: how many scanned agents fall into each purity
    * rung. A high `pure` count means more of the harness is statically testable
    * (deterministic, no mocks); `unrestricted` is the blind-spot count.
@@ -399,6 +409,31 @@ const nodeIsDirectory = (p: string): boolean => {
     return false;
   }
 };
+
+/**
+ * Does the repo have its OWN test setup — so the vigiles-native `untested` count
+ * shouldn't read as a failure? A real `package.json` `test` script, or a
+ * conventional test dir (JS/TS/Python/JVM/Rust/Go). A weak proxy on purpose: it
+ * only downgrades an ADVISORY signal from "alarm" to "optional", never changes a
+ * grade.
+ */
+function detectOwnTestSignal(dir: string): boolean {
+  const pkg = join(dir, "package.json");
+  if (existsSync(pkg)) {
+    try {
+      const { scripts } = JSON.parse(readFileSync(pkg, "utf-8")) as {
+        scripts?: Record<string, string>;
+      };
+      const t = scripts?.test?.trim();
+      if (t && !/no test specified/i.test(t)) return true;
+    } catch {
+      /* malformed package.json — ignore */
+    }
+  }
+  return ["test", "tests", "__tests__", "spec", join("src", "test")].some((d) =>
+    existsSync(join(dir, d)),
+  );
+}
 
 /** Scan a plugin/repo directory and report its surfaces + structural issues. */
 export function scanPlugin(
@@ -517,6 +552,7 @@ export function scanPlugin(
     warnings: loaded.warnings,
     untested: findUntestedSurfaces({ basePath: dir, layout: lay }).untested
       .length,
+    ownTestSignal: detectOwnTestSignal(dir),
     puritySummary,
   };
 }

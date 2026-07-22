@@ -473,8 +473,8 @@ function LockedRow({ onUnlock }: { onUnlock?: () => void }) {
               preview
             </span>
             <span className="sr-only">
-              Example preview only — run vigiles to measure your skills&apos; real
-              recall and precision.
+              Example preview only — run vigiles to measure your skills&apos;
+              real recall and precision.
             </span>
           </div>
         </div>
@@ -547,6 +547,11 @@ function CliRulesRow() {
       <pre className="mt-2 whitespace-pre-wrap break-words rounded-md border border-border bg-card/40 px-3 py-2 font-mono text-xs leading-relaxed text-foreground">
         {`"always use ===" → eqeqeq is "off" in your ESLint config`}
       </pre>
+      <p className="mt-2 text-[11px] leading-snug text-muted-foreground/70">
+        Rule cross-referencing covers ESLint, Ruff, Pylint, Clippy &amp;
+        RuboCop. On other stacks vigiles still verifies references, structure
+        &amp; safety — it just can&apos;t check a linter it doesn&apos;t know.
+      </p>
     </div>
   );
 }

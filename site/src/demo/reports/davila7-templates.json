@@ -52,7 +52,10 @@
         "score": 55,
         "weight": 1,
         "advisory": true,
-        "findings": ["15 untested surfaces"]
+        "findings": [
+          "15 surfaces with no vigiles test/eval",
+          "your own test setup detected — vigiles-native skill coverage is optional"
+        ]
       }
     ],
     "empty": false

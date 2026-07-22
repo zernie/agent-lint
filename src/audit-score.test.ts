@@ -191,6 +191,25 @@ describe("auditScore", () => {
     // the overall ignores the advisory Tested ring — a clean-but-untested repo is A
     expect(s.overall).toBe(100);
     expect(s.grade).toBe("A");
+    // The finding names the vigiles-native tier, not a bare "untested" (honesty).
+    expect(cat(s, "Tested")?.findings.some((f) => /vigiles test/.test(f))).toBe(
+      true,
+    );
+  });
+
+  it("own-test signal contextualizes Tested — never reads as 'you don't test'", () => {
+    // A repo with its OWN tests + surfaces vigiles doesn't cover → the ring stays
+    // advisory, but adds an honest "your own tests count, vigiles-native is optional".
+    const s = auditScore(makeReport({ untested: 3, ownTestSignal: true }));
+    expect(cat(s, "Tested")?.advisory).toBe(true);
+    expect(
+      cat(s, "Tested")?.findings.some((f) => /your own test setup/.test(f)),
+    ).toBe(true);
+    // No own-test signal → no context note.
+    const bare = auditScore(makeReport({ untested: 3 }));
+    expect(
+      cat(bare, "Tested")?.findings.some((f) => /your own test setup/.test(f)),
+    ).toBe(false);
   });
 
   it("Safety is clean (100) when there IS a tool-bearing surface but no trifecta", () => {
