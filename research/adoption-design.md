@@ -1,0 +1,132 @@
+---
+status: active
+topic: positioning
+---
+
+# Adoption design — the buildable spec
+
+HOW we hit the adoption goals. The WHAT/WHY north star is `adoption-goals.md` (read it
+first); the per-team cases are `adoption-personas.md`; the verb model is
+`cli-command-model.md`. This is the implementation plan — each item names the goal it
+serves, the file-level mechanics, and the ethical guardrail. The ethical-sharing
+mechanics are grounded in a 2026-07 research pass on viral-loop patterns + backlash
+incidents (Lighthouse/PageSpeed, Socket, OpenSSF Scorecard, README-badge studies;
+anti-patterns: LinkedIn contact-spam $13M settlement, FB frictionless sharing, Path
+address-book, Duolingo guilt-streaks, GitHub's move away from public "name & shame").
+
+## Build items (priority order)
+
+### 1. `init` gate-only + non-evil spec nudge → G1, G2
+
+**Why:** existing-harness / non-JS teams want the integrity GATE, not the plugin+spec
+SETUP (`adoption-personas.md` case 3). Full `init` is friction/conflict for them.
+**How:** add `gateOnly: boolean` to `SetupPlan` (`src/setup-plan.ts` `resolvePlan`) —
+writes ONLY the `zernie/vigiles@v1` workflow + devDep; skips plugin install, spec
+scaffold, skill install. Surface it as a first wizard choice ("Gate only — lint in CI"
+vs "Full setup") and a `--gate-only` / `--ci` flag. The nudge: `nudgeSpecAdoption()` —
+at a TTY an `AskUserQuestion`-style ask ("install the skills so your agent maintains
+this + can measure whether your skills fire? [y/N]"); headless a one-line print; writes
+`.vigilesrc.json` `nudge: "dismissed"` so a "no" is remembered and NOT re-asked.
+**Ethical guard (non-negotiables 1–2):** declining is one keystroke, no grade penalty,
+agent/CI/piped never hangs. The plugin install is opt-in with an honest heads-up
+("installs model-invocable skills that may overlap your existing triggers").
+
+### 2. `Tested` + `rules → enforced` HONESTY → G3
+
+**Why:** `Tested` reads as a failing alarm though it's advisory and counts only
+vigiles-native `.eval.mjs`/`.harness.mjs`; `rules → enforced` is silent on non-JS/Py
+yet the site features it. Both make a team feel the tool doesn't fit / lies.
+**How:** (a) `Tested` — detect the repo's own test signal (a `package.json` `test`
+script, a test dir, a CI test step) and either credit it or null the ring; re-word so
+it's unmistakably "N surfaces have a vigiles test/eval", never a red "55/100". (b)
+`rules → enforced` — gate on `detectedLinters` (rule-inventory): none → render
+"references + structure verified; rule-enforcement needs ESLint/Ruff/Pylint/Clippy"
+instead of the universal `eqeqeq` example (also on the site's `CliRulesRow` — note the
+supported stacks). **Guard (non-negotiable 3):** never over-promise / measure the wrong
+thing; honesty over a flattering-but-false signal. Ties to the transparent-methodology
+mechanic — each ring should link to "what this measures / doesn't / reproduce locally".
+
+### 3. Non-interactive `audit` output → G4, G5
+
+**Why:** Lighthouse always emits the report file; a bare all-A leaderboard with no
+action points reads as "found nothing" (`adoption-personas.md` case 5).
+**How:** `audit` always writes `vigiles-report.html` + prints its path (a `--out`
+override); the leaderboard (`src/leaderboard.ts` `formatLeaderboard`) gains the worst
+finding per plugin + a per-plugin report link + a "N plugins detected → leaderboard
+mode" header. **Guard:** stays a pure read (non-negotiable 1) — writes only the report
+file it's asked to emit, nothing in the audited tree.
+
+### 4. LOCAL-RESULT SHARE loop → G4
+
+**Why:** a graded result spreads only if it's shareable; today only the WEB demo shares
+(via `?repo=` deep-link), a local CLI result doesn't. Backlash research is unanimous: a
+share must be a deliberate act on a standalone-useful artifact, never auto/coerced.
+**How (three tiers, all opt-in, value-first):**
+
+- **(a) Public-remote deep-link (ship first, zero backend):** when the audited repo has
+  a PUBLIC GitHub remote, `audit` prints `Share → vigiles.sh/?repo=owner/repo` — reuses
+  the demo deep-link, which re-runs live for the recipient. No upload, no new infra.
+- **(b) OG/social-card image in the HTML report:** bake a self-contained grade + four-ring
+  social-preview image into the single-file report (SVG/canvas, no network) so a pasted
+  link previews as a scannable card, not a screenshot — the exact gap that made a third
+  party build page-speed.dev over Google's own tool. Fixes "shared via screenshot".
+- **(c) Explicit upload (later, needs the roadmap backend):** a "Copy shareable link"
+  ACTION (never automatic), time-boxed (PageSpeed's 30-day model), uploads the
+  `AuditReport` JSON only — never source/env/file contents — with a plain pre-upload
+  disclosure (same posture as the `audit.measure` consent-once).
+  **Guard (non-negotiable 5):** no auto-post, no "share to unlock", no contact access,
+  always declinable.
+
+### 5. README badge → G4 (after 1–4)
+
+**How:** ONE dynamic badge (`vigiles: A`, a shields.io-compatible endpoint), always
+**maintainer-added** after they run `audit` (never injected by `init` into a file),
+linking to the methodology page. **Guard:** do NOT ship a badge kit — npm badge-fatigue
+data shows >~5 badges correlates with LOWER perceived credibility on popular repos. One
+badge, one link.
+
+## Reputation-safe grading (the public leaderboard/demo — highest-risk surface) → G4, non-negotiable 4
+
+Featuring real repos' (sometimes low) grades is the biggest reputational risk. The rules,
+from how OpenSSF Scorecard / Socket / GitHub earned trust while grading others:
+
+1. **Publish the methodology before any public score** — what's measured, what's NOT,
+   reproducible locally (Scorecard's candor is what defuses "shame tool").
+2. **Grade artifacts, not people** — findings are about a repo's config/refs/structure,
+   never a maintainer's competence; no "so-and-so's plugin is broken" copy anywhere.
+3. **Every finding fixable, inline** — a score without a next action reads as judgment.
+4. **Label confidence** — decidable fact (broken ref) vs judgment (vague description),
+   using the existing `rule-meta` buckets.
+5. **Private-first for real defects** — a `lethalTrifecta`/leaking-hook finding follows
+   GitHub's move away from public name-and-shame; judge the RESPONSE, not the flaw.
+6. **Only feature MIT-or-opted-in repos** — REUSE the existing `dogfood-vendoring-policy`
+   (MIT-only, SHA-pinned, provenance-documented) as the SOURCING rule for anything shown
+   publicly; it already IS the reputation-safe pattern, just apply it to the public
+   leaderboard, not only internal fixtures.
+7. **Sort, don't editorialize** — a plain `repo · score · top fix` table, never a "hall
+   of shame" headline.
+8. **Fast free re-score** — the moment a maintainer can fix-and-refresh, the tool stops
+   feeling adversarial and becomes a to-do list.
+9. **No surveillance-scale scraping** — periodic public benchmarks are fine; a live
+   "we're watching you" dashboard is not.
+
+NOTE (current demo, PR #106): davila7 is featured at F — findings ARE objective +
+one-line-fixable (per rule 3–4) and the framing is "worth fixing" (rule 7 OK), but it
+is NOT MIT-vendored/opted-in per rule 6. Reconcile when the leaderboard hardens: prefer
+the `?repo=` LIVE grade (the maintainer's own public code, graded on demand, always
+re-scorable) over a baked low grade, or apply the vendoring policy.
+
+## Deferred / lower priority
+
+- **"Wrapped"-style local recap** (G4) — opt-in periodic "harness health, N months in"
+  (score trend, rules promoted, findings fixed); narrative delight, NO streak/guilt
+  mechanic; the user's own repo so zero third-party exposure. Post install-base.
+- **Percentile-in-report** (G3/G4) — "your Structure beats 70% of scanned plugins" from
+  the aggregate corpus; never names/ranks specific repos to the viewer. Needs corpus scale.
+
+## Build sequence
+
+1 (init gate-only + nudge) → 2 (Tested/rules honesty) → 3 (audit output) → 4a (public
+deep-link) → 4b (OG image) → 5 (badge). 4c/Wrapped/percentile gated on the backend +
+corpus. Each ships behind the `adoption-goals.md` non-negotiables; the public-grading
+checklist is a hard gate on anything that features a repo vigiles doesn't own.
