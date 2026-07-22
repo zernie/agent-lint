@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:dcabffbebce80c34 compiled from research/CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:27562f9ac8adaac6 compiled from research/CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -49,6 +49,7 @@ The `research/` corpus is the INTERNAL record (design rationale, competitive ana
 - `research/rule-enforcer-multilang-design.md` — [active] Multi-language (Ruff+Pylint) design for the rule-compile tier + a segmentation model, grounded in a 20-repo OSS corpus: Intent→Realization data model, per-linter ConfigProbe port (ruff select-replaces-default, pylint inverted polarity), both-keys language scoping, intent-verdict fold (ruff-absorbs-pylint is not a contradiction), the segmentation tier-ladder + reject-first negative signals; AGENTS.md is the #1 code-norm carrier, CLAUDE.md a redirect stub
 - `research/adoption-strategy.md` — [superseded] Early adoption-wizard design (vigiles setup, adoption levels); superseded by later init/setup-plan mechanics
 - `research/install-enforcement-dx.md` — [shipped] Design record for vigiles init's rule-group enforcement model (structural/workflow/nudge), landscape-grounded in Clippy/Biome/Ruff conventions
+- `research/cli-command-model.md` — [active] The CLI command model + non-evil adoption decision record: the verb table (audit/lint/test/eval/init), why audit(read) ⊄ init(write) — never merge, progressive-disclosure instead; the gate-only-first-class adoption path (lint-in-CI, no plugin/spec) for existing-harness/non-JS teams + init NUDGES spec adoption via the ask tool at install AND gently later but is NOT evil (easy decline, no nag); the open items (Tested reads-as-failure, rules→enforced silent on non-JS, non-interactive audit should emit the HTML report + leaderboard action points). Internal rationale behind docs/commands-and-how-they-relate.md
 - `research/readme-revamp-concepts.md` — [idea] Five distinct whole-README redesign concepts/positioning options to resolve audit-vs-instruments front-door tension
 - `research/cache-invalidation.md` — [shipped] Research behind the eval CACHE (local speed) vs eval LOCK (CI staleness) mechanisms, grounded in Bazel/Turborepo/ccache practice
 - `research/covering-arrays-for-harness.md` — [idea] Pairwise/covering-array sampling over typed spec config space for interaction-testing evals

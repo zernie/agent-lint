@@ -72,6 +72,7 @@ export default claude({
     // ── docs ──
     "research/adoption-strategy.md": `[superseded] Early adoption-wizard design (vigiles setup, adoption levels); superseded by later init/setup-plan mechanics`,
     "research/install-enforcement-dx.md": `[shipped] Design record for vigiles init's rule-group enforcement model (structural/workflow/nudge), landscape-grounded in Clippy/Biome/Ruff conventions`,
+    "research/cli-command-model.md": `[active] The CLI command model + non-evil adoption decision record: the verb table (audit/lint/test/eval/init), why audit(read) ⊄ init(write) — never merge, progressive-disclosure instead; the gate-only-first-class adoption path (lint-in-CI, no plugin/spec) for existing-harness/non-JS teams + init NUDGES spec adoption via the ask tool at install AND gently later but is NOT evil (easy decline, no nag); the open items (Tested reads-as-failure, rules→enforced silent on non-JS, non-interactive audit should emit the HTML report + leaderboard action points). Internal rationale behind docs/commands-and-how-they-relate.md`,
     "research/readme-revamp-concepts.md": `[idea] Five distinct whole-README redesign concepts/positioning options to resolve audit-vs-instruments front-door tension`,
 
     // ── eval ──
