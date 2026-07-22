@@ -637,11 +637,17 @@ export function Report({
   const overall = score.empty ? null : score.overall;
 
   useEffect(() => {
+    // Only the STANDALONE report (the CLI's HTML file) owns the browser-tab title —
+    // there, the grade-in-title is the whole point. The in-demo `summary` variant
+    // must NOT hijack the site's own title: a fresh visitor sees a baked EXAMPLE
+    // (e.g. madappgang B 82), and branding the tab with a stranger's grade reads as
+    // "this is vigiles's own score". The demo sets its own title for real reports.
+    if (variant !== "full") return;
     document.title =
       overall === null
         ? `vigiles — ${basename(meta.dir)}`
         : `vigiles — ${score.grade} (${overall}) · ${basename(meta.dir)}`;
-  }, [overall, score.grade, meta.dir]);
+  }, [variant, overall, score.grade, meta.dir]);
 
   // Points map, index-aligned to recommendations; rank fixes by real impact.
   const pointsFor = (i: number): number =>
