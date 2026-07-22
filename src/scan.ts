@@ -73,6 +73,7 @@ import {
   collectHookMatchers,
   summarizePurity,
   preferCompiledHooksMessage,
+  detectOwnTestSignal,
 } from "./scan-core.js";
 
 // Re-export the pure detectors (and their public types: SurfaceClassifier,
@@ -411,28 +412,17 @@ const nodeIsDirectory = (p: string): boolean => {
 };
 
 /**
- * Does the repo have its OWN test setup — so the vigiles-native `untested` count
- * shouldn't read as a failure? A real `package.json` `test` script, or a
- * conventional test dir (JS/TS/Python/JVM/Rust/Go). A weak proxy on purpose: it
- * only downgrades an ADVISORY signal from "alarm" to "optional", never changes a
- * grade.
+ * The disk (node:fs) wrapper over the shared, node-free
+ * {@link detectOwnTestSignal} in scan-core — a real `package.json` `test` script
+ * or a conventional test dir. A weak proxy on purpose: it only downgrades an
+ * ADVISORY signal from "alarm" to "optional", never changes a grade. Sharing the
+ * detector keeps the disk report and the browser demo report byte-identical.
  */
-function detectOwnTestSignal(dir: string): boolean {
-  const pkg = join(dir, "package.json");
-  if (existsSync(pkg)) {
-    try {
-      const { scripts } = JSON.parse(readFileSync(pkg, "utf-8")) as {
-        scripts?: Record<string, string>;
-      };
-      const t = scripts?.test?.trim();
-      if (t && !/no test specified/i.test(t)) return true;
-    } catch {
-      /* malformed package.json — ignore */
-    }
-  }
-  return ["test", "tests", "__tests__", "spec", join("src", "test")].some((d) =>
-    existsSync(join(dir, d)),
-  );
+function ownTestSignalOnDisk(dir: string): boolean {
+  return detectOwnTestSignal(dir, {
+    readFile: (p) => (existsSync(p) ? readFileSync(p, "utf-8") : ""),
+    existsSync,
+  });
 }
 
 /** Scan a plugin/repo directory and report its surfaces + structural issues. */
@@ -478,7 +468,10 @@ export function scanPlugin(
       : null;
   const mcpServers = collectMcpServers(resolve(dir), lay);
   const declaredServers = Object.keys(mcpServers);
-  const agents = scanAgents(loaded.files, dialect, declaredServers, cls);
+  const agents = scanAgents(loaded.files, dialect, declaredServers, cls, {
+    root: resolve(dir),
+    sources: loaded.sources,
+  });
   const skills = scanSkills(loaded.files, cls, {
     root: resolve(dir),
     materializeRoot: lay.materializeRoot,
@@ -552,7 +545,7 @@ export function scanPlugin(
     warnings: loaded.warnings,
     untested: findUntestedSurfaces({ basePath: dir, layout: lay }).untested
       .length,
-    ownTestSignal: detectOwnTestSignal(dir),
+    ownTestSignal: ownTestSignalOnDisk(dir),
     puritySummary,
   };
 }

@@ -69,6 +69,7 @@ import {
   collectHookBlockEntries,
   collectHookMatchers,
   summarizePurity,
+  detectOwnTestSignal,
 } from "./scan-core.js";
 // TYPE-ONLY from ./scan.js (the report shapes) — elided at build, so the
 // node-only runtime deps of scan.ts (plugin-loader/mcp/test-coverage/node:fs)
@@ -586,7 +587,16 @@ export function scanFiles(
       : null;
   const mcpServers = collectMcpServers(files, lay);
   const declaredServers = Object.keys(mcpServers);
-  const agents = scanAgents(loaded.files, dialect, declaredServers, cls);
+  // The repo's own test signal — same shared detector as the disk path, over the
+  // map-backed IO, so the demo report matches `audit --json` byte-for-byte.
+  const ownTestSignal = detectOwnTestSignal(BROWSER_ROOT, {
+    readFile: mapReadFile(files),
+    existsSync: exists,
+  });
+  const agents = scanAgents(loaded.files, dialect, declaredServers, cls, {
+    root: BROWSER_ROOT,
+    sources: loaded.sources,
+  });
   const skills = scanSkills(loaded.files, cls, {
     root: BROWSER_ROOT,
     materializeRoot: lay.materializeRoot,
@@ -600,6 +610,7 @@ export function scanFiles(
   return {
     dir: BROWSER_ROOT,
     instructions,
+    ownTestSignal,
     skills,
     agents,
     hooks,

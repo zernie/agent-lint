@@ -243,6 +243,31 @@ test("scanPlugin reports skills with description + user-invoked flags", () => {
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin reports the REAL on-disk surface path, not the phantom .claude/ key (dogfood E1)", () => {
+  // A root-kind plugin materializes `agents/*.md` + `skills/*/SKILL.md` under a
+  // synthetic `.claude/…` key (the layout's materializeRoot) that does NOT exist
+  // on disk. The reported `.path` must be the real repo-relative path so a
+  // diagnostic / GitHub annotation points at a file that actually exists.
+  const dir = fixture();
+  try {
+    const r = scanPlugin(dir);
+    for (const a of r.agents) {
+      assert.ok(
+        a.path.startsWith("agents/") && !a.path.startsWith(".claude/"),
+        `agent path should be the real agents/… path, got "${a.path}"`,
+      );
+    }
+    for (const s of r.skills) {
+      assert.ok(
+        s.path.startsWith("skills/") && !s.path.startsWith(".claude/"),
+        `skill path should be the real skills/… path, got "${s.path}"`,
+      );
+    }
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
 test("scanPlugin reads a YAML block-scalar description (not just `>`)", () => {
   // Regression: wshobson/agents skills commonly write `description: >` / `>-`
   // folded blocks. The naive regex captured only the indicator, mislabeling a
