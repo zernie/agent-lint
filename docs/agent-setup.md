@@ -112,15 +112,15 @@ _"set up vigiles in this repo"_ is enough:
 
 ```bash
 npx vigiles init        # full: specs + skills/hooks + CI + devDep (the default)
-npx vigiles init --gate # gate only: the CI integrity gate + devDep, nothing installed
+npx vigiles init --ci-only # gate only: the CI integrity gate + devDep, nothing installed
 ```
 
 **Which one?** Bare `init` sets up the **full** layers (the default). Use
-**`--gate`** when the repo **already has its own harness** (its own hooks/skills, or
+**`--ci-only`** when the repo **already has its own harness** (its own hooks/skills, or
 its own eval loop) or **isn't JS/Python** — you get the deterministic lint gate in CI
 with **zero conflict**: no plugin, no scaffolded spec, no test. It's the same choice
 the interactive wizard's first question offers; an agent picks it with the flag. A
-non-interactive full run **prints a one-line pointer to `--gate`** in its summary, so
+non-interactive full run **prints a one-line pointer to `--ci-only`** in its summary, so
 the alternative is discoverable even when nobody saw the wizard. Either way the setup
 stays non-destructive and invites the richer layers later — nothing is forced.
 
@@ -154,7 +154,7 @@ Set up vigiles for this project:
 1. Run `npx vigiles init` (adds vigiles to devDependencies and installs the
    Claude Code plugin via the marketplace — nothing is vendored into the repo).
    If this repo already has its own harness or isn't JS/Python, use
-   `npx vigiles init --gate` for the CI integrity gate alone (nothing installed).
+   `npx vigiles init --ci-only` for the CI integrity gate alone (nothing installed).
 2. Read the generated .spec.ts, fill in the project's actual conventions
 3. Run `npm install`, then `npx vigiles compile` to verify
 4. Commit the .spec.ts, compiled .md, .vigiles/generated.d.ts, and package.json

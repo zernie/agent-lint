@@ -33,15 +33,15 @@ pure-gate setup ("run `init` and choose 'full' … optional, the gate already wo
 INFORMATIONAL, never a second prompt (the wizard already asked; a headless run never
 hangs). Unit-tested in `setup-plan.test.ts`.
 
-**SHIPPED — the non-interactive gate is `--gate`.** `init --gate` is the headless
+**SHIPPED — the non-interactive gate is `--ci-only`.** `init --ci-only` is the headless
 equal of the wizard's "gate" choice: `resolvePlan` maps it to
 `{lint:true, test:false, plugin:false, scaffoldSpecs:false, strict:false}` (the lint
 gate plus CI plus the devDep, nothing installed), and `shouldPrompt` treats it as a
 settled choice so it never prompts. Unit-tested in `setup-plan.test.ts`; documented in
 `docs/cli.md`.
 
-**Why `--gate` (opt-in), NOT a default-flip — the decision + reasoning (2026-07-22).**
-The options were: (A) a `--gate` flag, full stays the default; (B) flip the
+**Why `--ci-only` (opt-in), NOT a default-flip — the decision + reasoning (2026-07-22).**
+The options were: (A) a `--ci-only` flag, full stays the default; (B) flip the
 non-interactive default to gate-only, specs behind `--strict`; (C) `--lint
 --no-scaffold`; (D) a `setup.mode` config key; (E) auto-detect gate when the repo
 "looks" gate-appropriate. **Chose A.** The founder's sharp question was: doesn't making

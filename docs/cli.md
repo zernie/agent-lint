@@ -66,31 +66,31 @@ which layers, CI, and the plugin. Run by an agent, in CI, or with piped input
 
 ### `init` flags
 
-| Flag                     | Effect                                                                      |
-| ------------------------ | --------------------------------------------------------------------------- |
-| `--yes`, `-y`            | Skip prompts; use defaults (both layers, CI, plugin)                        |
-| `--gate`                 | Gate-only: the lint gate + CI + devDep, **no** plugin/spec/test (see below) |
-| `--lint` / `--no-lint`   | Lint layer — verify instruction-file references (default on)                |
-| `--test` / `--no-test`   | Test layer — scaffold a harness test (default on)                           |
-| `--harness=claude,codex` | Which harness(es) to set up (default: auto-detect from the repo)            |
-| `--no-gha`               | Skip wiring CI                                                              |
-| `--no-plugin`            | Skip installing the Claude Code plugin                                      |
-| `--strict`               | Also enforce the workflow tier (specs + tests; see below)                   |
-| `--report-only`          | Write the whole gate at `warn` — nothing fails CI (migration mode)          |
-| `--target=AGENTS.md`     | Adopt / create a spec for one file (Lint layer only)                        |
+| Flag                     | Effect                                                                                                                                                   |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--yes`, `-y`            | Skip prompts; use defaults (both layers, CI, the plugin)                                                                                                 |
+| `--ci-only`              | The CI check only: the lint gate + CI workflow + devDep, **nothing installed** — no plugin/spec/test (see below)                                         |
+| `--lint` / `--no-lint`   | Lint layer — verify instruction-file references (default on)                                                                                             |
+| `--test` / `--no-test`   | Test layer — scaffold a harness test (default on)                                                                                                        |
+| `--harness=claude,codex` | Which harness(es) to set up (default: auto-detect from the repo)                                                                                         |
+| `--no-gha`               | Skip wiring CI                                                                                                                                           |
+| `--no-plugin`            | Skip installing the vigiles **Claude Code plugin** (its skills + hooks, into `~/.claude/`) — not a vigiles-CLI plugin, and never vendored into your repo |
+| `--strict`               | Also enforce the workflow tier (specs + tests; see below)                                                                                                |
+| `--report-only`          | Write the whole gate at `warn` — nothing fails CI (migration mode)                                                                                       |
+| `--target=AGENTS.md`     | Adopt / create a spec for one file (Lint layer only)                                                                                                     |
 
 Passing a single positive layer flag selects only it (`--lint` = the Lint
 layer only); pass both, or neither, for both. `init` also adds `vigiles` to your
 `devDependencies` (moving it out of `dependencies` if it's there) so the
 scaffolded `vigiles.harness.mjs` resolves `vigiles/testing`.
 
-**`--gate` — the integrity gate, nothing installed.** At a terminal the wizard's
-first question is "gate vs full"; `--gate` is the same choice for a headless run
+**`--ci-only` — the CI check only, nothing installed.** At a terminal the wizard's
+first question is "gate vs full"; `--ci-only` is the same choice for a headless run
 (an agent or CI). It sets up the deterministic lint gate on your raw files, wires
 CI, and adds the dev dependency — then stops: no plugin, no scaffolded spec, no
 test. It's the zero-conflict path for a repo that already has its own harness (or
 isn't JS/Python). **Full stays the default** — bare `init` is unchanged, so
-`--gate` is an opt-in that never hides the richer layers; the setup still prints a
+`--ci-only` is an opt-in that never hides the richer layers; the setup still prints a
 one-line invitation to run the full setup later, and the report keeps showing what
 a spec or eval would catch.
 

@@ -79,11 +79,11 @@ test("parseSetupArgs reads --lint / --no-test / --harness", () => {
   assert.equal(parseSetupArgs([]).test, undefined);
 });
 
-test("--gate: the explicit gate-only opt-in (no plugin, no spec, no test)", () => {
-  assert.equal(parseSetupArgs(["--gate"]).gate, true);
-  assert.equal(parseSetupArgs([]).gate, false);
+test("--ci-only: the explicit gate-only opt-in (no plugin, no spec, no test)", () => {
+  assert.equal(parseSetupArgs(["--ci-only"]).ciOnly, true);
+  assert.equal(parseSetupArgs([]).ciOnly, false);
 
-  const plan = resolvePlan(parseSetupArgs(["--gate"]));
+  const plan = resolvePlan(parseSetupArgs(["--ci-only"]));
   assert.equal(plan.lint, true, "gate keeps the lint GATE");
   assert.equal(plan.test, false);
   assert.equal(plan.plugin, false);
@@ -92,17 +92,17 @@ test("--gate: the explicit gate-only opt-in (no plugin, no spec, no test)", () =
   // The gate-only invitation fires (it's a pure lint gate → invite to full later).
   assert.ok(gateOnlyInvitation(plan));
 
-  // --gate wins over a conflicting default-strict: still minimal.
+  // --ci-only wins over a conflicting default-strict: still minimal.
   assert.equal(
-    resolvePlan(parseSetupArgs(["--gate", "--strict"])).strict,
+    resolvePlan(parseSetupArgs(["--ci-only", "--strict"])).strict,
     false,
   );
 
   // Bare `init` is UNCHANGED — full stays the default (gate is opt-in, no flip).
   assert.equal(resolvePlan(parseSetupArgs([])).scaffoldSpecs, true);
 
-  // --gate settles the fork → never prompt over it (even at a TTY).
-  assert.equal(shouldPrompt(parseSetupArgs(["--gate"]), true), false);
+  // --ci-only settles the fork → never prompt over it (even at a TTY).
+  assert.equal(shouldPrompt(parseSetupArgs(["--ci-only"]), true), false);
 });
 
 test("parseSetupArgs: the old --verify/--testing/--pillars flags are gone", () => {

@@ -3529,7 +3529,7 @@ async function setup(args: string[]): Promise<void> {
   // Surface the OTHER mode so both directions are discoverable — the two branches
   // are mutually exclusive (a run is either gate-only or full):
   //   • a gate-only setup → a ONE-LINE nudge to graduate to the full layer;
-  //   • a NON-INTERACTIVE full setup → name `--gate`, because an agent/CI took the
+  //   • a NON-INTERACTIVE full setup → name `--ci-only`, because an agent/CI took the
   //     full default WITHOUT seeing the wizard's "gate vs full" fork, so it would
   //     otherwise never learn the flag exists (the discovery gap for the agent path).
   // Both are informational, never a prompt (a headless run must not hang), and the
@@ -3539,7 +3539,7 @@ async function setup(args: string[]): Promise<void> {
     console.log(`\n${invite}`);
   } else if (!prompted) {
     console.log(
-      "\nℹ Ran the standard setup. Already have a harness, or not a JS/Python repo, and want only the CI integrity gate (nothing installed)? Re-run `npx vigiles init --gate`.",
+      "\nℹ Ran the standard setup. Already have a harness, or not a JS/Python repo, and want only the CI integrity gate (nothing installed)? Re-run `npx vigiles init --ci-only`.",
     );
   }
 }
@@ -5226,7 +5226,7 @@ function printUsage(command: string | undefined): void {
   console.log("");
   console.log("Commands:");
   console.log(
-    "  vigiles init [flags]           Setup project (--gate for the CI gate only; --lint, --test, --harness=, --strict, --report-only, --no-gha, --force)",
+    "  vigiles init [flags]           Setup project (--ci-only for the CI gate only; --lint, --test, --harness=, --strict, --report-only, --no-gha, --force)",
   );
   console.log("  vigiles compile [files...]     Compile .spec.ts → .md");
   console.log(

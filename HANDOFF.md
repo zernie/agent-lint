@@ -24,7 +24,7 @@ earlier — percent-encoded-link false-positive fix (real bug, 92→100), blurre
 (`LockedRow`), adoption docs. **Latest adoption batch (all SHIPPED + pushed):** VerbMap red→green examples · OG card
 (4b‑b1) · 4a share deep-link · **1b** (dismissible nudge, `.vigilesrc.json` `"nudge":"dismissed"`) · **2b** (full audit
 HTML softens rules wording when no linter) · **3** (leaderboard mode-header + drill-in + "all-clean → model tier" note)
-· **`init --gate`** (the non-interactive gate-only opt-in — full stays default, no flip) · value-framed adoption nudge.
+· **`init --ci-only`** (the non-interactive gate-only opt-in — full stays default, no flip) · value-framed adoption nudge.
 This session (2026-07-22 cont.):
 
 - **Adoption docs DONE + signed off** — `research/adoption-goals.md` (G1–G5 + non-evil contract), `adoption-design.md`
@@ -33,7 +33,7 @@ This session (2026-07-22 cont.):
   `vigiles/s50.md` (NOT here — strategy). davila7-F reconciliation noted (design item, not blocking).
 - **Item 1 (gate-first `init`) — PARTIAL/SHIPPED** — `SetupPlan.scaffoldSpecs` decouples the lint GATE from the SPEC
   scaffold; wizard's new FIRST question is "gate vs full"; `gateOnlyInvitation` one-liner. NO new CLI surface (honors
-  the high-bar). NON-INTERACTIVE gate is the DEFERRED half (needs a founder call: `--gate` flag vs default-flip that
+  the high-bar). NON-INTERACTIVE gate is the DEFERRED half (needs a founder call: `--ci-only` flag vs default-flip that
   breaks ~16 "specs by default" tests).
 - **Item 2 (Tested + rules honesty) — SHIPPED** — `detectOwnTestSignal` in `scan.ts` (`ScanReport.ownTestSignal`) +
   `audit-score.ts tested()` re-worded to "N surfaces with no vigiles test/eval" + credits your own test setup as

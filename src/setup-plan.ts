@@ -60,13 +60,14 @@ export interface ParsedSetupArgs {
   gha?: boolean;
   plugin?: boolean;
   /**
-   * `--gate` — the explicit gate-only opt-in: the non-interactive equal of the
-   * wizard's "gate" choice (lint GATE + CI + devDep, no plugin, no spec, no test).
-   * Lets an agent/CI reach gate-only without a TTY. Full stays the DEFAULT (bare
-   * `init` is unchanged), so gate is opt-IN — it never buries the richer layers
-   * behind a default flip.
+   * `--ci-only` — the explicit CI-gate-only opt-in: the non-interactive equal of
+   * the wizard's "gate" choice (the lint gate in CI + devDep, no plugin, no spec,
+   * no test). Lets an agent/CI reach it without a TTY. Full stays the DEFAULT (bare
+   * `init` is unchanged), so this is opt-IN — it never buries the richer layers
+   * behind a default flip. (Named for what it sets up — the CI check — not the
+   * internal "integrity gate" concept.)
    */
-  gate: boolean;
+  ciOnly: boolean;
 }
 
 function flagValue(
@@ -97,7 +98,7 @@ export function parseSetupArgs(args: readonly string[]): ParsedSetupArgs {
     harness: flagValue(args, "--harness="),
     gha: args.includes("--no-gha") ? false : undefined,
     plugin: args.includes("--no-plugin") ? false : undefined,
-    gate: args.includes("--gate"),
+    ciOnly: args.includes("--ci-only"),
   };
 }
 
@@ -246,9 +247,9 @@ export function mergeProjectConfig(
  * via flags. Agents / CI / piped input (no TTY) never prompt.
  */
 export function shouldPrompt(parsed: ParsedSetupArgs, isTTY: boolean): boolean {
-  // `--gate` is an explicit setup-shape choice (the CLI equal of the wizard's
+  // `--ci-only` is an explicit setup-shape choice (the CLI equal of the wizard's
   // "gate" answer), so it settles the fork — never prompt over it.
-  if (!isTTY || parsed.yes || parsed.target || parsed.gate) return false;
+  if (!isTTY || parsed.yes || parsed.target || parsed.ciOnly) return false;
   const pillarsPinned = parsed.lint !== undefined || parsed.test !== undefined;
   const allPinned =
     pillarsPinned && parsed.gha !== undefined && parsed.plugin !== undefined;
@@ -560,12 +561,12 @@ export function resolvePlan(
   // "gate" answer is the one thing that overrides this to false (a lint gate with no
   // spec). So `--no-lint` also stops the scaffold, and everything else is unchanged.
   plan.scaffoldSpecs = plan.lint;
-  // `--gate`: the explicit gate-only opt-in — the lint GATE + CI + devDep, but no
-  // plugin, no spec scaffold, no test (the same shape as the wizard's "gate"
+  // `--ci-only`: the explicit CI-gate-only opt-in — the lint gate in CI + devDep,
+  // but no plugin, no spec scaffold, no test (the same shape as the wizard's "gate"
   // choice). Full stays the DEFAULT, so this never flips bare `init`'s behaviour;
   // it just lets a headless agent/CI request the non-invasive gate. Applied after
   // the pillar flags so it wins over `plan.scaffoldSpecs = plan.lint`.
-  if (parsed.gate) {
+  if (parsed.ciOnly) {
     plan.lint = true;
     plan.test = false;
     plan.plugin = false;

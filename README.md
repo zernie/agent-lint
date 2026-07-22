@@ -212,7 +212,7 @@ npx vigiles init   # sets up the typed spec for structural rules (non-destructiv
                    # ~/.claude/, not your repo). On Codex, skills install globally too.
 ```
 
-**Already have a harness, or a non-JS repo?** `npx vigiles init --gate` sets up just the CI integrity gate — nothing installed, zero conflict. **[When to use gate vs full →](docs/agent-setup.md#non-interactive-setup-agents--ci)**
+**Already have a harness, or a non-JS repo?** `npx vigiles init --ci-only` sets up just the CI integrity gate — nothing installed, zero conflict. **[When to use gate vs full →](docs/agent-setup.md#non-interactive-setup-agents--ci)**
 
 Interactive in a terminal, non-interactive for agents/CI (or `--yes`). **Works with Claude Code and Codex** — vigiles verifies `CLAUDE.md` and `AGENTS.md` the same way. **[Codex setup →](docs/harnesses.md)**
 
