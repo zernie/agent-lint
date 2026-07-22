@@ -22,15 +22,18 @@ The two axes that decide everything:
 ## The cases
 
 ### 1. JS/TS team with ESLint (+ Prettier) — the flagship
+
 - **Value:** the full story. `rules → enforced` lands (prose rule ↔ real linter rule,
   the `===`/eqeqeq case), plus ref verification, tool contracts, trifecta.
 - **Path:** `init` full — specs + plugin + CI. Who the site markets to.
 - **Today:** works. **Friction:** none major.
 
 ### 2. Python team with Ruff / Pylint
+
 - Same as #1 (Ruff/Pylint are supported route targets). `rules → enforced` works.
 
 ### 3. Existing rich harness, NON-JS stack, own eval loop (the review team)
+
 - **Value:** the integrity GATE only — broken refs, tool contracts, skill collisions,
   lethal-trifecta. `rules → enforced` is silent (no linter); `eval` is redundant (own loop).
 - **Path:** **gate-only** — `lint` in CI via `zernie/vigiles@v1`, NO plugin, NO spec, NO
@@ -38,15 +41,17 @@ The two axes that decide everything:
 - **Today:** `lint` works standalone. **Friction (must fix):** `init` is invasive by
   default (global plugin can double-trigger their skills; spec is extra maintenance);
   `Tested` reads as a failure though it's advisory + vigiles-native-only; `rules →
-  enforced` is featured on the site but says nothing here (over-promise).
+enforced` is featured on the site but says nothing here (over-promise).
 
 ### 4. Newcomer — bare / thin CLAUDE.md, no harness yet
+
 - **Value:** `audit` shows the gaps; nothing to conflict with, so full setup is safe.
 - **Path:** `init` full — scaffold specs, install skills, wire CI. The onboarding happy path.
 - **Today:** works. **Friction:** the value of specs must be sold, not assumed (the
   non-evil nudge in `cli-command-model.md`).
 
 ### 5. Plugin / skill AUTHOR (publishing to a marketplace)
+
 - **Value:** `lint` as a PRE-PUBLISH gate (tool contracts, frontmatter, skill collisions,
   hook events, missing hook scripts); `audit` report + the leaderboard for comparison.
 - **Path:** `lint` in CI + `audit` for the shareable report/grade.
@@ -54,17 +59,20 @@ The two axes that decide everything:
   report link (a bare all-A leaderboard reads as "found nothing").
 
 ### 6. Platform / CI team — a deterministic gate across many repos
+
 - **Value:** one gate on every PR, org-wide; sticky PR comment.
 - **Path:** gate-only (`zernie/vigiles@v1`), rolled out per repo. No per-repo `init`.
 - **Today:** works. **Friction:** none major; document the org-wide rollout.
 
 ### 7. Multi-harness team (Claude Code + Codex)
+
 - **Value:** `audit`/`lint` on both; the `CLAUDE.md`⇄`AGENTS.md` mirror linted once.
 - **Path:** harness-agnostic `lint`; `--harness=` or `.vigilesrc.json` when it can't autodetect.
 - **Today:** compile/lint are harness-aware. **Friction:** audit is Claude-Code-focused
   for now (`audit-harness-dx.md`, deferred).
 
 ### 8. Security-conscious team
+
 - **Value:** the lethal-trifecta detector (rare + useful — max blast-radius under
   prompt-injection) + tool-contract enforcement.
 - **Path:** `audit`/`lint` + the Safety ring; the trifecta finding is the hook.

@@ -12,13 +12,13 @@ rationale + the open design items.
 
 ## The verbs (one engine, few human verbs)
 
-| Verb    | Kind            | What it is                                                        |
-| ------- | --------------- | ---------------------------------------------------------------- |
+| Verb    | Kind            | What it is                                                                                          |
+| ------- | --------------- | --------------------------------------------------------------------------------------------------- |
 | `audit` | **read**        | Zero-config A–F report. Safe anywhere; writes nothing, (by default) executes nothing. "Where am I?" |
-| `lint`  | **read (gate)** | The same deterministic checks as a CI gate — fails the build. No model. |
-| `test`  | read            | Runs hooks/skills against a scripted stand-in model (no key). "Does it behave?" |
-| `eval`  | read (model)    | The one verb that calls a real model, on your Claude subscription. "Does a skill help / fire?" |
-| `init`  | **write**       | Setup: scaffold specs, install the plugin (skills+hooks), wire CI, add a devDep. |
+| `lint`  | **read (gate)** | The same deterministic checks as a CI gate — fails the build. No model.                             |
+| `test`  | read            | Runs hooks/skills against a scripted stand-in model (no key). "Does it behave?"                     |
+| `eval`  | read (model)    | The one verb that calls a real model, on your Claude subscription. "Does a skill help / fire?"      |
+| `init`  | **write**       | Setup: scaffold specs, install the plugin (skills+hooks), wire CI, add a devDep.                    |
 
 ## Why `audit` and `init` do NOT merge (read ⊄ write)
 

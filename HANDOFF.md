@@ -24,6 +24,7 @@ cohesive overhaul, the real F→C→B→A featured default (davila7 F → disler
 
 **Branch `claude/click-not-working-s9apfb` was rebuilt from `main` and has 5 UNMERGED commits (pushed, NO PR yet)** —
 restart follow-ups from `main` (`git fetch origin main && git checkout -B claude/click-not-working-s9apfb origin/main`):
+
 1. `fix(audit)` — a percent-encoded markdown link was flagged as a broken bundled resource (a real FALSE POSITIVE;
    verified a clean repo went 92→100). 2. `feat/fix(report)` — the trigger-rate tease is now a BLURRED "preview"
    (gated-content pattern, honest: blurred + labelled + sr-only truth; founder wanted the tease, NOT honest em-dashes —
@@ -68,8 +69,8 @@ is the backstop but the visual + Fable cold-visitor pass still matter — ACT on
    leaderboard gets worst-finding + per-plugin link; (d) LOCAL-RESULT SHARE — for a repo with a public GH remote,
    `audit` prints `Share → vigiles.sh/?repo=owner/repo` (reuses the demo deep-link; private/local needs the backend).
 3. **Open a PR** for the 5 committed fixes when founder OKs (they hadn't decided PR-now vs bundle-with-adoption).
-Other candidates (founder's call): analytics provider (`track()` instrumented, no script yet); roadmap
-backend-audit-service; Codex trigger-rate promotion (below).
+   Other candidates (founder's call): analytics provider (`track()` instrumented, no script yet); roadmap
+   backend-audit-service; Codex trigger-rate promotion (below).
 
 ### Codex trigger-rate is EXPERIMENTAL
 
