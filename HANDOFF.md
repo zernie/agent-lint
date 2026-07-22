@@ -18,7 +18,7 @@
 **`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
 via `pages.yml` on push to main. Demo UX + real-F default MERGED (PRs #100–#106).
 
-**Branch `claude/click-not-working-s9apfb`: 26 UNMERGED commits (pushed, NO PR yet).** Restart from `main`
+**Branch `claude/click-not-working-s9apfb`: 30+ UNMERGED commits (pushed, NO PR yet).** Restart from `main`
 if needed (`git fetch origin main && git checkout -B claude/click-not-working-s9apfb origin/main`). What's on it:
 earlier — percent-encoded-link false-positive fix (real bug, 92→100), blurred "preview" trigger-rate tease
 (`LockedRow`), adoption docs. **Adoption batch (all SHIPPED):** VerbMap red→green · OG card (4b‑b1) · 4a share
@@ -70,12 +70,26 @@ against the skill (READ it before touching `site/`); screenshot desktop AND full
 
 ### 🎯 DO NEXT
 
-0. **Synthesize the 4 dogfood agents' findings** (running now) — verify each is REAL (repro + source trace), then
-   fix the strong ones and/or FILE them as GitHub issues (Vlad's style — the user said "find more issues using this
-   way"). Confirm before mass-filing.
-1. **Fix the remaining dogfood issues** in priority: #107 (compile frontmatter data-loss — `allowed-tools`/YAML-list/
-   `context:fork`/dirty-tree), #110 (detector false-positives), #112 (`"off"` severity → normalizeSeverity), #113
-   (testGlobs docs). #108 already FIXED.
+0. **DOGFOOD BATCH — finish the remaining fixes.** The 4 agents found 14 verified bugs; founder said FIX (not file) —
+   deterministic traced bugs don't need an issue, fix directly (codified: file only when the fix is ambiguous).
+   **FIXED + pushed this session:** #108 (marketplace owner) · #112+C3/C4/C5 (config parse-don't-validate:
+   normalizeSeverity + asStringArray in `loadConfig`) · I2 (Codex install `-s`-scoped to SHIPPED_SKILLS) · D2
+   (hook-block exit-2-in-comment). **REMAINING (all traced, fixes known):**
+   - **A / C1+I3** — `audit` AND `init` ignore `.vigilesrc.json` `harness` (route both through `resolveHarnessSelection`
+     like lint/compile). cli.ts audit case (~6926) + `resolveHarnesses` (~3323).
+   - **E1 (P0)** — agent/skill diagnostics + GH annotations print a phantom `.claude/<surface>/…` path (thread
+     `sources` into `scanAgents`; use the real on-disk path in `ScanAgent/ScanSkill.path`). scan-core.ts + plugin-loader.ts.
+   - **E2** — default `lint` integrity sweep skips subagents (`findInstructionFiles` globs only CLAUDE/AGENTS/SKILL;
+     add the resolved adapter's `agentDir`). cli.ts ~4630.
+   - **D1** — `hook-script-exists` FP on `find -name "*.js"` glob (narrow SCRIPT_RE to command-head / known-prefix). scan-core.ts ~65/478.
+   - **E3** — `init --target` silently drops unmapped frontmatter keys on malformed YAML (`unmappedFrontmatterKeys`
+     bails on `!fm.data`; add raw-key-scan fallback). adopt.ts ~346.
+   - **I1 / I4** — scaffolded CI workflow `npm install` ENOENT on no-package.json (gate on package.json); `--test`-only
+     still wires a lint job (gate on `plan.lint`). cli.ts `vigilesWorkflow` ~2609.
+   - **C2** — unknown harness → raw stack-trace crash (top-level try/catch in `main()` → err.message + exit 2). cli.ts.
+   - Vlad's #107 (compile frontmatter data-loss) + #110 (skill-resource/dangling FPs) + #113 (testGlobs docs) + #109/#111 remain too.
+1. **Codify the dogfood process as a skill** (`.claude/skills/dogfood-cli`) — the expert find+fix fan-out, with the
+   lesson: worktree-isolate, and serialize/merge fixes that touch shared files (cli.ts/scan-core.ts). Founder asked for this.
 2. **Open the PR** for the 26 commits — founder hasn't given final go; multiple real bug fixes worth shipping.
    (Founder deprioritized item 6 GHA PR-comment grade — GHA is later-adoption AND not guaranteed after gate-first init.)
 3. **Item 4b b2 (per-grade OG card)** — the ONLY remaining share-loop piece: a card showing `owner/repo · actual grade`.
