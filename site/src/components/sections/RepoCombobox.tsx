@@ -65,30 +65,34 @@ export function RepoCombobox({
   const reqId = useRef(0);
   const abort = useRef<AbortController | null>(null);
 
-  const { owner, fragment } = splitOwnerFragment(text);
-  // A slash means the owner is known → scope to it; otherwise the whole text is a
-  // repo-name query searched across GitHub. `mode` + `lookupKey` drive the fetch.
-  const hasSlash = text.includes("/");
-  const mode: "owner" | "query" = hasSlash ? "owner" : "query";
-  const lookupKey = hasSlash ? owner : text.trim();
-  const debouncedKey = useDebouncedValue(lookupKey, 300);
+  // Live split — used by the render (instant fragment filtering) + submit.
+  const { fragment } = splitOwnerFragment(text);
+  // The FETCH target (mode + key) is derived from ONE debounced text, so mode and key
+  // can never desync across the "/" boundary — a live mode paired with a stale
+  // debounced key would fire a wrong-owner lookup (owner mode with the previous
+  // bare-name key). A slash → scope to that owner; otherwise → a global name query.
+  const debouncedText = useDebouncedValue(text, 300);
+  const fetchHasSlash = debouncedText.includes("/");
+  const fetchOwner = splitOwnerFragment(debouncedText).owner;
+  const fetchMode: "owner" | "query" = fetchHasSlash ? "owner" : "query";
+  const fetchKey = fetchHasSlash ? fetchOwner : debouncedText.trim();
 
-  // Fetch suggestions for the debounced key (cached per mode+key so re-typing and
+  // Fetch suggestions for the debounced target (cached per mode+key so re-typing and
   // client-side fragment filtering never re-hit the network). Owner mode fetches an
   // owner's repos once; query mode searches by name across GitHub.
   useEffect(() => {
-    // Invalidate any in-flight lookup UP FRONT: a newer key must supersede a prior
+    // Invalidate any in-flight lookup UP FRONT: a newer target must supersede a prior
     // request even when this run resolves from cache or is too short to search —
     // otherwise a late resolution still matches the current id and overwrites the
     // suggestions with the prior query's results.
     const id = ++reqId.current;
     abort.current?.abort();
-    const minLen = mode === "query" ? 2 : 1;
-    if (debouncedKey.length < minLen) {
+    const minLen = fetchMode === "query" ? 2 : 1;
+    if (fetchKey.length < minLen) {
       setOutcome(null);
       return;
     }
-    const cacheKey = `${mode}:${debouncedKey}`;
+    const cacheKey = `${fetchMode}:${fetchKey}`;
     const cached = cache.current.get(cacheKey);
     if (cached) {
       setOutcome(cached);
@@ -97,21 +101,22 @@ export function RepoCombobox({
     const ctrl = new AbortController();
     abort.current = ctrl;
     setOutcome("loading");
-    const fetcher = mode === "owner" ? searchOwner : searchByName;
-    void fetcher(debouncedKey, ctrl.signal).then((o) => {
-      if (reqId.current !== id) return; // a newer key superseded us
+    const fetcher = fetchMode === "owner" ? searchOwner : searchByName;
+    void fetcher(fetchKey, ctrl.signal).then((o) => {
+      if (reqId.current !== id) return; // a newer target superseded us
       if (isCacheable(o)) cache.current.set(cacheKey, o);
       setOutcome(o);
     });
-  }, [debouncedKey, mode, searchOwner, searchByName]);
+  }, [fetchMode, fetchKey, searchOwner, searchByName]);
 
   useClickOutside(rootRef, () => setOpen(false), open);
 
   // Owner mode filters the owner's repos by the typed fragment; query mode's results
-  // arrive already ranked by stars from the search API, so show them as-is.
+  // arrive already ranked by stars from the search API, so show them as-is. Keyed on
+  // fetchMode (matches the outcome), with the LIVE fragment for instant filtering.
   const hits: readonly RepoHit[] =
     outcome !== null && outcome !== "loading" && outcome.kind === "ok"
-      ? mode === "owner"
+      ? fetchMode === "owner"
         ? rankRepos(outcome.repos, fragment)
         : outcome.repos.slice(0, 7)
       : [];
@@ -205,9 +210,10 @@ export function RepoCombobox({
         >
           {loading && (
             <div className="px-4 py-2.5 font-mono text-sm text-muted-foreground">
-              {mode === "owner" ? (
+              {fetchMode === "owner" ? (
                 <>
-                  searching <span className="text-foreground">@{owner}</span>…
+                  searching{" "}
+                  <span className="text-foreground">@{fetchOwner}</span>…
                 </>
               ) : (
                 "searching repos…"
@@ -238,7 +244,7 @@ export function RepoCombobox({
                 <span className="block truncate font-mono text-sm text-foreground">
                   {/* Query mode spans owners, so show owner/name; owner mode already
                       knows the owner, so the bare repo name is enough. */}
-                  {mode === "query" ? hit.fullName : hit.name}
+                  {fetchMode === "query" ? hit.fullName : hit.name}
                   {hit.archived && (
                     <span className="ml-2 text-xs text-muted-foreground">
                       archived

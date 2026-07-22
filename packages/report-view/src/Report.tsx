@@ -33,6 +33,17 @@ export const AUDIT_PROMPT =
   "the overall grade, each category, and the top fixes in order of impact. " +
   "It's a read-only audit — don't change any files.";
 
+/** The prompt the LOCKED trigger-rate tease copies — distinct from AUDIT_PROMPT
+ *  because that one is a read-only audit and would NOT produce the recall/precision
+ *  numbers the tease promises. This one sets vigiles up and runs the model-gated
+ *  trigger-rate measurement (measureTriggerRate, via the test-harness skill) on the
+ *  user's own Claude subscription. */
+export const TRIGGER_RATE_PROMPT =
+  "Set up vigiles and measure whether my skills actually fire: run " +
+  "`npx vigiles init`, then use the test-harness skill to run measureTriggerRate. " +
+  "Report each skill's recall (does it fire when it should?) and precision (does " +
+  "it stay quiet on unrelated prompts?). It runs on my Claude subscription — no API key.";
+
 /** The audit checks that have a dedicated explainer page at vigiles.sh/checks/<slug>/.
  *  Mirrors the slugs in site/src/checks/checks.ts — a finding whose detector is here
  *  links to its plain-language page. ABSOLUTE url so the link also works from the CLI's
@@ -306,7 +317,7 @@ function LockedTease({ onUnlock }: { onUnlock?: () => void }) {
   const [copied, setCopied] = useState(false);
   const unlock = (): void => {
     onUnlock?.();
-    void navigator.clipboard?.writeText(AUDIT_PROMPT).then(
+    void navigator.clipboard?.writeText(TRIGGER_RATE_PROMPT).then(
       () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 1800);
@@ -348,7 +359,7 @@ function LockedTease({ onUnlock }: { onUnlock?: () => void }) {
       <button
         type="button"
         onClick={unlock}
-        title={AUDIT_PROMPT}
+        title={TRIGGER_RATE_PROMPT}
         className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-background/50 px-5 text-center"
       >
         {copied ? (
