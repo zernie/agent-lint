@@ -109,11 +109,10 @@ few words, one clear focal point per section. NOT a feature-stuffed template.
 
 ## In-browser demo (SHIPPED — the invariants to keep)
 
-The live "grade any repo" demo is BUILT (`site/src/components/sections/DemoAudit.tsx`
-
-- `site/src/demo/`): type/paste a public repo or tap a featured chip, it fetches the
-  harness files client-side and runs the SAME compiled engine the CLI does. The rules
-  below are now INVARIANTS to preserve, not future direction.
+The live "grade any repo" demo is BUILT (in `DemoAudit.tsx` + `site/src/demo/`):
+type/paste a public repo or tap a featured chip, it fetches the harness files
+client-side and runs the SAME compiled engine the CLI does. The rules below are now
+INVARIANTS to preserve, not future direction.
 
 * **Every result is shareable (see the shareability goal above).** A completed grade
   carries a one-tap share + a stable auto-running `?repo=` deep-link. This is a hard
