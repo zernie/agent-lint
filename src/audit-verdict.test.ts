@@ -211,7 +211,7 @@ describe("computeVerdict", () => {
     expect(v.pointsToNextGrade).toBe(10);
     expect(v.fixesToNextGrade).toBeNull();
     expect(v.perRecommendation).toEqual([]);
-    expect(v.sentence).toMatch(/^B — 2 units holding all three/);
+    expect(v.sentence).toMatch(/^B — 2 units can read data, reach the web/);
     expect(v.sentence).toMatch(/still lands below an A\.$/);
   });
 

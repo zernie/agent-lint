@@ -226,7 +226,7 @@ test("a HARD lethal-trifecta finding deducts W_TRIFECTA (-10); advisory does not
     }),
   );
   assert.equal(hard.score, 90); // 100 - 10
-  assert.ok(hard.issues.some((i) => i.includes("lethal-trifecta")));
+  assert.ok(hard.issues.some((i) => i.includes("lethal trifecta")));
 
   // An advisory (inherits-all) trifecta is NOT graded — it's surfaced elsewhere
   // (the Safety ring) as an advisory, never a leaderboard penalty.

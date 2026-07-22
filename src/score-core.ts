@@ -41,6 +41,18 @@ export const W_DANGLING_REF = 8; // a referenced intra-plugin file that's missin
 export const W_OVERLAP = 8; // a description collision → the wrong skill fires
 export const W_NO_CONTRACT = 5; // generic small-footgun weight (disallowedTools typo, invalid model/color)
 export const W_TRIFECTA = 10; // a HARD lethal-trifecta contract (all three legs, explicit) → a prompt-injection exfil path. HALF the old 20: a DING, not a fail — a trifecta is a real risk worth surfacing in the grade, but official plugins ship the pattern by design, so it dents the score (e.g. feature-dev's 3 hard units → −30 → C) without a catastrophic F.
+/**
+ * The one canonical, jargon-free finding string for a HARD lethal-trifecta unit —
+ * shared by the Safety category card (audit-score) AND the verdict sentence / overall
+ * deduction (reportDeductions here), so the plain-language copy can't drift between
+ * surfaces (one-detector-no-drift). It NAMES the three legs and the consequence in
+ * plain words instead of the old "holding all three lethal-trifecta legs
+ * (prompt-injection exfil path)" shorthand a first-time reader can't parse. The
+ * `(s)` placeholder is resolved by the caller's pluralizer against the count.
+ */
+export const TRIFECTA_LABEL =
+  'unit(s) can read data, reach the web, and run commands — the "lethal trifecta", so a prompt injection could exfiltrate secrets';
+
 // Two things are advisory, NOT graded penalties (shown, never scored — see scoreReport):
 //   - untested surfaces — a hardening gap, not breakage.
 //   - an agent that inherits all tools (no `tools:` line) — see reportDeductions for why.
@@ -93,8 +105,7 @@ export function reportDeductions(r: ScanReport): Deduction[] {
     {
       n: hardTrifecta,
       weight: W_TRIFECTA,
-      label:
-        "unit(s) holding all three lethal-trifecta legs (prompt-injection exfil path)",
+      label: TRIFECTA_LABEL,
     },
     {
       n: missingHooks,
