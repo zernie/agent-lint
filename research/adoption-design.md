@@ -33,15 +33,43 @@ pure-gate setup ("run `init` and choose 'full' … optional, the gate already wo
 INFORMATIONAL, never a second prompt (the wizard already asked; a headless run never
 hangs). Unit-tested in `setup-plan.test.ts`.
 
-**FOLLOW-UP (needs a founder call):** a NON-INTERACTIVE gate (an agent/CI reaching
-gate-only without the wizard) is not wired — `--no-plugin --no-test` is ambiguous with
-`--lint` (both resolve to lint-only, and `--lint` historically = specs), so a true
-non-interactive gate needs either the default-flip (`scaffoldSpecs = strict`, which
-breaks ~16 "specs by default" tests + the current `--lint` contract) OR a `--gate`
-flag (surface the founder resists). Deferred to that decision; the interactive path
-covers the actual human-setting-up scenario. The "gently later" nudge (a `.vigilesrc.json`
-`nudge:"dismissed"` flag + a one-time reminder on the next `audit`/`lint`) is also a
-follow-up.
+**SHIPPED — the non-interactive gate is `--gate`.** `init --gate` is the headless
+equal of the wizard's "gate" choice: `resolvePlan` maps it to
+`{lint:true, test:false, plugin:false, scaffoldSpecs:false, strict:false}` (the lint
+gate plus CI plus the devDep, nothing installed), and `shouldPrompt` treats it as a
+settled choice so it never prompts. Unit-tested in `setup-plan.test.ts`; documented in
+`docs/cli.md`.
+
+**Why `--gate` (opt-in), NOT a default-flip — the decision + reasoning (2026-07-22).**
+The options were: (A) a `--gate` flag, full stays the default; (B) flip the
+non-interactive default to gate-only, specs behind `--strict`; (C) `--lint
+--no-scaffold`; (D) a `setup.mode` config key; (E) auto-detect gate when the repo
+"looks" gate-appropriate. **Chose A.** The founder's sharp question was: doesn't making
+the gate opt-in REDUCE adoption of the richer features (specs/skills/evals)? The answer
+is the reverse — **A keeps full as the default, so the richer layers are what a human
+gets by default; only B would bury them behind a flag nobody types.** So B is the option
+the concern actually rules out. The deeper principle, which is the real record here:
+richer-feature adoption does NOT come from the install DEFAULT — a real existing-harness
+team proved that FORCING specs at `init` was friction that _hurt_ first adoption (the
+symmetric failure to hiding them behind a flag). Both "force at install" and "hide behind
+opt-in" starve the richer layers. The escape is **discovery-through-use**: the audit
+report shows what a spec/eval would catch in YOUR repo (the adoptability preview), the
+honest `Tested`/`rules→enforced` teases say "run locally to see X", the model-invocable
+skills (`strengthen`/`edit-spec`/`test-harness`) fire on the matching prompt, and the
+report's "create spec" buttons turn a finding into one click. So the gate is the
+low-friction floor everyone reaches; the richer layers are pulled in by a compelling
+INVITATION, not a forced default. The corollary to hold onto: the growth risk isn't
+"gate is opt-in", it's **a weak invitation** — so keep the in-report "what a spec/eval
+would catch" tease strong (that's where richer-feature adoption is actually won), and
+never let the (now-dismissible, item 2/1b) nudge be the ONLY invite. Rejected: B
+(breaking + surprising + the exact thing the concern rules out), E (magic — violates the
+explicit-over-magic ethos the install rules stand on), C (two flags to say "gate", less
+discoverable than one), D (chicken-and-egg — `init` is what creates the config).
+
+**FOLLOW-UP:** the "gently later" nudge is now DISMISSIBLE (item 2/1b — a `.vigilesrc.json`
+`nudge:"dismissed"` flag suppresses the adoption invitation; the invite states the one-key
+dismiss inline). A time-delayed "remind me on the Nth run" is still unbuilt (and would need
+`init` or a hook to write state, since `audit`/`lint` are pure reads).
 **Ethical guard (non-negotiables 1–2):** declining is one keystroke, no grade penalty,
 agent/CI/piped never hangs (the invitation is a print, not a prompt).
 
