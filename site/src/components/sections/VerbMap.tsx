@@ -1,6 +1,5 @@
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
 
 /** The four verbs over one engine — the "one tool, not four" frame. Each row is a
  *  clickable summary (command · what it answers · model note) that EXPANDS to a
@@ -14,6 +13,8 @@ const VERBS: {
   detail: string;
   /** A concrete one-liner of what it catches / proves. */
   example: string;
+  /** An optional "read more" link shown under the example. */
+  link?: { href: string; label: string };
 }[] = [
   {
     verb: "audit",
@@ -22,7 +23,7 @@ const VERBS: {
     detail:
       "The zero-config front door. One command reads your whole harness and grades it across five categories — truthful references, skills that trigger, sound structure, safety, test coverage. Nothing executes; it's a local report, like Lighthouse.",
     example:
-      'CLAUDE.md says "always use ===" → eqeqeq is OFF in your ESLint config',
+      'a hook registered on event "Setup" — which doesn\'t exist, so it never fires',
   },
   {
     verb: "lint",
@@ -47,9 +48,13 @@ const VERBS: {
     answers: "Does a skill actually help?",
     model: "needs a model · your subscription · on demand",
     detail:
-      "The one tier that needs a real model — run on YOUR Claude subscription, not a metered API. Measures whether a skill's description makes it FIRE when it should (recall) and stay quiet otherwise (precision), and whether its guidance moves the agent's behavior at all.",
+      "The one tier that needs a real model — run on YOUR Claude subscription, not a metered API. Measures whether a skill's description makes it FIRE when it should (recall) and stay quiet otherwise (precision), and whether its guidance actually moves the agent's behavior — so you can tell a real win from a claimed one.",
     example:
-      "commit-helper: fires 9/10 relevant · 0/10 unrelated → recall 90% · precision 100%",
+      "a skill claimed −75% tokens · measured: −6% (your model's output is <1% of the bill)",
+    link: {
+      href: "https://zernie.com/blog/token-savings-wrong-number/",
+      label: "Read the measurement",
+    },
   },
 ];
 
@@ -102,6 +107,17 @@ export function VerbMap() {
                 <pre className="mt-3 whitespace-pre-wrap break-words rounded-md border border-border bg-card/50 px-3 py-2 font-mono text-xs leading-relaxed text-foreground">
                   {v.example}
                 </pre>
+                {v.link && (
+                  <a
+                    href={v.link.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-accent no-underline transition-colors hover:text-accent/80"
+                  >
+                    {v.link.label}
+                    <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                  </a>
+                )}
               </div>
             </details>
           ))}
@@ -116,35 +132,6 @@ export function VerbMap() {
           CI gate that fails the build on the same deterministic checks — broken
           references, tool contracts, dead hooks, skill collisions.
         </p>
-
-        {/* Your rules → enforced — the prose-to-enforcement payoff of the hero
-            pain. One compact card, not a new section. */}
-        <Card className="reveal mx-auto mt-10 max-w-3xl p-6">
-          <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold tracking-tight">
-              Your rules → enforced
-            </h3>
-            {/* Clearly an ILLUSTRATION, not a scan of your repo — the example
-                below is representative, not a fabricated result (credibility). */}
-            <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              example
-            </span>
-          </div>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            <span className="font-mono text-foreground">audit</span> maps each
-            prose rule you wrote to the lint rule that enforces it, and tells
-            you which state it&apos;s in: already on, one line from on, or — the
-            costly one —{" "}
-            <span className="text-foreground">
-              silently turned off in your own config.
-            </span>{" "}
-            Deterministic, no model.
-          </p>
-          <pre className="mt-4 whitespace-pre-wrap break-words rounded-md border border-signal/25 bg-signal/[0.06] px-3 py-2.5 font-mono text-xs leading-relaxed text-signal">
-            {`"always use ===" → eqeqeq is "off" in your ESLint config
-   your CLAUDE.md says enforce it; your config quietly turns it off`}
-          </pre>
-        </Card>
       </div>
     </section>
   );

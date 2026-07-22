@@ -87,6 +87,18 @@
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);
   }
+  /* Tailwind v4's Preflight follows the CSS spec and gives <button> the DEFAULT
+     cursor (not pointer) — so every button (chips, copy pills, share, re-grade,
+     the combobox submit) loses its pointer. Restore it on the real interactive
+     elements. The Tailwind-v4-recommended fix; :not(:disabled) so a disabled
+     control still shows not-allowed. */
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  summary,
+  label[for],
+  select:not(:disabled) {
+    cursor: pointer;
+  }
 }
 
 /* A quiet oceanic glow behind the hero — soft cyan + teal, matching the accent. */

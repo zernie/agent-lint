@@ -80,6 +80,55 @@ caption, a second button, or a reassurance line is suspect until proven necessar
   `index.html` and confirm events land. Analytics carries the OUTCOME kind only, never
   a typed slug (a private repo name must not leak).
 
+## Direction — decisions of record (keep current; this is where the DIRECTION lives)
+
+The strategic calls behind the current site. Update this section when a direction
+changes — it's the design doc, not just a style guide. Each is a decision that cost
+real iteration to reach; don't silently undo one.
+
+- **THE DEFAULT DEMO MUST SHOW A CATCH — lead with a real low grade, never a wall of
+  A's.** The `FEATURED` chips are a genuine **F → C → B → A** scale on RECOGNIZABLE
+  repos (currently davila7/claude-code-templates F, disler/claude-code-hooks-mastery
+  C, madappgang B, obra/superpowers A). WHY it must be this way: real popular plugins
+  mostly grade **A/B on the deterministic axis the browser can run** — the dramatic
+  failures (skills don't fire, descriptions collide) live in the **model-gated
+  trigger-rate tier the browser CAN'T run** — so a clean-looking default argues
+  AGAINST the tool ("everything's fine, why do I need this?"). The default must be a
+  genuinely-broken repo so the wow (the report) shows vigiles catching something.
+  **Refreshing the low-grade default** (repos get fixed over time): sweep with
+  `git clone https://github.com/<slug>` then `node dist/cli.js audit <dir> --json`
+  (NOTE: `codeload`/`api.github.com` are proxy-blocked in the cloud env — `git clone`
+  via github.com works). Pick a repo that is (a) recognizable, (b) has OBJECTIVE,
+  one-line-fixable findings (dead tool, invisible `skills/` dir, dead hook event —
+  not embarrassing-by-design), so the public grade is fair (the Lighthouse model IS
+  public grades of public artifacts). Bake the report to `site/src/demo/reports/` and
+  wire it into `FEATURED`. The real fix for showing model-tier failures is the
+  **backend (roadmap)** — server-side fetch (no proxy block) + a rate-limited model.
+- **NAMES-BUT-NEVER-EXPLAINS is the #1 copy failure — gloss every concept or cut it.**
+  A cold visitor doesn't know what "linter", "reference", "enforce", "spec", or a
+  category name means. Every concept gets a plain-English gloss on FIRST use, or it's
+  cut. Don't name-drop jargon (the OLD README learned this — "DEFINE HARNESS on first
+  use"; the site regressed and had to relearn it). Test every line as a cold Claude
+  Code/Codex user who's never heard of vigiles.
+- **FOLD ECHOES INTO THE REPORT — don't add standalone explainer cards.** The report
+  IS the wow. A concept the browser can't show (model-gated trigger-rate, the linter
+  cross-reference that needs your local config) is a dashed **CLI-only row INSIDE the
+  report** (`LockedRow` / `CliRulesRow` in `report-view/src/Report.tsx`), not a card
+  floating below the frame. If the site explains the report in two places, cut the
+  echo (this is why the Wedge five-category strip and the standalone "Your rules →
+  enforced" card were removed — the report already carries both).
+- **ONE INPUT AFFORDANCE AT A TIME — Public/Private tabs, not a stack.** The hero
+  input was input + "public API" caption + private command hand-off + privacy line all
+  stacked (crowded). It's now **Public | Private tabs** in `DemoAudit`: Public = the
+  live type-a-repo combobox; Private = the `npx vigiles audit` command copy. One
+  affordance visible at a time.
+- **HONEST TEASE, NEVER BLUR/FAKE (supersedes any older "render it blurred" note).**
+  The model-gated row uses em-dash placeholders (`recall — · precision —`), NOT
+  blurred fake numbers. Blur reads as a render bug AND a paywall dark pattern, and
+  fabricating a number breaks "measured, not claimed" — doubly wrong sitting near copy
+  that mocks claimed numbers. If a stronger tease is ever wanted, use a REAL measured
+  number with an `example` label, never a fabricated/blurred one.
+
 ## UX requirements
 
 - **Command-first.** `npx vigiles audit` is the universal action (works on every
@@ -158,26 +207,29 @@ INVARIANTS to preserve, not future direction.
   trigger-rate — that's the part that needs an LLM + quota.
 - **A real progress bar / streaming state** while the audit runs — fetching files,
   running each ring — never a dead spinner. It should feel like work is happening.
-- **TEASE the locked LLM part, don't just label it "limited."** Render the
-  trigger-rate / model-gated section in the result as **blurred / locked** (a
-  gated-content pattern) with an "unlock by running it locally" affordance — make
-  people _curious_ to run `npx vigiles audit` for the full report (trigger-rate,
-  linter cross-ref, private repos). The deterministic rings show real numbers; the
-  model-gated section is present but veiled.
+- **TEASE the locked LLM part with HONEST placeholders, NOT blur** (see the
+  "HONEST TEASE, NEVER BLUR/FAKE" decision above — this supersedes the earlier
+  "render it blurred" guidance). The model-gated trigger-rate is a dashed CLI-only
+  row IN the report (`LockedRow`) with em-dash placeholders (`recall — · precision —`,
+  "run to fill") and an explicit "Copy prompt →" that says what it copies — so people
+  are curious to run it locally, and NOTHING is fabricated. Blur reads as a render
+  failure / paywall and fakes a number; don't.
 - **Reuse the real report components** (render from the `AuditReport` JSON) — never a
-  screenshot. This is why the report view must live in a SHARED package (see below).
+  screenshot. This is why the report view lives in a SHARED package (see below).
 
-## Repo structure for shared UI (no hacks)
+## Repo structure for shared UI (SHIPPED — the invariant to keep)
 
-The audit report (`report/`) and the landing site (`site/`) — and the future demo —
-share the same shadcn primitives, the `AuditReport` schema, and the report view.
-These must be **genuinely shared via a workspace package**, not duplicated or
-cross-imported by relative path. Target: npm workspaces + a `packages/` dir (e.g. a
-shared `@vigiles/ui` primitives package and a `@vigiles/report-view` package that
-renders an `AuditReport`), consumed by `report/`, `site/`, and the demo. The root
-`vigiles` published package + its CI gates (api-surface, coverage) must stay green —
-workspaces coexist, they don't replace the root package. Do this as its own reviewed
-change, not bolted onto a design pass.
+The audit report (`report/`) and the landing site (`site/`) share the same report
+view via a workspace package — **`@vigiles/report-view`** (`packages/report-view/`),
+which renders an `AuditReport` and owns the `Report` component (`variant: "summary"`
+for the in-demo frame, `"full"` for the CLI's standalone HTML report), the schema,
+the band tokens, and `theme.css`. Wired as npm WORKSPACES (`workspaces: [packages/*,
+report, site]`). **The invariant:** the demo and the CLI report render from the SAME
+component + the SAME `AuditReport` JSON — never a screenshot, never a duplicated or
+relative-cross-imported component. A consumer must `@source` this package's `src`
+(Tailwind v4 ignores `node_modules`). The root `vigiles` published package + its CI
+gates (api-surface, coverage) stay green — workspaces are private, excluded from its
+`files`. (See `research/report-view-and-browser-demo.md` for the CI-critical setup.)
 
 ## Process — before shipping any site change
 

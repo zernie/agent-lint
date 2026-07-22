@@ -129,6 +129,26 @@ describe("auditScore", () => {
     expect(s.grade).toBe("F");
   });
 
+  it("a misplaced-plugin-dir deduction lands on the Structure ring (rings sum to the headline)", () => {
+    // Regression: pluginLayoutIssues (e.g. `skills/` nested inside `.claude-plugin/`
+    // where the harness can't load it) is graded in the overall but was attributed to
+    // NO ring — so a real F could show Structure/Safety adding to less than the
+    // headline, leaving an unexplained score (Codex P2 on the davila7 demo fixture).
+    const s = auditScore(
+      makeReport({
+        pluginLayoutIssues: [
+          { dir: "skills", message: "skills/ is inside .claude-plugin/" },
+        ],
+      }),
+    );
+    // −10 (W_NO_DESCRIPTION) shows on Structure, and the ring sums to the overall.
+    expect(cat(s, "Structure")?.score).toBe(90);
+    expect(cat(s, "Structure")?.findings.some((f) => /misplaced/.test(f))).toBe(
+      true,
+    );
+    expect(s.overall).toBe(90);
+  });
+
   it("inherit-all (no tool contract) is ADVISORY — shown on Structure, never graded", () => {
     // Decision (2026-06-28): omitting the `tools:` line is a near-universal,
     // legitimate authoring style (an OSS sweep of 122 real plugins found 109 whose

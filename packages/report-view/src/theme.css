@@ -50,3 +50,18 @@
     --na: #6b7688;
   }
 }
+
+/* Tailwind v4's Preflight no longer gives <button> a pointer cursor (it follows
+   the CSS spec default). Restore it on real interactive elements so the report's
+   buttons (fix toggles, the locked-tease copy) show a pointer. In @layer base so a
+   cursor-* utility still wins; :not(:disabled) keeps disabled controls non-pointer.
+   Mirrors the same rule in the site's index.css (the two report surfaces agree). */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  summary,
+  label[for],
+  select:not(:disabled) {
+    cursor: pointer;
+  }
+}

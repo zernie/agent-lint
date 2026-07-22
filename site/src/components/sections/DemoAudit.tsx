@@ -24,10 +24,10 @@ import { cn } from "@/lib/utils";
 // plugins and baked at build time — the INSTANT one-tap examples. They render
 // through the SAME @vigiles/report-view component a live typed run does, so a
 // featured report and a repo you type are indistinguishable in authority.
-import ohMy from "@/demo/reports/oh-my-claudecode.json";
-import superpowers from "@/demo/reports/superpowers.json";
-import wshobson from "@/demo/reports/wshobson-accessibility.json";
+import davila7 from "@/demo/reports/davila7-templates.json";
+import disler from "@/demo/reports/disler-hooks-mastery.json";
 import madappgang from "@/demo/reports/madappgang-frontend.json";
+import superpowers from "@/demo/reports/superpowers.json";
 
 type Featured = {
   slug: string;
@@ -39,9 +39,22 @@ type Featured = {
   repo?: string;
 };
 
-// madappgang first — the one with a real finding + fix (a B "one fix from an A"),
-// the sharpest demonstration. The rest are clean A's (real plugins usually are).
+// A real F → C → B → A scale on repos people recognize — so the default shows
+// vigiles CATCHING something (not a wall of A's that reads as "everything's fine"),
+// and the A at the end proves the grade is earnable. davila7 (F) leads: its skills/
+// dir is hidden inside .claude-plugin/ where the harness can't load it, and two
+// subagents list a tool that doesn't exist — "valid files, silently broken".
 const FEATURED: Featured[] = [
+  {
+    slug: "davila7/claude-code-templates",
+    label: "davila7/claude-code-templates",
+    report: davila7 as unknown as AuditReport,
+  },
+  {
+    slug: "disler/claude-code-hooks-mastery",
+    label: "disler/claude-code-hooks-mastery",
+    report: disler as unknown as AuditReport,
+  },
   {
     slug: "madappgang/frontend",
     label: "madappgang/frontend",
@@ -49,20 +62,9 @@ const FEATURED: Featured[] = [
     repo: "MadAppGang/claude-code",
   },
   {
-    slug: "oh-my-claudecode",
-    label: "oh-my-claudecode",
-    report: ohMy as unknown as AuditReport,
-    repo: "Yeachan-Heo/oh-my-claudecode",
-  },
-  {
     slug: "obra/superpowers",
     label: "obra/superpowers",
     report: superpowers as unknown as AuditReport,
-  },
-  {
-    slug: "wshobson/agents",
-    label: "wshobson/agents",
-    report: wshobson as unknown as AuditReport,
   },
 ];
 
@@ -296,6 +298,10 @@ export function DemoAudit({
 } = {}) {
   const [view, setView] = useState<View>({ k: "featured", i: 0 });
   const [loadingVisible, setLoadingVisible] = useState(false);
+  // Public/Private tabs — one input affordance at a time, so the hero doesn't
+  // stack the type-a-repo input, its caption, the command hand-off, AND a privacy
+  // line all at once. Public = grade a public repo live; Private = copy the command.
+  const [tab, setTab] = useState<"public" | "private">("public");
   // Live star counts per featured slug (from the module memo, filled on mount).
   const [stars, setStars] = useState<Record<string, number>>(() =>
     Object.fromEntries(
@@ -495,22 +501,48 @@ export function DemoAudit({
         </div>
       )}
 
-      <RepoCombobox onSubmit={run} />
-
-      {/* Proactive private-repo answer — the browser demo is public-only (GitHub
-          anonymous API). A private/local repo can't run in-browser, so the job here
-          is a clean COMMAND HAND-OFF: a labelled command-copy, not a button jammed
-          mid-sentence. Label + pill stack on mobile; the privacy note is a sub-line. */}
-      <div className="mt-4 flex flex-col items-center justify-center gap-2 sm:flex-row">
-        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Lock className="h-3 w-3" aria-hidden />
-          Private or local repo? Grade it in your terminal:
-        </span>
-        <InlineCommand />
+      {/* Public/Private tabs — show ONE affordance at a time (was: input + caption
+          + command hand-off + privacy line all stacked, which read as crowded). */}
+      <div
+        role="tablist"
+        aria-label="How to grade your repo"
+        className="mx-auto mt-8 flex w-full max-w-[28rem] rounded-lg border border-border bg-card/40 p-1 text-sm"
+      >
+        {(["public", "private"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={tab === t}
+            onClick={() => setTab(t)}
+            className={cn(
+              "flex-1 rounded-md px-3 py-1.5 font-medium transition-colors",
+              tab === t
+                ? "bg-accent/15 text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t === "public" ? "Public repo" : "Private / local"}
+          </button>
+        ))}
       </div>
-      <p className="mt-1.5 text-center text-[11px] text-muted-foreground/70">
-        Reads your working copy off disk — nothing leaves your machine.
-      </p>
+
+      {tab === "public" ? (
+        <RepoCombobox onSubmit={run} />
+      ) : (
+        <div className="mx-auto mt-5 w-full max-w-[28rem] text-center">
+          <p className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Lock className="h-3.5 w-3.5" aria-hidden />
+            Grade it in your terminal — nothing leaves your machine:
+          </p>
+          <div className="mt-3 flex justify-center">
+            <InlineCommand />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground/70">
+            Reads your working copy off disk. Private repos, Codex, any harness.
+          </p>
+        </div>
+      )}
 
       {/* Featured chips as a lightweight LEADERBOARD — real popular plugins with
             their real grades. Reframes the one-tap examples as "here's how the
@@ -610,17 +642,6 @@ export function DemoAudit({
           </div>
         )}
       </div>
-
-      {/* Honest scope: the browser runs the deterministic STRUCTURAL detectors —
-          it can't reach your linter config, so it doesn't do the full rule
-          cross-reference (does each `enforce()` rule exist AND is it enabled?).
-          That's the CLI. Keeps the demo from over-claiming what it verifies. */}
-      <p className="mt-4 text-center text-[11px] leading-relaxed text-muted-foreground/60">
-        Structural checks, in your browser.{" "}
-        <span className="font-mono">vigiles audit</span> locally goes deeper —
-        it cross-references every linter rule your instructions name against
-        your actual config.
-      </p>
 
       {/* Shareability is the growth loop — a graded result is a public link that
           auto-runs. Surface a one-tap share on any report/featured view. */}
