@@ -55,16 +55,25 @@ hardcoded. Two tiny hand-rolled hooks (`site/src/lib/hooks.ts`) instead of a dep
   surfaces + the CLI HTML report share it).
 - DECIDED: untested skills stay ADVISORY in the grade (don't game the score; the tease is the nudge).
 
-**6 CODEX REVIEW P2s CLEARED on #101 (Codex does a line-by-line pass, ~1 refinement/commit):** (1) share only real
-fetched reports, not baked featured chips (a share link only re-fetches → can't reproduce a baked example); (2) n/a
-Safety (`score:null`) must not render as a red trifecta card; (3) combobox: invalidate in-flight lookups UP FRONT
-(cache hit could let a stale request overwrite); (4) filter `(advisory)`-suffixed inherits-all out of the red
-safety cards (a broad-by-default A/100 repo isn't a hard defect); (5) DISCLOSE the GitHub API in the combobox copy
-(autocomplete sends keystrokes to GitHub Search — don't claim "nothing leaves it"; the real promise is "no vigiles
-server, nothing uploaded"); (6) scope the demo copy to Claude Code — the browser demo is CC-ONLY (Codex-only repos
-hit the no-harness state), so "Claude Code or Codex" over-promised; credit the CLI for Codex instead.
-Shared helper `safetyReviewFindings()` in `report-view/Report.tsx` gates #2 + #4 (summary + full can't diverge).
-STILL WATCHING #101 — clear new Codex/CI as they arrive; ~1hr self-check-in armed (trig via send_later).
+**14 CODEX REVIEW P2s CLEARED on #101 (Codex does a THOROUGH line-by-line pass, ~1-2 refinements/commit; many are
+follow-ups to a prior fix, each is legit — the code got more robust, not sloppier). CI stays GREEN each round
+(all 7 checks; mergeable_state clean).** Themes: (a) SHARE/COPY correctness — share only real fetched reports not
+baked chips; the locked tease copies a dedicated `TRIGGER_RATE_PROMPT` (runs measureTriggerRate), NOT the read-only
+`AUDIT_PROMPT`, and `LockedTease` is the SOLE clipboard copier (default `onUnlock` no longer races a 2nd write);
+tease CTA is Claude-Code-ONLY (Codex trigger-rate is experimental). (b) COMBOBOX races — derive fetch mode+key from
+ONE debounced text (no owner/query desync across `/`); invalidate in-flight lookups up front; a UNIFIED stale guard
+suppresses hits when the live key ≠ debounced `fetchKey` (both owner + query modes) so a stale row can't submit the
+wrong repo. (c) REPORT honesty — n/a Safety (`score:null`) + `(advisory)` inherits-all never render as red trifecta
+cards (shared `safetyReviewFindings()`); "structure is clean" shows ONLY at `overall===100` (shared
+`FixesEmptyState`), else neutral "no auto-fix" wording (many graded detectors produce no recommendation). (d) COPY
+honesty — disclose the GitHub API in the combobox ("no vigiles server, nothing uploaded", not "nothing leaves it");
+demo copy scoped to Claude Code (browser demo is CC-only). STILL WATCHING #101 — clear new Codex/CI as they arrive;
+~1hr self-check-in armed (send_later). The PR is otherwise GREEN + MERGEABLE whenever the founder is happy with it.
+
+**FLAG (founder's call, NOT auto-fixed):** the PR BODY carries an auto-appended `claude.ai/code/session_…` URL added
+by the PR-CREATION harness (NOT `pr-describe.yml`, which only manages its marked summary block + preserves other
+prose). Violates the public no-session-links rule. To strip durably: set the body to the clean original (ends at the
+`claude.com/claude-code` line) — pr-describe preserves the edit. Better: fix the PR-creation harness so it stops.
 
 **FETCH-TAIL DOCUMENTED — do NOT keep chasing Codex's `fetchRepo` P2s.** The browser demo's `fetchRepo` does a
 BOUNDED, SELECTIVE fetch (harness-shaped paths + their refs, to respect GitHub's 60-req/hr limit), NOT the CLI's
