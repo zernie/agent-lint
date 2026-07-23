@@ -43,6 +43,9 @@ export function andThen<PriorOk extends Shape, PriorErr extends Shape, Needs ext
 export type AuthoredPurity = "pure" | "bounded" | "dangerously-unrestricted";
 
 // @public
+export type BuiltinLinter = "eslint" | "stylelint" | "ruff" | "clippy" | "pylint" | "rubocop" | "detekt" | "ktlint" | "checkstyle" | "golangci-lint" | "cedar";
+
+// @public
 export function claude(spec: ClaudeSpecInput): ClaudeSpec;
 
 // @public (undocumented)

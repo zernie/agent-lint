@@ -61,7 +61,16 @@ augmentToolPath();
 // Types
 // ---------------------------------------------------------------------------
 
-export type ConfigEnabledStatus = "enabled" | "disabled" | "unknown";
+// ConfigEnabledStatus + DiscoveredRules live in the type-only linter-adapter
+// leaf (so linters.ts and generate-types.ts share them without a cycle);
+// re-exported here to keep the existing `vigiles/linting` surface unchanged.
+export type {
+  ConfigEnabledStatus,
+  DiscoveredRules,
+  LinterAdapter,
+  LinterCapabilities,
+} from "./linter-adapter.js";
+import type { ConfigEnabledStatus } from "./linter-adapter.js";
 
 export interface LinterCheckResult {
   exists: boolean;

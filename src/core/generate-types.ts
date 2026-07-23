@@ -20,6 +20,7 @@ import {
   readDetektConfig,
   parseGolangciEnabledLinters,
 } from "./linters.js";
+import type { DiscoveredRules } from "./linter-adapter.js";
 
 // ---------------------------------------------------------------------------
 // Linter config detection
@@ -87,11 +88,6 @@ function hasGolangciConfig(basePath: string): boolean {
 // Linter rule discovery
 // ---------------------------------------------------------------------------
 
-interface DiscoveredRules {
-  linter: string;
-  rules: string[];
-  via: string;
-}
 
 function discoverEslintRules(basePath: string): DiscoveredRules | null {
   try {

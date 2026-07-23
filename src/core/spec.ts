@@ -14,7 +14,7 @@
 // ---------------------------------------------------------------------------
 
 /** Linters and policy catalogs vigiles can cross-reference. */
-type BuiltinLinter =
+export type BuiltinLinter =
   | "eslint"
   | "stylelint"
   | "ruff"
