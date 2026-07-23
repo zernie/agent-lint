@@ -70,7 +70,8 @@ export type {
   LinterAdapter,
   LinterCapabilities,
 } from "./linter-adapter.js";
-import type { ConfigEnabledStatus } from "./linter-adapter.js";
+import type { ConfigEnabledStatus, LinterAdapter } from "./linter-adapter.js";
+import type { BuiltinLinter } from "./spec.js";
 
 export interface LinterCheckResult {
   exists: boolean;
@@ -1317,6 +1318,89 @@ function getCedarPolicies(
     `Rule file for "${ctx.ruleName}" not found in ${ctx.linterName} rulesDir`,
   );
 }
+
+// ---------------------------------------------------------------------------
+// The LinterAdapter registry — the SINGLE, type-enforced registration surface.
+//
+// `Record<BuiltinLinter, LinterAdapter>` makes a missing linter a tsc error;
+// `linter-contract.test.ts` cross-checks each capability flag against its method
+// and against docs/linter-support.md. Each adapter bundles what used to be
+// scattered across LINTER_RESOLVERS / CLI_RULE_CHECKS / LINTER_CONFIG_CHECKERS /
+// CLI_TOOL_FOR_LINTER / getCliRuleSet / the generate-types discoverers. The
+// dispatch (checkLinterRule) and generate-types read this registry.
+//
+// NB `discoverEnabled` (the generate-types union) is attached in a later stage
+// (the discoverers still live in generate-types.ts); until then `generateTypes`
+// stays false so the conformance invariant `generateTypes === (discoverEnabled
+// present)` holds. ktlint's existence check is format-only, but it keeps a
+// `cliTool` so it stays PATH-gated exactly as before (its capability is `cli`);
+// a true no-binary format-only mode is a separate behavior change.
+// ---------------------------------------------------------------------------
+
+const cliAdapter = (
+  name: BuiltinLinter,
+  cliTool: string,
+  opts: { enumerable: boolean },
+): LinterAdapter => ({
+  name,
+  capabilities: {
+    existenceCheck: "cli",
+    configCheck: true,
+    catalogEnumeration: opts.enumerable,
+    alwaysEnabled: false,
+    generateTypes: false,
+  },
+  cliTool,
+  checkExists: (rule, basePath) => {
+    CLI_RULE_CHECKS[name](rule, basePath); // throws if the rule is unknown
+    return true;
+  },
+  configEnabled: LINTER_CONFIG_CHECKERS[name],
+  ...(opts.enumerable
+    ? { enumerateRules: (basePath: string) => getCliRuleSet(name, basePath) }
+    : {}),
+});
+
+const nodeApiAdapter = (name: "eslint" | "stylelint"): LinterAdapter => ({
+  name,
+  capabilities: {
+    existenceCheck: "node-api",
+    configCheck: true,
+    catalogEnumeration: true,
+    alwaysEnabled: false,
+    generateTypes: false,
+  },
+  checkExists: (rule, basePath) => LINTER_RESOLVERS[name](basePath).has(rule),
+  configEnabled: LINTER_CONFIG_CHECKERS[name],
+  enumerateRules: (basePath) => LINTER_RESOLVERS[name](basePath),
+});
+
+export const LINTERS: Record<BuiltinLinter, LinterAdapter> = {
+  eslint: nodeApiAdapter("eslint"),
+  stylelint: nodeApiAdapter("stylelint"),
+  ruff: cliAdapter("ruff", "ruff", { enumerable: true }),
+  clippy: cliAdapter("clippy", "cargo", { enumerable: true }),
+  pylint: cliAdapter("pylint", "pylint", { enumerable: true }),
+  rubocop: cliAdapter("rubocop", "rubocop", { enumerable: true }),
+  detekt: cliAdapter("detekt", "detekt", { enumerable: true }),
+  ktlint: cliAdapter("ktlint", "ktlint", { enumerable: false }),
+  checkstyle: cliAdapter("checkstyle", "checkstyle", { enumerable: false }),
+  "golangci-lint": cliAdapter("golangci-lint", "golangci-lint", {
+    enumerable: true,
+  }),
+  cedar: {
+    name: "cedar",
+    capabilities: {
+      existenceCheck: "filesystem",
+      configCheck: false,
+      catalogEnumeration: false,
+      alwaysEnabled: true,
+      generateTypes: false,
+    },
+    checkExists: (rule, basePath, customDirs) =>
+      getCedarPolicies(basePath, customDirs).has(rule),
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Public API
