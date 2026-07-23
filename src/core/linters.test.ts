@@ -338,18 +338,21 @@ describe("generateTypes JVM/Go discovery", () => {
     });
   });
 
-  it("discovers checkstyle modules from checkstyle.xml", () => {
+  it("discovers checkstyle modules, EXCLUDING severity=ignore ones (Codex review)", () => {
     withTmpDir((dir) => {
       writeFileSync(join(dir, "checkstyle.xml"), CHECKSTYLE_XML);
       const result = generateTypes({ basePath: dir, fileGlobs: [] });
       const checkstyle = result.linters.find((l) => l.linter === "checkstyle");
       assert.ok(checkstyle, "checkstyle catalog should be discovered");
-      assert.deepEqual(checkstyle.rules, [
-        "MagicNumber",
-        "NewlineAtEndOfFile",
-        "WhitespaceAround",
-      ]);
+      // WhitespaceAround has `severity="ignore"` → DISABLED → left out of the
+      // type union, so a spec can't type-check against a rule CI won't enforce
+      // (the generated-types proof would be defeated otherwise).
+      assert.deepEqual(checkstyle.rules, ["MagicNumber", "NewlineAtEndOfFile"]);
       assert.ok(result.dts.includes("CheckstyleRule"));
+      assert.ok(
+        !result.dts.includes("WhitespaceAround"),
+        "the severity=ignore module must not appear in the CheckstyleRule type",
+      );
     });
   });
 

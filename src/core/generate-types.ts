@@ -14,6 +14,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 import { globSync } from "glob";
+import { checkstyleEnabledStatus } from "./linters.js";
 
 // ---------------------------------------------------------------------------
 // Linter config detection
@@ -374,7 +375,13 @@ function discoverCheckstyleRules(basePath: string): DiscoveredRules | null {
     const re = /<module\s+name\s*=\s*["']([A-Za-z0-9.]+)["']/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(content)) !== null) {
-      if (m[1] !== "Checker" && m[1] !== "TreeWalker") rules.add(m[1]);
+      if (m[1] === "Checker" || m[1] === "TreeWalker") continue;
+      // A module with `severity="ignore"` is DISABLED — leave it out of the type
+      // union, or a spec could type-check against a rule CI won't enforce,
+      // defeating the generated-types proof. Reuse the lint enabled-status logic
+      // (one detector, no drift — Codex review).
+      if (checkstyleEnabledStatus(m[1], basePath) === "disabled") continue;
+      rules.add(m[1]);
     }
     if (rules.size === 0) return null;
     return {
