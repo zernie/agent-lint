@@ -18,14 +18,14 @@
 **`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
 via `pages.yml` on push to main. Demo UX + real-F default MERGED (PRs #100–#106).
 
-**Branch `claude/click-not-working-s9apfb`: 43 UNMERGED commits (pushed, NO PR yet).** Restart from `main`
+**Branch `claude/click-not-working-s9apfb`: PR #114 OPEN (github.com/zernie/vigiles/pull/114), ~50 commits.** Restart from `main`
 if needed (`git fetch origin main && git checkout -B claude/click-not-working-s9apfb origin/main`). It carries an
 adoption batch (VerbMap red→green · OG card b1 · 4a share deep-link · dismissible nudge · full-HTML rules honesty ·
 leaderboard drill-in · value-framed nudge), the `--ci-only` opt-in + discoverability, the `cohesive-feature-delivery`
 rule's (8) DISCOVERY + (9) OUTPUT-PARITY additions, and the DOGFOOD batch below.
 
 **DOGFOOD BATCH — DONE.** A 4-agent Sonnet fan-out found **14 verified, source-traced bugs**; founder's call was
-**FIX, not file**. **All 14 fixed + pushed**, each with a regression test; full `vitest` suite green (2292 passing).
+**FIX, not file**. **All 14 fixed + pushed**, each with a regression test; full `vitest` suite green (2327 passing).
 The process is now CODIFIED as `.claude/skills/dogfood-cli` (the find+fix fan-out method + every lesson).
 
 Fixed (by commit): **#108** marketplace `owner` · **#112+C3/C4/C5** config parse-don't-validate · **I2** Codex install
@@ -38,7 +38,10 @@ CI-workflow gates `npm install` on package.json + the lint job on the lint pilla
 Bonus finds fixed en route: a pre-existing `scanFiles`<->`scanPlugin` parity failure (browser `ownTestSignal`), a
 literal NUL byte in scan-core (read as binary), and a missed I2 e2e assertion (only the FULL suite caught it).
 
-**ONLY Vlad's #107/#109/#110/#111/#113 remain** (lower priority - assess whether still reproducing).
+**VLAD'S ISSUES #107/#109/#110/#111/#113 — ALL FIXED** (fanned out per the dogfood-cli skill: #109 linters +
+#110 scan-FPs on background agents, verified + integrated). #107 skill `allowed-tools` list + `context:fork` adopt
+(1d dirty-tree deferred as founder UX) · #109 JVM/Go linter catalogs (detekt/ktlint/checkstyle/golangci-lint, 7→11) ·
+#110 example-link + shell-comment scan FPs · #111 non-JS harness guide · #113 testGlobs docs. Full suite green.
 
 **GATE-FAILURE RULE (founder, standing): if a skill/hook/rule DIDN'T CATCH an issue the founder had to spot,
 FIX THE GATE FIRST.** (e.g. the mobile-overflow CI gate + the responsive-grid lesson in `.claude/skills/landing-site`.)
@@ -55,22 +58,18 @@ against the skill (READ it before touching `site/`); screenshot desktop AND full
 
 ### 🎯 DO NEXT
 
-0. **Vlad's remaining dogfood issues** (lower priority — assess whether still reproducing on the current branch first,
-   several may already be fixed by the batch): **#107** (compile frontmatter data-loss) · **#110** (skill-resource/
-   dangling FPs) · **#113** (testGlobs docs) · **#109/#111**. Same loop: repro → source-trace → fix + regression test →
-   full suite. The `.claude/skills/dogfood-cli` skill now documents the method.
-1. **Open the PR** for the 43 commits — founder hasn't given final go; the whole dogfood batch (14 fixes) + the
-   adoption batch are worth shipping. (Founder deprioritized item 6 GHA PR-comment grade — GHA is later-adoption AND
-   not guaranteed after gate-first init.)
-2. **Item 4b b2 (per-grade OG card)** — the ONLY remaining share-loop piece: a card showing `owner/repo · actual grade`.
+0. **PR #114 OPEN** (github.com/zernie/vigiles/pull/114), ~50 commits: adoption batch + dogfood 14/14 + Vlad's 5 issues). Watch CI; the
+   `Claude`-authored-commit gotcha (below) may need an Approve-and-run or Close→Reopen for checks to start.
+   The GHA PR-comment grade (item 6) stays deprioritized (later-adoption, not guaranteed after gate-first init).
+1. **Item 4b b2 (per-grade OG card)** — the ONLY remaining share-loop piece: a card showing `owner/repo · actual grade`.
    Needs a SERVERLESS OG endpoint (GitHub Pages is static, can't vary `<meta>` by `?repo=`) → bundles with **4c**
    (time-boxed upload, needs backend). b1 (generic card) is SHIPPED (`site/public/og.png` + tags in `site/index.html`).
-3. **Item 5 (one opt-in README badge)** — after the share loop; badge-fatigue data says exactly one.
-4. **STRENGTHEN THE IN-REPORT INVITATION (the real growth lever, per adoption-design.md §1 reasoning).** The terminal
+2. **Item 5 (one opt-in README badge)** — after the share loop; badge-fatigue data says exactly one.
+3. **STRENGTHEN THE IN-REPORT INVITATION (the real growth lever, per adoption-design.md §1 reasoning).** The terminal
    nudge is now value-framed (why a spec), but the HTML report's adoption surface (Adopt/adoptability preview) deserves
    its OWN focused pass with screenshots + a Fable cold-visitor review — "make a skeptic WANT a spec/eval by showing
    what it'd catch". This is where richer-feature adoption is won (gate is opt-in, so the invitation must carry it).
-5. **davila7-F reconciliation** — featured at F but not MIT-vendored/opted-in; prefer the live `?repo=` grade or apply
+4. **davila7-F reconciliation** — featured at F but not MIT-vendored/opted-in; prefer the live `?repo=` grade or apply
    the vendoring policy before the leaderboard hardens.
 
 ### Codex trigger-rate is EXPERIMENTAL
