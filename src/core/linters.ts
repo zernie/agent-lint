@@ -513,7 +513,14 @@ function checkstyleModuleInstantiates(ruleName: string): boolean {
 // CLI-based per-rule checks
 // ---------------------------------------------------------------------------
 
-const CLI_RULE_CHECKS: Record<string, (ruleName: string) => void> = {
+// Each check throws if the rule doesn't exist. `basePath` is the TARGET project's
+// root (a monorepo package / a library caller's audited repo), NOT process.cwd —
+// a custom rule declared only in the target's own config must resolve against it
+// (Codex review). A check that doesn't need it may omit the 2nd param.
+const CLI_RULE_CHECKS: Record<
+  string,
+  (ruleName: string, basePath: string) => void
+> = {
   ruff(ruleName: string): void {
     execSync(`ruff rule ${ruleName}`, { stdio: "ignore" });
   },
@@ -538,7 +545,7 @@ const CLI_RULE_CHECKS: Record<string, (ruleName: string) => void> = {
       throw new Error(`Unknown cop: ${ruleName}`);
     }
   },
-  detekt(ruleName: string): void {
+  detekt(ruleName: string, basePath: string): void {
     // detekt has no per-rule query CLI; the bundled catalog is enumerated once
     // via `detekt --generate-config` (see getDetektDefaultRules). A rule
     // outside the bundled set may still come from a third-party ruleset
@@ -547,7 +554,7 @@ const CLI_RULE_CHECKS: Record<string, (ruleName: string) => void> = {
     const rules = getDetektDefaultRules();
     if (rules.size === 0) return;
     if (rules.has(ruleName)) return;
-    if (detektConfigNamesRule(ruleName, process.cwd())) return;
+    if (detektConfigNamesRule(ruleName, basePath)) return;
     throw new Error(`Unknown detekt rule: ${ruleName}`);
   },
   ktlint(ruleName: string): void {
@@ -1053,7 +1060,7 @@ function getCliRuleSet(linterName: string, basePath: string): Set<string> {
     );
   }
   try {
-    cliCheck(ctx.ruleName);
+    cliCheck(ctx.ruleName, ctx.basePath);
     const enabled = checkConfigEnabled(
       ctx.linterName,
       ctx.ruleName,

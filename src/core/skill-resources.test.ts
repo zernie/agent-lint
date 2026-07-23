@@ -167,6 +167,16 @@ describe("skillResourceIssues", () => {
     });
   });
 
+  it("flags a plain resource link with NO use directive (a link is explicit syntax — Codex review)", () => {
+    // A markdown link is the actual file reference, so a normal resource listing
+    // ("Resources: [API](references/api.md)") must still be checked even without a
+    // verb like read/see/run — only an illustrative cue suppresses a link.
+    const body = "Resources: [the API](references/api.md).";
+    const found = run(body, existsOnly());
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ resolved: "references/api.md", kind: "link" });
+  });
+
   it("can be disabled entirely via <!-- vigiles-disable skill-resource-resolves --> (issue #110)", () => {
     // The escape hatch — a skill body that inherently reads as full of
     // illustrative bundle-path examples (a skill-authoring tutorial) can opt

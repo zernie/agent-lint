@@ -253,12 +253,15 @@ interface Candidate {
 /** Collect candidate bundled-resource refs from one body line, skipping fences. */
 function candidatesInLine(line: string, lineNo: number): Candidate[] {
   const out: Candidate[] = [];
-  // Both shapes below fire only when the surrounding prose USES the file (not
-  // an illustrative mention on a teaching skill — see `inlinePathIsUsed`,
-  // issue #110). Computed once — the same gate covers markdown links now too.
-  const used = inlinePathIsUsed(line);
+  // A markdown link is EXPLICIT follow-me syntax (`[text](target)`) — the link IS
+  // the reference — so it's real UNLESS the line is an illustrative example.
+  // Suppress it ONLY on an illustrative cue; do NOT also require a use directive,
+  // or a plain `Resources: [API](references/api.md)` (no verb) goes unchecked
+  // (Codex review — that under-detection). A BARE inline backtick path is noisier
+  // (often just a mention), so it still needs BOTH a use directive AND no cue.
+  const illustrative = ILLUSTRATIVE_CUE.test(line);
   // Markdown links: a relative path target that passes the local-resource gate.
-  if (used) {
+  if (!illustrative) {
     for (const m of line.matchAll(MD_LINK)) {
       const resolved = localResourceTarget(m[1]);
       if (resolved !== null) {
@@ -266,8 +269,9 @@ function candidatesInLine(line: string, lineNo: number): Candidate[] {
       }
     }
   }
-  // Inline-code path mentions: only the high-confidence bundle-dir-prefixed form.
-  if (used) {
+  // Inline-code path mentions: only the high-confidence bundle-dir-prefixed form,
+  // and only when the prose directs the agent to use it (the noisier shape).
+  if (inlinePathIsUsed(line)) {
     for (const m of line.matchAll(INLINE_SPAN)) {
       const token = m[1].trim();
       if (!isInlineBundlePath(token)) continue;
