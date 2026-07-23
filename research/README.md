@@ -77,6 +77,7 @@ one click away.
 
 - [`subagent-compilation.md`](subagent-compilation.md) — compiling typed subagent definitions (`agent()` → `agents/<name>.md`); the declared-vs-enforced tool gap (`tools:` is documentation, a `PreToolUse` hook is the rail); the empirical "no iterator in a subagent" survey (~100 agents).
 - [`railway-subagents.md`](railway-subagents.md) — **railway-style orchestration over flat subagents.** The direct, differentiated answer to Anthropic's **ultraplan / dynamic-workflows** (plan-as-code): be the _typed, verified, compiled_ counterpart to its ephemeral generated script. Includes the Temporal analogy and the marks / `workflow()`-spec / deterministic-driver options. **Closest external thing to our direction — read for inspiration.**
+- [`loop-combinator.md`](loop-combinator.md) — _[idea]_ **`loop()` extending the finite railway** with a *checkable* stop condition: a deterministic `until`-gate (compiles to a `Stop`-hook) + a mandatory `maxIters` cap, so an iterating orchestrator's "until done" is a **compiled gate, not prose** ("a loop is a self-edge node; stop conditions live at the loop level"). The product side of the terminatability / "Prose Isn't Policy for control flow" angle.
 
 ## Skills
 

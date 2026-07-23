@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:4f86ff0979638235 compiled from research/CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:37f4b3b4daf6ba68 compiled from research/CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -125,6 +125,7 @@ The `research/` corpus is the INTERNAL record (design rationale, competitive ana
 - `research/executable-specs.md` — [shipped] Original v2 design doc for the spec.ts→markdown compilation model now built as vigiles's core architecture
 - `research/lightweight-spec-authoring.md` — [active] Sweep of 16 real instruction files: current claude() spec is too heavy; value is composition/templates
 - `research/railway-subagents.md` — [active] Railway-orchestration design over flat subagents: Temporal analogy, marks vs typed workflow() vs driver options
+- `research/loop-combinator.md` — [idea] loop(body,{until,maxIters}) extending railway(): a checkable stop condition (deterministic until-gate → Stop-hook, mandatory maxIters cap) so an iterating orchestrator's "until done" is a compiled gate, not prose. Product side of the terminatability / Prose-Isn't-Policy-for-control-flow angle
 - `research/shareable-presets.md` — [idea] Design sketch for publishable npm-package typed presets that other repos extend, bundling rules + evals
 - `research/composable-instruction-files.md` — [active] Mid-2026 survey of composable/modular instruction files: only Claude Code + Gemini CLI have true @import; AGENTS.md standard has no imports (open proposal); demand real+dated (openai/codex#17401); the unmet gap is multi-repo registry-distributed versioned rule packages; maps onto vigiles's preset()/extends() + compose.ts
 - `research/spec-api-design.md` — [active] Best-practice synthesis for spec.ts API: doc()/section() split, preset()/extends() merge model, strict-typing upgrades
