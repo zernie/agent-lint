@@ -73,8 +73,8 @@ verify less):
 - **detekt** falls back to the generated default catalog and fails _open_ (never
   flags every rule) when it can't enumerate.
 
-See [`docs/linter-support.md`](linter-support.md) for the full catalog and each
-tool's config conventions.
+See [`docs/linter-support.md`](linter-support.md) for the full linter list and
+each tool's config conventions.
 
 ## The Tested metric for a native test loop
 
@@ -95,6 +95,6 @@ The deterministic `audit`/`lint` layer above needs none of this.
 
 ## See also
 
-- [`docs/linter-support.md`](linter-support.md) — the full linter catalog.
+- [`docs/linter-support.md`](linter-support.md) — all 11 supported linters.
 - [`docs/harnesses.md`](harnesses.md) — which agent harnesses vigiles targets.
 - [`docs/rules/untested-skill.md`](rules/untested-skill.md) — counting an external test loop.

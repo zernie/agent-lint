@@ -595,7 +595,7 @@ different contracts** — the classic gate-vs-report split (think `eslint .` /
 `tsc --noEmit` vs `npm audit` / `terraform plan`):
 
 - **`lint` is the gate.** It runs on **your** repo with **your** config, verifies
-  references (file paths, scripts, and linter rules across **11 catalogs** — does
+  references (file paths, scripts, and linter rules across **11 linters** — does
   the rule exist _and_ is it enabled?), checks integrity/hash, coverage
   thresholds, orphan docs, duplicate rules — and exits with **config-driven
   severities → stable CI codes (0/1/2)**. It blocks bad commits.
@@ -611,7 +611,7 @@ They deliberately **share one implementation** of the few deterministic
 structural detectors they have in common (untested-surface, dangling-ref,
 description-script), per the `one-detector-no-drift` rule, so the two surfaces can
 never disagree. The asymmetry everywhere else is intentional: some checks need
-inputs only the gate has (your catalogs, your compiled output), and the
+inputs only the gate has (your linter configs, your compiled output), and the
 **model-gated trigger column must never become a `lint` rule** (lint stays free +
 deterministic + every-commit).
 
@@ -619,7 +619,7 @@ deterministic + every-commit).
 
 | Check                                                       |  `lint`  |  `audit`  | `audit` (interactive) |
 | ----------------------------------------------------------- | :------: | :-------: | :-------------------: |
-| Linter-rule cross-ref (11 catalogs, exists **+ enabled**)   |    ✓     |     –     |           –           |
+| Linter-rule cross-ref (11 linters, exists **+ enabled**)    |    ✓     |     –     |           –           |
 | Marked file/script ref verification                         |    ✓     |     –     |           –           |
 | Integrity/hash · duplicate-NCD · coverage · orphan docs     |    ✓     |     –     |           –           |
 | Untested surface                                            |  ✓ gate  |  ✓ ring   |           –           |

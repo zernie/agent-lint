@@ -242,7 +242,7 @@ Targets Claude Code and Codex out of the box, or [your own harness](docs/authori
 - **Isn't this just a markdown linter?** No — it checks whether your instruction file is _true_ (every path/script/symbol/rule exists and is enabled), then tests and measures your harness. A style linter can't do any of that.
 - **Does anything leave my machine?** No. `audit` and `lint` read your local repo — no upload, no account, no server. (`eval` is the only step that calls a model, on your own Claude subscription; the browser demo only reads a public repo you name via GitHub's API.)
 - **What do I have to change to adopt it?** Almost nothing. Plain markdown works with zero new files, rules run in your existing linter, and the agent edits the specs for you. The typed spec is opt-in, only for structural checks a linter can't express — like TS's `strict` ([why?](docs/faq.md#why-are-the-strongest-guarantees-opt-in-not-the-default)).
-- **Non-JS repo?** `npx vigiles lint` verifies your CLAUDE.md or AGENTS.md with no install (Ruff/Clippy/Pylint/… too).
+- **Non-JS repo?** `npx vigiles lint` verifies your CLAUDE.md or AGENTS.md with no install (Ruff/Clippy/golangci-lint/detekt/… too — 11 linters across Python, Rust, Go, Kotlin, Java, Ruby, CSS).
 
 **[Full FAQ →](docs/faq.md)**
 

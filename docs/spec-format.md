@@ -317,7 +317,7 @@ Declares a rule delegated to an external linter or to a vigiles-internal check. 
 - `@${scope}/${rule}` for scoped ESLint plugins (e.g., `@typescript-eslint/no-explicit-any`)
 - `vigiles/${string}` for vigiles-internal assertions (e.g., `vigiles/orphan-docs`)
 
-At compile time, vigiles verifies the rule exists in the catalog and — for external linters — is enabled in the project's config. For Cedar, presence in a `.cedar` file counts as enabled. For `vigiles/<id>`, existence is checked against a built-in catalog and the actual check runs at lint time. Compiles to `**Enforced by:** ` followed by the rule reference in backticks.
+At compile time, vigiles verifies the rule exists and — for external linters — is enabled in the project's config. For Cedar, presence in a `.cedar` file counts as enabled. For `vigiles/<id>`, existence is checked against a built-in catalog and the actual check runs at lint time. Compiles to `**Enforced by:** ` followed by the rule reference in backticks.
 
 ```ts
 rules: {
