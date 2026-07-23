@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:69df04d88687d37c compiled from examples/CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:17fb913f226f6087 compiled from examples/CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -6,21 +6,21 @@
 
 vigiles compiles `.spec.ts` files to instruction files (CLAUDE.md, AGENTS.md, or any markdown target). The spec is the source of truth. The markdown is a build artifact.
 
-The linter cross-referencing engine is the core moat: `enforce("@typescript-eslint/no-floating-promises")` verifies the rule exists AND is enabled in your linter config. Same across 7 catalogs — ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, and Cedar.
+The linter cross-referencing engine is the core moat: `enforce("@typescript-eslint/no-floating-promises")` verifies the rule exists AND is enabled in your linter config. Same across 11 catalogs — ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar, detekt, ktlint, Checkstyle, and golangci-lint.
 
-`generate-types` is the second moat: scans all 7 catalog APIs, package.json, and project files to emit a `.d.ts` with type unions. The TS compiler then PROVES references are valid at authoring time — typos become type errors, not runtime surprises.
+`generate-types` is the second moat: scans all 11 catalog APIs, package.json, and project files to emit a `.d.ts` with type unions. The TS compiler then PROVES references are valid at authoring time — typos become type errors, not runtime surprises.
 
 ## Architecture
 
 Three rule kinds in specs: `enforce()` (delegated to an external linter — vigiles verifies the rule exists and is enabled), `guard()` (a path→command guard, e.g. recompile when a spec changes), and `guidance()` (prose only).
 
-Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `src/linters.ts` (7-catalog cross-referencing engine), `src/generate-types.ts` (type generator).
+Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `src/linters.ts` (11-catalog cross-referencing engine), `src/generate-types.ts` (type generator).
 
 ## Key Files
 
 - `src/spec.ts` — Type system and builder functions
 - `src/compile.ts` — Compiler: spec → markdown with SHA-256 hash
-- `src/linters.ts` — Cross-referencing engine (7 catalogs incl. Cedar)
+- `src/linters.ts` — Cross-referencing engine (11 catalogs incl. Cedar + JVM/Go)
 - `src/generate-types.ts` — Type generator: project state → .d.ts
 - `src/cli.ts` — CLI: init, compile, lint, test, eval, generate-types
 

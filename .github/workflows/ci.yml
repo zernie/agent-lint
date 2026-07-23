@@ -9,6 +9,16 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      # JVM/Go linter pins for the gated real-binary catalog tests
+      # (src/core/linters.test.ts — describe.skipIf(!hasBinary(...))). Installing
+      # these makes those tests RUN in CI instead of silently skipping forever
+      # (a green-with-skips is a hidden gap — no-silent-skips). detekt is pinned
+      # to the latest STABLE (2.0 is still alpha).
+      DETEKT_VERSION: "1.23.8"
+      KTLINT_VERSION: "1.8.0"
+      CHECKSTYLE_VERSION: "13.8.0" # 13.x requires JDK >= 17
+      GOLANGCI_LINT_VERSION: "2.12.2"
     steps:
       - uses: actions/checkout@v4
 
@@ -25,6 +35,13 @@ jobs:
         with:
           ruby-version: "3.3"
 
+      # One JDK serves detekt + ktlint + checkstyle. Temurin 21 is preinstalled
+      # on ubuntu-24.04 runners, so this is env setup (~seconds), not a download.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
       - name: Cache pip packages
         uses: actions/cache@v4
         with:
@@ -37,6 +54,12 @@ jobs:
           path: ~/.local/share/gem
           key: gem-${{ runner.os }}-rubocop
 
+      - name: Cache JVM/Go linter tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.vigiles-linter-tools
+          key: linter-tools-${{ runner.os }}-detekt${{ env.DETEKT_VERSION }}-ktlint${{ env.KTLINT_VERSION }}-checkstyle${{ env.CHECKSTYLE_VERSION }}-golangci${{ env.GOLANGCI_LINT_VERSION }}
+
       - run: npm ci
 
       - name: Install linter CLIs for tests
@@ -44,6 +67,51 @@ jobs:
           pip install ruff pylint
           gem install rubocop
           rustup component add clippy
+
+      - name: Install JVM/Go linter CLIs (detekt, ktlint, checkstyle, golangci-lint)
+        # Lets the gated real-binary catalog tests in src/core/linters.test.ts
+        # actually RUN instead of skipping. Each tool must land on PATH under the
+        # exact name CLI_TOOL_FOR_LINTER expects (src/core/linters.ts): detekt,
+        # ktlint, checkstyle, golangci-lint. checkstyle ships only a fat jar, so
+        # it gets a 2-line `java -jar` shim; detekt's zip launcher is symlinked.
+        run: |
+          TOOLS="$HOME/.vigiles-linter-tools"
+          BIN="$TOOLS/bin"
+          mkdir -p "$BIN"
+          if [ ! -x "$BIN/detekt" ]; then
+            curl -sSfL -o /tmp/detekt-cli.zip \
+              "https://github.com/detekt/detekt/releases/download/v${DETEKT_VERSION}/detekt-cli-${DETEKT_VERSION}.zip"
+            unzip -q -o /tmp/detekt-cli.zip -d "$TOOLS"
+            launcher=$(find "$TOOLS/detekt-cli-${DETEKT_VERSION}/bin" -maxdepth 1 -type f ! -name '*.bat' | head -n1)
+            [ -n "$launcher" ] || { echo "detekt launcher not found in zip"; exit 1; }
+            chmod +x "$launcher" && ln -sf "$launcher" "$BIN/detekt"
+
+            curl -sSfL -o "$BIN/ktlint" \
+              "https://github.com/pinterest/ktlint/releases/download/${KTLINT_VERSION}/ktlint"
+            chmod +x "$BIN/ktlint"
+
+            curl -sSfL -o "$TOOLS/checkstyle-all.jar" \
+              "https://github.com/checkstyle/checkstyle/releases/download/checkstyle-${CHECKSTYLE_VERSION}/checkstyle-${CHECKSTYLE_VERSION}-all.jar"
+            printf '#!/usr/bin/env bash\nexec java -jar "%s" "$@"\n' "$TOOLS/checkstyle-all.jar" > "$BIN/checkstyle"
+            chmod +x "$BIN/checkstyle"
+
+            curl -sSfL "https://raw.githubusercontent.com/golangci/golangci-lint/v${GOLANGCI_LINT_VERSION}/install.sh" \
+              | sh -s -- -b "$BIN" "v${GOLANGCI_LINT_VERSION}"
+          fi
+          echo "$BIN" >> "$GITHUB_PATH"
+
+      - name: Verify linter tools resolve (no silent skips)
+        # hasBinary() gates on `which <name>`; fail FAST here rather than letting
+        # the gated catalog tests silently skip (no-silent-skips). If a download
+        # shape changes, this step goes red instead of the tests quietly passing.
+        run: |
+          for t in detekt ktlint checkstyle golangci-lint; do
+            command -v "$t" >/dev/null || { echo "MISSING on PATH: $t"; exit 1; }
+          done
+          detekt --version
+          ktlint --version
+          checkstyle --version || checkstyle -V
+          golangci-lint --version
 
       - name: Install claude + codex CLIs + bubblewrap (deterministic harness + sandbox tests)
         # claude and codex (no API key needed — both reached via a local mock-model

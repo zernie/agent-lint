@@ -40,7 +40,7 @@ your existing markdown. It's the vigiles equivalent of
 Three pieces, all required:
 
 1. **`vigiles:enforce`** — only `enforce` is supported inline. The prose around the comment _is_ the guidance, so a `guidance` comment would be a tautology.
-2. **`<linter>/<rule>`** — the same reference format as `enforce()` in spec mode. All eleven catalogs (ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar, detekt, ktlint, Checkstyle, golangci-lint), scoped plugin names (`eslint/@typescript-eslint/...`), and the vigiles-internal namespace (`vigiles/orphan-docs`) work here.
+2. **`<linter>/<rule>`** — the same reference format as `enforce()` in spec mode. All eleven linters (ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar, detekt, ktlint, Checkstyle, golangci-lint), scoped plugin names (`eslint/@typescript-eslint/...`), and the vigiles-internal namespace (`vigiles/orphan-docs`) work here.
 3. **`"<why>"`** — a double-quoted string shown to the agent as context. No newlines or embedded quotes; if you need either, move to a spec.
 
 A fuller example:
@@ -158,7 +158,7 @@ vigiles:
 ---
 ```
 
-- `rule` — a `<linter>/<rule>` reference. All eleven catalogs (ESLint,
+- `rule` — a `<linter>/<rule>` reference. All eleven linters (ESLint,
   Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar, detekt, ktlint, Checkstyle,
   golangci-lint), scoped plugin names,
   and the vigiles-internal namespace (`vigiles/orphan-docs`) work here, same

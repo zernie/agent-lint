@@ -64,7 +64,7 @@ The only thing that needs a model is a real-model **eval**. That runs on **your 
 
 ## Does it work on a non-JavaScript repo (Python, Rust, Go…)?
 
-✅ **Yes for Lint** — `npx vigiles lint` verifies your `CLAUDE.md` against your repo and linters (Ruff, Clippy, Pylint, RuboCop, … alongside ESLint) with **no install**.
+✅ **Yes for Lint** — `npx vigiles lint` verifies your `CLAUDE.md` against your repo and linters (Ruff, Clippy, Pylint, RuboCop, golangci-lint, detekt, … alongside ESLint — 11 in all, covering Python, Rust, Go, Kotlin, Java, Ruby, and CSS) with **no install**.
 
 The typed-spec / `compile` path needs `vigiles` installed locally (it's an npm package). On a repo without a `package.json`, either add one (`npm init -y && npm i -D vigiles`) or stay in inline-comment mode — both are fully supported.
 
