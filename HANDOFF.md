@@ -28,7 +28,7 @@ is the LITERAL single dispatch source — a missing linter is a tsc error, `lint
 drift, and `add-a-linter` (`.claude/skills/`) is the authoring guide. To add a linter: `BUILTIN_LINTERS` (`spec.ts`)
 → register in `LINTERS` via `nodeApiAdapter`/`cliAdapter` (checkExists/configEnabled inline) → docs row → CI install.
 
-**Branch `claude/click-not-working-s9apfb`: a NEW follow-up PR (Stage 4 + site + cedar) about to open off main.**
+**PR #117 MERGED** (`c9b2a96`) — the follow-up (Stage 4 + site-chip derivation + cedar P1) off main.
 Stage 4 = collapsed the 4 legacy dispatch maps (`LINTER_RESOLVERS`/`CLI_RULE_CHECKS`/`LINTER_CONFIG_CHECKERS`/
 `CLI_TOOL_FOR_LINTER` + `getCliRuleSet`) into the adapters, behavior byte-preserved (golden `linters.test.ts` 307
 green; done by a background subagent, dispatch reviewed). Site = `Wedge.tsx` now DERIVES the linter chip strip from
@@ -88,9 +88,8 @@ against the skill (READ it before touching `site/`); screenshot desktop AND full
 
 ### 🎯 DO NEXT
 
-0. **The Stage 4 + site + cedar follow-up PR** — open it, watch CI to green, MERGE (auto-merge OFF → squash manually).
-   Roadmap sweep leftover: the `## Now` §"Vlad's real-harness pass" #107–#113 items still read as OPEN but all shipped
-   in v14.12.0 (#114) — a cheap honesty pass to move them to "Shipped recently" (not done, out of this PR's scope).
+0. **The linter work is DONE** — PR #116 + #117 both merged; the LinterAdapter port is complete and the roadmap's
+   "Vlad's real-harness pass" block is moved to "Shipped recently". No open linter follow-up.
    The GHA PR-comment grade (item 6) stays deprioritized (later-adoption, not guaranteed after gate-first init).
 1. **Item 4b b2 (per-grade OG card)** — the ONLY remaining share-loop piece: a card showing `owner/repo · actual grade`.
    Needs a SERVERLESS OG endpoint (GitHub Pages is static, can't vary `<meta>` by `?repo=`) → bundles with **4c**
