@@ -43,14 +43,18 @@ link. A skill that _teaches_ how to build skills is full of bundle paths used as
 **examples** of what a skill _could_ contain, not files it ships — "a
 `` `scripts/rotate_pdf.py` `` would be helpful to store", "**Examples**:
 `` `references/finance.md` ``", "- **`` `references/patterns.md` ``** — Common
-patterns". So an inline path is treated as a real reference **only when the line
-directs the agent to use the file** (`read` / `run` / `see` / `load` / …) **and
-carries no illustrative cue** (`example`, `e.g.`, `such as`, `would be`,
-`template`, `→`). Markdown links are **not** gated this way — a link is already an
-act-on-it reference.
+patterns". So a reference — an inline path **or** a markdown link — is treated as
+real **only when the line directs the agent to use the file** (`read` / `run` /
+`see` / `load` / …) **and carries no illustrative cue** (`example`, `e.g.`,
+`such as`, `would be`, `template`, `→`). A markdown link is a higher-confidence
+shape than a bare backtick span, but an example link — "For example, see
+`[a report](assets/example.pdf)`" — is still a prose illustration, not a real dead
+ref, so the same prose gate applies to both.
 
 The detector prefers **missing a real ref over a false positive** — a noisy
-resource check would teach users to ignore it.
+resource check would teach users to ignore it. A skill whose body is inherently
+full of illustrative bundle-path examples (a skill-authoring tutorial) can opt out
+entirely with a `<!-- vigiles-disable skill-resource-resolves -->` marker.
 
 ## Configuration
 

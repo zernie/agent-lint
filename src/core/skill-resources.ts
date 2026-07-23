@@ -22,14 +22,22 @@
  * MISSING a real ref over emitting a false positive — a noisy resource check
  * would teach users to ignore it.
  *
- * The INLINE-CODE path form is weaker than a link, so it carries an extra prose
- * gate: a skill that TEACHES how to build skills mentions bundle paths
- * constantly as EXAMPLES of what a skill *could* ship ("a `scripts/rotate.py`
- * would be helpful to store", "**Examples**: `references/finance.md`"). An
- * inline path is treated as a real reference ONLY when the line DIRECTS the
- * agent to use the file (read/run/see/…) and carries no illustrative cue
- * (example / e.g. / such as / would be / template / →). Markdown links are
- * unchanged — a link is already an act-on-it reference. See `inlinePathIsUsed`.
+ * BOTH candidate shapes carry the same prose gate (issue #110 — a markdown
+ * link is a stronger signal than an inline-code mention, but it is NOT
+ * immune from illustrative prose): a skill that TEACHES how to build skills
+ * mentions bundle paths constantly as EXAMPLES of what a skill *could* ship
+ * ("a `scripts/rotate.py` would be helpful to store", "**Examples**:
+ * `references/finance.md`", or a markdown-link example demonstrating how to
+ * write a path — e.g. one with a space in the filename). A reference (link OR
+ * inline path) is treated as real ONLY when the line DIRECTS the agent to use
+ * the file (read/run/see/…) and carries no illustrative cue (example / e.g. /
+ * such as / would be / template / →). See `inlinePathIsUsed`.
+ *
+ * ESCAPE HATCH: a SKILL.md carrying `<!-- vigiles-disable skill-resource-resolves -->`
+ * anywhere in its body opts OUT of this check entirely (mirrors `orphans.ts`'s
+ * `vigiles-disable orphan-docs`) — for a skill whose body is inherently full of
+ * illustrative bundle-path examples (a skill-authoring tutorial) that still
+ * trips the heuristic.
  *
  * Pure + node-free: the only IO is a REQUIRED, injected `existsSync` (the disk
  * caller passes `node:fs`; the browser engine a map-backed check), so the
@@ -178,25 +186,30 @@ function isInlineBundlePath(token: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Inline-path prose gate (don't-cry-wolf on TEACHING / illustrative skills)
+// Prose gate (don't-cry-wolf on TEACHING / illustrative skills)
 // ---------------------------------------------------------------------------
 //
-// An inline-code bundle path (`` `scripts/foo.py` ``) is a much WEAKER signal
-// than a markdown link — skills that TEACH how to build skills (e.g. the
-// official `skill-development` skill) are full of bundle paths used as
-// EXAMPLES of what a skill *could* contain, not as references to a file the
+// A bundle-path reference — whether an inline-code mention (`` `scripts/foo.py` ``)
+// or a markdown link (`[..](scripts/foo.py)`) — can be an ILLUSTRATIVE EXAMPLE
+// rather than a real shipped resource. Skills that TEACH how to build skills
+// (e.g. the official `skill-development` skill) are full of bundle paths used
+// as EXAMPLES of what a skill *could* contain, not as references to a file the
 // skill actually ships: "a `scripts/rotate_pdf.py` would be helpful to store",
 // "**Examples**: `references/finance.md` …", "- **`references/patterns.md`** —
-// Common patterns". Flagging those as "bundled resource not found" cries wolf
-// and graded a clean, correct skill an F.
+// Common patterns". A markdown link is not immune either — a skill documenting
+// "how to escape a space in a bundled filename" routinely shows an EXAMPLE
+// link (`[a report](assets/My-Escaped-Space.pdf)`) that is prose, not a real
+// dead ref (issue #110). Flagging those as "bundled resource not found" cries
+// wolf and graded a clean, correct skill an F.
 //
-// So an inline path is only treated as a real reference when the surrounding
-// prose DIRECTS the agent to ACT on the file (read/run/see/…) AND carries no
-// illustrative/hypothetical cue. Markdown links (`[text](path)`) are unchanged
-// — a link is already a high-confidence, follow-me reference. We bias HARD
-// toward precision here: missing a real dead-ref is far better than a false
-// positive on a teaching skill (the same don't-cry-wolf discipline as the
-// loader's `danglingRefs`).
+// So a reference — link or inline path — is only treated as real when the
+// surrounding prose DIRECTS the agent to ACT on the file (read/run/see/…) AND
+// carries no illustrative/hypothetical cue. We bias HARD toward precision
+// here: missing a real dead-ref is far better than a false positive on a
+// teaching skill (the same don't-cry-wolf discipline as the loader's
+// `danglingRefs`). A markdown link is still the HIGHER-confidence shape (it
+// requires an explicit `[text](target)`, not just a bare backtick span), but
+// the illustrative-cue skip applies to it too — see `inlinePathIsUsed`.
 
 // Verbs that direct the agent to CONSUME an existing file. Deliberately EXCLUDES
 // authoring verbs (store/create/add/move/write) — "a `scripts/x.py` would be
@@ -213,11 +226,14 @@ const ILLUSTRATIVE_CUE =
   /\b(example|examples|e\.g\.?|i\.e\.?|such as|for instance|would be|helpful|useful|template|boilerplate)\b|→|->/i;
 
 /**
- * Whether an inline bundle-path on this line reads as a REAL reference (the
+ * Whether a bundle-path reference on this line reads as a REAL reference (the
  * agent is told to use the file) rather than an illustrative mention. Requires
  * a positive use-directive and the absence of an illustrative cue — both
  * evaluated over the whole line for simplicity (a tight, precise rule over a
- * clever one). Only the inline-path branch consults this; markdown links do not.
+ * clever one). BOTH candidate shapes consult this (issue #110) — a markdown
+ * link's `[text](target)` syntax is a stronger signal than a bare inline span,
+ * but "For example, see [the schema](...)" is still an illustrative mention,
+ * not a real dead ref.
  */
 function inlinePathIsUsed(line: string): boolean {
   return USE_DIRECTIVE.test(line) && !ILLUSTRATIVE_CUE.test(line);
@@ -237,17 +253,21 @@ interface Candidate {
 /** Collect candidate bundled-resource refs from one body line, skipping fences. */
 function candidatesInLine(line: string, lineNo: number): Candidate[] {
   const out: Candidate[] = [];
-  // Markdown links: any relative path target that passes the local-resource gate.
-  for (const m of line.matchAll(MD_LINK)) {
-    const resolved = localResourceTarget(m[1]);
-    if (resolved !== null) {
-      out.push({ ref: m[1].trim(), resolved, kind: "link", line: lineNo });
+  // Both shapes below fire only when the surrounding prose USES the file (not
+  // an illustrative mention on a teaching skill — see `inlinePathIsUsed`,
+  // issue #110). Computed once — the same gate covers markdown links now too.
+  const used = inlinePathIsUsed(line);
+  // Markdown links: a relative path target that passes the local-resource gate.
+  if (used) {
+    for (const m of line.matchAll(MD_LINK)) {
+      const resolved = localResourceTarget(m[1]);
+      if (resolved !== null) {
+        out.push({ ref: m[1].trim(), resolved, kind: "link", line: lineNo });
+      }
     }
   }
-  // Inline-code path mentions: only the high-confidence bundle-dir-prefixed
-  // form, AND only when the surrounding prose USES the file (not an illustrative
-  // mention on a teaching skill — see `inlinePathIsUsed`).
-  if (inlinePathIsUsed(line)) {
+  // Inline-code path mentions: only the high-confidence bundle-dir-prefixed form.
+  if (used) {
     for (const m of line.matchAll(INLINE_SPAN)) {
       const token = m[1].trim();
       if (!isInlineBundlePath(token)) continue;
@@ -259,6 +279,15 @@ function candidatesInLine(line: string, lineNo: number): Candidate[] {
   }
   return out;
 }
+
+/**
+ * A SKILL.md body carrying this marker opts OUT of skill-resource checking
+ * entirely — the inline escape hatch (issue #110), mirroring `orphans.ts`'s
+ * `vigiles-disable orphan-docs`. For a skill whose body is inherently full of
+ * illustrative bundle-path examples (a skill-authoring tutorial) that still
+ * trips the heuristic despite the prose gate above.
+ */
+const DISABLE_RE = /<!--\s*vigiles-disable\s+skill-resource-resolves\s*-->/;
 
 /**
  * The bundled-resource references in a SKILL.md body that don't resolve on disk
@@ -273,6 +302,7 @@ export function skillResourceIssues(
   skillDir: string,
   opts: SkillResourceOptions,
 ): SkillResourceFinding[] {
+  if (DISABLE_RE.test(skillBody)) return [];
   const exists = opts.existsSync;
   const sharedDirs = new Set(opts.sharedDirs ?? []);
   // A ref resolves if it exists under the skill's own dir. If (and only if) its

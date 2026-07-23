@@ -400,6 +400,21 @@ function isPluginRooted(content: string, idx: number): boolean {
 
 const DOC_SOURCE_RE = /\.(?:md|markdown|mdx|txt|rst)$/i;
 
+// A `.sh`/`.bash`/`.cmd` SCRIPT's own `#`-led comments are prose, not code — a
+// usage comment (`# bash skills/<plugin>/hooks/setup.sh`, written as it would be
+// invoked from the REPO CHECKOUT root) is not a real file operation any more than
+// a path mentioned in a doc file is (issue #110). Mirror of plugin-loader.ts
+// `SCRIPT_COMMENT_RE`.
+const SCRIPT_COMMENT_RE = /\.(?:sh|bash|cmd)$/i;
+
+/** Mirror of plugin-loader.ts `stripShellComments`. */
+function stripShellComments(content: string): string {
+  return content
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n");
+}
+
 /** The plugin's executable (non-prose) source-file CONTENTS under the surface dirs. */
 function executableContents(
   files: Record<string, string>,
@@ -412,23 +427,48 @@ function executableContents(
       if (!k.startsWith(`${surface}/`)) continue;
       if (DOC_SOURCE_RE.test(k)) continue;
       if (byteLen(content) > MAX_SKILL_FILE_BYTES) continue;
-      out.push(content);
+      out.push(
+        SCRIPT_COMMENT_RE.test(k) ? stripShellComments(content) : content,
+      );
     }
   }
   return out;
+}
+
+/**
+ * Mirror of plugin-loader.ts `resolvesUnderRoot`, over the file map. `rootName`
+ * is the audited root's own directory name (the map-backed analog of
+ * `basename(root)` on disk — see `scanFiles`'s `repoName` param) — used to
+ * detect a REPO-CHECKOUT-RELATIVE echo of the plugin's own containing surface
+ * dir + name (`skills/<plugin>/hooks/setup.sh`) ahead of the real
+ * plugin-relative path (`hooks/setup.sh`), issue #110.
+ */
+function resolvesUnderRoot(
+  files: Record<string, string>,
+  ref: string,
+  rootName: string,
+): boolean {
+  if (hasFile(files, ref)) return true;
+  const segs = ref.split("/");
+  if (segs.length > 2 && segs[1] === rootName) {
+    const rest = segs.slice(2).join("/");
+    if (rest.length > 0 && hasFile(files, rest)) return true;
+  }
+  return false;
 }
 
 /** Mirror of plugin-loader.ts `danglingRefs`, over the file map. */
 function danglingRefs(
   files: Record<string, string>,
   layout: PluginLayout,
+  rootName: string,
 ): string[] {
   const re = intraRefRe(layout);
   const missing = new Set<string>();
   for (const content of executableContents(files, layout)) {
     for (const m of content.matchAll(re)) {
       if (m.index !== undefined && !isPluginRooted(content, m.index)) continue;
-      if (!hasFile(files, m[0])) missing.add(m[0]);
+      if (!resolvesUnderRoot(files, m[0], rootName)) missing.add(m[0]);
     }
   }
   return [...missing];
@@ -444,6 +484,7 @@ function pluginWarnings(
   counts: Record<string, number>,
   hooks: unknown,
   materialized: Record<string, string>,
+  rootName: string,
 ): string[] {
   const warnings: string[] = [];
   if (counts.agents) {
@@ -461,7 +502,7 @@ function pluginWarnings(
       `plugin declares MCP server(s) (${layout.mcpManifestKey} / ${layout.mcpConfigFile}) — the loader does not wire MCP; bring the server up yourself if your test needs it.`,
     );
   }
-  const dangling = danglingRefs(files, layout);
+  const dangling = danglingRefs(files, layout, rootName);
   if (dangling.length) {
     const shown = dangling.slice(0, 5).join(", ");
     const more =
@@ -516,7 +557,14 @@ export function loadPluginFromFiles(
     settings: resolvedHooks ? { hooks: resolvedHooks } : {},
     files: out,
     sources,
-    warnings: pluginWarnings(files, layout, counts, resolvedHooks, out),
+    warnings: pluginWarnings(
+      files,
+      layout,
+      counts,
+      resolvedHooks,
+      out,
+      repoName ?? basename(BROWSER_ROOT),
+    ),
   };
 }
 
@@ -626,7 +674,7 @@ export function scanFiles(
     manualHookCount: manual,
     commands: Object.keys(loaded.files).filter(cls.isCommand).length,
     mcp: loaded.warnings.some((w) => w.includes("MCP server")),
-    danglingRefs: danglingRefs(files, lay),
+    danglingRefs: danglingRefs(files, lay, repoName ?? basename(BROWSER_ROOT)),
     hookEventIssues,
     frontmatterIssues: remap(frontmatterIssuesFor(loaded.files, cls)),
     frontmatterValueIssues: remap(frontmatterValueIssuesFor(loaded.files, cls)),

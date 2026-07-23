@@ -142,16 +142,46 @@ describe("skillResourceIssues", () => {
     ]);
   });
 
-  it("STILL flags a missing bundled resource behind a markdown link (unchanged)", () => {
-    // Markdown links are a high-confidence reference regardless of prose — a
-    // link to a missing bundled file always fires (the direction we must keep).
-    const body = "For example, see [the schema](references/schema.md).";
+  it("does NOT flag an illustrative markdown-link EXAMPLE (issue #110)", () => {
+    // Regression: markdown links now carry the SAME illustrative-cue prose
+    // gate as inline spans — "For example, see [the schema](...)" describes a
+    // hypothetical usage, not a real bundled file the skill ships. Previously
+    // this fired unconditionally (candidatesInLine had no gate on the link
+    // branch), which is exactly the false positive issue #110 reports (a
+    // SKILL.md documenting how to write a path — e.g. escaping a space in a
+    // filename — via an example markdown link).
+    const body =
+      "For example, see [a report](assets/My-Escaped-Space.pdf) for how to write the path.";
+    expect(run(body, existsOnly())).toEqual([]);
+  });
+
+  it("STILL flags a missing bundled resource behind a directive markdown link with no illustrative cue (issue #110 caution)", () => {
+    // A markdown link that DIRECTS the agent to a file, carrying no
+    // illustrative cue, is still a genuine follow-me reference and must fire.
+    const body = "Read [the schema](references/schema.md) before editing.";
     const found = run(body, existsOnly());
     expect(found).toHaveLength(1);
     expect(found[0]).toMatchObject({
       resolved: "references/schema.md",
       kind: "link",
     });
+  });
+
+  it("can be disabled entirely via <!-- vigiles-disable skill-resource-resolves --> (issue #110)", () => {
+    // The escape hatch — a skill body that inherently reads as full of
+    // illustrative bundle-path examples (a skill-authoring tutorial) can opt
+    // out wholesale, mirroring orphans.ts's `vigiles-disable orphan-docs`.
+    const body = [
+      "<!-- vigiles-disable skill-resource-resolves -->",
+      "Read [the schema](references/schema.md) before editing.",
+      "Run `scripts/install.sh` to set up.",
+    ].join("\n");
+    expect(run(body, existsOnly())).toEqual([]);
+  });
+
+  it("still flags without the disable marker (control for the escape-hatch test)", () => {
+    const body = "Read [the schema](references/schema.md) before editing.";
+    expect(run(body, existsOnly())).toHaveLength(1);
   });
 
   it("skips a bare word inline mention (no extension, no bundle prefix)", () => {
