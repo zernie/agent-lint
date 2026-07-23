@@ -988,6 +988,17 @@ assertRates`) is the recommended path for testing one skill, but
   the reference-verification domain — only do it if the symmetry is judged worth
   that. · **LOW**
 
+- **`loop()` combinator — a checkable stop condition for iterating orchestrators.**
+  `railway()` ships no loop (finite steps → termination is structural); real
+  orchestrators loop "until done", and that stop condition is prose today. Add
+  `loop(body, { until, maxIters })` where `until` MUST be a deterministic gate
+  (compiles to a `Stop`-hook) and `maxIters` is a mandatory cap — prose `until` is
+  a compile error / advisory. Emit-and-verify only (no engine), reusing the shipped
+  `Stop`-gate + per-iteration `PreToolUse` rail. The product side of the
+  terminatability / "Prose Isn't Policy for control flow" paper angle. →
+  [`loop-combinator.md`](loop-combinator.md), extends [`railway-subagents.md`](railway-subagents.md).
+  · **MED / needs the railway-driver open question resolved**
+
 ## Backlog — lower priority / niche
 
 - Pillar 1: #12 annotation-typo (partial), #10 instruction diff (PR-time), #4
