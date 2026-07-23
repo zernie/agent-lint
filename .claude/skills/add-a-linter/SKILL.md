@@ -70,9 +70,12 @@ Work in this order — each step's gate tells you the next is needed.
    The conformance test set-matches the table against the registry, so a missing
    row fails CI.
 
-6. **Show it on the site** — add the name to the `const LINTERS = [...]` array in
-   `site/src/components/sections/Wedge.tsx`. The conformance test also guards
-   this, so a stale front page fails CI (loud), not silently.
+6. **The site updates itself** — the vigiles.sh chip strip (`Wedge.tsx`) DERIVES
+   from `BUILTIN_LINTERS`, so a new linter appears automatically; there's no array
+   to edit. Optionally add a display label to `LINTER_LABELS` in `Wedge.tsx` if it
+   needs special casing (e.g. `ESLint`, `RuboCop`); with no entry it renders under
+   its lowercase name. The conformance test guards that the derivation stays in
+   place (a revert to a hand-typed list fails CI).
 
 7. **If it's a `cli` linter, make CI actually run it — no silent skips.** The
    real-binary tests are `describe.skipIf(!hasBinary("<tool>"))` in
