@@ -56,7 +56,7 @@ describe("LinterAdapter conformance", () => {
       expect(c.existenceCheck === "cli").toBe(adapter.cliTool !== undefined);
       // an always-enabled linter (cedar) has no separate config-enabled read.
       if (c.alwaysEnabled) {
-        expect(adapter.configEnabled).toBeUndefined();
+        expect(adapter.configEnabled === undefined).toBe(true);
       }
     }
   });

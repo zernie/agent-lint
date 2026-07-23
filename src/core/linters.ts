@@ -1391,7 +1391,6 @@ function hasGolangciConfig(basePath: string): boolean {
 // Linter rule discovery
 // ---------------------------------------------------------------------------
 
-
 function discoverEslintRules(basePath: string): DiscoveredRules | null {
   try {
     const script = `
