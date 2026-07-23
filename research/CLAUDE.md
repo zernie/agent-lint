@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:dcabffbebce80c34 compiled from research/CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:a0cc27bf904ec0ef compiled from research/CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
