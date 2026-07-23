@@ -480,6 +480,27 @@ export function golangciEnabledStatusFromOutput(
   return "unknown";
 }
 
+/**
+ * The linter names in the ENABLED half of `golangci-lint linters` output — the
+ * generate-types discovery surface. Reads only the "Enabled by your
+ * configuration linters:" section (everything before the "Disabled by …" split),
+ * taking each name that starts a line (an optional `(alt, names)` paren ignored).
+ * Pure so discovery can be unit-tested with no `golangci-lint` binary.
+ * @internal
+ */
+export function parseGolangciEnabledLinters(output: string): string[] {
+  const disabledIdx = output.search(/^Disabled by/m);
+  const enabledSection =
+    disabledIdx >= 0 ? output.substring(0, disabledIdx) : output;
+  const names: string[] = [];
+  const re = /^([a-z][a-z0-9_-]+)(?:\s*\([^)]*\))?:/gm;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(enabledSection)) !== null) {
+    names.push(m[1]);
+  }
+  return names;
+}
+
 /** Linter names listed at line starts of `golangci-lint help linters` output. */
 function golangciLinterNames(output: string): string[] {
   const names: string[] = [];

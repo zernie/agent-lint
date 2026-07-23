@@ -26,6 +26,7 @@ import {
   checkstyleEnabledStatus,
   golangciOutputListsLinter,
   golangciEnabledStatusFromOutput,
+  parseGolangciEnabledLinters,
 } from "./linters.js";
 import { generateTypes } from "./generate-types.js";
 import type { LinterRule } from "./spec.js";
@@ -338,6 +339,20 @@ describe("golangci-lint output parsing", () => {
       "unknown",
     );
   });
+
+  it("parseGolangciEnabledLinters returns ONLY the enabled section (the type-gen discovery parse)", () => {
+    // The generate-types discovery surface — extracted from discoverGolangciLintRules
+    // so it's testable with no golangci-lint binary (its only prior coverage was a
+    // vacuous empty-project test). Enabled linters in, disabled ones excluded.
+    const enabled = parseGolangciEnabledLinters(GOLANGCI_LINTERS_OUTPUT);
+    assert.deepEqual(enabled.sort(), ["errcheck", "govet", "staticcheck"]);
+    // the disabled section is excluded, and an alt-name paren isn't a rule
+    assert.equal(enabled.includes("gocyclo"), false);
+    assert.equal(enabled.includes("unparam"), false);
+    assert.equal(enabled.includes("vet"), false);
+    // no enabled section → nothing
+    assert.deepEqual(parseGolangciEnabledLinters("Disabled by foo:\nx:\n"), []);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -537,6 +552,27 @@ describe("missing-binary behavior", () => {
       const result = checkLinterRule("golangci-lint/errcheck", process.cwd());
       assert.equal(result.exists, false);
       assert.ok(result.error?.includes('CLI tool "golangci-lint" not found'));
+    },
+  );
+
+  it.skipIf(hasBinary("ktlint"))(
+    "ktlint absent from PATH → honest CLI-not-found error (not a false positive)",
+    () => {
+      const result = checkLinterRule(
+        "ktlint/standard:no-wildcard-imports",
+        process.cwd(),
+      );
+      assert.equal(result.exists, false);
+      assert.ok(result.error?.includes('CLI tool "ktlint" not found'));
+    },
+  );
+
+  it.skipIf(hasBinary("checkstyle"))(
+    "checkstyle absent from PATH → honest CLI-not-found error",
+    () => {
+      const result = checkLinterRule("checkstyle/MagicNumber", process.cwd());
+      assert.equal(result.exists, false);
+      assert.ok(result.error?.includes('CLI tool "checkstyle" not found'));
     },
   );
 });

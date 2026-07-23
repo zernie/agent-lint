@@ -18,6 +18,7 @@ import {
   checkstyleEnabledStatus,
   parseDetektConfig,
   readDetektConfig,
+  parseGolangciEnabledLinters,
 } from "./linters.js";
 
 // ---------------------------------------------------------------------------
@@ -381,15 +382,7 @@ function discoverGolangciLintRules(basePath: string): DiscoveredRules | null {
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 60000,
     });
-    const disabledIdx = output.search(/^Disabled by/m);
-    const enabledSection =
-      disabledIdx >= 0 ? output.substring(0, disabledIdx) : output;
-    const rules: string[] = [];
-    const re = /^([a-z][a-z0-9_-]+)(?:\s*\([^)]*\))?:/gm;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(enabledSection)) !== null) {
-      rules.push(m[1]);
-    }
+    const rules = parseGolangciEnabledLinters(output);
     if (rules.length === 0) return null;
     return { linter: "golangci-lint", rules, via: "CLI" };
   } catch {
