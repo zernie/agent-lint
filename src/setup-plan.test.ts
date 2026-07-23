@@ -12,8 +12,10 @@ import {
   applyCodexPluginHooks,
   mergeProjectConfig,
   collectSetupAnswers,
+  gateOnlyInvitation,
   STRUCTURAL_RULES,
   WORKFLOW_RULES,
+  SHIPPED_SKILLS,
   type AskFn,
 } from "./setup-plan.js";
 
@@ -23,9 +25,21 @@ test("defaults: both pillars, CI, plugin, non-strict", () => {
     test: true,
     gha: true,
     plugin: true,
+    scaffoldSpecs: true, // tracks the lint pillar; only the wizard "gate" turns it off
     strict: false,
     force: false,
   });
+});
+
+test("resolvePlan: scaffoldSpecs tracks the lint pillar (off when --no-lint)", () => {
+  assert.equal(resolvePlan(parseSetupArgs([])).scaffoldSpecs, true);
+  assert.equal(resolvePlan(parseSetupArgs(["--no-lint"])).scaffoldSpecs, false);
+  // The wizard "gate" answer overrides it to false even with lint on.
+  assert.equal(
+    resolvePlan(parseSetupArgs([]), { lint: true, scaffoldSpecs: false })
+      .scaffoldSpecs,
+    false,
+  );
 });
 
 test("parseSetupArgs reads --force; resolvePlan carries it", () => {
@@ -66,6 +80,32 @@ test("parseSetupArgs reads --lint / --no-test / --harness", () => {
   assert.equal(parseSetupArgs([]).test, undefined);
 });
 
+test("--ci-only: the explicit gate-only opt-in (no plugin, no spec, no test)", () => {
+  assert.equal(parseSetupArgs(["--ci-only"]).ciOnly, true);
+  assert.equal(parseSetupArgs([]).ciOnly, false);
+
+  const plan = resolvePlan(parseSetupArgs(["--ci-only"]));
+  assert.equal(plan.lint, true, "gate keeps the lint GATE");
+  assert.equal(plan.test, false);
+  assert.equal(plan.plugin, false);
+  assert.equal(plan.scaffoldSpecs, false, "gate scaffolds no spec");
+  assert.equal(plan.strict, false);
+  // The gate-only invitation fires (it's a pure lint gate → invite to full later).
+  assert.ok(gateOnlyInvitation(plan));
+
+  // --ci-only wins over a conflicting default-strict: still minimal.
+  assert.equal(
+    resolvePlan(parseSetupArgs(["--ci-only", "--strict"])).strict,
+    false,
+  );
+
+  // Bare `init` is UNCHANGED — full stays the default (gate is opt-in, no flip).
+  assert.equal(resolvePlan(parseSetupArgs([])).scaffoldSpecs, true);
+
+  // --ci-only settles the fork → never prompt over it (even at a TTY).
+  assert.equal(shouldPrompt(parseSetupArgs(["--ci-only"]), true), false);
+});
+
 test("parseSetupArgs: the old --verify/--testing/--pillars flags are gone", () => {
   // Clean break — they no longer select a pillar (treated as unknown flags).
   const p = parseSetupArgs(["--verify", "--testing"]);
@@ -82,6 +122,7 @@ test("resolvePlan: a positive pillar flag selects exactly that pillar", () => {
     test: false,
     gha: true,
     plugin: true,
+    scaffoldSpecs: true,
     strict: false,
     force: false,
   });
@@ -149,7 +190,29 @@ test("planPluginInstall: codex installs skills GLOBALLY (-g) + wires repo hooks"
   const [codex] = planPluginInstall(["codex"], { hasClaude: false });
   assert.equal(codex.harness, "codex");
   // The cross-agent skills CLI with -g → ~/.agents/skills/, not the repo.
-  assert.ok(codex.commands.some((c) => /skills add .* -a codex -g/.test(c)));
+  assert.ok(codex.commands.some((c) => /skills add .* -a codex .* -g/.test(c)));
+  // #dogfood-I2 + PR #114 CI: MUST scope with `-s <shipped>` so it doesn't leak
+  // the repo's contributor-only .claude/skills/ into the user's global store —
+  // AND the real `skills` CLI parses `-s` SPACE-separated (it consumes
+  // consecutive non-dash args); a COMMA list is read as one literal skill name,
+  // matches nothing, and the install exits 1. Parse the flag the SAME way the CLI
+  // does and assert the tokens are EXACTLY the shipped skills, so a comma
+  // regression or a bad name fails HERE (no network) rather than only in the e2e
+  // tier that needs it.
+  const cmd = codex.commands.find((c) => c.includes("skills add"));
+  assert.ok(cmd, "codex plan includes a skills-add command");
+  // Tokens start with a word char (a flag like `-g` starts with `-`), so the
+  // capture stops at the next flag — otherwise `[\w-]` would swallow `-g`.
+  const scoped = /-s ((?:[\w][\w-]* )*[\w][\w-]*) -/.exec(cmd);
+  assert.ok(
+    scoped,
+    `-s must be a SPACE-separated skill list (comma is parsed as one bad name), got: ${cmd}`,
+  );
+  assert.deepEqual(
+    scoped[1].split(" "),
+    [...SHIPPED_SKILLS],
+    "the -s list must be exactly the shipped skills",
+  );
   // Skills are global, but the nudge hooks are written to .codex/config.toml
   // (repo-committed, the Codex norm) → this method now touches the repo.
   assert.equal(codex.vendors, true);
@@ -384,7 +447,7 @@ function fakeAsk(scripted: Record<string, string>): {
   return { ask, asked };
 }
 
-test("collectSetupAnswers: all defaults (user hits Enter) → both pillars, all on, strict", async () => {
+test("collectSetupAnswers: all defaults (user hits Enter) → full mode, both pillars, all on, strict", async () => {
   const { ask, asked } = fakeAsk({});
   assert.deepEqual(await collectSetupAnswers(ask), {
     lint: true,
@@ -392,8 +455,45 @@ test("collectSetupAnswers: all defaults (user hits Enter) → both pillars, all 
     gha: true,
     plugin: true,
     strict: true,
+    scaffoldSpecs: true, // "full" + strict scaffolds the invited spec
   });
-  assert.equal(asked.length, 4, "asks pillars, CI, plugin, strict");
+  assert.equal(asked.length, 5, "asks mode, pillars, CI, plugin, strict");
+});
+
+test("gateOnlyInvitation: fires only for a pure gate (no plugin, no specs)", () => {
+  // A pure gate (the wizard "gate" choice) → the one-line invitation to graduate.
+  const gate = { ...defaultPlan(false), plugin: false, scaffoldSpecs: false };
+  assert.match(gateOnlyInvitation(gate) ?? "", /choose 'full'/);
+  // Plugin installed → not a pure gate → no invitation.
+  assert.equal(gateOnlyInvitation(defaultPlan(false)), null);
+  // Specs scaffolded but no plugin → still not a pure gate → no invitation.
+  assert.equal(
+    gateOnlyInvitation({ ...defaultPlan(false), plugin: false }),
+    null,
+  );
+});
+
+test("collectSetupAnswers: 'gate' mode → lint-only gate, nothing installed, one question", async () => {
+  const { ask, asked } = fakeAsk({ "Setup mode": "gate" });
+  assert.deepEqual(await collectSetupAnswers(ask), {
+    lint: true,
+    test: false,
+    plugin: false,
+    scaffoldSpecs: false,
+    strict: false,
+  });
+  // Gate short-circuits: only the mode question is asked (no pillar/plugin/strict).
+  assert.equal(asked.length, 1, "gate mode asks nothing further");
+});
+
+test("collectSetupAnswers: 'full' + declining strict → plugin + specs on, gate rules off", async () => {
+  const { ask } = fakeAsk({ "Setup mode": "full", "enforce specs": "n" });
+  const a = await collectSetupAnswers(ask);
+  assert.equal(a.plugin, true);
+  assert.equal(a.strict, false, "the workflow RULES are opt-out");
+  // strict is a separate axis from whether a spec is scaffolded — full mode always
+  // creates the spec (that's the full setup); strict only gates the workflow rules.
+  assert.equal(a.scaffoldSpecs, true);
 });
 
 test("collectSetupAnswers: 'lint' pillar → test off", async () => {

@@ -149,6 +149,43 @@ export function findInstructionFiles(
 // Config loading
 // ---------------------------------------------------------------------------
 
+/**
+ * ESLint users write `"off"` / `0` / `1` / `2` for severity; normalize to
+ * vigiles's `"warn" | "error" | false` so a rule the user meant to DISABLE
+ * (`"off"`) or GATE (`2`) actually does — instead of a truthy string / number
+ * silently rendering as a non-gating warn (issue #112 + numeric severities). The
+ * array form `[sev, opts]` recurses on the head. An unrecognized value is left
+ * as-is (it renders as a warn, the pre-existing behavior).
+ */
+export function normalizeSeverity(v: unknown): unknown {
+  if (Array.isArray(v)) return [normalizeSeverity(v[0]), v[1]];
+  if (v === "off" || v === 0 || v === false) return false;
+  if (v === "error" || v === 2) return "error";
+  if (v === "warn" || v === 1) return "warn";
+  return v;
+}
+
+/**
+ * Coerce a config value that should be a `string[]`: a bare STRING becomes a
+ * one-element array (the natural first-value mistake), so `exclude` /
+ * `orphans.include` don't silently iterate a string's CHARACTERS as globs — a
+ * no-op at best, and garbage "orphan" matches (`.`, `/`, `README.md`) at worst.
+ * A non-string/array value falls back with a warning (the `ruleMarkers` pattern).
+ */
+export function asStringArray(
+  v: unknown,
+  fallback: readonly string[],
+  key: string,
+): readonly string[] {
+  if (typeof v === "string") return [v];
+  if (Array.isArray(v))
+    return v.filter((x): x is string => typeof x === "string");
+  console.warn(
+    `Invalid ${key} in config: expected a string or string[], got ${JSON.stringify(v)}. Ignoring.`,
+  );
+  return fallback;
+}
+
 export function loadConfig(): VigilesConfig {
   try {
     const explorer = cosmiconfigSync("vigiles", {
@@ -165,9 +202,41 @@ export function loadConfig(): VigilesConfig {
     const config: VigilesConfig = {
       ...DEFAULT_CONFIG,
       ...userConfig,
-      rules: { ...DEFAULT_RULES, ...userConfig.rules },
+      // Normalize ESLint-idiom severities ("off"/0/1/2) across the merged rules,
+      // so a config value coerces to a real gating decision instead of a truthy
+      // string silently downgrading to warn.
+      rules: Object.fromEntries(
+        Object.entries({ ...DEFAULT_RULES, ...userConfig.rules }).map(
+          ([k, v]) => [k, normalizeSeverity(v)],
+        ),
+      ) as Required<RulesConfig>,
       files: Array.isArray(userConfig.files) ? userConfig.files : DEFAULT_FILES,
     };
+
+    // Parse-don't-validate the array-shaped keys ONCE here: a bare string is
+    // accepted as [string]; anything else warns + falls back. Downstream code
+    // then always sees a real string[] (no char-by-char glob spread).
+    if (userConfig.exclude !== undefined)
+      config.exclude = asStringArray(userConfig.exclude, [], "exclude");
+    if (userConfig.sharedDirs !== undefined)
+      config.sharedDirs = asStringArray(
+        userConfig.sharedDirs,
+        [],
+        "sharedDirs",
+      );
+    if (config.orphans) {
+      config.orphans = {
+        ...config.orphans,
+        include:
+          config.orphans.include === undefined
+            ? undefined
+            : asStringArray(config.orphans.include, [], "orphans.include"),
+        exclude:
+          config.orphans.exclude === undefined
+            ? undefined
+            : asStringArray(config.orphans.exclude, [], "orphans.exclude"),
+      };
+    }
 
     if (
       !Array.isArray(config.ruleMarkers) ||

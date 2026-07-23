@@ -46,7 +46,7 @@
         "score": 91,
         "weight": 1,
         "advisory": true,
-        "findings": ["3 untested surfaces"]
+        "findings": ["3 surfaces with no vigiles test/eval"]
       }
     ],
     "empty": false

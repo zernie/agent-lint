@@ -1,12 +1,13 @@
 # Linter Cross-Referencing
 
 > **Scope:** this page is about **`enforce()` cross-reference verification** — checking that a rule
-> you NAME actually exists + is enabled (7 catalogs: ESLint, Ruff, Pylint, Clippy, Stylelint,
-> RuboCop, Cedar). It is **NOT** the prose→rule _routing_ map (which auto-maps freeform prose to a
-> rule and supports ESLint + Pylint + Ruff route-only). Don't conflate the two — see
-> `research/rule-enforceability.md` for routing/synthesis coverage.
+> you NAME actually exists + is enabled (11 catalogs: ESLint, Ruff, Pylint, Clippy, Stylelint,
+> RuboCop, Detekt, Ktlint, Checkstyle, golangci-lint, Cedar). It is **NOT** the prose→rule
+> _routing_ map (which auto-maps freeform prose to a rule and supports ESLint + Pylint + Ruff
+> route-only). Don't conflate the two — see `research/rule-enforceability.md` for
+> routing/synthesis coverage.
 
-vigiles verifies that every `enforce()` rule in your spec actually exists and is enabled in your project. This is the core differentiator -- no other tool resolves rules against 7 catalog APIs and checks config-enabled status.
+vigiles verifies that every `enforce()` rule in your spec actually exists and is enabled in your project. This is the core differentiator -- no other tool resolves rules against 11 catalog APIs and checks config-enabled status.
 
 ## How It Works
 
@@ -32,17 +33,32 @@ The reference format is `<linter>/<rule>` -- e.g., `eslint/no-console`, `ruff/F4
 
 ## Supported Linters
 
-| Linter    | Detection      | Existence Check                               | Config Check                                          |
-| --------- | -------------- | --------------------------------------------- | ----------------------------------------------------- |
-| ESLint    | `node_modules` | Node API (`builtinRules` + plugin resolution) | Loads flat config, checks severity > 0                |
-| Stylelint | `node_modules` | Node API (`rules` export)                     | Loads config, checks rule value is not `null`         |
-| Ruff      | `PATH`         | CLI (`ruff rule <name>`)                      | Parses `ruff check --show-settings` for enabled codes |
-| Clippy    | `PATH`         | CLI (`cargo clippy --explain <name>`)         | Parses `Cargo.toml` `[lints.clippy]` section          |
-| Pylint    | `PATH`         | CLI (`pylint --help-msg=<name>`)              | Runs `pylint --list-msgs-enabled`                     |
-| RuboCop   | `PATH`         | CLI (`rubocop --show-cops <name>`)            | Parses `Enabled: true/false` from output              |
-| Cedar     | Filesystem     | Scan `.cedar/` and `cedar/` for `@id("...")`  | Presence == enabled (no separate config layer)        |
+| Linter        | Detection      | Existence Check                                          | Config Check                                                                         |
+| ------------- | -------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| ESLint        | `node_modules` | Node API (`builtinRules` + plugin resolution)            | Loads flat config, checks severity > 0                                               |
+| Stylelint     | `node_modules` | Node API (`rules` export)                                | Loads config, checks rule value is not `null`                                        |
+| Ruff          | `PATH`         | CLI (`ruff rule <name>`)                                 | Parses `ruff check --show-settings` for enabled codes                                |
+| Clippy        | `PATH`         | CLI (`cargo clippy --explain <name>`)                    | Parses `Cargo.toml` `[lints.clippy]` section                                         |
+| Pylint        | `PATH`         | CLI (`pylint --help-msg=<name>`)                         | Runs `pylint --list-msgs-enabled`                                                    |
+| RuboCop       | `PATH`         | CLI (`rubocop --show-cops <name>`)                       | Parses `Enabled: true/false` from output                                             |
+| Detekt        | `PATH`         | CLI (`detekt --generate-config` default-catalog parse)   | Parses `detekt.yml` / `detekt-config.yml` / `config/detekt/detekt.yml` for `active:` |
+| Ktlint        | `PATH`         | Reference format only (`<ruleset>:<rule-id>`) — see note | Parses `.editorconfig` `ktlint_<ruleset>_<rule-id> = enabled\|disabled` properties   |
+| Checkstyle    | `PATH`         | CLI (probe config naming the module — see note)          | Parses `checkstyle.xml` `<module name="...">` whitelist (+ `severity` `ignore`)      |
+| golangci-lint | `PATH`         | CLI (`golangci-lint help linters` listing)               | Runs `golangci-lint linters`, splits enabled/disabled-by-your-configuration sections |
+| Cedar         | Filesystem     | Scan `.cedar/` and `cedar/` for `@id("...")`             | Presence == enabled (no separate config layer)                                       |
 
-Node-based linters (ESLint, Stylelint) are resolved via `createRequire` from the project's `node_modules`. CLI-based linters (Ruff, Clippy, Pylint, RuboCop) must be available on `PATH`. Cedar policies are read directly from `.cedar` files — no external tool required.
+Node-based linters (ESLint, Stylelint) are resolved via `createRequire` from the project's `node_modules`. CLI-based linters (Ruff, Clippy, Pylint, RuboCop, Detekt, Ktlint, Checkstyle, golangci-lint) must be available on `PATH`. Cedar policies are read directly from `.cedar` files — no external tool required.
+
+## JVM and Go Catalogs
+
+The reference formats are `detekt/MagicNumber`, `ktlint/standard:no-wildcard-imports`, `checkstyle/MagicNumber`, and `golangci-lint/errcheck` (a golangci-lint "rule" is one of its bundled linters — that is golangci-lint's own unit of enablement).
+
+Three of the four have no direct "does rule X exist" query, so vigiles asks the real tool the closest honest question:
+
+- **Detekt** has no per-rule query, but `detekt --generate-config` exports the default config, which names every bundled rule — vigiles generates it once (into a temp dir), parses the rule keys, and checks your reference against that catalog. A rule from a third-party ruleset plugin won't be in the default catalog, so a rule named in your own detekt config is also accepted; if the catalog can't be generated at all, the check fails open rather than flagging every rule.
+- **Ktlint** ships no rule catalog CLI at all (its only subcommands are `generateEditorConfig` and the git hooks), so the existence check is format-only: the reference must be a qualified `<ruleset>:<rule-id>`. The config check is real — it reads the `ktlint_<ruleset>_<rule-id> = enabled|disabled` properties (and the ruleset-level `ktlint_<ruleset>` fallback) from `.editorconfig`.
+- **Checkstyle** has no module-listing command, so vigiles probes: it runs `checkstyle -c` with a tiny generated config naming your module (first as a `TreeWalker` child, then directly under `Checker` for file-level checks and filters). Only a module-instantiation error means the check doesn't exist; a style violation on the probe file proves it does. A checkstyle config is a whitelist, so for the enabled check a module absent from your `checkstyle.xml` is reported `disabled`.
+- **golangci-lint** lists every supported linter via `golangci-lint help linters` (existence) and your effective set via `golangci-lint linters`, which prints `Enabled by your configuration linters:` / `Disabled by your configuration linters:` sections (config check, run in your project so it respects `.golangci.yml`/`.yaml`/`.toml`).
 
 ## Cedar Policies
 
@@ -145,7 +161,7 @@ Custom linters only support existence checks. Config-enabled status is always `"
 
 ## generate-types
 
-`vigiles generate types` scans all 7 catalog APIs, `package.json`, and project files, then emits `.vigiles/generated.d.ts` with type unions derived from your actual project state.
+`vigiles generate types` scans all 11 catalog APIs, `package.json`, and project files, then emits `.vigiles/generated.d.ts` with type unions derived from your actual project state.
 
 ```sh
 npx vigiles generate types
@@ -191,6 +207,10 @@ Discovery methods per catalog:
 - **Pylint** -- parses `pylint --list-msgs-enabled`, extracts both IDs (`C0114`) and symbolic names
 - **RuboCop** -- parses `rubocop --show-cops` output for cop names
 - **Clippy** -- reads `Cargo.toml` `[lints.clippy]` section, excludes rules set to `"allow"`
+- **Detekt** -- reads your detekt YAML config (`detekt.yml` / `detekt-config.yml` / `config/detekt/detekt.yml`), collects rule keys not set to `active: false`
+- **Ktlint** -- reads `.editorconfig`, collects `ktlint_<ruleset>_<rule-id> = enabled` properties as `<ruleset>:<rule-id>`
+- **Checkstyle** -- reads your checkstyle XML config, collects `<module name="...">` names (the config is the whitelist of enabled checks)
+- **golangci-lint** -- parses the `Enabled by your configuration linters:` section of `golangci-lint linters`
 - **Cedar** -- scans `.cedar/` and `cedar/` for files containing `@id("...")` annotations, with filename fallback for unannotated policies
 
 Project files default to `src/**/*` but can be configured via `fileGlobs`.

@@ -48,7 +48,7 @@ The docs are grouped by what you're trying to do:
 - [`commands-and-how-they-relate.md`](commands-and-how-they-relate.md) — the mental model: how `audit` / `lint` / `test` / `eval` / `init` fit together, and why measuring "do my skills fire?" uses `init`, not `audit`.
 - [`testing-api.md`](testing-api.md) — the full harness-testing API: every predicate, assertion, `check`, matcher, and option (`measureTriggerRate` / `runEval` / significance).
 - [`spec-format.md`](spec-format.md) — the typed `.spec.ts` format (target, sections, rules, verified references) — the source of truth.
-- [`linter-support.md`](linter-support.md) — the 7 linter catalogs + `generate-types` / `generate-schema`.
+- [`linter-support.md`](linter-support.md) — the 11 linter catalogs + `generate-types` / `generate-schema`.
 - [`adapter-api.md`](adapter-api.md) — the adapter API reference: every port field, the conformance functions, the registry API.
 - **Validation rules:** the [full matrix](verifying-instruction-files.md#the-validation-rules--the-full-matrix) lives in the linting guide; each rule has a doc under [`rules/`](rules/).
 - **Library entry points** (grouped by concern so a future harness can sit beside the current one):

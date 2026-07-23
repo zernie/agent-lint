@@ -71,10 +71,33 @@ export function rankPlugins(dirs: readonly string[]): PluginScore[] {
   );
 }
 
+/**
+ * A note for the "all clean" leaderboard — the deterministic axis mostly grades
+ * real plugins A/B, and the dramatic failures (skills that don't fire,
+ * descriptions that collide) live in the model-gated trigger-rate tier the
+ * ranking can't run. So a high-scoring board isn't "found nothing" — it's "the
+ * next thing to check needs a model". Shown only when nothing scored below a B
+ * (≥80) — a C or worse has a real structural finding to fix first. "" otherwise.
+ */
+function modelTierNote(scores: readonly PluginScore[]): string {
+  if (scores.length === 0) return "";
+  const minScore = Math.min(...scores.map((s) => s.score));
+  if (minScore < 80) return ""; // there's a real structural finding to fix first
+  return (
+    "\nAll structurally clean on the deterministic axis — where real plugins usually pass. " +
+    "The failures that hide here (do skills FIRE? do descriptions collide?) need the " +
+    "model-gated tier: run `npx vigiles audit <dir>` interactively on one."
+  );
+}
+
 /** Format a ranked leaderboard as human-readable text. */
 export function formatLeaderboard(scores: readonly PluginScore[]): string {
+  const n = scores.length;
   const out: string[] = [
-    `Plugin health leaderboard (${String(scores.length)} scanned)`,
+    // Name the mode so a user who ran `audit ./plugins/*/` and expected one
+    // report understands why they got a ranking — and how to drill in.
+    `${String(n)} plugin${n === 1 ? "" : "s"} detected → leaderboard mode.`,
+    "Ranked by deterministic structural health (no model). Audit a single directory for its full report.",
     "",
     "  #   score  grade  plugin",
   ];
@@ -84,6 +107,11 @@ export function formatLeaderboard(scores: readonly PluginScore[]): string {
     const issue = s.issues.length > 0 ? ` — ${s.issues.join("; ")}` : "";
     out.push(`  ${rank}  ${score}    ${s.grade}      ${s.name}${issue}`);
   });
+  // The drill-in affordance — a local dir has no URL, so the per-plugin "report
+  // link" is the command that renders its full report.
+  out.push("", "Full report for any plugin: npx vigiles audit <dir>");
+  const note = modelTierNote(scores);
+  if (note) out.push(note);
   out.push(
     "",
     "Structural health only (no model). Weights: missing hook -15, hard lethal-",
@@ -121,6 +149,8 @@ export function formatLeaderboardMarkdown(
       `| ${String(i + 1)} | ${s.grade} | ${String(s.score)} | \`${s.name}\` | ${issues} |`,
     );
   });
+  const note = modelTierNote(scores);
+  if (note) lines.push("", note.trim());
   lines.push("", LEADERBOARD_METHOD);
   return lines.join("\n");
 }

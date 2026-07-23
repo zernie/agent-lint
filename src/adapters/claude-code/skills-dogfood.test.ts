@@ -23,6 +23,7 @@ import { readdirSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { loadPlugin } from "./plugin-loader.js";
+import { SHIPPED_SKILLS } from "../../setup-plan.js";
 
 // __dirname is dist/ at runtime; the plugin manifest lives at the repo root.
 const ROOT = join(__dirname, "..", "..", "..");
@@ -91,6 +92,40 @@ test("vigiles plugin: every hook command's ${CLAUDE_PLUGIN_ROOT} script exists",
       `plugin.json references \${CLAUDE_PLUGIN_ROOT}/${rel} but ${rel} does not exist at the plugin root`,
     );
   }
+});
+
+test("SHIPPED_SKILLS matches the skills/ dir (Codex install scope stays honest)", () => {
+  // #dogfood-I2: the Codex install scopes to SHIPPED_SKILLS with `-s`. If that
+  // list drifts from what actually ships under skills/, a user either misses a
+  // real skill or (worse) we re-leak a contributor skill. Keep them in lockstep.
+  const onDisk = readdirSync(join(ROOT, "skills"), { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .filter((d) => existsSync(join(ROOT, "skills", d.name, "SKILL.md")))
+    .map((d) => d.name)
+    .sort();
+  assert.deepEqual(
+    [...SHIPPED_SKILLS].sort(),
+    onDisk,
+    "SHIPPED_SKILLS (setup-plan.ts) must match the skills/ dirs that ship a SKILL.md",
+  );
+});
+
+test("vigiles marketplace.json declares owner (Claude Code v2.1.x requires it)", () => {
+  // Regression for #108: CC >= v2.1.x's marketplace schema requires a top-level
+  // `owner` object ({ name, url? }). Without it `claude plugin marketplace add
+  // zernie/vigiles` throws "owner: expected object, received undefined" and the
+  // whole plugin install (skills + hooks) fails for anyone on a recent CC — so
+  // `init`'s plugin step silently never completes. Our own inspectMarketplace is
+  // lax about it, so this is the guard that keeps the shipped manifest installable.
+  const market = JSON.parse(
+    readFileSync(join(ROOT, ".claude-plugin/marketplace.json"), "utf-8"),
+  ) as { owner?: { name?: unknown } };
+  assert.ok(
+    market.owner &&
+      typeof market.owner.name === "string" &&
+      market.owner.name.length > 0,
+    "marketplace.json must declare owner.name (required by Claude Code v2.1.x)",
+  );
 });
 
 test("vigiles plugin: every skill has a name and a non-empty description", () => {

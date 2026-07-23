@@ -19,6 +19,21 @@ export interface SetupPlan {
   gha: boolean;
   /** Install the Claude Code plugin (hooks + skills). */
   plugin: boolean;
+  /**
+   * Adopt/scaffold the instruction file(s) into typed `.spec.ts` (the compiled
+   * `CLAUDE.md` + integrity hash). GATE-FIRST (see `gate-first-adoption`): the
+   * INTEGRITY GATE (structural rules on your raw files + CI + devDep) is the
+   * universal floor and needs NO spec — the `structural` rule group reads
+   * skills/agents/hooks as-is, and `require-instructions-spec` is itself opt-in. So
+   * scaffolding a spec (extra maintenance + a compiled artifact) is the INVITED
+   * layer, gated on this flag (`setupPillar1` runs iff `lint && scaffoldSpecs`).
+   * Default: TRACKS the lint pillar (`resolvePlan` sets it to `plan.lint`), so bare
+   * `init` / `--lint` scaffold as before — non-interactive behaviour is unchanged.
+   * The ONE thing that turns it off with lint on is the wizard's "gate" choice: a
+   * pure lint gate on your raw files, nothing installed, no spec. No new CLI flag —
+   * a non-interactive gate is a documented follow-up (research/adoption-design.md §1).
+   */
+  scaffoldSpecs: boolean;
   /** Strict rule severities in `.vigilesrc.json`. */
   strict: boolean;
   /** Rewrite an existing STALE CI workflow in place (instead of only warning). */
@@ -44,6 +59,15 @@ export interface ParsedSetupArgs {
   harness?: string;
   gha?: boolean;
   plugin?: boolean;
+  /**
+   * `--ci-only` — the explicit CI-gate-only opt-in: the non-interactive equal of
+   * the wizard's "gate" choice (the lint gate in CI + devDep, no plugin, no spec,
+   * no test). Lets an agent/CI reach it without a TTY. Full stays the DEFAULT (bare
+   * `init` is unchanged), so this is opt-IN — it never buries the richer layers
+   * behind a default flip. (Named for what it sets up — the CI check — not the
+   * internal "integrity gate" concept.)
+   */
+  ciOnly: boolean;
 }
 
 function flagValue(
@@ -74,16 +98,22 @@ export function parseSetupArgs(args: readonly string[]): ParsedSetupArgs {
     harness: flagValue(args, "--harness="),
     gha: args.includes("--no-gha") ? false : undefined,
     plugin: args.includes("--no-plugin") ? false : undefined,
+    ciOnly: args.includes("--ci-only"),
   };
 }
 
-/** The non-interactive defaults: both pillars, CI, and the plugin. */
+/** The non-interactive defaults: both pillars, CI, and the plugin. `scaffoldSpecs`
+ * tracks the lint pillar (specs are created when the lint layer is set up) — the
+ * ONE exception is the wizard's "gate" choice, which sets up the lint GATE on your
+ * raw files WITHOUT scaffolding a spec (gate-first-adoption). Non-interactive
+ * behaviour is unchanged: bare `init` (lint on) scaffolds as before. */
 export function defaultPlan(strict = false): SetupPlan {
   return {
     lint: true,
     test: true,
     gha: true,
     plugin: true,
+    scaffoldSpecs: true,
     strict,
     force: false,
   };
@@ -217,7 +247,9 @@ export function mergeProjectConfig(
  * via flags. Agents / CI / piped input (no TTY) never prompt.
  */
 export function shouldPrompt(parsed: ParsedSetupArgs, isTTY: boolean): boolean {
-  if (!isTTY || parsed.yes || parsed.target) return false;
+  // `--ci-only` is an explicit setup-shape choice (the CLI equal of the wizard's
+  // "gate" answer), so it settles the fork — never prompt over it.
+  if (!isTTY || parsed.yes || parsed.target || parsed.ciOnly) return false;
   const pillarsPinned = parsed.lint !== undefined || parsed.test !== undefined;
   const allPinned =
     pillarsPinned && parsed.gha !== undefined && parsed.plugin !== undefined;
@@ -226,7 +258,10 @@ export function shouldPrompt(parsed: ParsedSetupArgs, isTTY: boolean): boolean {
 
 /** Interactive answers (only the fields the prompts cover). */
 export type SetupAnswers = Partial<
-  Pick<SetupPlan, "lint" | "test" | "gha" | "plugin" | "strict">
+  Pick<
+    SetupPlan,
+    "lint" | "test" | "gha" | "plugin" | "strict" | "scaffoldSpecs"
+  >
 >;
 
 /** Ask one question with a default — injected so the interactive Q&A is pure +
@@ -243,6 +278,29 @@ const isYesAnswer = (s: string): boolean => /^y(es)?$/i.test(s);
  * (the questions can't silently break) without a terminal.
  */
 export async function collectSetupAnswers(ask: AskFn): Promise<SetupAnswers> {
+  // GATE-FIRST fork (gate-first-adoption): the FIRST question is the shape of the
+  // setup, not a pillar list — because the integrity GATE is the universal floor and
+  // everything richer is invited. "gate" = lint your files in CI, nothing installed,
+  // zero conflict (the existing-harness / non-JS path). "full" = also scaffold specs
+  // + install the skills/hooks. Default "full" keeps the newcomer experience; an
+  // existing-harness user picks "gate" (and its tradeoff is stated inline).
+  const mode = (
+    await ask(
+      "Setup mode — [gate] lint your files in CI, nothing installed (best if you already have a harness) · [full] also scaffold specs + install skills/hooks? [gate/full] (full): ",
+      "full",
+    )
+  ).toLowerCase();
+  if (mode === "gate" || mode === "g") {
+    // Pure gate: the structural rules on your raw files + CI + devDep. No spec, no
+    // plugin, no test scaffold — nothing installed, nothing to maintain.
+    return {
+      lint: true,
+      test: false,
+      plugin: false,
+      scaffoldSpecs: false,
+      strict: false,
+    };
+  }
   const pillars = (
     await ask("Set up which pillars? [both/lint/test] (both): ", "both")
   ).toLowerCase();
@@ -253,7 +311,8 @@ export async function collectSetupAnswers(ask: AskFn): Promise<SetupAnswers> {
   // Structural gating (broken tools/hooks/MCP/collisions) is always on. This asks
   // about the WORKFLOW tier — a spec per file + a test per surface — which a clean
   // repo can fail just for not having done the work yet, so it's the recommended
-  // default a human opts OUT of (never forced on a silent run).
+  // default a human opts OUT of (never forced on a silent run). "yes" also turns on
+  // the spec scaffold (the workflow tier's `require-instructions-spec`).
   const strict = isYesAnswer(
     await ask(
       "Also enforce specs + a test per surface (recommended)? [Y/n]: ",
@@ -266,6 +325,10 @@ export async function collectSetupAnswers(ask: AskFn): Promise<SetupAnswers> {
     gha,
     plugin,
     strict,
+    // "full" scaffolds specs whenever the lint pillar is on (specs are how the full
+    // setup works); `strict` is a separate axis (it gates the workflow RULES, not
+    // whether a spec exists).
+    scaffoldSpecs: pillars !== "test",
   };
 }
 
@@ -290,6 +353,23 @@ function applyAnswers(plan: SetupPlan, answers: SetupAnswers): void {
   if (answers.gha !== undefined) plan.gha = answers.gha;
   if (answers.plugin !== undefined) plan.plugin = answers.plugin;
   if (answers.strict !== undefined) plan.strict = answers.strict;
+  if (answers.scaffoldSpecs !== undefined)
+    plan.scaffoldSpecs = answers.scaffoldSpecs;
+}
+
+/**
+ * The NON-EVIL invitation to graduate a gate-only setup to the full layer (skills
+ * + typed specs) — `gate-first-adoption`'s "invite the rest". Pure: returns the
+ * one-line invitation when the setup landed as a pure gate (no plugin, no specs),
+ * else null. It's INFORMATIONAL — a printed line, never a second prompt (the TTY
+ * wizard already asked; a headless run must never hang), and declining costs
+ * nothing (the gate is fully functional). The IO (printing it, and the optional
+ * later reminder on `audit`/`lint`) lives in cli.ts.
+ */
+export function gateOnlyInvitation(plan: SetupPlan): string | null {
+  const gateOnly = !plan.plugin && !plan.scaffoldSpecs;
+  if (!gateOnly) return null;
+  return "→ Want your agent to maintain this + measure whether your skills fire? Run `npx vigiles init` and choose 'full' (installs the skills). Optional — the gate above already works.";
 }
 
 /**
@@ -324,6 +404,24 @@ export interface InstallPlan {
  * with `-g -y` (the global store ~/.agents/skills/, which Codex reads). Codex
  * gets the skills but NOT hooks — Codex hook wiring (.codex/config.toml [hooks])
  * is not automated yet. */
+/**
+ * The SHIPPED consumer skills (the `skills/` dir, published via `plugin.json`) —
+ * the ONLY ones a user's install should get. The cross-agent `skills` CLI would
+ * otherwise clone the whole repo and install EVERY skill dir it finds, including
+ * this repo's CONTRIBUTOR-only `.claude/skills/` (generate-logo, landing-site,
+ * pr-to-lint-rule, …) — internal tooling users never asked for. So the Codex
+ * install is scoped with `-s`. Kept in lockstep with `skills/` on disk by the
+ * dogfood test in `src/adapters/claude-code/skills-dogfood.test.ts`.
+ */
+export const SHIPPED_SKILLS = [
+  "adopt-spec",
+  "debug-my-harness",
+  "edit-spec",
+  "linter-docs",
+  "strengthen",
+  "test-harness",
+] as const;
+
 export function planPluginInstall(
   harnesses: readonly string[],
   opts: { hasClaude: boolean },
@@ -357,12 +455,25 @@ export function planPluginInstall(
       // (eval-lock + refs) are wired into the repo's .codex/config.toml by
       // `init` (see codexPluginHooks / wireCodexHooks) — Codex config is
       // repo-committed, so that's the idiomatic place.
+      // Scope to the SHIPPED skills with `-s` — without it the `skills` CLI
+      // installs EVERY SKILL.md in the repo, leaking the contributor-only
+      // .claude/skills/ into the user's global store (#dogfood-I2; confirmed —
+      // the CLI's `-l` list shows 17 skills for this repo, incl. .claude/skills).
+      // The `-s` parser is SPACE-separated (it consumes consecutive non-dash
+      // args), NOT comma-separated — a comma list is read as one literal skill
+      // name, matches nothing, and the install exits 1 (verified against the
+      // real `skills@1.5.20` arg parser).
+      const skillScope = `-s ${SHIPPED_SKILLS.join(" ")}`;
       return {
         harness,
-        commands: ["npx --yes skills add zernie/vigiles -a codex -g -y"],
+        commands: [
+          `npx --yes skills add zernie/vigiles -a codex ${skillScope} -g -y`,
+        ],
         successMessage:
           "✓ Installed the vigiles skills into ~/.agents/skills/ (global, not vendored)",
-        manualSteps: ["npx skills add zernie/vigiles -a codex -g -y"],
+        manualSteps: [
+          `npx skills add zernie/vigiles -a codex ${skillScope} -g -y`,
+        ],
         notes: [
           "Codex reads AGENTS.md directly; the skills install globally to ~/.agents/skills/ (not the repo).",
           "The eval-lock + refs NUDGE hooks are wired into .codex/config.toml (repo-committed, the Codex norm).",
@@ -477,6 +588,22 @@ export function resolvePlan(
   if (parsed.plugin === false) plan.plugin = false;
   if (parsed.force) plan.force = true;
   if (parsed.target) plan.test = false;
+  // Specs track the lint pillar (created when the lint layer is set up); the wizard's
+  // "gate" answer is the one thing that overrides this to false (a lint gate with no
+  // spec). So `--no-lint` also stops the scaffold, and everything else is unchanged.
+  plan.scaffoldSpecs = plan.lint;
+  // `--ci-only`: the explicit CI-gate-only opt-in — the lint gate in CI + devDep,
+  // but no plugin, no spec scaffold, no test (the same shape as the wizard's "gate"
+  // choice). Full stays the DEFAULT, so this never flips bare `init`'s behaviour;
+  // it just lets a headless agent/CI request the non-invasive gate. Applied after
+  // the pillar flags so it wins over `plan.scaffoldSpecs = plan.lint`.
+  if (parsed.ciOnly) {
+    plan.lint = true;
+    plan.test = false;
+    plan.plugin = false;
+    plan.scaffoldSpecs = false;
+    plan.strict = false;
+  }
   if (answers) applyAnswers(plan, answers);
   return plan;
 }

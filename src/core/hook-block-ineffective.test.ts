@@ -57,6 +57,21 @@ describe("wrong-event (no-effect events only)", () => {
     assert.equal(findings[0].scriptPath, script);
   });
 
+  it("does NOT flag an exit 2 that appears only in a comment (dogfood D2)", () => {
+    const script = "/hooks/welcome.sh";
+    const entries: HookScriptEntry[] = [
+      { event: "SessionStart", command: `sh ${script}`, scriptPath: script },
+    ];
+    const findings = hookBlockIssues(
+      entries,
+      withFiles({
+        [script]:
+          "#!/bin/sh\n# Note: other tools may exit 2 on failure; this hook never blocks.\necho welcome\n",
+      }),
+    );
+    assert.equal(findings.length, 0, "a comment-only exit 2 is not a block");
+  });
+
   it('Notification hook with a legacy "decision":"block" → wrong-event', () => {
     const entries: HookScriptEntry[] = [
       {

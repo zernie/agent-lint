@@ -453,17 +453,28 @@ function LockedRow({ onUnlock }: { onUnlock?: () => void }) {
             one needs a real model: recall (does a skill fire when it should?)
             and precision (does it stay quiet on unrelated prompts?).
           </p>
-          {/* Honest placeholders — the shape of the result you'd get, not a blur. */}
+          {/* A LOCKED PREVIEW (the gated-content pattern): representative numbers,
+              BLURRED and tagged "preview", so it teases the SHAPE of the result you'd
+              get without reading as this repo's real measured finding — you unlock the
+              real ones by running it. Blurred + labelled = clearly illustrative, not a
+              fabricated claim. Screen readers get the honest description, not digits.
+              ("preview", not "example", also disambiguates from the frame's example-chip
+              source tag.) */}
           <div className="mt-2 flex items-center gap-2 font-mono text-xs text-muted-foreground">
-            <span>
-              recall <span className="font-bold text-foreground">—</span>
+            <span
+              className="select-none blur-[2.5px]"
+              aria-hidden
+              title="preview — run it to see your real numbers"
+            >
+              recall <span className="font-bold text-foreground">92%</span> ·
+              precision <span className="font-bold text-foreground">100%</span>
             </span>
-            <span>·</span>
-            <span>
-              precision <span className="font-bold text-foreground">—</span>
+            <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium uppercase not-italic tracking-wide text-muted-foreground/80">
+              preview
             </span>
-            <span className="not-italic text-muted-foreground/70">
-              (run to fill)
+            <span className="sr-only">
+              Example preview only — run vigiles to measure your skills&apos;
+              real recall and precision.
             </span>
           </div>
         </div>
@@ -536,6 +547,11 @@ function CliRulesRow() {
       <pre className="mt-2 whitespace-pre-wrap break-words rounded-md border border-border bg-card/40 px-3 py-2 font-mono text-xs leading-relaxed text-foreground">
         {`"always use ===" → eqeqeq is "off" in your ESLint config`}
       </pre>
+      <p className="mt-2 text-[11px] leading-snug text-muted-foreground/70">
+        Rule cross-referencing covers ESLint, Ruff, Pylint, Clippy &amp;
+        RuboCop. On other stacks vigiles still verifies references, structure
+        &amp; safety — it just can&apos;t check a linter it doesn&apos;t know.
+      </p>
     </div>
   );
 }
@@ -869,11 +885,24 @@ export function Report({
             Your rules → enforced
             <Badge className="border-warn text-warn">experimental</Badge>
           </h2>
-          <p className="mb-3 text-xs text-muted-foreground">
-            Prose rules in your instruction file that map to an off-the-shelf
-            lint rule — and whether it's actually enforced. Detection is a
-            heuristic, precision-first preview: it won't catch every rule.
-          </p>
+          {(rulesInventory?.length ?? 0) === 0 ? (
+            // No documented rule resolved to an off-the-shelf linter rule — so
+            // don't imply enforcement (the honest non-JS / no-linter case).
+            // The routed rules below are still shown; references, structure &
+            // safety are verified regardless of the linter.
+            <p className="mb-3 text-xs text-muted-foreground">
+              No supported linter resolved here. Rule cross-referencing covers
+              ESLint, Ruff, Pylint, Clippy &amp; RuboCop — on other stacks your
+              references, structure &amp; safety are still verified; enforcing a
+              documented rule just needs one of those linters.
+            </p>
+          ) : (
+            <p className="mb-3 text-xs text-muted-foreground">
+              Prose rules in your instruction file that map to an off-the-shelf
+              lint rule — and whether it's actually enforced. Detection is a
+              heuristic, precision-first preview: it won't catch every rule.
+            </p>
+          )}
           <RuleInventory data={rulesInventory ?? []} routing={ruleRouting} />
         </>
       )}

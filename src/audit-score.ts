@@ -303,11 +303,33 @@ function safety(r: ScanReport): CategoryScore {
 
 function tested(r: ScanReport): CategoryScore {
   const { score, findings } = scoreFrom([
-    { n: r.untested, weight: W_UNTESTED, label: "untested surface(s)" },
+    {
+      n: r.untested,
+      // Say VIGILES-NATIVE explicitly — this counts `.eval.mjs`/`.harness.mjs`, not
+      // whether a surface is tested at all, so the label must not read as "untested".
+      weight: W_UNTESTED,
+      label: "surface(s) with no vigiles test/eval",
+    },
   ]);
-  // ADVISORY: untested surfaces are a hardening gap, not breakage — shown, but
-  // excluded from the overall grade (so a clean-but-untested repo isn't graded F).
-  return { key: "Tested", score, weight: 1, advisory: true, findings };
+  // ADVISORY: a hardening gap, not breakage — shown but EXCLUDED from the overall
+  // grade (so a clean-but-untested repo is never graded F). And because it counts
+  // only vigiles-native tests, a repo with its OWN test setup gets an honest context
+  // note so the number is read as "optional", not "you don't test" (G3 — don't
+  // measure the wrong thing).
+  const contextualized =
+    r.ownTestSignal && r.untested > 0
+      ? [
+          ...findings,
+          "your own test setup detected — vigiles-native skill coverage is optional",
+        ]
+      : findings;
+  return {
+    key: "Tested",
+    score,
+    weight: 1,
+    advisory: true,
+    findings: contextualized,
+  };
 }
 
 /**

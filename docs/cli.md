@@ -66,22 +66,33 @@ which layers, CI, and the plugin. Run by an agent, in CI, or with piped input
 
 ### `init` flags
 
-| Flag                     | Effect                                                             |
-| ------------------------ | ------------------------------------------------------------------ |
-| `--yes`, `-y`            | Skip prompts; use defaults (both layers, CI, plugin)               |
-| `--lint` / `--no-lint`   | Lint layer — verify instruction-file references (default on)       |
-| `--test` / `--no-test`   | Test layer — scaffold a harness test (default on)                  |
-| `--harness=claude,codex` | Which harness(es) to set up (default: auto-detect from the repo)   |
-| `--no-gha`               | Skip wiring CI                                                     |
-| `--no-plugin`            | Skip installing the Claude Code plugin                             |
-| `--strict`               | Also enforce the workflow tier (specs + tests; see below)          |
-| `--report-only`          | Write the whole gate at `warn` — nothing fails CI (migration mode) |
-| `--target=AGENTS.md`     | Adopt / create a spec for one file (Lint layer only)               |
+| Flag                     | Effect                                                                                                                                                   |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--yes`, `-y`            | Skip prompts; use defaults (both layers, CI, the plugin)                                                                                                 |
+| `--ci-only`              | The CI check only: the lint gate + CI workflow + devDep, **nothing installed** — no plugin/spec/test (see below)                                         |
+| `--lint` / `--no-lint`   | Lint layer — verify instruction-file references (default on)                                                                                             |
+| `--test` / `--no-test`   | Test layer — scaffold a harness test (default on)                                                                                                        |
+| `--harness=claude,codex` | Which harness(es) to set up (default: auto-detect from the repo)                                                                                         |
+| `--no-gha`               | Skip wiring CI                                                                                                                                           |
+| `--no-plugin`            | Skip installing the vigiles **Claude Code plugin** (its skills + hooks, into `~/.claude/`) — not a vigiles-CLI plugin, and never vendored into your repo |
+| `--strict`               | Also enforce the workflow tier (specs + tests; see below)                                                                                                |
+| `--report-only`          | Write the whole gate at `warn` — nothing fails CI (migration mode)                                                                                       |
+| `--target=AGENTS.md`     | Adopt / create a spec for one file (Lint layer only)                                                                                                     |
 
 Passing a single positive layer flag selects only it (`--lint` = the Lint
 layer only); pass both, or neither, for both. `init` also adds `vigiles` to your
 `devDependencies` (moving it out of `dependencies` if it's there) so the
 scaffolded `vigiles.harness.mjs` resolves `vigiles/testing`.
+
+**`--ci-only` — the CI check only, nothing installed.** At a terminal the wizard's
+first question is "gate vs full"; `--ci-only` is the same choice for a headless run
+(an agent or CI). It sets up the deterministic lint gate on your raw files, wires
+CI, and adds the dev dependency — then stops: no plugin, no scaffolded spec, no
+test. It's the zero-conflict path for a repo that already has its own harness (or
+isn't JS/Python). **Full stays the default** — bare `init` is unchanged, so
+`--ci-only` is an opt-in that never hides the richer layers; the setup still prints a
+one-line invitation to run the full setup later, and the report keeps showing what
+a spec or eval would catch.
 
 #### What `init` gates by default (vs `--strict`)
 
@@ -350,6 +361,13 @@ automatically (like `lighthouse --view`; `--no-open` suppresses it). `--no-html`
 skips writing it. A versioned **`vigiles-report.json`** is written alongside
 (`--no-json` to skip) — the same contract `--json` prints, for CI or upload.
 
+**Share a local result with no upload.** When the audited repo has a GitHub
+`origin` remote, `audit` prints `Share this grade → https://vigiles.sh/?repo=owner/repo`.
+The in-browser demo re-runs the audit **live** for whoever opens the link, so
+there's nothing to upload and no backend — but a recipient can only fetch a
+**public** repo (the line says so). It's a suggestion on the human-readable path
+only, never an automatic share.
+
 **The report artifacts stay out of git.** Because `audit` runs zero-config
 (without `init`), it keeps `git status` clean itself: when it writes a report it
 idempotently adds `vigiles-report.*` to your `.gitignore` (appending only what's
@@ -577,7 +595,7 @@ different contracts** — the classic gate-vs-report split (think `eslint .` /
 `tsc --noEmit` vs `npm audit` / `terraform plan`):
 
 - **`lint` is the gate.** It runs on **your** repo with **your** config, verifies
-  references (file paths, scripts, and linter rules across **7 catalogs** — does
+  references (file paths, scripts, and linter rules across **11 catalogs** — does
   the rule exist _and_ is it enabled?), checks integrity/hash, coverage
   thresholds, orphan docs, duplicate rules — and exits with **config-driven
   severities → stable CI codes (0/1/2)**. It blocks bad commits.
@@ -601,7 +619,7 @@ deterministic + every-commit).
 
 | Check                                                       |  `lint`  |  `audit`  | `audit` (interactive) |
 | ----------------------------------------------------------- | :------: | :-------: | :-------------------: |
-| Linter-rule cross-ref (7 catalogs, exists **+ enabled**)    |    ✓     |     –     |           –           |
+| Linter-rule cross-ref (11 catalogs, exists **+ enabled**)   |    ✓     |     –     |           –           |
 | Marked file/script ref verification                         |    ✓     |     –     |           –           |
 | Integrity/hash · duplicate-NCD · coverage · orphan docs     |    ✓     |     –     |           –           |
 | Untested surface                                            |  ✓ gate  |  ✓ ring   |           –           |

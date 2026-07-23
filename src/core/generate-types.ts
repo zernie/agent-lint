@@ -14,6 +14,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 import { globSync } from "glob";
+import {
+  checkstyleEnabledStatus,
+  parseDetektConfig,
+  readDetektConfig,
+} from "./linters.js";
 
 // ---------------------------------------------------------------------------
 // Linter config detection
@@ -47,6 +52,34 @@ function hasPylintConfig(basePath: string): boolean {
 
 function hasRubocopConfig(basePath: string): boolean {
   return existsSync(resolve(basePath, ".rubocop.yml"));
+}
+
+function firstExisting(basePath: string, paths: string[]): string | null {
+  for (const rel of paths) {
+    const p = resolve(basePath, rel);
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
+function checkstyleConfigPath(basePath: string): string | null {
+  return firstExisting(basePath, [
+    "checkstyle.xml",
+    "config/checkstyle/checkstyle.xml",
+    "google_checks.xml",
+    "sun_checks.xml",
+  ]);
+}
+
+function hasGolangciConfig(basePath: string): boolean {
+  return (
+    firstExisting(basePath, [
+      ".golangci.yml",
+      ".golangci.yaml",
+      ".golangci.toml",
+      ".golangci.json",
+    ]) !== null
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -271,6 +304,99 @@ function discoverClippyRules(basePath: string): DiscoveredRules | null {
   }
 }
 
+function discoverDetektRules(basePath: string): DiscoveredRules | null {
+  // Reuse the shared detekt-config parser (one-parser-no-drift): a rule is
+  // excluded when its own `active: false` OR its enclosing ruleset's
+  // `active: false` disables it — so a spec can't type-check against a rule
+  // detekt won't run.
+  const cfg = readDetektConfig(basePath);
+  if (cfg === null) return null;
+  const rules = [...parseDetektConfig(cfg)]
+    .filter(([, state]) => state.active !== "disabled")
+    .map(([name]) => name);
+  if (rules.length === 0) return null;
+  return { linter: "detekt", rules, via: "detekt config" };
+}
+
+function discoverKtlintRules(basePath: string): DiscoveredRules | null {
+  // ktlint has no rule-enumeration CLI; the per-rule `.editorconfig`
+  // properties (`ktlint_<ruleset>_<rule-id> = enabled|disabled`) are the only
+  // enumerable surface, so only explicitly-configured rules are discovered.
+  const p = resolve(basePath, ".editorconfig");
+  if (!existsSync(p)) return null;
+  try {
+    const content = readFileSync(p, "utf-8");
+    const rules: string[] = [];
+    const re =
+      /^\s*ktlint_([a-z0-9-]+)_([a-z0-9-]+)\s*=\s*(enabled|disabled)\s*$/gm;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content)) !== null) {
+      if (m[3] === "enabled") rules.push(`${m[1]}:${m[2]}`);
+    }
+    if (rules.length === 0) return null;
+    return { linter: "ktlint", rules, via: ".editorconfig" };
+  } catch {
+    return null;
+  }
+}
+
+function discoverCheckstyleRules(basePath: string): DiscoveredRules | null {
+  // A checkstyle config is a whitelist of <module name="..."> elements — the
+  // module names (minus the Checker/TreeWalker containers) ARE the enabled
+  // rule set.
+  const configPath = checkstyleConfigPath(basePath);
+  if (!configPath) return null;
+  try {
+    const content = readFileSync(configPath, "utf-8");
+    const rules = new Set<string>();
+    const re = /<module\s+name\s*=\s*["']([A-Za-z0-9.]+)["']/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content)) !== null) {
+      if (m[1] === "Checker" || m[1] === "TreeWalker") continue;
+      // A module with `severity="ignore"` is DISABLED — leave it out of the type
+      // union, or a spec could type-check against a rule CI won't enforce,
+      // defeating the generated-types proof. Reuse the lint enabled-status logic
+      // (one detector, no drift — Codex review).
+      if (checkstyleEnabledStatus(m[1], basePath) === "disabled") continue;
+      rules.add(m[1]);
+    }
+    if (rules.size === 0) return null;
+    return {
+      linter: "checkstyle",
+      rules: [...rules].sort(),
+      via: "checkstyle config",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function discoverGolangciLintRules(basePath: string): DiscoveredRules | null {
+  try {
+    if (!hasGolangciConfig(basePath)) return null;
+    execSync("which golangci-lint", { stdio: "ignore" });
+    const output = execSync("golangci-lint linters", {
+      encoding: "utf-8",
+      cwd: basePath,
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 60000,
+    });
+    const disabledIdx = output.search(/^Disabled by/m);
+    const enabledSection =
+      disabledIdx >= 0 ? output.substring(0, disabledIdx) : output;
+    const rules: string[] = [];
+    const re = /^([a-z][a-z0-9_-]+)(?:\s*\([^)]*\))?:/gm;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(enabledSection)) !== null) {
+      rules.push(m[1]);
+    }
+    if (rules.length === 0) return null;
+    return { linter: "golangci-lint", rules, via: "CLI" };
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // NPM script discovery
 // ---------------------------------------------------------------------------
@@ -350,28 +476,24 @@ export function generateTypes(
   const fileGlobs = options.fileGlobs ?? ["src/**/*"];
 
   // Discover everything
+  const discoverers = [
+    discoverEslintRules,
+    discoverStylelintRules,
+    discoverRuffRules,
+    discoverPylintRules,
+    discoverRubocopRules,
+    discoverClippyRules,
+    discoverDetektRules,
+    discoverKtlintRules,
+    discoverCheckstyleRules,
+    discoverGolangciLintRules,
+    discoverCedarPolicies,
+  ];
   const linters: DiscoveredRules[] = [];
-
-  const eslint = discoverEslintRules(basePath);
-  if (eslint) linters.push(eslint);
-
-  const stylelint = discoverStylelintRules(basePath);
-  if (stylelint) linters.push(stylelint);
-
-  const ruff = discoverRuffRules(basePath);
-  if (ruff) linters.push(ruff);
-
-  const pylint = discoverPylintRules(basePath);
-  if (pylint) linters.push(pylint);
-
-  const rubocop = discoverRubocopRules(basePath);
-  if (rubocop) linters.push(rubocop);
-
-  const clippy = discoverClippyRules(basePath);
-  if (clippy) linters.push(clippy);
-
-  const cedar = discoverCedarPolicies(basePath);
-  if (cedar) linters.push(cedar);
+  for (const discover of discoverers) {
+    const found = discover(basePath);
+    if (found) linters.push(found);
+  }
 
   const scripts = discoverNpmScripts(basePath);
   const files = discoverProjectFiles(basePath, fileGlobs);

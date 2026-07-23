@@ -366,9 +366,11 @@ test("rankPlugins orders healthy above broken, with grades", () => {
   cleanupTmpDir(dir);
 });
 
-test("formatLeaderboard renders ranks, grades, and reasons", () => {
+test("formatLeaderboard renders the mode header, ranks, grades, and reasons", () => {
   const scores = rankPlugins([]); // empty is fine for the header path
-  assert.ok(formatLeaderboard(scores).includes("Plugin health leaderboard (0"));
+  assert.ok(
+    formatLeaderboard(scores).includes("0 plugins detected → leaderboard mode"),
+  );
 
   const text = formatLeaderboard([
     {
@@ -380,9 +382,60 @@ test("formatLeaderboard renders ranks, grades, and reasons", () => {
       report: report(),
     },
   ]);
+  assert.ok(text.includes("1 plugin detected → leaderboard mode")); // singular
   assert.ok(text.includes("demo"));
   assert.ok(text.includes("C"));
   assert.ok(text.includes("2 untested surfaces"));
+  // The drill-in affordance (a local dir's per-plugin "report link").
+  assert.match(text, /Full report for any plugin: npx vigiles audit <dir>/);
+  // A C-grade plugin has a real finding → NOT the "all clean" model-tier note.
+  assert.ok(!text.includes("All structurally clean"));
+});
+
+test("formatLeaderboard points an all-clean board at the model tier", () => {
+  // Nothing below a B → the deterministic axis found little, so the note points
+  // at the model-gated trigger tier (the "reads as found nothing" fix).
+  const text = formatLeaderboard([
+    {
+      dir: "a",
+      name: "clean",
+      score: 100,
+      grade: "A",
+      issues: [],
+      report: report(),
+    },
+    {
+      dir: "b",
+      name: "solid",
+      score: 85,
+      grade: "B",
+      issues: [],
+      report: report(),
+    },
+  ]);
+  assert.match(text, /All structurally clean on the deterministic axis/);
+  assert.match(text, /do skills FIRE\? do descriptions collide\?/);
+
+  // A board with a real finding (a C) does NOT get the note.
+  const withFinding = formatLeaderboard([
+    {
+      dir: "a",
+      name: "clean",
+      score: 100,
+      grade: "A",
+      issues: [],
+      report: report(),
+    },
+    {
+      dir: "c",
+      name: "weak",
+      score: 70,
+      grade: "C",
+      issues: ["1 dead tool reference"],
+      report: report(),
+    },
+  ]);
+  assert.ok(!withFinding.includes("All structurally clean"));
 });
 
 test("formatLeaderboardMarkdown renders a publishable table", () => {

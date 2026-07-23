@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:c40f21e2814f36f7 compiled from src/CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:11108bf417ae43ea compiled from src/CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -8,7 +8,7 @@ Working in `src/`? The root `CLAUDE.md` holds the full positioning, architecture
 
 ## Key Files
 
-- `src/cli.ts` — CLI dispatch — the single source of truth for what each verb does. NB the `init` verb splits two ways: bare `vigiles init` runs `setup()` (the full onboarding wizard — both layers, deps, CI, plugin), while `vigiles init --target=<file>` runs `scaffoldSpec()` (the single-target spec scaffolder; also called once per target by `setupPillar1`). The verb name is `init`; the helper is `scaffoldSpec`, not `init`.
+- `src/cli.ts` — CLI dispatch — the single source of truth for what each verb does. NB the `init` verb splits two ways: bare `vigiles init` runs `setup()` (the full onboarding wizard — both layers, deps, CI, plugin), while `vigiles init --target=<file>` runs `scaffoldSpec()` (the single-target spec scaffolder; also called once per target by `setupPillar1`). The verb name is `init`; the helper is `scaffoldSpec`, not `init`. The `--ci-only` flag (parsed as `ParsedSetupArgs.ciOnly`) is the non-interactive equal of the wizard's 'gate vs full' fork — the CI lint gate + devDep, nothing installed (no plugin/spec/test); full stays the default, so it's opt-in, and a non-interactive full run PRINTS a pointer to `--ci-only` so an agent that never saw the wizard can still discover it (a `cohesive-feature-delivery` discovery surface).
 - `src/cli-commands.ts` — The canonical VERBS + HOOK_RUNTIME_KINDS list (the self-command-refs moat)
 
 ## Rules

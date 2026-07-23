@@ -17,8 +17,41 @@ import {
   expandGlobs,
   findInstructionFiles,
   loadConfig,
+  normalizeSeverity,
+  asStringArray,
 } from "./validate.js";
 import type { MarkerType, ParseOptions } from "./types.js";
+
+describe("config value normalization (dogfood fixes)", () => {
+  it("normalizeSeverity maps ESLint idioms to vigiles severities", () => {
+    // #112: "off" (a truthy string) must disable, not render as warn.
+    assert.equal(normalizeSeverity("off"), false);
+    assert.equal(normalizeSeverity(0), false);
+    // numeric ESLint severities (the C5 dogfood finding).
+    assert.equal(normalizeSeverity(1), "warn");
+    assert.equal(normalizeSeverity(2), "error");
+    // vigiles-native values pass through untouched.
+    assert.equal(normalizeSeverity("warn"), "warn");
+    assert.equal(normalizeSeverity("error"), "error");
+    assert.equal(normalizeSeverity(false), false);
+    // the [severity, options] array form recurses on the head.
+    assert.deepEqual(normalizeSeverity([2, { x: 1 }]), ["error", { x: 1 }]);
+    // an unrecognized value is left as-is (pre-existing behavior).
+    assert.equal(normalizeSeverity("bogus"), "bogus");
+  });
+
+  it("asStringArray accepts a bare string as a one-element array", () => {
+    // C3/C4: a bare string must NOT be iterated char-by-char as globs.
+    assert.deepEqual(asStringArray("bench/**", [], "exclude"), ["bench/**"]);
+    assert.deepEqual(asStringArray(["a", "b"], [], "exclude"), ["a", "b"]);
+    assert.deepEqual(asStringArray(["a", 2, "b"], [], "exclude"), ["a", "b"]);
+    assert.deepEqual(asStringArray(undefined, ["fallback"], "exclude"), [
+      "fallback",
+    ]);
+    // a non-string/array falls back with a warning.
+    assert.deepEqual(asStringArray(42, ["fb"], "exclude"), ["fb"]);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // parseRules

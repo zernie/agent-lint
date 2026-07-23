@@ -358,5 +358,12 @@ export function formatUntestedReport(report: UntestedReport): string {
   for (const s of report.untested) {
     lines.push(`    ${s.kind} ${s.path} — add e.g. ${suggestedTestPath(s)}`);
   }
+  // Already testing these another way (a promptfoo suite, a home-grown evals
+  // file)? Point `testGlobs` at it so it counts toward coverage (issue #113).
+  lines.push(
+    `  Testing these another way (promptfoo / a home-grown eval loop)? Add its ` +
+      `files to \`testGlobs\` in .vigilesrc.json — a discovered test that names a ` +
+      `surface's path counts. See docs/rules/untested-skill.md.`,
+  );
   return lines.join("\n");
 }
