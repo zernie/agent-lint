@@ -1315,20 +1315,45 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
-  it("no package.json: the harness job omits `npm install` (dogfood I1)", () => {
-    // A non-JS repo has no package.json — an `npm install` step would ENOENT.
+  it("no package.json: NO harness job (the JS test tier can't resolve vigiles/testing) — lint only (dogfood I1 / Codex review)", () => {
+    // A non-JS repo has no package.json, so `npx vigiles test` on the starter
+    // harness can't resolve its `vigiles/testing` import — the whole harness job
+    // would fail, not just an install step. So the workflow emits the lint job
+    // (needs no toolchain) and NO harness job.
     const dir = mkdtempSync(join(tmpdir(), "vigiles-init-nopkg-"));
     try {
       writeFileSync(join(dir, "CLAUDE.md"), "# proj\n");
       run("init --no-plugin", dir);
       const wf = join(dir, ".github/workflows/vigiles.yml");
-      assert.ok(existsSync(wf), "workflow written");
+      assert.ok(existsSync(wf), "workflow written (lint job)");
       const yaml = readFileSync(wf, "utf-8");
-      assert.match(yaml, /npx vigiles test/, "harness job present");
+      assert.match(
+        yaml,
+        /^ {2}lint:/m,
+        "lint job present (needs no toolchain)",
+      );
       assert.doesNotMatch(
         yaml,
-        /run: npm install/,
-        "no npm install step without a package.json",
+        /npx vigiles test/,
+        "no harness job without a package.json (can't resolve vigiles/testing)",
+      );
+      assert.doesNotMatch(yaml, /run: npm install/, "no npm install step");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("no package.json + --test only: no runnable job → no workflow written (Codex review: no empty jobs:)", () => {
+    // The only pillar is the JS test tier, which can't run without a package.json,
+    // so there is no job to emit — writing a bare `jobs:` would be an invalid
+    // workflow GitHub rejects. Emit nothing instead.
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-init-nopkg-testonly-"));
+    try {
+      writeFileSync(join(dir, "CLAUDE.md"), "# proj\n");
+      run("init --test --no-plugin", dir);
+      assert.ok(
+        !existsSync(join(dir, ".github/workflows/vigiles.yml")),
+        "no workflow when there is no runnable job",
       );
     } finally {
       rmSync(dir, { recursive: true, force: true });

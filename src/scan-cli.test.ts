@@ -947,3 +947,36 @@ describe("lint of a foreign repo does not satisfy target refs from the caller's 
     );
   });
 });
+
+describe("audit share-link only for a whole-repo audit (Codex review)", () => {
+  it("suppresses the share link for a SUBDIRECTORY audit (parent origin ≠ audited target)", () => {
+    const root = mkdtempSync(join(tmpdir(), "scan-sharelink-"));
+    try {
+      // A git repo with a github origin; the plugin lives in a subdir.
+      execSync(
+        "git init -q && git remote add origin https://github.com/foo/bar.git",
+        {
+          cwd: root,
+          stdio: "ignore",
+        },
+      );
+      writeFileSync(join(root, "CLAUDE.md"), "# repo root\nRun the build.\n");
+      mkdirSync(join(root, "plugin"), { recursive: true });
+      writeFileSync(
+        join(root, "plugin", "CLAUDE.md"),
+        "# plugin\nRun tests.\n",
+      );
+
+      // Whole-repo audit (target IS the git toplevel) → the share link is shown.
+      const whole = run("audit .", root);
+      assert.match(whole.stdout, /Share this grade → .*foo\/bar/);
+
+      // Subdir audit → git origin belongs to the PARENT, so the owner/repo link
+      // would rerun a different audit → suppressed.
+      const sub = run("audit plugin", root);
+      assert.doesNotMatch(sub.stdout, /Share this grade/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

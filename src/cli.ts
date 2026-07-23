@@ -102,8 +102,6 @@ import {
 } from "./scan-behavioral.js";
 import {
   ADAPTERS,
-  detectAdapterResult,
-  resolveAdapter,
   resolveHarnessSelection,
   resolveHarnessAdapters,
   normalizeHarnessName,
@@ -111,6 +109,7 @@ import {
   getAdapter,
   adapterForInstructionFile,
 } from "./adapter-registry.js";
+import type { HarnessSelection } from "./adapter-registry.js";
 import type { HarnessDialect } from "./core/dialect.js";
 import type { HarnessAdapter } from "./core/adapter.js";
 import { skillFrontmatterDropWarnings } from "./skill-harness.js";
@@ -2638,11 +2637,18 @@ function vigilesWorkflow(
       - uses: zernie/vigiles@v1
 `
     : "";
-  // `npm install` only when a package.json exists (dogfood I1: a non-JS repo has
-  // none, so the step would ENOENT). Without one, npx fetches vigiles on demand.
-  const install = hasPackageJson ? "      - run: npm install\n" : "";
-  const harness = plan.test
-    ? `
+  // The test pillar's harness job runs `*.harness.mjs` files that
+  // `import "vigiles/testing"`, so it needs vigiles RESOLVABLE — a package.json +
+  // install. A repo with no package.json can't run the JS test tier in CI at all
+  // (the import won't resolve even though the CLI itself came from npx), so the
+  // harness job is emitted ONLY when a package.json exists (Codex review / #111 /
+  // dogfood I1) — otherwise the whole job fails, not just the install step. A
+  // non-JS repo uses `audit`/`lint` (which need no toolchain — see
+  // docs/non-js-harnesses.md); it opts into the JS test tier by adding a
+  // package.json and re-running `init`.
+  const harness =
+    plan.test && hasPackageJson
+      ? `
   harness:
     # Test pillar — run your *.harness.{mjs,ts} tests against the real agent CLI and
     # a scripted mock model (deterministic, no API key). Drop this job if you only
@@ -2653,7 +2659,8 @@ function vigilesWorkflow(
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-${install}      - run: npm i -g ${harnessTestBinaries(harnesses)} # mock tier needs the binary, no API key
+      - run: npm install
+      - run: npm i -g ${harnessTestBinaries(harnesses)} # mock tier needs the binary, no API key
       - run: npx vigiles test
 
   eval-check:
@@ -2671,7 +2678,12 @@ ${install}      - run: npm i -g ${harnessTestBinaries(harnesses)} # mock tier ne
         with:
           command: eval-check
 `
-    : "";
+      : "";
+  // No selectable jobs (e.g. `--no-lint --no-test`, or `--test` on a repo with no
+  // package.json) → emit NOTHING, so `wireGha` writes no workflow. A `jobs:` with
+  // no children is rejected by GitHub Actions and would leave the repo with broken
+  // CI (Codex review). The generator never produces an invalid workflow.
+  if (lint === "" && harness === "") return "";
   return `name: vigiles
 on:
   pull_request:
@@ -2765,7 +2777,9 @@ function wireGha(plan: SetupPlan, harnesses: string[]): string[] {
       );
     } else if (workflowUsesStaleApi(content)) {
       if (plan.force) {
-        writeFileSync(path, vigilesWorkflow(plan, harnesses, hasPackageJson));
+        const regenerated = vigilesWorkflow(plan, harnesses, hasPackageJson);
+        if (regenerated === "") return []; // no jobs → leave the stale file, don't write an empty one
+        writeFileSync(path, regenerated);
         console.log(`✓ Regenerated ${rel} (was a stale bare \`npx vigiles\`)`);
         return [rel];
       }
@@ -2780,8 +2794,14 @@ function wireGha(plan: SetupPlan, harnesses: string[]): string[] {
     }
     return [];
   }
+  const workflow = vigilesWorkflow(plan, harnesses, hasPackageJson);
+  if (workflow === "") {
+    // No selectable jobs (no-pillar setup, or a test-only run on a repo with no
+    // package.json) → don't write an invalid empty-`jobs:` workflow.
+    return [];
+  }
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(path, vigilesWorkflow(plan, harnesses, hasPackageJson));
+  writeFileSync(path, workflow);
   console.log(
     "✓ Created .github/workflows/vigiles.yml (uses zernie/vigiles@v1)",
   );
@@ -4713,6 +4733,25 @@ function flagValue(args: string[], name: string): string | undefined {
  * degrades honestly ("unavailable") when absent. The OSS-testing front door:
  * `vigiles audit ./plugin --prompts=p.json` (interactive — say yes when asked).
  */
+/**
+ * Resolve the adapter for a COMMAND, honouring the full precedence: `--harness=`
+ * flag → `.vigilesrc.json` `harness` → auto-detect (dogfood A/I3). This is the
+ * ONE resolution path a command may use — resolving via the raw auto-detect
+ * alone silently ignores config.harness, which is the exact bug this closes.
+ * A dogfood test (src/cli-harness-resolution.test.ts) asserts cli.ts routes all
+ * command harness resolution through here, so a future command can't regress.
+ */
+function resolveCommandHarness(
+  dir: string,
+  harnessFlag: string | undefined,
+): HarnessSelection {
+  return resolveHarnessSelection({
+    root: dir,
+    flag: harnessFlag,
+    configHarness: normalizeHarnessList(loadConfig().harness),
+  });
+}
+
 async function handleMeasure(
   restArgs: string[],
   args: string[],
@@ -4720,9 +4759,7 @@ async function handleMeasure(
   const dir = resolve(restArgs[0] ?? ".");
   const json = args.includes("--json");
   const harnessFlag = harnessFlagFrom(args);
-  const adapter = harnessFlag
-    ? resolveAdapter(dir, harnessFlag)
-    : detectAdapterResult(dir).adapter;
+  const adapter = resolveCommandHarness(dir, harnessFlag).adapter;
   const harness: ProbeHarness =
     adapter.name === "codex" ? "codex" : "claude-code";
 
@@ -4942,9 +4979,7 @@ async function refreshHarnessGenIfPresent(
   const fullOut = resolve(dir, HARNESS_GEN_FILENAME);
   if (!existsSync(fullOut)) return true; // opt-in: nothing to refresh
 
-  const adapter = harnessFlag
-    ? resolveAdapter(dir, harnessFlag)
-    : detectAdapterResult(dir).adapter;
+  const adapter = resolveCommandHarness(dir, harnessFlag).adapter;
   const model = await loadHarnessModel(
     dir,
     (abs) =>
@@ -4988,9 +5023,7 @@ async function handleGenerateHarness(
   // capability lattice is computed against the right dialect — never defaulting
   // to Claude Code in core. The dialect is INJECTED into the generator.
   const harnessFlag = harnessFlagFrom(args);
-  const adapter = harnessFlag
-    ? resolveAdapter(dir, harnessFlag)
-    : detectAdapterResult(dir).adapter;
+  const adapter = resolveCommandHarness(dir, harnessFlag).adapter;
 
   console.log(`Scanning ${labelFor(process.cwd(), dir)} for *.spec.ts...\n`);
 
@@ -6479,13 +6512,22 @@ function readOriginRemote(root: string): string | null {
   try {
     const { execSync } =
       require("node:child_process") as typeof import("node:child_process");
-    return (
-      execSync("git config --get remote.origin.url", {
+    const git = (cmd: string): string =>
+      execSync(cmd, {
         cwd: root,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "ignore"],
-      }).trim() || null
-    );
+      }).trim();
+    // Only share a link when the audited dir IS the git repo ROOT. For a subdir
+    // audit (`vigiles audit packages/foo` in a monorepo, or a vendored plugin)
+    // git walks UP to the enclosing repo, so `origin` names the PARENT owner/repo
+    // — the deep-link would rerun a DIFFERENT audit for the recipient and show a
+    // different grade. Suppress it there (Codex review); the link carries only
+    // owner/repo, so it can't disambiguate a subdirectory anyway.
+    if (resolve(git("git rev-parse --show-toplevel")) !== resolve(root)) {
+      return null;
+    }
+    return git("git config --get remote.origin.url") || null;
   } catch {
     return null;
   }
