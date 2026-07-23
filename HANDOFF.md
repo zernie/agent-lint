@@ -18,25 +18,26 @@
 **`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
 via `pages.yml` on push to main. Demo UX + real-F default MERGED (PRs #100–#106).
 
-**Branch `claude/click-not-working-s9apfb`: PR #114 — MERGE-IMMINENT (github.com/zernie/vigiles/pull/114), ~60 commits.**
-Merge conflict with main RESOLVED (only the compiled `research/CLAUDE.md`; main's #115 `loop-combinator.md`
-merged into the spec → recompiled), `origin/main` merged in, local full suite GREEN (2343 passed). CI running on
-the merge commit; auto-merge is OFF on the repo so MERGE MANUALLY (squash) when all 7 checks pass — closes
-#107/#109/#110/#111/#113 (added to the PR body; session URL scrubbed). A scheduled self-check (`send_later`) polls CI.
-It carries an adoption batch (VerbMap · OG card · share deep-link · dismissible nudge · full-HTML rules · leaderboard
-drill-in), the `--ci-only` opt-in, the DOGFOOD batch below, Vlad's 5 issues, AND this session's PREVENTION work:
-**one markdown-it fence oracle** replacing 5 copy-pasted `inFence` toggles (`src/core/markdown.ts` +
-`parse-structured-input-with-a-real-parser` rule) and **one js-yaml `parseDetektConfig`** replacing 3 regex parsers
-(fixes 2 Codex review P2s).
+**PR #114 MERGED** (JVM/Go linters 7→11, audit/init/compile hardening, adoption UX; closed #107/#109/#110/#111/#113).
 
-**⚠️ DEFERRED FOLLOW-UP (founder chose patch-now + roadmap-P0): the linter subsystem is NOT hexagonal** — a linter is
-smeared across ~7 code sites in 3 files + 2 docs with NOTHING enforcing completeness (3 agent audits confirmed:
-architecture/test/doc). Founder's call: (1) PATCH the current holes as a fast FOLLOW-UP PR — 5 stale "7 catalogs"
-refs (`spec-format.md:316`, `verifying-instruction-files.md:83/144`, `examples/CLAUDE.md.spec.ts` ×3,
-`CLAUDE.md.spec.ts:173` keyfile, `skills/linter-docs/SKILL.md:3`), a new-4 capability-tier table + non-js caveats, and
-the golangci type-gen / ktlint+checkstyle missing-binary test gaps; (2) the STRUCTURAL fix is **roadmap P0**:
-`research/linter-adapter-architecture.md` — a `LinterAdapter` port + `Record<BuiltinLinter, LinterAdapter>` registry
-(missing = tsc error) + conformance loop, mirroring HarnessAdapter/rule-meta. Do as its OWN PR off main after #114.
+**Branch `claude/click-not-working-s9apfb`: PR #116 OPEN (github.com/zernie/vigiles/pull/116), 12 commits ahead of main.**
+The follow-up to #114 — AND it BUILDS the LinterAdapter port (the founder wanted "the entire linterport", not just
+roadmapped). Stages 0–3 shipped: `BUILTIN_LINTERS` single-source array (`spec.ts`) → `BuiltinLinter`; the type-only
+`linter-adapter.ts` port leaf; `LINTERS: Record<BuiltinLinter, LinterAdapter>` in `linters.ts` (missing linter = tsc
+error); `generate-types` iterates the registry (no parallel `discoverers[]`); `linter-contract.test.ts` conformance
+loop (key===name, capability-flag⇄method, set-match vs BUILTIN_LINTERS **and** docs table **and** the site chip list).
+CI now INSTALLS detekt/ktlint/checkstyle/golangci-lint so their previously-`skipIf`-gated tests RUN (no silent skips).
+Plus doc parity (catalogs→linters, capability limits) + golangci/ktlint/checkstyle test gaps.
+Watching CI: 6/7 green; the `test` job (first real run of the JVM/Go linter tests) is the one to confirm. Subscribed
++ send_later fallback armed. PR body was REWRITTEN — old body had a leaked session URL (scrubbed) + wrongly said the
+port "stays roadmap-P0" when it was actually built.
+
+**⚠️ STAGE 4 DEFERRED (own PR off main, tracked in `research/linter-adapter-architecture.md`):** route the runtime
+existence/config DISPATCH through `LINTERS` and delete the 4 legacy maps (`LINTER_RESOLVERS`, `CLI_RULE_CHECKS`,
+`LINTER_CONFIG_CHECKERS`, `CLI_TOOL_FOR_LINTER`) — ~200 lines of core-moat surgery, so LINTERS becomes the literal
+single dispatch source. Deferred to keep #116 low-risk. Also still-pending per founder: **cedar** public docs + a P1
+roadmap item (revisit its value — KEEP + document), and an **authoring-a-linter doc + add-a-linter skill** (parity via
+test structure, mirroring the harness adapter). Do NOT pile these onto #116 mid-watch.
 
 **DOGFOOD BATCH — DONE.** A 4-agent Sonnet fan-out found **14 verified, source-traced bugs**; founder's call was
 **FIX, not file**. **All 14 fixed + pushed**, each with a regression test; full `vitest` suite green (2327 passing).
@@ -89,8 +90,8 @@ against the skill (READ it before touching `site/`); screenshot desktop AND full
 
 ### 🎯 DO NEXT
 
-0. **PR #114 OPEN** (github.com/zernie/vigiles/pull/114), ~50 commits: adoption batch + dogfood 14/14 + Vlad's 5 issues). Watch CI; the
-   `Claude`-authored-commit gotcha (below) may need an Approve-and-run or Close→Reopen for checks to start.
+0. **PR #116 OPEN** (LinterAdapter port + JVM/Go doc/test parity) — watch CI to green, then MERGE (auto-merge OFF →
+   squash manually). Then Stage 4 + cedar docs + authoring-a-linter skill as their own PRs off main (see above).
    The GHA PR-comment grade (item 6) stays deprioritized (later-adoption, not guaranteed after gate-first init).
 1. **Item 4b b2 (per-grade OG card)** — the ONLY remaining share-loop piece: a card showing `owner/repo · actual grade`.
    Needs a SERVERLESS OG endpoint (GitHub Pages is static, can't vary `<meta>` by `?repo=`) → bundles with **4c**
