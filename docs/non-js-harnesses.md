@@ -59,8 +59,22 @@ supports native JVM and Go linters, not just the JS/Python ones:
 
 vigiles detects the linter from its config file (`detekt.yml`, `.editorconfig`,
 `checkstyle.xml`, `.golangci.yml`) and cross-references your rules against it.
-See [`docs/linter-support.md`](linter-support.md) for the full catalog and each
-tool's config conventions.
+
+**Know the limits before you rely on it** — these tools expose less than ESLint,
+so a couple of checks are intentionally weaker (they never cry wolf, but they
+verify less):
+
+- **ktlint** ships no rule catalog, so the existence check is _format-only_ — a
+  reference must be a qualified `ktlint/<ruleset>:<rule-id>` (e.g.
+  `ktlint/standard:no-wildcard-imports`); the enabled-state read (from
+  `.editorconfig`) is real.
+- **Checkstyle** has no rule-listing command, so a module absent from your
+  `checkstyle.xml` is reported _disabled_ (a config is a whitelist).
+- **detekt** falls back to the generated default catalog and fails _open_ (never
+  flags every rule) when it can't enumerate.
+
+See [`docs/linter-support.md`](linter-support.md) for the full linter list and
+each tool's config conventions.
 
 ## The Tested metric for a native test loop
 
@@ -81,6 +95,6 @@ The deterministic `audit`/`lint` layer above needs none of this.
 
 ## See also
 
-- [`docs/linter-support.md`](linter-support.md) — the full linter catalog.
+- [`docs/linter-support.md`](linter-support.md) — all 11 supported linters.
 - [`docs/harnesses.md`](harnesses.md) — which agent harnesses vigiles targets.
 - [`docs/rules/untested-skill.md`](rules/untested-skill.md) — counting an external test loop.

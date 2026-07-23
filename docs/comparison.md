@@ -35,7 +35,7 @@ Codex has no hook or plugin system. The compile-time verification and CI enforce
 
 | Check                            | Deterministic? | How                                                                                  |
 | -------------------------------- | -------------- | ------------------------------------------------------------------------------------ |
-| Linter rule exists in catalog    | ✅ Yes         | Node API (`builtinRules`) or CLI (`ruff rule`, `rubocop --show-cops`)                |
+| Linter rule exists               | ✅ Yes         | Node API (`builtinRules`) or CLI (`ruff rule`, `rubocop --show-cops`)                |
 | Linter rule is enabled in config | ✅ Yes         | `calculateConfigForFile` (ESLint), `--show-settings` (Ruff), `--show-cops` (RuboCop) |
 | Cedar policy exists              | ✅ Yes         | Scan `.cedar/` and `cedar/` for `@id("...")` annotations, with filename fallback     |
 | File path exists                 | ✅ Yes         | `fs.existsSync`                                                                      |

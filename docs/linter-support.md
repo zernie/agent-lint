@@ -1,13 +1,13 @@
 # Linter Cross-Referencing
 
 > **Scope:** this page is about **`enforce()` cross-reference verification** — checking that a rule
-> you NAME actually exists + is enabled (11 catalogs: ESLint, Ruff, Pylint, Clippy, Stylelint,
+> you NAME actually exists + is enabled (11 linters: ESLint, Ruff, Pylint, Clippy, Stylelint,
 > RuboCop, Detekt, Ktlint, Checkstyle, golangci-lint, Cedar). It is **NOT** the prose→rule
 > _routing_ map (which auto-maps freeform prose to a rule and supports ESLint + Pylint + Ruff
 > route-only). Don't conflate the two — see `research/rule-enforceability.md` for
 > routing/synthesis coverage.
 
-vigiles verifies that every `enforce()` rule in your spec actually exists and is enabled in your project. This is the core differentiator -- no other tool resolves rules against 11 catalog APIs and checks config-enabled status.
+vigiles verifies that every `enforce()` rule in your spec actually exists and is enabled in your project. This is the core differentiator -- no other tool resolves rules against all 11 linters' APIs and checks config-enabled status.
 
 ## How It Works
 
@@ -49,7 +49,7 @@ The reference format is `<linter>/<rule>` -- e.g., `eslint/no-console`, `ruff/F4
 
 Node-based linters (ESLint, Stylelint) are resolved via `createRequire` from the project's `node_modules`. CLI-based linters (Ruff, Clippy, Pylint, RuboCop, Detekt, Ktlint, Checkstyle, golangci-lint) must be available on `PATH`. Cedar policies are read directly from `.cedar` files — no external tool required.
 
-## JVM and Go Catalogs
+## JVM and Go Linters
 
 The reference formats are `detekt/MagicNumber`, `ktlint/standard:no-wildcard-imports`, `checkstyle/MagicNumber`, and `golangci-lint/errcheck` (a golangci-lint "rule" is one of its bundled linters — that is golangci-lint's own unit of enablement).
 
@@ -161,7 +161,7 @@ Custom linters only support existence checks. Config-enabled status is always `"
 
 ## generate-types
 
-`vigiles generate types` scans all 11 catalog APIs, `package.json`, and project files, then emits `.vigiles/generated.d.ts` with type unions derived from your actual project state.
+`vigiles generate types` scans all 11 linter APIs, `package.json`, and project files, then emits `.vigiles/generated.d.ts` with type unions derived from your actual project state.
 
 ```sh
 npx vigiles generate types
@@ -199,7 +199,7 @@ declare module "vigiles/generated" {
 
 The TypeScript compiler then proves references are valid at authoring time. A typo like `enforce("eslint/no-consloe")` becomes a type error in your editor before you ever run `vigiles compile`. This shifts rule-reference validation from runtime to authoring time.
 
-Discovery methods per catalog:
+Discovery methods per linter:
 
 - **ESLint** -- loads flat config via `calculateConfigForFile`, collects rules with severity > 0 (v9 and v10)
 - **Stylelint** -- loads config via `createLinter` + `getConfigForFile`, collects non-null rules
@@ -223,7 +223,7 @@ Project files default to `src/**/*` but can be configured via `fileGlobs`.
 npx vigiles generate schema
 ```
 
-It runs the same catalog discovery and emits `.vigiles/schema.json` — a JSON Schema whose `rule` field is an `enum` of every enabled rule. Point your markdown frontmatter at it with a modeline and your editor's built-in YAML language server autocompletes rule names and red-squiggles typos:
+It runs the same rule discovery and emits `.vigiles/schema.json` — a JSON Schema whose `rule` field is an `enum` of every enabled rule. Point your markdown frontmatter at it with a modeline and your editor's built-in YAML language server autocompletes rule names and red-squiggles typos:
 
 ```yaml
 ---
