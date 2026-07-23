@@ -18,11 +18,25 @@
 **`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
 via `pages.yml` on push to main. Demo UX + real-F default MERGED (PRs #100–#106).
 
-**Branch `claude/click-not-working-s9apfb`: PR #114 OPEN (github.com/zernie/vigiles/pull/114), ~50 commits.** Restart from `main`
-if needed (`git fetch origin main && git checkout -B claude/click-not-working-s9apfb origin/main`). It carries an
-adoption batch (VerbMap red→green · OG card b1 · 4a share deep-link · dismissible nudge · full-HTML rules honesty ·
-leaderboard drill-in · value-framed nudge), the `--ci-only` opt-in + discoverability, the `cohesive-feature-delivery`
-rule's (8) DISCOVERY + (9) OUTPUT-PARITY additions, and the DOGFOOD batch below.
+**Branch `claude/click-not-working-s9apfb`: PR #114 — MERGE-IMMINENT (github.com/zernie/vigiles/pull/114), ~60 commits.**
+Merge conflict with main RESOLVED (only the compiled `research/CLAUDE.md`; main's #115 `loop-combinator.md`
+merged into the spec → recompiled), `origin/main` merged in, local full suite GREEN (2343 passed). CI running on
+the merge commit; auto-merge is OFF on the repo so MERGE MANUALLY (squash) when all 7 checks pass — closes
+#107/#109/#110/#111/#113 (added to the PR body; session URL scrubbed). A scheduled self-check (`send_later`) polls CI.
+It carries an adoption batch (VerbMap · OG card · share deep-link · dismissible nudge · full-HTML rules · leaderboard
+drill-in), the `--ci-only` opt-in, the DOGFOOD batch below, Vlad's 5 issues, AND this session's PREVENTION work:
+**one markdown-it fence oracle** replacing 5 copy-pasted `inFence` toggles (`src/core/markdown.ts` +
+`parse-structured-input-with-a-real-parser` rule) and **one js-yaml `parseDetektConfig`** replacing 3 regex parsers
+(fixes 2 Codex review P2s).
+
+**⚠️ DEFERRED FOLLOW-UP (founder chose patch-now + roadmap-P0): the linter subsystem is NOT hexagonal** — a linter is
+smeared across ~7 code sites in 3 files + 2 docs with NOTHING enforcing completeness (3 agent audits confirmed:
+architecture/test/doc). Founder's call: (1) PATCH the current holes as a fast FOLLOW-UP PR — 5 stale "7 catalogs"
+refs (`spec-format.md:316`, `verifying-instruction-files.md:83/144`, `examples/CLAUDE.md.spec.ts` ×3,
+`CLAUDE.md.spec.ts:173` keyfile, `skills/linter-docs/SKILL.md:3`), a new-4 capability-tier table + non-js caveats, and
+the golangci type-gen / ktlint+checkstyle missing-binary test gaps; (2) the STRUCTURAL fix is **roadmap P0**:
+`research/linter-adapter-architecture.md` — a `LinterAdapter` port + `Record<BuiltinLinter, LinterAdapter>` registry
+(missing = tsc error) + conformance loop, mirroring HarnessAdapter/rule-meta. Do as its OWN PR off main after #114.
 
 **DOGFOOD BATCH — DONE.** A 4-agent Sonnet fan-out found **14 verified, source-traced bugs**; founder's call was
 **FIX, not file**. **All 14 fixed + pushed**, each with a regression test; full `vitest` suite green (2327 passing).
@@ -54,9 +68,9 @@ incomplete fix → grep siblings + one choke-point + gate test). Full suite gree
 **⏳ PENDING FOUNDER DECISION — adopt.ts markdown parsing.** Founder flagged (correctly) that `adopt.ts`
 `splitBlocks` parses CLAUDE.md/agent BODY structure with HAND-ROLLED REGEX (`HEADING_RE`/`FENCE_RE` + manual
 fence toggle), a `prefer-existing-solutions` gap. REAL BUG exposed: the fence toggle matches any 3+ backtick run,
-so a nested/mismatched fence (4-backtick block containing ```) mis-splits a `##` inside code as a heading; setext
+so a nested/mismatched fence (4-backtick block containing ```) mis-splits a `##`inside code as a heading; setext
 headings missed too. (Skills unaffected — body is verbatim; frontmatter IS js-yaml.) FIX = swap boundary-detection
-to `markdown-it` `token.map` line ranges, keep VERBATIM slicing on source offsets (never AST-reserialize — breaks
+to`markdown-it` `token.map` line ranges, keep VERBATIM slicing on source offsets (never AST-reserialize — breaks
 round-trip), add a nested-fence fixture. Tradeoff: adds 1 runtime dep to a deliberately dep-light CLI (13 deps).
 Recommended DO IT (markdown-it, browser-safe, minimal). AWAITING founder: do-on-#114 vs file-separately.
 
