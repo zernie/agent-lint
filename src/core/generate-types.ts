@@ -62,7 +62,6 @@ function firstExisting(basePath: string, paths: string[]): string | null {
   return null;
 }
 
-
 function checkstyleConfigPath(basePath: string): string | null {
   return firstExisting(basePath, [
     "checkstyle.xml",

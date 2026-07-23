@@ -119,7 +119,9 @@ Be nice.
     const spec = adoptToSpec(md, "CLAUDE.md");
     expect(Object.keys(spec.sections)).toEqual(["Setup", "Rules"]);
     // The in-block `##` rides along verbatim in Setup; Rules survives as its own.
-    expect(spec.sections["Setup"]).toContain("## Heading INSIDE the outer block");
+    expect(spec.sections["Setup"]).toContain(
+      "## Heading INSIDE the outer block",
+    );
     expect(spec.sections["Rules"]).toBe("Be nice.");
   });
 

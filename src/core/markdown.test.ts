@@ -77,6 +77,6 @@ describe("fencedLineFlags", () => {
     const src = ["para", "", "    not a fence, indented code", "", "end"].join(
       "\n",
     );
-    expect(fencedLineFlags(src).every((f) => f === false)).toBe(true);
+    expect(fencedLineFlags(src).every((f) => !f)).toBe(true);
   });
 });

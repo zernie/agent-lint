@@ -174,7 +174,10 @@ describe("skillResourceIssues", () => {
     const body = "Resources: [the API](references/api.md).";
     const found = run(body, existsOnly());
     expect(found).toHaveLength(1);
-    expect(found[0]).toMatchObject({ resolved: "references/api.md", kind: "link" });
+    expect(found[0]).toMatchObject({
+      resolved: "references/api.md",
+      kind: "link",
+    });
   });
 
   it("can be disabled entirely via <!-- vigiles-disable skill-resource-resolves --> (issue #110)", () => {

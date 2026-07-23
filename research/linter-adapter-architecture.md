@@ -21,21 +21,21 @@ To add one linter today you must independently edit **~7 code sites across 3
 files + 2 docs + a test file**, with nothing linking them — miss any one and it
 fails **silently** (no compile error, no test):
 
-| # | Site | Needed for |
-|---|------|-----------|
-| 1 | `src/core/spec.ts` `BuiltinLinter` union | the `enforce("X/…")` ref type |
-| 2 | `src/core/linters.ts` `CLI_RULE_CHECKS` | existence check (CLI linters) |
-| 3 | `src/core/linters.ts` `LINTER_CONFIG_CHECKERS` | enabled-state (else silently `"unknown"`) |
-| 4 | `src/core/linters.ts` `CLI_TOOL_FOR_LINTER` | PATH check (CLI linters) |
-| 5 | `src/core/linters.ts` `getCliRuleSet` if/else chain **or** `checkLinterRule` `??`-chain | typo suggestions / bespoke resolvers (cedar, vigiles-internal) |
-| 6 | `src/core/generate-types.ts` `discoverXRules` fn **+** the `discoverers[]` array | `.d.ts` `XRule` union |
-| 7 | `docs/linter-support.md` + `docs/spec-format.md` + `linters.test.ts` | parity |
+| #   | Site                                                                                    | Needed for                                                     |
+| --- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| 1   | `src/core/spec.ts` `BuiltinLinter` union                                                | the `enforce("X/…")` ref type                                  |
+| 2   | `src/core/linters.ts` `CLI_RULE_CHECKS`                                                 | existence check (CLI linters)                                  |
+| 3   | `src/core/linters.ts` `LINTER_CONFIG_CHECKERS`                                          | enabled-state (else silently `"unknown"`)                      |
+| 4   | `src/core/linters.ts` `CLI_TOOL_FOR_LINTER`                                             | PATH check (CLI linters)                                       |
+| 5   | `src/core/linters.ts` `getCliRuleSet` if/else chain **or** `checkLinterRule` `??`-chain | typo suggestions / bespoke resolvers (cedar, vigiles-internal) |
+| 6   | `src/core/generate-types.ts` `discoverXRules` fn **+** the `discoverers[]` array        | `.d.ts` `XRule` union                                          |
+| 7   | `docs/linter-support.md` + `docs/spec-format.md` + `linters.test.ts`                    | parity                                                         |
 
 Key smells (all source-verified):
 
 - The three runtime maps are `Record<string, fn>` keyed by a **bare string**, not
   `BuiltinLinter`. There is **no object** that bundles a linter's capabilities; a
-  linter's identity is the *coincidence* of the same string key appearing in N
+  linter's identity is the _coincidence_ of the same string key appearing in N
   maps, plus optional bespoke branches in a `??`-chain.
 - Per-linter capability **variance is implicit** in which map has an entry:
   cedar is in none of the three maps (bespoke `tryCedarPolicy`, always-enabled);
@@ -64,20 +64,20 @@ the two mechanisms the repo already trusts for harnesses and rules.
 // src/core/linter-adapter.ts (new; harness-agnostic domain)
 interface LinterCapabilities {
   existenceCheck: "node-api" | "cli" | "filesystem" | "format-only";
-  configCheck: boolean;        // has a real enabled-state read
+  configCheck: boolean; // has a real enabled-state read
   catalogEnumeration: boolean; // can list rules (eslint/pylint); ktlint/checkstyle = false
-  alwaysEnabled: boolean;      // cedar = true (a found policy is "enabled")
-  generateTypes: boolean;      // emits an XRule .d.ts union
+  alwaysEnabled: boolean; // cedar = true (a found policy is "enabled")
+  generateTypes: boolean; // emits an XRule .d.ts union
 }
 
 interface LinterAdapter {
   name: BuiltinLinter;
-  capabilities: LinterCapabilities;              // models the variance explicitly
-  cliTool?: string;                              // was CLI_TOOL_FOR_LINTER
+  capabilities: LinterCapabilities; // models the variance explicitly
+  cliTool?: string; // was CLI_TOOL_FOR_LINTER
   checkExists(rule: string, basePath: string): void | boolean; // was CLI_RULE_CHECKS / resolvers / tryCedarPolicy
   configEnabled?(rule: string, basePath: string): ConfigEnabledStatus; // was LINTER_CONFIG_CHECKERS
-  enumerateRules?(basePath: string): Set<string>;              // was getCliRuleSet chain (typo suggestions)
-  discoverEnabled?(basePath: string): DiscoveredRules | null;  // was discoverXRules + discoverers[]
+  enumerateRules?(basePath: string): Set<string>; // was getCliRuleSet chain (typo suggestions)
+  discoverEnabled?(basePath: string): DiscoveredRules | null; // was discoverXRules + discoverers[]
 }
 ```
 
