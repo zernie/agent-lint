@@ -14,24 +14,12 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { LINTERS } from "./linters.js";
-import type { BuiltinLinter } from "./spec.js";
+import { BUILTIN_LINTERS } from "./spec.js";
 
-// The BuiltinLinter members, spelled out as a typed witness: a typo is a tsc
-// error, and the set-equality checks below tie this ⇄ the registry ⇄ the docs,
-// so adding a linter must touch all three or a test fails.
-const ALL_LINTERS: readonly BuiltinLinter[] = [
-  "eslint",
-  "stylelint",
-  "ruff",
-  "clippy",
-  "pylint",
-  "rubocop",
-  "detekt",
-  "ktlint",
-  "checkstyle",
-  "golangci-lint",
-  "cedar",
-];
+// BUILTIN_LINTERS is the single source the BuiltinLinter type derives from; the
+// set-equality checks below tie it ⇄ the registry ⇄ the docs, so adding a linter
+// must touch all three (the array, the registry, the docs table) or a test fails.
+const ALL_LINTERS = BUILTIN_LINTERS;
 
 /** Lowercased linter names from the `## Supported Linters` table. */
 function docLinterNames(): Set<string> {

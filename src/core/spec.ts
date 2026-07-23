@@ -14,18 +14,28 @@
 // ---------------------------------------------------------------------------
 
 /** Linters and policy catalogs vigiles can cross-reference. */
-export type BuiltinLinter =
-  | "eslint"
-  | "stylelint"
-  | "ruff"
-  | "clippy"
-  | "pylint"
-  | "rubocop"
-  | "detekt"
-  | "ktlint"
-  | "checkstyle"
-  | "golangci-lint"
-  | "cedar";
+/**
+ * The built-in linter / policy catalogs vigiles cross-references — the SINGLE
+ * source for the set. `BuiltinLinter` derives from it, the `LINTERS` registry
+ * is keyed by it, the conformance test cross-checks it, and browser-safe
+ * consumers (the website) import this array to list the linters without going
+ * stale. Zero node imports here, so it is importable everywhere.
+ */
+export const BUILTIN_LINTERS = [
+  "eslint",
+  "stylelint",
+  "ruff",
+  "clippy",
+  "pylint",
+  "rubocop",
+  "detekt",
+  "ktlint",
+  "checkstyle",
+  "golangci-lint",
+  "cedar",
+] as const;
+
+export type BuiltinLinter = (typeof BUILTIN_LINTERS)[number];
 
 /** Scoped ESLint plugin prefix (e.g., @typescript-eslint). */
 type ScopedPlugin = `@${string}/${string}`;
