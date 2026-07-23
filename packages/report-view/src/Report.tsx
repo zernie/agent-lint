@@ -449,9 +449,8 @@ function LockedRow({ onUnlock }: { onUnlock?: () => void }) {
             Do your skills actually fire?
           </div>
           <p className="mt-1 text-[13px] leading-snug text-muted-foreground">
-            The five above are deterministic — a browser can measure them. This
-            one needs a real model: recall (does a skill fire when it should?)
-            and precision (does it stay quiet on unrelated prompts?).
+            Needs a real model, not a browser — recall (fires when it should) +
+            precision (stays quiet otherwise).
           </p>
           {/* A LOCKED PREVIEW (the gated-content pattern): representative numbers,
               BLURRED and tagged "preview", so it teases the SHAPE of the result you'd
@@ -507,14 +506,10 @@ function LockedRow({ onUnlock }: { onUnlock?: () => void }) {
               </>
             )}
           </button>
-          <span className="text-[11px] text-muted-foreground/70">
-            copies a prompt for Claude Code
-          </span>
         </div>
       </div>
       <p className="mt-2 text-[11px] text-muted-foreground">
-        Runs on your Claude subscription — no API key, nothing leaves your
-        machine.
+        Runs on your Claude subscription — no API key.
       </p>
     </div>
   );
@@ -540,17 +535,16 @@ function CliRulesRow() {
         </span>
       </div>
       <p className="mt-1 text-[13px] leading-snug text-muted-foreground">
-        Run it locally and vigiles maps each prose rule you wrote to the linter
-        rule that enforces it — and flags the costly case: a rule you told the
-        agent to follow that&apos;s silently turned off in your own config.
+        Locally, vigiles maps each prose rule to the linter rule that enforces
+        it — and flags a rule you told the agent to follow that&apos;s silently
+        off in your config.
       </p>
       <pre className="mt-2 whitespace-pre-wrap break-words rounded-md border border-border bg-card/40 px-3 py-2 font-mono text-xs leading-relaxed text-foreground">
         {`"always use ===" → eqeqeq is "off" in your ESLint config`}
       </pre>
       <p className="mt-2 text-[11px] leading-snug text-muted-foreground/70">
-        Rule cross-referencing covers ESLint, Ruff, Pylint, Clippy &amp;
-        RuboCop. On other stacks vigiles still verifies references, structure
-        &amp; safety — it just can&apos;t check a linter it doesn&apos;t know.
+        Covers JS, Python, Rust, Ruby, JVM &amp; Go linters. On an unknown
+        stack, references, structure &amp; safety are still verified.
       </p>
     </div>
   );
