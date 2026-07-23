@@ -71,18 +71,22 @@ describe("LinterAdapter conformance", () => {
     expect([...docLinterNames()].sort()).toEqual(Object.keys(LINTERS).sort());
   });
 
-  it("the website's linter list covers every BUILTIN_LINTER (anti-stale site)", () => {
-    // Keep the marketing site honest: adding a linter but forgetting the
-    // vigiles.sh chips fails HERE (loud) rather than shipping a stale front page.
+  it("the website's linter strip is DERIVED from BUILTIN_LINTERS (can't go stale)", () => {
+    // The site no longer hand-lists the linters — it renders straight from the
+    // engine's BUILTIN_LINTERS, so drift is impossible by construction. Guard
+    // that the derivation stays in place (a revert to a hand-typed array would
+    // reintroduce the staleness this replaced).
     const wedge = readFileSync(
       resolve(__dirname, "../../site/src/components/sections/Wedge.tsx"),
       "utf8",
     );
-    const arr = /const LINTERS = \[([\s\S]*?)\]/.exec(wedge)?.[1] ?? "";
-    const shown = new Set(
-      [...arr.matchAll(/"([^"]+)"/g)].map((m) => m[1].toLowerCase()),
+    // imports the single source of truth…
+    expect(wedge).toMatch(
+      /import\s*\{[^}]*\bBUILTIN_LINTERS\b[^}]*\}\s*from\s*["']@engine\/spec["']/,
     );
-    const missing = BUILTIN_LINTERS.filter((l) => !shown.has(l.toLowerCase()));
-    expect(missing).toEqual([]);
+    // …and renders the strip from it…
+    expect(wedge).toMatch(/BUILTIN_LINTERS\.map\(/);
+    // …not a reintroduced hand-typed string array of linter names.
+    expect(wedge).not.toMatch(/const LINTERS\s*=\s*\[\s*["']/);
   });
 });

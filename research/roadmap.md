@@ -444,18 +444,15 @@ harnesses; each is source-traced with a suggested fix. Ranked by bite:
   step (skills + hooks) never completes for ANYONE on a recent Claude Code. Fix: add
   `"owner": { "name": "zernie", "url": "https://github.com/zernie" }`. **Breaks the whole
   onboarding — highest priority.**
-- **LinterAdapter port — make a linter a cohesive type-enforced unit · P0 (structural, own PR).**
-  Adding the #109 JVM/Go linters produced a steady stream of the SAME bug class (3 detekt
-  review P2s, 5 stale doc refs, uneven tests) because a "linter" is smeared across ~7 code
-  sites in 3 files + 2 docs with NOTHING enforcing completeness — the opposite of the
-  `HarnessAdapter`/`rule-meta.ts` pattern the repo already uses. Fix: a `LinterAdapter` port
-  bundling every capability + a `LinterCapabilities` variance type, a
-  `Record<BuiltinLinter, LinterAdapter>` registry (missing linter/capability = tsc error),
-  a `linter-contract.test.ts` conformance loop (capability↔method + docs/test parity — would
-  have caught the stale-doc drift), and a `docs/authoring-a-linter.md` + `add-a-linter` skill.
-  Pure parsers already exist → mostly gathering, not redesign. Full details +
-  interface sketch: `research/linter-adapter-architecture.md`. Down-payments already shipped
-  on #114 (the shared markdown-it fence oracle + the js-yaml detekt-config parser).
+- ✅ **LinterAdapter port — make a linter a cohesive type-enforced unit · SHIPPED (#116 +
+  follow-up).** Adding the #109 JVM/Go linters produced a steady stream of the SAME bug class
+  (3 detekt review P2s, 5 stale doc refs, uneven tests) because a "linter" was smeared across
+  ~7 code sites. Now a linter is ONE `LinterAdapter` in a `Record<BuiltinLinter, LinterAdapter>`
+  registry (missing linter/capability = tsc error), with a `linter-contract.test.ts` conformance
+  loop (capability↔method + docs/site parity) and an `add-a-linter` contributor skill. Stages
+  0–3 on #116 (port leaf + registry + generate-types + conformance + CI parity); Stage 4 (collapse
+  the 4 legacy dispatch maps so `LINTERS` is the LITERAL single dispatch source) in the follow-up.
+  Design record: `research/linter-adapter-architecture.md`.
 - **#107 — `compile` mangles skill frontmatter + overwrites uncommitted edits · HIGH (data loss).**
   (a) emits `tools:` not the CC skill key `allowed-tools:`; (b) CSV not a YAML list;
   (c) `context: fork` silently lost on adopt (falsely marked a KNOWN_KEY); (d) dirty-tree
@@ -693,6 +690,17 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
 
 ## Next — differentiated, medium effort
 
+- [ ] **Cedar verification depth — beyond presence · P1.** Cedar is KEPT (it's the policy
+      language AWS Bedrock AgentCore GA'd for deterministic runtime constraints on agent tool
+      calls — the exact "deterministic constraints" layer vigiles is about, applied to agent
+      authorization; documented in `docs/linter-support.md` § Cedar Policies). Today the
+      `enforce("cedar/<id>")` check only verifies a policy ID EXISTS in the bundle (presence ==
+      enabled, filesystem adapter). The deepening: PARSE the referenced policy (validate it's
+      real Cedar, not just a matching filename), and — further out — resolve the action/entity
+      it names, moving from "a file mentions this id" to "this is a valid, well-formed policy."
+      Sibling of the `compile --policy → Cedar/OPA codegen` item below (one drives the policy,
+      the other verifies references to it). Cheap first slice: syntactic validation via the
+      Cedar parser; the entity/action resolution is the bigger step.
 - [~] **Flue poach (2026-06-29) — a typed TS harness validates the typed-spec bet + opens
   surfaces.** Flue (withastro/flue, the Astro team) is a programmable TypeScript agent
   harness with Valibot-typed tool/workflow I/O that ALSO imports Claude Code `SKILL.md`

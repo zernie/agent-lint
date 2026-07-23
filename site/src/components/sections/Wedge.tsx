@@ -1,4 +1,5 @@
 import { AlertTriangle } from "lucide-react";
+import { BUILTIN_LINTERS } from "@engine/spec";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -33,20 +34,24 @@ const FAILURES: {
   },
 ];
 
-/** The eleven linters vigiles cross-references a rule against. */
-const LINTERS = [
-  "ESLint",
-  "Ruff",
-  "Clippy",
-  "Pylint",
-  "RuboCop",
-  "Stylelint",
-  "Cedar",
-  "detekt",
-  "ktlint",
-  "Checkstyle",
-  "golangci-lint",
-];
+/** Display casing for the linters (the engine's `BUILTIN_LINTERS` is lowercase).
+ * A linter with no entry renders under its own lowercase name (detekt / ktlint /
+ * golangci-lint — their canonical branding), so the fallback is always correct. */
+const LINTER_LABELS: Record<string, string> = {
+  eslint: "ESLint",
+  stylelint: "Stylelint",
+  ruff: "Ruff",
+  clippy: "Clippy",
+  pylint: "Pylint",
+  rubocop: "RuboCop",
+  cedar: "Cedar",
+  checkstyle: "Checkstyle",
+};
+
+/** The linters vigiles cross-references a rule against — DERIVED from the
+ * engine's `BUILTIN_LINTERS` so the strip can never drift from what's shipped
+ * (add a linter there and it appears here automatically). */
+const LINTERS = BUILTIN_LINTERS.map((l) => LINTER_LABELS[l] ?? l);
 
 export function Wedge() {
   return (
