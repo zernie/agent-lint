@@ -92,3 +92,4 @@ vigiles also **dogfoods** that rule: `CLAUDE.md.spec.ts` carries `enforce("bound
 ## See also
 
 - [`docs/harness-testing.md`](harness-testing.md) — the harness-agnostic test tiers that ride on `vigiles/testing`. Per-harness specifics: [`harness-testing-claude-code.md`](harness-testing-claude-code.md) · [`harness-testing-codex.md`](harness-testing-codex.md).
+- [`docs/non-js-harnesses.md`](non-js-harnesses.md) — using vigiles on a Kotlin/Go/Java repo with no `package.json` or Node toolchain (which checks work with zero setup, JVM/Go linter cross-referencing).
