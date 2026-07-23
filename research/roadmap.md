@@ -383,6 +383,17 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
 
 ## Shipped recently (don't rebuild)
 
+- **Vlad's real-harness pass — issues #107–#113 (2026-07-22/23)** — the dogfood batch
+  from a real Claude Code + Kotlin harness, all SHIPPED (v14.12.0 / #114, then #116 + #117)
+  and the issues CLOSED + personally replied. #108 marketplace `owner` (onboarding unblock)
+  · #107 skill `allowed-tools`/`context:fork` round-trip (1d dirty-tree guard deferred) ·
+  #110 skill-resource + dangling-ref false positives · #112 `"off"` severity string · #113
+  `testGlobs` external-loop docs (looser surface→coverage match deferred) · #111 non-JS
+  harness guide · #109 JVM/Go linter catalogs (7→11). AND the **LinterAdapter port** it
+  prompted: `LINTERS: Record<BuiltinLinter, LinterAdapter>` is now the LITERAL single dispatch
+  source (a missing linter is a tsc error, `linter-contract.test.ts` catches docs/site drift,
+  `add-a-linter` skill is the authoring guide) — stages 0–3 on #116, Stage 4 (dispatch-map
+  collapse) + site-chip-derivation + cedar-P1 on #117. Design: `linter-adapter-architecture.md`.
 - **Effect-surface + purity contract + Bash classifier (2026-06-20)** — the
   deterministic side-effect substrate. `src/core/effects.ts` (`classifyToolEffect`
   / `effectSurface` / `purityViolations` + the pure/bounded/unrestricted ladder,
@@ -432,57 +443,6 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
   **symbol refs**, **dead-enforcement / stale-ref** (pillar 1 core).
 
 ## Now — cheap, high-leverage, do next
-
-### 🐛 Dogfood-found — Vlad's real-harness pass (2026-07-22, GitHub issues #107–#113)
-
-Filed after dogfooding `init`/`compile`/`audit`/`lint` on real Claude Code + Kotlin
-harnesses; each is source-traced with a suggested fix. Ranked by bite:
-
-- **#108 — plugin install BROKEN on Claude Code v2.1.x · P0, do FIRST (one-line fix).**
-  `.claude-plugin/marketplace.json` lacks the now-required `owner` field, so
-  `claude plugin marketplace add zernie/vigiles` fails on CC ≥ v2.1.x → `init`'s plugin
-  step (skills + hooks) never completes for ANYONE on a recent Claude Code. Fix: add
-  `"owner": { "name": "zernie", "url": "https://github.com/zernie" }`. **Breaks the whole
-  onboarding — highest priority.**
-- ✅ **LinterAdapter port — make a linter a cohesive type-enforced unit · SHIPPED (#116 +
-  follow-up).** Adding the #109 JVM/Go linters produced a steady stream of the SAME bug class
-  (3 detekt review P2s, 5 stale doc refs, uneven tests) because a "linter" was smeared across
-  ~7 code sites. Now a linter is ONE `LinterAdapter` in a `Record<BuiltinLinter, LinterAdapter>`
-  registry (missing linter/capability = tsc error), with a `linter-contract.test.ts` conformance
-  loop (capability↔method + docs/site parity) and an `add-a-linter` contributor skill. Stages
-  0–3 on #116 (port leaf + registry + generate-types + conformance + CI parity); Stage 4 (collapse
-  the 4 legacy dispatch maps so `LINTERS` is the LITERAL single dispatch source) in the follow-up.
-  Design record: `research/linter-adapter-architecture.md`.
-- **#107 — `compile` mangles skill frontmatter + overwrites uncommitted edits · HIGH (data loss).**
-  (a) emits `tools:` not the CC skill key `allowed-tools:`; (b) CSV not a YAML list;
-  (c) `context: fork` silently lost on adopt (falsely marked a KNOWN_KEY); (d) dirty-tree
-  overwrite with no `--force`/clean-tree guard. Fixes traced in the issue (`renderSkillFrontmatter`
-  - `adoptSkill` + a clean-tree guard + a round-trip regression test). SKILL emitter only —
-    subagent `tools:` is correct, keep it.
-- **#110 — false positives in skill-resource + dangling-ref detectors · HIGH (don't-cry-wolf).**
-  A markdown-link example in prose flagged as a missing resource (no illustrative-cue gate on
-  the link branch + no `vigiles-disable` escape hatch); a `#`-led usage comment in a `.sh`
-  scanned as real code + a repo-vs-plugin-root path-base mismatch (−8 dropped a plugin 100→92).
-  Cry-wolf on a real repo is the load-bearing safety property once an agent obeys findings.
-- **#112 — `"off"` severity string is truthy · MED (quick fix).** `"off"` doesn't disable a
-  rule (only boolean `false` does), but ESLint users expect `"off"`. Fix: `normalizeSeverity`
-  in `loadConfig` (`"off"`/`0` → `false`, array-aware) before the `rules` merge — fixes it for
-  every rule at once. Add the `"off"`-path test (currently untested).
-- **#113 — external test-coverage source for `Tested` · MED.** A harness with its own eval loop
-  (promptfoo / a home-grown `evals.json`) shows every surface "untested". `testGlobs`/`exclude`
-  already exist on the `untested-*` rules but are UNDOCUMENTED, and `isCovered` only counts a
-  file that embeds the surface's path/namespace token. Document `testGlobs` as the supported
-  external-loop hook + consider a looser/explicit surface→coverage-file mapping. (Companion to
-  item 2's `Tested` honesty already shipped this session.)
-- **#111 — non-JS harnesses first-class · MED-HIGH (umbrella over #109 + #3).** A Kotlin/Go repo
-  (no `package.json`) gets refs but empty linter coverage + a dead rule-enforcer. Document +
-  support the `npx`-only non-JS workflow (which checks work with no node toolchain; how to wire
-  a native linter) as first-class, not an implicit side effect.
-- **#109 — JVM/Go linter adapters · MED (under #111).** detekt/ktlint/checkstyle/golangci-lint
-  catalogs so "rules → enforced" + rule coverage work on JVM/Go. The CLI-based adapter is cheap
-  — 3 map entries analogous to `rubocop`/`clippy` (`CLI_RULE_CHECKS`/`CLI_TOOL_FOR_LINTER`/
-  `LINTER_CONFIG_CHECKERS`) + a `generate-types` row + `docs/linter-support.md` (keep the
-  7-catalog set in lockstep). Issue traces the exact insertion points.
 
 ### 🤖 Blind-agent onboarding dogfood (2026-07-22, NEW — the META catch)
 
