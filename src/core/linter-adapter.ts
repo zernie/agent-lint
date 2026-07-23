@@ -63,16 +63,18 @@ export interface LinterAdapter {
   /** The PATH tool for a `cli` linter (absent for node-api/filesystem/format-only). */
   cliTool?: string;
   /**
-   * Verify a rule exists. Throws (with a user-facing message) when it does not,
-   * mirroring the CLI checks; returns a boolean for filesystem linters. The
-   * optional `customDirs` threads a linter's configured rule directories
+   * Verify a rule exists. A `cli` linter THROWS (with a user-facing message)
+   * when the rule is unknown and otherwise returns `true`; node-api/filesystem
+   * linters return a boolean. The dispatch treats both a `false` return and a
+   * throw as "not found" (a throw additionally carries the tool's own message).
+   * The optional `customDirs` threads a linter's configured rule directories
    * (cedar's `rulesDir`).
    */
   checkExists(
     rule: string,
     basePath: string,
     customDirs?: string | readonly string[],
-  ): void | boolean;
+  ): boolean;
   /** Config-enabled status; absent when `alwaysEnabled` or no config layer. */
   configEnabled?(rule: string, basePath: string): ConfigEnabledStatus;
   /** All known rule names, for closest-match suggestions; absent when unlistable. */
