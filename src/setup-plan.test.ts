@@ -191,11 +191,27 @@ test("planPluginInstall: codex installs skills GLOBALLY (-g) + wires repo hooks"
   assert.equal(codex.harness, "codex");
   // The cross-agent skills CLI with -g → ~/.agents/skills/, not the repo.
   assert.ok(codex.commands.some((c) => /skills add .* -a codex .* -g/.test(c)));
-  // #dogfood-I2: MUST scope with `-s <shipped>` so it doesn't leak the repo's
-  // contributor-only .claude/skills/ into the user's global store.
+  // #dogfood-I2 + PR #114 CI: MUST scope with `-s <shipped>` so it doesn't leak
+  // the repo's contributor-only .claude/skills/ into the user's global store —
+  // AND the real `skills` CLI parses `-s` SPACE-separated (it consumes
+  // consecutive non-dash args); a COMMA list is read as one literal skill name,
+  // matches nothing, and the install exits 1. Parse the flag the SAME way the CLI
+  // does and assert the tokens are EXACTLY the shipped skills, so a comma
+  // regression or a bad name fails HERE (no network) rather than only in the e2e
+  // tier that needs it.
+  const cmd = codex.commands.find((c) => c.includes("skills add"));
+  assert.ok(cmd, "codex plan includes a skills-add command");
+  // Tokens start with a word char (a flag like `-g` starts with `-`), so the
+  // capture stops at the next flag — otherwise `[\w-]` would swallow `-g`.
+  const scoped = /-s ((?:[\w][\w-]* )*[\w][\w-]*) -/.exec(cmd);
   assert.ok(
-    codex.commands.some((c) => c.includes(`-s ${SHIPPED_SKILLS.join(",")}`)),
-    "codex install must scope to the shipped skills with -s",
+    scoped,
+    `-s must be a SPACE-separated skill list (comma is parsed as one bad name), got: ${cmd}`,
+  );
+  assert.deepEqual(
+    scoped[1].split(" "),
+    [...SHIPPED_SKILLS],
+    "the -s list must be exactly the shipped skills",
   );
   // Skills are global, but the nudge hooks are written to .codex/config.toml
   // (repo-committed, the Codex norm) → this method now touches the repo.

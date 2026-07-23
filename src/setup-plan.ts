@@ -456,9 +456,14 @@ export function planPluginInstall(
       // `init` (see codexPluginHooks / wireCodexHooks) — Codex config is
       // repo-committed, so that's the idiomatic place.
       // Scope to the SHIPPED skills with `-s` — without it the `skills` CLI
-      // installs every skill dir in the repo, leaking the contributor-only
-      // .claude/skills/ into the user's global store (#dogfood-I2).
-      const skillScope = `-s ${SHIPPED_SKILLS.join(",")}`;
+      // installs EVERY SKILL.md in the repo, leaking the contributor-only
+      // .claude/skills/ into the user's global store (#dogfood-I2; confirmed —
+      // the CLI's `-l` list shows 17 skills for this repo, incl. .claude/skills).
+      // The `-s` parser is SPACE-separated (it consumes consecutive non-dash
+      // args), NOT comma-separated — a comma list is read as one literal skill
+      // name, matches nothing, and the install exits 1 (verified against the
+      // real `skills@1.5.20` arg parser).
+      const skillScope = `-s ${SHIPPED_SKILLS.join(" ")}`;
       return {
         harness,
         commands: [
