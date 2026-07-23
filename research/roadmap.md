@@ -444,6 +444,18 @@ harnesses; each is source-traced with a suggested fix. Ranked by bite:
   step (skills + hooks) never completes for ANYONE on a recent Claude Code. Fix: add
   `"owner": { "name": "zernie", "url": "https://github.com/zernie" }`. **Breaks the whole
   onboarding — highest priority.**
+- **LinterAdapter port — make a linter a cohesive type-enforced unit · P0 (structural, own PR).**
+  Adding the #109 JVM/Go linters produced a steady stream of the SAME bug class (3 detekt
+  review P2s, 5 stale doc refs, uneven tests) because a "linter" is smeared across ~7 code
+  sites in 3 files + 2 docs with NOTHING enforcing completeness — the opposite of the
+  `HarnessAdapter`/`rule-meta.ts` pattern the repo already uses. Fix: a `LinterAdapter` port
+  bundling every capability + a `LinterCapabilities` variance type, a
+  `Record<BuiltinLinter, LinterAdapter>` registry (missing linter/capability = tsc error),
+  a `linter-contract.test.ts` conformance loop (capability↔method + docs/test parity — would
+  have caught the stale-doc drift), and a `docs/authoring-a-linter.md` + `add-a-linter` skill.
+  Pure parsers already exist → mostly gathering, not redesign. Full details +
+  interface sketch: `research/linter-adapter-architecture.md`. Down-payments already shipped
+  on #114 (the shared markdown-it fence oracle + the js-yaml detekt-config parser).
 - **#107 — `compile` mangles skill frontmatter + overwrites uncommitted edits · HIGH (data loss).**
   (a) emits `tools:` not the CC skill key `allowed-tools:`; (b) CSV not a YAML list;
   (c) `context: fork` silently lost on adopt (falsely marked a KNOWN_KEY); (d) dirty-tree
