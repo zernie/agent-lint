@@ -14,7 +14,14 @@
  * build, so there is no runtime cycle — `scan.ts` requires `scan-core.js`, never
  * the reverse.
  */
-import { basename, dirname, isAbsolute, resolve } from "./posix-path.js";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+} from "./posix-path.js";
 
 import {
   verifyToolContract,
@@ -62,7 +69,14 @@ import type {
   ScanDelegationFinding,
 } from "./scan.js";
 
-const SCRIPT_RE = /\S+\.(?:sh|mjs|cjs|js|ts|py|rb)\b/g;
+// A script-path token inside a hook command. The token class is `\S` MINUS the
+// glob metacharacters `*` and `?` (dogfood D1): a real, resolvable hook path
+// never contains them, but a command that merely MENTIONS a glob — e.g.
+// `find . -name "*.js"` in a hook body — would otherwise have `"*.js"` grabbed as
+// a "script" and reported MISSING (a false positive). Shell vars / braces /
+// quotes / slashes ARE kept (`${CLAUDE_PLUGIN_ROOT}/hooks/x.sh`, `"$HOME"/y.sh`),
+// since resolveScript expands + strips those; only glob patterns are dropped.
+const SCRIPT_RE = /[^\s*?]+\.(?:sh|mjs|cjs|js|ts|py|rb)\b/g;
 
 // The scalar fields scan reads from a skill/agent `---` block, via the shared
 // lenient reader (core/frontmatter-read.ts) — a real YAML parse with a regex
@@ -224,6 +238,84 @@ export interface SkillScanContext {
   readonly existsSync: (p: string) => boolean;
 }
 
+/**
+ * The path to REPORT for a scanned surface (dogfood E1). A plugin skill/agent is
+ * materialized under a SYNTHETIC canonical key (the layout's `materializeRoot`
+ * prefix, e.g. `.claude/agents/x.md`) that does NOT exist on disk; `sources[key]`
+ * holds the real absolute on-disk path. Report the real path made REPO-RELATIVE —
+ * clickable in the terminal AND valid as a GitHub annotation `file=` — falling
+ * back to the canonical key when no source is recorded (a repo-root surface whose
+ * key already IS the real relative path). A source resolving OUTSIDE the scan root
+ * (a `..`-escape, unusual) keeps its real absolute path rather than a phantom.
+ */
+function reportedSurfacePath(
+  canonicalKey: string,
+  onDisk: string | undefined,
+  root: string,
+): string {
+  if (onDisk === undefined) return canonicalKey;
+  const rel = relative(root, onDisk);
+  return rel !== "" && !rel.startsWith("..") ? rel : onDisk;
+}
+
+/**
+ * Remap a batch of path-tagged findings from the synthetic materialize key to the
+ * real on-disk path (dogfood E1) — in BOTH the `path` field AND any embedded
+ * `message` (the detectors interpolate the key into their message text). Applied
+ * at report assembly to the frontmatter-family findings, which iterate the loaded
+ * file map's canonical keys directly (unlike ScanAgent/ScanSkill, whose `.path`
+ * is already remapped). No-op for a finding whose key IS the real path.
+ */
+export function remapFindingPaths<
+  T extends { readonly path: string; readonly message?: string },
+>(findings: readonly T[], sources: Record<string, string>, root: string): T[] {
+  return findings.map((f) => {
+    const real = reportedSurfacePath(f.path, sources[f.path], root);
+    if (real === f.path) return f;
+    return {
+      ...f,
+      path: real,
+      ...(typeof f.message === "string"
+        ? { message: f.message.split(f.path).join(real) }
+        : {}),
+    };
+  });
+}
+
+/**
+ * Does the repo already ship its OWN test setup — a real `package.json` `test`
+ * script, or a conventional test dir? Used by `audit` to credit an existing
+ * testing story as OPTIONAL (a repo isn't scolded for surfaces with no vigiles
+ * test when it clearly tests some other way). Node-free + injectable so the same
+ * detector runs on disk (`node:fs`) AND in the browser (map-backed), keeping the
+ * disk report and the demo report byte-identical (the OUTPUT-PARITY the
+ * scanFiles-vs-scanPlugin gate enforces).
+ */
+export function detectOwnTestSignal(
+  root: string,
+  io: {
+    readonly readFile: (p: string) => string;
+    readonly existsSync: (p: string) => boolean;
+  },
+): boolean {
+  const pkg = io.readFile(join(root, "package.json"));
+  if (pkg !== "") {
+    try {
+      const { scripts } = JSON.parse(pkg) as {
+        scripts?: Record<string, string>;
+      };
+      const t = scripts?.test?.trim();
+      if (t !== undefined && t !== "" && !/no test specified/i.test(t))
+        return true;
+    } catch {
+      /* malformed package.json — ignore */
+    }
+  }
+  return ["test", "tests", "__tests__", "spec", join("src", "test")].some((d) =>
+    io.existsSync(join(root, d)),
+  );
+}
+
 export function scanSkills(
   files: Record<string, string>,
   cls: SurfaceClassifier,
@@ -275,7 +367,8 @@ export function scanSkills(
       : lethalTrifectaIssues(skillTools ?? ["*"], dialect);
     out.push({
       name: fm.name ?? skillName(path),
-      path,
+      // Report the real on-disk path, not the synthetic materialize key (E1).
+      path: reportedSurfacePath(path, onDiskDir, root),
       hasDescription: Boolean(effectiveDesc && effectiveDesc.length >= 20),
       description: effectiveDesc?.trim(),
       userInvoked,
@@ -337,6 +430,11 @@ export function scanAgents(
   dialect: HarnessDialect,
   declaredServers: readonly string[],
   cls: SurfaceClassifier,
+  // Source-mapping context (dogfood E1): the scan `root` + the loader's canonical
+  // key → real on-disk path map, so a materialized agent reports its REAL path
+  // instead of the synthetic `.claude/agents/…` key. Optional so a caller that
+  // doesn't materialize (no sources) is unchanged — the canonical key is used.
+  ctx?: { root: string; sources?: Record<string, string> },
 ): ScanAgent[] {
   const out: ScanAgent[] = [];
   for (const [path, md] of Object.entries(files)) {
@@ -348,7 +446,9 @@ export function scanAgents(
     const surface = effectSurface(tools ?? ["*"], dialect);
     out.push({
       name: basename(path, ".md"),
-      path,
+      path: ctx
+        ? reportedSurfacePath(path, ctx.sources?.[path], ctx.root)
+        : path,
       tools,
       // Cross-reference the declared rail against the dialect catalog — the moat.
       // Auditing third-party plugins → only the HIGH-CONFIDENCE issues (never-
@@ -826,7 +926,7 @@ export function collectHookMatchers(
   const out: HookMatcherEntry[] = [];
   for (const { event, matcher } of regs) {
     if (matcher === null) continue;
-    const key = `${event} ${matcher}`;
+    const key = `${event}\u0000${matcher}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({ event, matcher });

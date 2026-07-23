@@ -33,7 +33,10 @@ import { execSync } from "node:child_process";
 const CLI = resolve(__dirname, "..", "dist", "cli.js");
 const VENDOR = resolve(__dirname, "..", "test/dogfood");
 
-function run(args: string, cwd?: string): { stdout: string; exitCode: number } {
+function run(
+  args: string,
+  cwd?: string,
+): { stdout: string; stderr: string; exitCode: number } {
   // A default `audit` writes vigiles-report.html + vigiles-report.json into cwd —
   // suppress both here so the test run never drops an artifact in the repo root.
   // The dedicated write tests exercise those paths explicitly in a tmp cwd.
@@ -48,10 +51,14 @@ function run(args: string, cwd?: string): { stdout: string; exitCode: number } {
       timeout: 30000,
       cwd,
     });
-    return { stdout, exitCode: 0 };
+    return { stdout, stderr: "", exitCode: 0 };
   } catch (e: unknown) {
-    const err = e as { stdout?: string; status?: number };
-    return { stdout: err.stdout ?? "", exitCode: err.status ?? 1 };
+    const err = e as { stdout?: string; stderr?: string; status?: number };
+    return {
+      stdout: err.stdout ?? "",
+      stderr: err.stderr ?? "",
+      exitCode: err.status ?? 1,
+    };
   }
 }
 
@@ -139,6 +146,12 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
     mk("mixed/CLAUDE.md", "# CC\nRun `npm test`.\n");
     mk("mixed/AGENTS.md", "# Codex\nRun `make`.\n");
 
+    // 3b. A repo that AUTO-DETECTS as claude-code (only a CLAUDE.md) but
+    // config-DECLARES codex. Audit must honor the `.vigilesrc.json` `harness`
+    // key (dogfood A: it used to ignore it and scan as Claude Code).
+    mk("cfgharness/CLAUDE.md", "# CC file\nRun `npm test`.\n");
+    mk("cfgharness/.vigilesrc.json", JSON.stringify({ harness: "codex" }));
+
     // 4. A marketplace: a marketplace.json over two member plugins.
     mk(
       "mp/.claude-plugin/marketplace.json",
@@ -208,17 +221,45 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
     const auto = run(`audit ${join(root, "mixed")}`);
     assert.equal(auto.exitCode, 0);
     assert.match(auto.stdout, /Detected harness: claude-code/);
-    assert.match(auto.stdout, /repo also matches: codex/);
+    // The ambiguity notice now flows through the SAME resolveHarnessSelection
+    // path as lint/compile (dogfood A) — it names both harnesses and points at
+    // the config key / --harness override.
+    assert.match(auto.stdout, /repo matches claude-code, codex/);
 
     const forced = run(`audit ${join(root, "mixed")} --harness=codex`);
     assert.match(forced.stdout, /Detected harness: codex/);
-    assert.doesNotMatch(forced.stdout, /repo also matches/); // override silences it
+    assert.doesNotMatch(forced.stdout, /repo matches/); // override silences it
+  });
+
+  it("an unknown --harness fails with a clean message, not a stack trace (dogfood C2)", () => {
+    const r = run(`audit ${join(root, "normal")} --harness=bogus`);
+    assert.equal(r.exitCode, 2);
+    assert.match(r.stderr, /Unknown harness "bogus"/);
+    assert.match(r.stderr, /claude-code, codex/); // lists the known harnesses
+    // A user-facing failure must NOT dump a Node stack trace.
+    assert.doesNotMatch(r.stderr, /^\s+at .+\(.*\)/m);
+  });
+
+  it("honors the .vigilesrc.json `harness` key (audit no longer ignores config)", () => {
+    // dogfood A: this repo auto-detects as claude-code (only a CLAUDE.md), but
+    // config declares codex. Audit must scan as codex — before the fix it
+    // ignored config.harness and reported claude-code. Config resolves from the
+    // cwd (like `lint`), so run audit from INSIDE the fixture.
+    const r = run("audit .", join(root, "cfgharness"));
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout, /Detected harness: codex/);
+    // A single configured harness is unambiguous → no override notice.
+    assert.doesNotMatch(r.stdout, /repo matches/);
   });
 
   it("marketplace root: expands members into a ranked leaderboard", () => {
     const r = run(`audit ${join(root, "mp")}`);
     assert.equal(r.exitCode, 0);
-    assert.match(r.stdout, /Plugin health leaderboard \(2 scanned\)/);
+    assert.match(r.stdout, /2 plugins detected → leaderboard mode/);
+    assert.match(
+      r.stdout,
+      /Full report for any plugin: npx vigiles audit <dir>/,
+    );
     assert.match(r.stdout, /alpha/);
     assert.match(r.stdout, /beta/);
   });
@@ -412,8 +453,8 @@ describe("audit → adoption — adoptable-surfaces nudge + JSON data", () => {
   it("the terminal audit prints the adoptable-surfaces nudge + a behavioral nudge", () => {
     const r = run(`audit ${join(root, "demo")}`);
     assert.equal(r.exitCode, 0);
-    // The adoption nudge with the create-all + per-surface command.
-    assert.match(r.stdout, /not yet spec-managed/);
+    // The adoption nudge — value-framed (why a spec), with the per-surface command.
+    assert.match(r.stdout, /could be spec-managed/);
     assert.match(r.stdout, /npx vigiles init/);
     assert.match(r.stdout, /--target=skills\/deploy\/SKILL\.md/);
     // The small behavioral "do your skills fire?" nudge.
@@ -445,7 +486,7 @@ describe("audit → adoption — adoptable-surfaces nudge + JSON data", () => {
       "npx vigiles init --target=skills/deploy/SKILL.md",
     );
     // JSON stays machine-clean — no human nudge text.
-    assert.doesNotMatch(r.stdout, /not yet spec-managed/);
+    assert.doesNotMatch(r.stdout, /could be spec-managed/);
     assert.doesNotMatch(r.stdout, /actually fire/);
   });
 });
@@ -904,5 +945,38 @@ describe("lint of a foreign repo does not satisfy target refs from the caller's 
       /foo\.py/,
       "a foreign-repo lint resolves shared refs against the TARGET, not the caller's cwd",
     );
+  });
+});
+
+describe("audit share-link only for a whole-repo audit (Codex review)", () => {
+  it("suppresses the share link for a SUBDIRECTORY audit (parent origin ≠ audited target)", () => {
+    const root = mkdtempSync(join(tmpdir(), "scan-sharelink-"));
+    try {
+      // A git repo with a github origin; the plugin lives in a subdir.
+      execSync(
+        "git init -q && git remote add origin https://github.com/foo/bar.git",
+        {
+          cwd: root,
+          stdio: "ignore",
+        },
+      );
+      writeFileSync(join(root, "CLAUDE.md"), "# repo root\nRun the build.\n");
+      mkdirSync(join(root, "plugin"), { recursive: true });
+      writeFileSync(
+        join(root, "plugin", "CLAUDE.md"),
+        "# plugin\nRun tests.\n",
+      );
+
+      // Whole-repo audit (target IS the git toplevel) → the share link is shown.
+      const whole = run("audit .", root);
+      assert.match(whole.stdout, /Share this grade → .*foo\/bar/);
+
+      // Subdir audit → git origin belongs to the PARENT, so the owner/repo link
+      // would rerun a different audit → suppressed.
+      const sub = run("audit plugin", root);
+      assert.doesNotMatch(sub.stdout, /Share this grade/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

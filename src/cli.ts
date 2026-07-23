@@ -58,6 +58,7 @@ import {
   applyCodexPluginHooks,
   mergeProjectConfig,
   collectSetupAnswers,
+  gateOnlyInvitation,
   type SetupPlan,
   type SetupAnswers,
   type AskFn,
@@ -101,8 +102,6 @@ import {
 } from "./scan-behavioral.js";
 import {
   ADAPTERS,
-  detectAdapterResult,
-  resolveAdapter,
   resolveHarnessSelection,
   resolveHarnessAdapters,
   normalizeHarnessName,
@@ -110,6 +109,7 @@ import {
   getAdapter,
   adapterForInstructionFile,
 } from "./adapter-registry.js";
+import type { HarnessSelection } from "./adapter-registry.js";
 import type { HarnessDialect } from "./core/dialect.js";
 import type { HarnessAdapter } from "./core/adapter.js";
 import { skillFrontmatterDropWarnings } from "./skill-harness.js";
@@ -119,6 +119,7 @@ import {
   formatLeaderboardMarkdown,
 } from "./leaderboard.js";
 import { optimize, formatRecommendations } from "./optimize.js";
+import { shareLinkForRemote } from "./share-link.js";
 import { formatAuditScore } from "./audit-score.js";
 import {
   autoTriggerPrompts,
@@ -1426,8 +1427,6 @@ async function runLint(
   const json = flags.includes("--json");
   const silent = summary || json;
 
-  const files = findInstructionFiles(restArgs, config?.exclude);
-
   // P0-2: scope the surface checks (subagent contracts, skill resources, MCP, …)
   // to an explicit DIRECTORY target when one is given, instead of always scanning
   // the whole working dir and reporting surfaces the user didn't point at. Only a
@@ -1449,7 +1448,8 @@ async function runLint(
   // not a hard-coded Claude Code default. A subagent-surface rule reports n/a
   // on a harness without subagents (Codex) rather than scanning nothing. Detect
   // against `scanRoot` (the target), so a scoped scan of another-harness repo
-  // uses that repo's layout/dialect.
+  // uses that repo's layout/dialect. Resolved BEFORE discovering instruction
+  // files so the integrity sweep can include the harness's subagent dir (E2).
   const harnessFlag = harnessFlagFrom(flags);
   const lintSelection = resolveHarnessSelection({
     root: scanRoot,
@@ -1457,6 +1457,18 @@ async function runLint(
     configHarness: normalizeHarnessList(config?.harness),
   });
   const adapter = lintSelection.adapter;
+
+  // Discover the compiled files whose integrity is verified. Include the active
+  // harness's subagent dir (dogfood E2): a compiled `agents/<name>.md` carries a
+  // vigiles hash, but the default glob only matched CLAUDE/AGENTS/SKILL, so a
+  // hand-edit of a compiled subagent slipped past `lint`. A hand-written agent
+  // (no hash header) stays a no-op, and require-instructions-spec is filename-
+  // scoped to CLAUDE/AGENTS so agents are never falsely flagged as spec-less.
+  const files = findInstructionFiles(
+    restArgs,
+    config?.exclude,
+    adapter.layout.agentDir,
+  );
 
   // 1. Verify hashes and structure
   if (!silent) {
@@ -2297,14 +2309,21 @@ function computeRuleRouting(
 function formatAdoptableNudge(surfaces: readonly string[]): string {
   if (surfaces.length === 0) return "";
   const n = surfaces.length;
+  // Lead with the VALUE, not the chore: a spec is the pull up from the gate to
+  // the richer layer, so say what it BUYS (drift-proof references + testable),
+  // not just "create one". The invitation is where richer-feature adoption is
+  // won — keep it compelling, never a bare to-do (research/adoption-design.md §1).
   const lines = [
-    `ℹ ${String(n)} surface${n === 1 ? "" : "s"} not yet spec-managed — create specs with \`npx vigiles init\``,
-    `  (or one at a time: \`npx vigiles init --target=<path>\`)`,
+    `ℹ ${String(n)} surface${n === 1 ? "" : "s"} could be spec-managed — a spec re-verifies its references on every change (a hand-edit can't silently break them) and makes it testable.`,
+    `  Adopt now, or one at a time with \`npx vigiles init --target=<path>\`:`,
   ];
   const shown = surfaces.slice(0, 5);
   for (const s of shown) lines.push(`    • npx vigiles init --target=${s}`);
   const more = n - shown.length;
   if (more > 0) lines.push(`    • +${String(more)} more`);
+  // The remembered-decline affordance (non-evil contract): one keystroke to
+  // silence, stated where it's shown so it's never a surprise nag.
+  lines.push(`  (set "nudge": "dismissed" in .vigilesrc.json to hide this)`);
   return lines.join("\n");
 }
 
@@ -2597,9 +2616,39 @@ function harnessTestBinaries(harnesses: string[]): string {
   return (pkgs.length > 0 ? pkgs : ["@anthropic-ai/claude-code"]).join(" ");
 }
 
-function vigilesWorkflow(plan: SetupPlan, harnesses: string[]): string {
-  const harness = plan.test
+function vigilesWorkflow(
+  plan: SetupPlan,
+  harnesses: string[],
+  hasPackageJson: boolean,
+): string {
+  // The lint job — ONLY when the lint pillar is selected (dogfood I4: a
+  // `--test`-only setup must not wire a lint job).
+  const lint = plan.lint
     ? `
+  lint:
+    # Lint pillar — verify the references in your instruction files (composite
+    # Action over the published CLI). Posts a sticky PR comment + a \`valid\` output.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: zernie/vigiles@v1
+`
+    : "";
+  // The test pillar's harness job runs `*.harness.mjs` files that
+  // `import "vigiles/testing"`, so it needs vigiles RESOLVABLE — a package.json +
+  // install. A repo with no package.json can't run the JS test tier in CI at all
+  // (the import won't resolve even though the CLI itself came from npx), so the
+  // harness job is emitted ONLY when a package.json exists (Codex review / #111 /
+  // dogfood I1) — otherwise the whole job fails, not just the install step. A
+  // non-JS repo uses `audit`/`lint` (which need no toolchain — see
+  // docs/non-js-harnesses.md); it opts into the JS test tier by adding a
+  // package.json and re-running `init`.
+  const harness =
+    plan.test && hasPackageJson
+      ? `
   harness:
     # Test pillar — run your *.harness.{mjs,ts} tests against the real agent CLI and
     # a scripted mock model (deterministic, no API key). Drop this job if you only
@@ -2629,7 +2678,12 @@ function vigilesWorkflow(plan: SetupPlan, harnesses: string[]): string {
         with:
           command: eval-check
 `
-    : "";
+      : "";
+  // No selectable jobs (e.g. `--no-lint --no-test`, or `--test` on a repo with no
+  // package.json) → emit NOTHING, so `wireGha` writes no workflow. A `jobs:` with
+  // no children is rejected by GitHub Actions and would leave the repo with broken
+  // CI (Codex review). The generator never produces an invalid workflow.
+  if (lint === "" && harness === "") return "";
   return `name: vigiles
 on:
   pull_request:
@@ -2640,18 +2694,7 @@ permissions:
   contents: read
   pull-requests: write # for the sticky PR comment
 
-jobs:
-  lint:
-    # Lint pillar — verify the references in your instruction files (composite
-    # Action over the published CLI). Posts a sticky PR comment + a \`valid\` output.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - uses: zernie/vigiles@v1
-${harness}`;
+jobs:${lint}${harness}`;
 }
 
 /**
@@ -2713,6 +2756,7 @@ function wireGha(plan: SetupPlan, harnesses: string[]): string[] {
   const dir = resolve(process.cwd(), ".github", "workflows");
   const path = resolve(dir, "vigiles.yml");
   const rel = ".github/workflows/vigiles.yml";
+  const hasPackageJson = existsSync(resolve(process.cwd(), "package.json"));
   if (existsSync(path)) {
     const content = readFileSync(path, "utf-8");
     const removed = workflowRemovedSubcommand(content);
@@ -2733,7 +2777,9 @@ function wireGha(plan: SetupPlan, harnesses: string[]): string[] {
       );
     } else if (workflowUsesStaleApi(content)) {
       if (plan.force) {
-        writeFileSync(path, vigilesWorkflow(plan, harnesses));
+        const regenerated = vigilesWorkflow(plan, harnesses, hasPackageJson);
+        if (regenerated === "") return []; // no jobs → leave the stale file, don't write an empty one
+        writeFileSync(path, regenerated);
         console.log(`✓ Regenerated ${rel} (was a stale bare \`npx vigiles\`)`);
         return [rel];
       }
@@ -2748,8 +2794,14 @@ function wireGha(plan: SetupPlan, harnesses: string[]): string[] {
     }
     return [];
   }
+  const workflow = vigilesWorkflow(plan, harnesses, hasPackageJson);
+  if (workflow === "") {
+    // No selectable jobs (no-pillar setup, or a test-only run on a repo with no
+    // package.json) → don't write an invalid empty-`jobs:` workflow.
+    return [];
+  }
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(path, vigilesWorkflow(plan, harnesses));
+  writeFileSync(path, workflow);
   console.log(
     "✓ Created .github/workflows/vigiles.yml (uses zernie/vigiles@v1)",
   );
@@ -3309,18 +3361,34 @@ function ensureVigilesDevDep(): string[] {
   return ["package.json"];
 }
 
-/** Which harnesses to set up: an explicit `--harness=` list, else auto-detected
+/** Map a canonical harness name (as stored in `.vigilesrc.json`, e.g.
+ * `claude-code`) back to the SHORT working form the install/plan path keys on
+ * (`claude`). Everything else passes through trimmed + lowercased. */
+function shortHarness(name: string): string {
+  const n = name.trim().toLowerCase();
+  return n === "claude-code" ? "claude" : n;
+}
+
+/** Which harnesses to set up, in precedence order: an explicit `--harness=`
+ * list, else an EXISTING `.vigilesrc.json` `harness` key, else auto-detected
  * from the repo (Claude Code / Codex), defaulting to Claude Code. */
 function resolveHarnesses(
   parsed: ParsedSetupArgs,
   detected: DetectedProject,
+  configHarness?: string | readonly string[],
 ): string[] {
   if (parsed.harness) {
-    return parsed.harness
-      .split(",")
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
+    return parsed.harness.split(",").map(shortHarness).filter(Boolean);
   }
+  // Honor an EXISTING config `harness` before re-detecting (dogfood I3):
+  // re-running `init` on a repo that already declares its harness must target
+  // that, not silently re-detect a different set. Config stores the CANONICAL
+  // name (`claude-code`); the install/plan path keys on the SHORT form
+  // (`claude`), so map it back.
+  const fromConfig = [
+    ...new Set(normalizeHarnessList(configHarness).map(shortHarness)),
+  ];
+  if (fromConfig.length > 0) return fromConfig;
   const set = new Set<string>();
   if (
     detected.hasClaude ||
@@ -3426,7 +3494,8 @@ async function setup(args: string[]): Promise<void> {
 
   // Plan: defaults → flags → interactive prompts (only a human at a TTY).
   let plan = resolvePlan(parsed);
-  if (shouldPrompt(parsed, process.stdin.isTTY ?? false)) {
+  const prompted = shouldPrompt(parsed, process.stdin.isTTY ?? false);
+  if (prompted) {
     plan = resolvePlan(parsed, await promptSetup());
   }
   // Read strict from the RESOLVED plan, not the raw flag — an interactive "yes"
@@ -3441,18 +3510,24 @@ async function setup(args: string[]): Promise<void> {
     `vigiles setup${strict ? " (strict)" : ""} — pillars: ${pillars}\n`,
   );
 
-  // Detect project.
+  // Detect project. An existing `.vigilesrc.json` `harness` (from a prior init /
+  // a hand-authored config) wins over auto-detection (dogfood I3).
   const detected = detectProject();
-  const harnesses = resolveHarnesses(parsed, detected);
+  const harnesses = resolveHarnesses(parsed, detected, loadConfig().harness);
   printDetection(detected, harnesses);
 
   // Files actually written, accumulated for an honest commit hint.
   const written: string[] = [];
 
-  // Lint pillar — verify instruction-file references.
+  // Lint pillar. The integrity GATE (structural rules on your raw files + CI +
+  // devDep, written below) is what `lint` needs — it reads skills/agents/hooks
+  // as-is, no spec required. Scaffolding typed specs (setupPillar1) is the INVITED
+  // layer (`scaffoldSpecs`, on under `--strict` / the wizard's "full"), so a
+  // gate-first `init` (or `init --no-plugin --no-test`) never forces a spec + a
+  // compiled artifact on an existing harness. See `gate-first-adoption`.
   let targets: string[] = [];
   let adopted: string[] = [];
-  if (plan.lint) {
+  if (plan.lint && plan.scaffoldSpecs) {
     console.log("");
     const p1 = await setupPillar1(detected, parsed.target, harnesses);
     targets = p1.specTargets;
@@ -3510,6 +3585,23 @@ async function setup(args: string[]): Promise<void> {
   });
 
   printSetupSummary({ plan, strict, targets, adopted, written });
+
+  // Surface the OTHER mode so both directions are discoverable — the two branches
+  // are mutually exclusive (a run is either gate-only or full):
+  //   • a gate-only setup → a ONE-LINE nudge to graduate to the full layer;
+  //   • a NON-INTERACTIVE full setup → name `--ci-only`, because an agent/CI took the
+  //     full default WITHOUT seeing the wizard's "gate vs full" fork, so it would
+  //     otherwise never learn the flag exists (the discovery gap for the agent path).
+  // Both are informational, never a prompt (a headless run must not hang), and the
+  // interactive human who already chose "full" isn't re-nudged. See `gate-first-adoption`.
+  const invite = gateOnlyInvitation(plan);
+  if (invite) {
+    console.log(`\n${invite}`);
+  } else if (!prompted) {
+    console.log(
+      "\nℹ Ran the standard setup. Already have a harness, or not a JS/Python repo, and want only the CI integrity gate (nothing installed)? Re-run `npx vigiles init --ci-only`.",
+    );
+  }
 }
 
 /** Canonical, de-duplicated harness list → a config value (string when one). */
@@ -4594,8 +4686,13 @@ async function countGuidanceRules(silent = false): Promise<number> {
 function findInstructionFiles(
   restArgs: string[],
   exclude: readonly string[] = [],
+  agentDir = "",
 ): string[] {
   const patterns = ["**/CLAUDE.md", "**/AGENTS.md", "**/SKILL.md"];
+  // Include the active harness's subagent dir so a COMPILED `agents/<name>.md`
+  // (a vigiles-hashed file) is integrity-checked (dogfood E2). Empty for a
+  // harness without subagents (Codex agentDir === ""), so nothing is added there.
+  if (agentDir !== "") patterns.push(`**/${agentDir}/*.md`);
   // `exclude` (from .vigilesrc.json) drops vendored/benchmark fixtures the repo's
   // own lint shouldn't police — a third-party CLAUDE.md isn't held to require-instructions-spec.
   // node_modules/dist/.git stay always-excluded.
@@ -4636,6 +4733,25 @@ function flagValue(args: string[], name: string): string | undefined {
  * degrades honestly ("unavailable") when absent. The OSS-testing front door:
  * `vigiles audit ./plugin --prompts=p.json` (interactive — say yes when asked).
  */
+/**
+ * Resolve the adapter for a COMMAND, honouring the full precedence: `--harness=`
+ * flag → `.vigilesrc.json` `harness` → auto-detect (dogfood A/I3). This is the
+ * ONE resolution path a command may use — resolving via the raw auto-detect
+ * alone silently ignores config.harness, which is the exact bug this closes.
+ * A dogfood test (src/cli-harness-resolution.test.ts) asserts cli.ts routes all
+ * command harness resolution through here, so a future command can't regress.
+ */
+function resolveCommandHarness(
+  dir: string,
+  harnessFlag: string | undefined,
+): HarnessSelection {
+  return resolveHarnessSelection({
+    root: dir,
+    flag: harnessFlag,
+    configHarness: normalizeHarnessList(loadConfig().harness),
+  });
+}
+
 async function handleMeasure(
   restArgs: string[],
   args: string[],
@@ -4643,9 +4759,7 @@ async function handleMeasure(
   const dir = resolve(restArgs[0] ?? ".");
   const json = args.includes("--json");
   const harnessFlag = harnessFlagFrom(args);
-  const adapter = harnessFlag
-    ? resolveAdapter(dir, harnessFlag)
-    : detectAdapterResult(dir).adapter;
+  const adapter = resolveCommandHarness(dir, harnessFlag).adapter;
   const harness: ProbeHarness =
     adapter.name === "codex" ? "codex" : "claude-code";
 
@@ -4865,9 +4979,7 @@ async function refreshHarnessGenIfPresent(
   const fullOut = resolve(dir, HARNESS_GEN_FILENAME);
   if (!existsSync(fullOut)) return true; // opt-in: nothing to refresh
 
-  const adapter = harnessFlag
-    ? resolveAdapter(dir, harnessFlag)
-    : detectAdapterResult(dir).adapter;
+  const adapter = resolveCommandHarness(dir, harnessFlag).adapter;
   const model = await loadHarnessModel(
     dir,
     (abs) =>
@@ -4911,9 +5023,7 @@ async function handleGenerateHarness(
   // capability lattice is computed against the right dialect — never defaulting
   // to Claude Code in core. The dialect is INJECTED into the generator.
   const harnessFlag = harnessFlagFrom(args);
-  const adapter = harnessFlag
-    ? resolveAdapter(dir, harnessFlag)
-    : detectAdapterResult(dir).adapter;
+  const adapter = resolveCommandHarness(dir, harnessFlag).adapter;
 
   console.log(`Scanning ${labelFor(process.cwd(), dir)} for *.spec.ts...\n`);
 
@@ -5194,7 +5304,7 @@ function printUsage(command: string | undefined): void {
   console.log("");
   console.log("Commands:");
   console.log(
-    "  vigiles init [flags]           Setup project (--lint, --test, --harness=, --strict, --report-only, --no-gha, --force)",
+    "  vigiles init [flags]           Setup project (--ci-only for the CI gate only; --lint, --test, --harness=, --strict, --report-only, --no-gha, --force)",
   );
   console.log("  vigiles compile [files...]     Compile .spec.ts → .md");
   console.log(
@@ -6393,6 +6503,38 @@ function writeAuditHtml(
 }
 
 /**
+ * The audited repo's `origin` remote URL, or null when there's no remote / it
+ * isn't a git tree. Offline, best-effort — feeds the `audit` share deep-link. The
+ * pure parse lives in src/share-link.ts; this is the local read.
+ */
+/* v8 ignore start — thin git-config read; the parse is unit-tested in share-link.test.ts */
+function readOriginRemote(root: string): string | null {
+  try {
+    const { execSync } =
+      require("node:child_process") as typeof import("node:child_process");
+    const git = (cmd: string): string =>
+      execSync(cmd, {
+        cwd: root,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+    // Only share a link when the audited dir IS the git repo ROOT. For a subdir
+    // audit (`vigiles audit packages/foo` in a monorepo, or a vendored plugin)
+    // git walks UP to the enclosing repo, so `origin` names the PARENT owner/repo
+    // — the deep-link would rerun a DIFFERENT audit for the recipient and show a
+    // different grade. Suppress it there (Codex review); the link carries only
+    // owner/repo, so it can't disambiguate a subdirectory anyway.
+    if (resolve(git("git rev-parse --show-toplevel")) !== resolve(root)) {
+      return null;
+    }
+    return git("git config --get remote.origin.url") || null;
+  } catch {
+    return null;
+  }
+}
+/* v8 ignore stop */
+
+/**
  * Start the live (`--serve`) adoption server: render the report with a per-run
  * token, serve it on loopback, and run `init` in-process when a button POSTs. The
  * security model lives in src/audit-serve.ts (token + Origin + allowlist). Blocks
@@ -6868,20 +7010,26 @@ async function main(): Promise<void> {
       } else {
         const root = resolve(targets[0]);
         const harnessFlag = harnessFlagFrom(args);
-        const det = detectAdapterResult(root);
-        const adapter = harnessFlag
-          ? resolveAdapter(root, harnessFlag)
-          : det.adapter;
+        // Honor the SAME precedence as lint/compile (dogfood A): --harness= flag,
+        // else the `.vigilesrc.json` `harness` key, else auto-detect. Previously
+        // audit auto-detected and IGNORED config.harness, so a repo that
+        // config-declares `"harness": "codex"` but carries a CLAUDE.md was still
+        // scanned as Claude Code. `resolveHarnessSelection` also carries the
+        // ambiguity/multi-target `notice` so the warning stays consistent.
+        const selection = resolveHarnessSelection({
+          root,
+          flag: harnessFlag,
+          configHarness: normalizeHarnessList(config.harness),
+        });
+        const adapter = selection.adapter;
         const report = scanPlugin(targets[0], adapter.layout, adapter.dialect, {
           sharedDirs: config.sharedDirs,
           sharedDirsRoot: sharedDirsRootFor(targets[0]),
         });
         if (!json) {
           console.log(`Detected harness: ${adapter.name}`);
-          if (!harnessFlag && det.ambiguousWith.length > 0) {
-            console.log(
-              `⚠ repo also matches: ${det.ambiguousWith.join(", ")} — override with --harness=<name>`,
-            );
+          if (selection.kind === "notice") {
+            console.log(`⚠ ${selection.notice}`);
           }
           // Freshness: warn if our hand-maintained CC catalog drifted from the
           // user's INSTALLED claude-code (read-local, best-effort, never throws).
@@ -6940,7 +7088,12 @@ async function main(): Promise<void> {
           // Adoption nudge: surfaces that exist but aren't spec-managed yet, with
           // the create-all + per-surface `init` commands (the JSON carries the
           // data in `adoptable` instead — the terminal stays human-readable).
-          const adoptNudge = formatAdoptableNudge(adoptableSurfaces);
+          // Suppressed by `nudge: "dismissed"` — the remembered-decline half of
+          // the non-evil adoption contract (a gate-only team isn't nagged).
+          const adoptNudge =
+            config.nudge === "dismissed"
+              ? ""
+              : formatAdoptableNudge(adoptableSurfaces);
           if (adoptNudge) console.log("\n" + adoptNudge);
           // A small behavioral nudge — the deterministic read can't tell whether
           // skills actually FIRE; point at the interactive measure + the API.
@@ -7183,6 +7336,22 @@ async function main(): Promise<void> {
           });
           ensureReportGitignored(process.cwd(), rel);
         }
+        // A shareable deep-link for a public GitHub repo: the in-browser demo
+        // re-runs the audit LIVE for whoever opens it, so a local result is
+        // shareable with zero upload/backend (the "can't share from localhost"
+        // gap). Offline + best-effort — read the audited repo's origin remote;
+        // print nothing when it isn't a GitHub repo (self-hosted / no remote /
+        // not a git tree). A suggestion only, never an auto-share, honest about
+        // the public requirement (the non-evil sharing contract).
+        if (!json) {
+          const share = shareLinkForRemote(readOriginRemote(root) ?? "");
+          if (share) {
+            console.log(`\nShare this grade → ${share}`);
+            console.log(
+              "  public repos — opens a live re-run for anyone, no upload",
+            );
+          }
+        }
       }
       break;
     }
@@ -7205,4 +7374,14 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+void main().catch((e: unknown) => {
+  // A thrown Error reaching the top is a user-facing failure (e.g. an unknown
+  // `--harness=`) — print the MESSAGE, not a raw stack trace (dogfood C2). Set
+  // VIGILES_DEBUG=1 to see the full stack when diagnosing a real internal bug.
+  if (process.env.VIGILES_DEBUG && e instanceof Error && e.stack) {
+    console.error(e.stack);
+  } else {
+    console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
+  }
+  process.exit(2);
+});

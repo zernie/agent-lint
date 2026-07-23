@@ -54,6 +54,42 @@ Two detectors, OR'd — a test placed **anywhere** counts:
 2. **Content-reference** — any discovered test (incl. `*.test.ts`) that names the
    skill by **path** (`skills/foo`) or **namespace** (`vigiles:foo`).
 
+## Counting an external test suite (promptfoo, a home-grown eval loop)
+
+If you already test your skills through a **separate loop** — a
+`promptfooconfig.yaml`, a home-grown `evals.json` benchmark, a Python harness —
+point `testGlobs` at those files so they count toward coverage instead of every
+surface reading as "untested":
+
+```json
+{
+  "rules": {
+    "untested-skill": [
+      "warn",
+      {
+        "testGlobs": [
+          "**/*.{harness,eval}.mjs",
+          "promptfooconfig.yaml",
+          "evals/**/*.json"
+        ]
+      }
+    ]
+  }
+}
+```
+
+A discovered file counts as covering a skill when it **names that skill by its
+path or namespace token** (`skills/foo` or `vigiles:foo`) — the same
+content-reference rule above. So an external suite counts as long as it references
+each skill by path/namespace somewhere (a comment, a `file://` path, a
+`description` field), not only by free-text prompt.
+
+> **Heads-up:** an external config that references a skill **only** by prose
+> prompt text (never its path/namespace) won't match yet, even when added to
+> `testGlobs` — add the skill's path in a comment or a `file://` reference to make
+> it count. A looser, name-based match is under consideration (it trades
+> precision, so it's not the default).
+
 ## Exemptions
 
 **Every** skill is held to this — invocation mode does **not** exempt anything. A

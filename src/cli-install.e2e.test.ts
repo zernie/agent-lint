@@ -56,10 +56,17 @@ function isNetworkFailure(e: unknown): boolean {
 test.skipIf(!skillsOk)(
   "codex install: the planned `skills add … -a codex -g -y` installs globally, not into the repo",
   (ctx) => {
-    // The command we assert is exactly the one `vigiles init` would run.
+    // The command we assert is exactly the one `vigiles init` would run. It
+    // scopes the install to the SHIPPED skills with `-s <list>` (dogfood I2, so a
+    // contributor-only skill isn't leaked) while still installing GLOBALLY (-g -y).
     const [plan] = planPluginInstall(["codex"], { hasClaude: false });
     const cmd = plan.commands[0];
-    assert.match(cmd, /^npx --yes skills add zernie\/vigiles -a codex -g -y$/);
+    // `-s` is SPACE-separated (the CLI consumes consecutive non-dash args); a
+    // comma list would be one literal skill name that matches nothing → exit 1.
+    assert.match(
+      cmd,
+      /^npx --yes skills add zernie\/vigiles -a codex -s (?:[\w][\w-]* )+-g -y$/,
+    );
     // SKILLS still install globally (asserted below, ~/.agents/skills/), but the
     // plan now also wires nudge hooks into the repo's .codex/config.toml — so it
     // touches the repo (vendors: true). The skills-are-global check stands.

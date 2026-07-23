@@ -7,10 +7,10 @@ topic: spec
 
 Design idea. Extends [`railway-subagents.md`](railway-subagents.md), which
 deliberately ships **no loop combinator** — `railway({ steps, recover })` is a
-finite step list + bounded recovery, so *termination is structural* (it cannot
+finite step list + bounded recovery, so _termination is structural_ (it cannot
 spin forever by construction). That is the safe end of the control-flow spectrum.
 This doc asks the next question: real orchestrators **do** loop
-(discover → plan → execute → verify, *until done*), and today that "until done"
+(discover → plan → execute → verify, _until done_), and today that "until done"
 is **prose**, not a checkable gate. So a `loop()` combinator has to earn its
 termination guarantee the way `railway()` gets it for free.
 
@@ -18,7 +18,7 @@ termination guarantee the way `railway()` gets it for free.
 
 A widely-shared distinction (Jason Zhou, "wtf is graph engineering") makes the
 gap crisp: **"a loop is a single-node graph with an edge back to itself"** — and
-therefore **stop conditions and verification live at the *loop* level, not the
+therefore **stop conditions and verification live at the _loop_ level, not the
 graph level.** "A graph of weak loops is just a more expensive way to produce
 slop."
 
@@ -32,21 +32,21 @@ combinator turns a **prose stop condition into a compiled one**.
 
 ```ts
 loop(
-  body,                          // a railway step / delegate() — the work per pass
+  body, // a railway step / delegate() — the work per pass
   {
-    until: cmd("npm test"),      // MUST be a deterministic gate (cmd() or a
-                                 // predicate over typed state) — NOT prose.
-    maxIters: 5,                 // MANDATORY cap — the runaway backstop.
+    until: cmd("npm test"), // MUST be a deterministic gate (cmd() or a
+    // predicate over typed state) — NOT prose.
+    maxIters: 5, // MANDATORY cap — the runaway backstop.
   },
-)
+);
 ```
 
 - **`until` must be deterministic — prose ⇒ compile error / abstain.** `until:
-  "when it looks done"` does not compile; it degrades to advisory. This mirrors
+"when it looks done"` does not compile; it degrades to advisory. This mirrors
   the two-stage adversarial gate in the rule-compiler (`@vigiles/compiler`): if a
   condition can't be expressed as a checkable predicate, vigiles refuses to claim
   it enforces one, rather than emitting a fake gate.
-- **`until` compiles to a `Stop`-hook** — the loop's termination check *is* the
+- **`until` compiles to a `Stop`-hook** — the loop's termination check _is_ the
   gate, reusing the shipped `Stop`-gate emission (`skill-hook`,
   [`runtime-enforcement.md`](runtime-enforcement.md)).
 - **`maxIters` compiles to a hook-counter cap** — the same backstop shape as the
@@ -56,19 +56,19 @@ loop(
   `PreToolUse` tool-contract / purity rail (`src/adapters/claude-code/agent-runtime.ts`);
   a loop repeats the rail N times, it does not grant new authority.
 - **`assertLoopTerminates`** in `src/harness-assert.ts` — the testing-framework
-  payoff: an eval (pass^k) that the `until` gate is actually *reachable*, not just
+  payoff: an eval (pass^k) that the `until` gate is actually _reachable_, not just
   that the railway type-checks. Reuses the eval tier that would score a railway.
 
 ## Boundary (same as railway Option 3)
 
 **Do not build a loop engine.** vigiles emits + verifies the loop (the `until`
-gate, the `maxIters` cap, the per-iteration rail) and delegates *execution* to the
+gate, the `maxIters` cap, the per-iteration rail) and delegates _execution_ to the
 harness's native `Stop`-hook + state-file pattern. The moat is "the stop condition
 is a compiled gate, not prose" — not a runtime.
 
 ## Relation to the measurement / paper angle
 
-The **measurement** side — a *terminatability probe* over real agent-loop
+The **measurement** side — a _terminatability probe_ over real agent-loop
 templates (what fraction have a deterministic vs LLM-judged stop condition) — is
 the external research artifact and lives in the private KB
 (`migratsiya/papers/research/2026-07-23-deep-research-agent-control-loop-taxonomy.md`,

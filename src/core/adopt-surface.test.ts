@@ -78,6 +78,73 @@ Body.
     expect(spec.tools).toEqual(["Read", "Grep", "Glob"]);
   });
 
+  it("round-trips EVERY standard skill frontmatter field through adopt → compile → re-adopt (issue #107 class)", () => {
+    // The prevention for the #107 class — a field that compile EMITS but adopt
+    // never READS (or vice versa) silently drops on the round-trip. Populate every
+    // standard CC skill key and assert each one survives adopt → compile →
+    // re-adopt. A new field added to one side but not the other fails here.
+    const md = `---
+name: full-skill
+description: A fully specified skill covering every standard frontmatter field
+allowed-tools: Read, Grep, Glob
+context: fork
+argument-hint: <file> [flag]
+---
+
+Do the work.
+`;
+    const first = adoptSkill(md, "full-skill").spec as SkillSpec;
+    const { markdown, errors } = compileSkill(first, {
+      specFile: "skills/full-skill/SKILL.md.spec.ts",
+      dialect: claudeCodeDialect,
+    });
+    expect(errors).toEqual([]);
+    const back = adoptSkill(markdown, "full-skill").spec as SkillSpec;
+    // Every field the adopter reads must be identical after the round-trip.
+    expect(back.name).toBe(first.name);
+    expect(back.description).toBe(first.description);
+    expect(back.tools).toEqual(first.tools);
+    expect(back.context).toBe(first.context);
+    expect(back.argumentHint).toBe(first.argumentHint);
+    const bodyText = (b: SkillSpec["body"]): string =>
+      (typeof b === "string" ? b : (b ?? []).map(String).join("")).trim();
+    expect(bodyText(back.body)).toBe(bodyText(first.body));
+  });
+
+  it("round-trips allowed-tools + context: fork through adopt → compile (issue #107)", () => {
+    const md = `---
+name: reviewer
+description: Review a changed file for defects
+allowed-tools: Read, Grep, Glob
+context: fork
+---
+
+Review the file.
+`;
+    const r = adoptSkill(md, "reviewer");
+    const spec = r.spec as SkillSpec;
+    expect(spec.tools).toEqual(["Read", "Grep", "Glob"]);
+    expect(spec.context).toBe("fork");
+    // context: fork is a known key → it must NOT surface as an unmapped-key note.
+    expect(r.unmappedKeys).not.toContain("context");
+
+    const { markdown, errors } = compileSkill(spec, {
+      specFile: "skills/reviewer/SKILL.md.spec.ts",
+      dialect: claudeCodeDialect,
+    });
+    expect(errors).toEqual([]);
+    // The skill tool key is `allowed-tools` (NOT `tools:`), emitted as a real
+    // YAML sequence, and `context: fork` survives.
+    expect(markdown).toMatch(/allowed-tools: \[Read, Grep, Glob\]/);
+    expect(markdown).not.toMatch(/\ntools: /); // never the subagent key for a skill
+    expect(markdown).toContain("context: fork");
+
+    // Re-reading the compiled skill yields the SAME tool contract (full round-trip).
+    const back = adoptSkill(markdown, "reviewer").spec as SkillSpec;
+    expect(back.tools).toEqual(["Read", "Grep", "Glob"]);
+    expect(back.context).toBe("fork");
+  });
+
   it("reports a non-standard frontmatter key instead of silently dropping it", () => {
     const md = `---
 name: x
@@ -91,6 +158,24 @@ Body.
     expect(r.unmappedKeys).toContain("license");
     expect(r.source).toContain("NOTE:");
     expect(r.source).toContain("license");
+  });
+
+  it("still reports unmapped keys when the frontmatter YAML is MALFORMED (dogfood E3)", () => {
+    // An unquoted `: ` in a value makes the block invalid YAML, so js-yaml gives
+    // no parsed map — the custom key would otherwise vanish silently. The raw
+    // key-scan fallback must still surface it in the NOTE.
+    const md = `---
+name: x
+description: breaks yaml: an unquoted colon
+custom-key: keep me
+---
+
+Body.
+`;
+    const r = adoptSkill(md, "x");
+    expect(r.unmappedKeys).toContain("custom-key");
+    expect(r.source).toContain("NOTE:");
+    expect(r.source).toContain("custom-key");
   });
 
   it("uses the directory name when frontmatter has no name", () => {

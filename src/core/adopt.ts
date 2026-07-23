@@ -27,6 +27,7 @@ import {
   type FrontmatterRead,
 } from "./frontmatter-read.js";
 import { skill, agent, type SkillSpec, type AgentSpec } from "./spec.js";
+import { fencedLineFlags } from "./markdown.js";
 
 export type AdoptTier = "structured" | "raw";
 
@@ -71,7 +72,6 @@ interface Block {
 // A top-level heading is `#` or `##` (the levels the compiler reserves for
 // document/section structure). `###`+ stay inside a section body.
 const HEADING_RE = /^ {0,3}(#{1,2})\s+(.*)$/;
-const FENCE_RE = /^ {0,3}(?:`{3,}|~{3,})/;
 
 // Mirrors compile.ts RESERVED_SECTION_KEYS — keys that clash with the structured
 // `commands`/`keyFiles`/`rules` fields and would be a compile error as a section.
@@ -91,14 +91,14 @@ const RESERVED_SECTION_KEYS = new Set([
 function splitIntoBlocks(body: string): Block[] {
   const blocks: Block[] = [];
   let current: Block = { heading: null, level: null, lines: [] };
-  let inFence = false;
-  for (const line of body.split("\n")) {
-    if (FENCE_RE.test(line)) {
-      inFence = !inFence;
-      current.lines.push(line);
-      continue;
-    }
-    const m = inFence ? null : line.match(HEADING_RE);
+  const lines = body.split("\n");
+  const fenced = fencedLineFlags(body);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // A heading only splits when it is NOT inside a fenced code block. Fence
+    // lines (and everything inside) stay as verbatim content of the current
+    // block — matching the prior behavior, but fence-correct on nesting.
+    const m = fenced[i] ? null : line.match(HEADING_RE);
     if (m) {
       blocks.push(current);
       current = {
@@ -343,12 +343,35 @@ const AGENT_KNOWN_KEYS = new Set([
   "disallowed-tools",
 ]);
 
+/**
+ * Top-level `key:` names from a raw frontmatter block (column-0 only, so nested
+ * map entries and `- list` items are ignored). The fallback for a MALFORMED block
+ * where js-yaml gave us no parsed map — without it every key would be silently
+ * dropped from the NOTE (dogfood E3).
+ */
+function rawTopLevelKeys(block: string): string[] {
+  const keys: string[] = [];
+  for (const line of block.split("\n")) {
+    const m = /^([A-Za-z0-9_-]+)\s*:/.exec(line);
+    if (m) keys.push(m[1]);
+  }
+  return [...new Set(keys)];
+}
+
 function unmappedFrontmatterKeys(
   fm: FrontmatterRead,
   known: Set<string>,
 ): string[] {
-  if (!fm.data) return [];
-  return Object.keys(fm.data).filter((k) => !known.has(k));
+  // Valid YAML → the parsed keys.
+  if (fm.data) return Object.keys(fm.data).filter((k) => !known.has(k));
+  // Malformed YAML (data === null but a block is present): the parsed map is
+  // empty, so EVERY unmapped key would otherwise vanish silently from the NOTE
+  // (dogfood E3). Recover the top-level key names from the raw block so the user
+  // is told which frontmatter didn't survive adoption.
+  if (fm.block !== null) {
+    return rawTopLevelKeys(fm.block).filter((k) => !known.has(k));
+  }
+  return [];
 }
 
 /** A `// NOTE:` banner naming any frontmatter keys we couldn't represent. */
@@ -386,6 +409,11 @@ export function adoptSkill(
   const argumentHint = frontmatterScalar(fm, "argument-hint");
   const disableModelInvocation =
     frontmatterScalar(fm, "disable-model-invocation") === "true";
+  // `context: fork` is a supported skill key (a forked skill runs as a subagent);
+  // `"fork"` is the only valid value. Previously it was in SKILL_KNOWN_KEYS but
+  // never read, so an existing SKILL.md's `context: fork` was silently dropped on
+  // adopt with NO unmapped-key warning (the key was falsely marked "known"). (#107)
+  const isFork = frontmatterScalar(fm, "context") === "fork";
   const unmappedKeys = unmappedFrontmatterKeys(fm, SKILL_KNOWN_KEYS);
 
   const lines = [
@@ -394,6 +422,7 @@ export function adoptSkill(
   ];
   if (argumentHint)
     lines.push(`  argumentHint: ${JSON.stringify(argumentHint)},`);
+  if (isFork) lines.push(`  context: "fork",`);
   if (disableModelInvocation) lines.push(`  disableModelInvocation: true,`);
   if (tools && tools.length > 0)
     lines.push(`  tools: ${JSON.stringify(tools)},`);
@@ -404,6 +433,7 @@ export function adoptSkill(
     name,
     description,
     ...(argumentHint ? { argumentHint } : {}),
+    ...(isFork ? { context: "fork" as const } : {}),
     ...(disableModelInvocation ? { disableModelInvocation: true } : {}),
     ...(tools && tools.length > 0 ? { tools } : {}),
     ...(trimmedBody ? { body: trimmedBody } : {}),

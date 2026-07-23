@@ -1,5 +1,9 @@
 {
   "name": "vigiles",
+  "owner": {
+    "name": "zernie",
+    "url": "https://github.com/zernie"
+  },
   "metadata": {
     "description": "Tools for AI-assisted development feedback loops"
   },

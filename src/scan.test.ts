@@ -243,6 +243,50 @@ test("scanPlugin reports skills with description + user-invoked flags", () => {
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin reports the REAL on-disk surface path, not the phantom .claude/ key (dogfood E1)", () => {
+  // A root-kind plugin materializes `agents/*.md` + `skills/*/SKILL.md` under a
+  // synthetic `.claude/…` key (the layout's materializeRoot) that does NOT exist
+  // on disk. The reported `.path` must be the real repo-relative path so a
+  // diagnostic / GitHub annotation points at a file that actually exists.
+  const dir = fixture();
+  try {
+    const r = scanPlugin(dir);
+    for (const a of r.agents) {
+      assert.ok(
+        a.path.startsWith("agents/") && !a.path.startsWith(".claude/"),
+        `agent path should be the real agents/… path, got "${a.path}"`,
+      );
+    }
+    for (const s of r.skills) {
+      assert.ok(
+        s.path.startsWith("skills/") && !s.path.startsWith(".claude/"),
+        `skill path should be the real skills/… path, got "${s.path}"`,
+      );
+    }
+    // The frontmatter-family findings must ALSO carry the real path, in both the
+    // path field and the embedded message (nodesc has no description → skillMeta).
+    const allFindingPaths = [
+      ...r.frontmatterIssues,
+      ...r.frontmatterValueIssues,
+      ...r.skillMetaIssues,
+      ...r.malformedFrontmatter,
+    ];
+    assert.ok(allFindingPaths.length > 0, "the fixture produces such findings");
+    for (const f of allFindingPaths) {
+      assert.ok(
+        !f.path.startsWith(".claude/"),
+        `finding path should not be the phantom .claude/ key, got "${f.path}"`,
+      );
+      assert.ok(
+        !("message" in f && f.message?.includes(".claude/")),
+        `finding message should not embed the phantom .claude/ path: "${String((f as { message?: string }).message)}"`,
+      );
+    }
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
 test("scanPlugin reads a YAML block-scalar description (not just `>`)", () => {
   // Regression: wshobson/agents skills commonly write `description: >` / `>-`
   // folded blocks. The naive regex captured only the indicator, mislabeling a
@@ -333,6 +377,48 @@ test("scanPlugin treats an existence-guarded hook command as optional, not missi
   );
   assert.equal(r.inlineHooks, 1, "counted as a conditional one-liner");
   cleanupTmpDir(dir);
+});
+
+test("scanPlugin does not flag a glob pattern in a hook command as a missing script (dogfood D1)", () => {
+  // A hook command that MENTIONS a glob — `find . -name "*.js"` — must not have
+  // `"*.js"` grabbed as a script path and reported missing. The real script
+  // (present.sh) still resolves ok.
+  const dir = makeTmpDir("scan-globhook");
+  try {
+    write(dir, "hooks/present.sh", "#!/usr/bin/env bash\n");
+    write(
+      dir,
+      ".claude-plugin/plugin.json",
+      JSON.stringify({
+        name: "x",
+        hooks: {
+          PostToolUse: [
+            {
+              matcher: "Edit",
+              hooks: [
+                {
+                  type: "command",
+                  command:
+                    'bash ${CLAUDE_PLUGIN_ROOT}/hooks/present.sh && find . -name "*.js" -newer /tmp/x',
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    const r = scanPlugin(dir);
+    assert.ok(
+      !r.hooks.some((h) => h.status === "missing"),
+      "a glob pattern in the command must not be read as a missing script",
+    );
+    assert.ok(
+      r.hooks.some((h) => h.script.includes("present.sh") && h.status === "ok"),
+      "the real hook script still resolves ok",
+    );
+  } finally {
+    cleanupTmpDir(dir);
+  }
 });
 
 test("isManagedHookCommand: only a hook-runtime invocation is vigiles-managed", () => {

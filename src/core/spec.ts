@@ -21,6 +21,10 @@ type BuiltinLinter =
   | "clippy"
   | "pylint"
   | "rubocop"
+  | "detekt"
+  | "ktlint"
+  | "checkstyle"
+  | "golangci-lint"
   | "cedar";
 
 /** Scoped ESLint plugin prefix (e.g., @typescript-eslint). */

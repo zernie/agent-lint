@@ -9,6 +9,7 @@
  */
 
 import { FORM_HEAD, RULE_PREDICATE } from "./rule-signals.js";
+import { fencedLineFlags } from "./core/markdown.js";
 
 /** A single atomic candidate rule extracted from an instructions file. */
 export interface SegmentedRule {
@@ -771,20 +772,16 @@ export function segmentInstructions(
   const out: SegmentedRule[] = [];
   const skipped: SkippedBullet[] = [];
 
-  let inFence = false;
+  const fenced = fencedLineFlags(markdown);
   let heading: HeadingState = { ruleish: false, antiContext: false };
   let i = 0;
 
   while (i < lines.length) {
     const line = lines[i];
 
-    // Code fences: toggle and skip everything inside (incl. the fence lines).
-    if (FENCE.test(line)) {
-      inFence = !inFence;
-      i++;
-      continue;
-    }
-    if (inFence) {
+    // Code fences: skip everything inside (incl. the fence lines), via the
+    // shared fence oracle — correct on nested/unbalanced fences.
+    if (fenced[i]) {
       i++;
       continue;
     }

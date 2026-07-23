@@ -20,9 +20,9 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { langForFile, fileDefinesSymbol } from "./symbols.js";
+import { fencedLineFlags } from "./markdown.js";
 import type { RuleSeverity } from "./types.js";
 
-const FENCE = /^\s*```/;
 const SPAN = /`([^`\n]+)`/g;
 
 /** An inline code span with its 1-based source line. */
@@ -37,14 +37,10 @@ export interface Span {
  */
 export function inlineSpans(markdown: string): Span[] {
   const spans: Span[] = [];
-  let inFence = false;
   const lines = markdown.split("\n");
+  const fenced = fencedLineFlags(markdown);
   for (let i = 0; i < lines.length; i++) {
-    if (FENCE.test(lines[i])) {
-      inFence = !inFence;
-      continue;
-    }
-    if (inFence) continue;
+    if (fenced[i]) continue;
     for (const m of lines[i].matchAll(SPAN)) {
       spans.push({ text: m[1].trim(), line: i + 1 });
     }

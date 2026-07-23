@@ -156,6 +156,24 @@ const PERMISSION_DENY = /"permissionDecision"\s*:\s*"(deny|ask)"/;
  * @param opts    - Injected sets of blocking/permission events, and the required
  *                  `readFileSync` (disk caller: node:fs; browser: map-backed).
  */
+/**
+ * Drop FULL-LINE comments (a line whose first non-whitespace char is `#` — shell /
+ * Python / Ruby — or `//` — JS) before scanning for block mechanisms, so an
+ * `exit 2` merely MENTIONED in a comment/shebang isn't read as a real block
+ * attempt (dogfood D2). Deliberately full-line only: a real `exit 2` statement
+ * never starts with `#`, and stripping inline `# …` would risk removing a `#`
+ * inside a quoted string (under-detecting a genuine block).
+ */
+function stripFullLineComments(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => {
+      const t = line.trimStart();
+      return !t.startsWith("#") && !t.startsWith("//");
+    })
+    .join("\n");
+}
+
 export function hookBlockIssues(
   entries: readonly HookScriptEntry[],
   opts: HookBlockOptions,
@@ -168,10 +186,12 @@ export function hookBlockIssues(
   for (const entry of entries) {
     // Determine the script text and the canonical "path" label for findings.
     const scriptPath = entry.scriptPath ?? null;
-    const text =
+    const rawText =
       scriptPath !== null ? readFile(scriptPath) : (entry.command ?? "");
 
-    // Detect block mechanisms.
+    // Detect block mechanisms on the code with full-line comments removed, so an
+    // `exit 2` only talked about in a comment/shebang isn't a false "block".
+    const text = stripFullLineComments(rawText);
     const hasExit2 = EXIT_2.test(text) || EXIT_2_CODE.test(text);
     const hasDecisionBlock = DECISION_BLOCK.test(text);
     const hasPermissionDeny = PERMISSION_DENY.test(text);

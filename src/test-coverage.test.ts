@@ -246,6 +246,8 @@ test("formatUntestedReport: clean vs flagged, suggestedTestPath", () => {
   const text = formatUntestedReport(flagged);
   assert.ok(text.includes("1 surface(s) with no test"));
   assert.ok(text.includes("skills/foo/foo.eval.mjs"));
+  // The footer points at testGlobs for an external test loop (issue #113).
+  assert.ok(text.includes("testGlobs"));
   assert.equal(
     suggestedTestPath(flagged.untested[0]),
     "skills/foo/foo.eval.mjs",

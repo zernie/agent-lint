@@ -11,8 +11,12 @@ const VERBS: {
   model: string;
   /** What the verb actually does, in plain words. */
   detail: string;
-  /** A concrete one-liner of what it catches / proves. */
-  example: string;
+  /** The broken / unproven state vigiles CATCHES (rendered red). */
+  before: string;
+  /** The correct / verified state you reach (rendered green). vigiles tells
+   *  red from green — it doesn't rewrite your code, so "after" is the fix,
+   *  never an auto-fix. */
+  after: string;
   /** An optional "read more" link shown under the example. */
   link?: { href: string; label: string };
 }[] = [
@@ -22,8 +26,8 @@ const VERBS: {
     model: "no model · read-only · anytime",
     detail:
       "The zero-config front door. One command reads your whole harness and grades it across five categories — truthful references, skills that trigger, sound structure, safety, test coverage. Nothing executes; it's a local report, like Lighthouse.",
-    example:
-      'a hook registered on event "Setup" — which doesn\'t exist, so it never fires',
+    before: 'hook on event "Setup" — no such event, never fires',
+    after: 'hook on event "SessionStart" — fires every session',
   },
   {
     verb: "lint",
@@ -31,8 +35,8 @@ const VERBS: {
     model: "no model · CI gate, every push",
     detail:
       "The CI gate. The same deterministic checks as audit, but as a build step that FAILS the PR when something's broken — a subagent pointing at a tool that doesn't exist, a hook on a misspelled event, two skills that collide. No model, runs on every push.",
-    example:
-      "✗ subagent 'reviewer' lists tool AskUserQuestion — never available → build fails",
+    before: "subagent tools: [AskUserQuestion] — not a real tool → build fails",
+    after: "subagent tools: [Read, Grep] — real tools → build passes",
   },
   {
     verb: "test",
@@ -40,8 +44,9 @@ const VERBS: {
     model: "no model · scripted stand-in · every commit",
     detail:
       "Runs your actual hooks and skills against a scripted stand-in model — deterministic, no API key. Proves a safety hook really blocks a dangerous command, or that a skill wires into the assembled machine and fires. The cheap middle tier: real harness, fake model.",
-    example:
-      "assert the pre-push hook blocks `git push --force` → it does (exit 2) ✓",
+    before:
+      "pre-push hook exits 1 on `git push --force` — looks like it blocks",
+    after: "pre-push hook exits 2 — actually blocks the push",
   },
   {
     verb: "eval",
@@ -49,8 +54,8 @@ const VERBS: {
     model: "needs a model · your subscription · on demand",
     detail:
       "The one tier that needs a real model — run on YOUR Claude subscription, not a metered API. Measures whether a skill's description makes it FIRE when it should (recall) and stay quiet otherwise (precision), and whether its guidance actually moves the agent's behavior — so you can tell a real win from a claimed one.",
-    example:
-      "a skill claimed −75% tokens · measured: −6% (your model's output is <1% of the bill)",
+    before: "skill claims −75% tokens — an unverified number in a README",
+    after: "measured −6% — the real number, on your own model",
     link: {
       href: "https://zernie.com/blog/token-savings-wrong-number/",
       label: "Read the measurement",
@@ -104,8 +109,20 @@ export function VerbMap() {
                 <p className="text-sm leading-relaxed text-muted-foreground">
                   {v.detail}
                 </p>
-                <pre className="mt-3 whitespace-pre-wrap break-words rounded-md border border-border bg-card/50 px-3 py-2 font-mono text-xs leading-relaxed text-foreground">
-                  {v.example}
+                {/* Before → after: red = the broken/unproven state vigiles
+                    CATCHES, green = the correct state you reach. Kept inside a
+                    <pre> so the 390px mobile-wrap gate covers it. */}
+                <pre className="mt-3 grid gap-1 whitespace-pre-wrap break-words rounded-md border border-border bg-card/50 px-3 py-2 font-mono text-xs leading-relaxed">
+                  <span className="text-red-400">
+                    <span aria-hidden>✗ </span>
+                    <span className="sr-only">before: </span>
+                    {v.before}
+                  </span>
+                  <span className="text-emerald-400">
+                    <span aria-hidden>✓ </span>
+                    <span className="sr-only">after: </span>
+                    {v.after}
+                  </span>
                 </pre>
                 {v.link && (
                   <a

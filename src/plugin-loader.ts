@@ -440,6 +440,29 @@ function isPluginRooted(content: string, idx: number): boolean {
 // obra/superpowers' `hooks/session-start`) IS a real file op — those we scan.
 const DOC_SOURCE_RE = /\.(?:md|markdown|mdx|txt|rst)$/i;
 
+// A `.sh`/`.bash`/`.cmd` SCRIPT's own `#`-led comments are prose, not code — a
+// usage comment (`# bash skills/<plugin>/hooks/setup.sh`, written as it would be
+// invoked from the REPO CHECKOUT root) is not a real file operation any more than
+// a path mentioned in a doc file is (issue #110). Narrowly scoped to the shell/cmd
+// shapes that conventionally use `#` for a comment (unlike e.g. `.mjs`/`.js`).
+const SCRIPT_COMMENT_RE = /\.(?:sh|bash|cmd)$/i;
+
+/**
+ * Drop FULL-LINE `#` comments (including the shebang, which also starts with
+ * `#`) from a `.sh`/`.bash`/`.cmd` script's content before it's scanned for
+ * intra-plugin refs — a line whose first non-whitespace character is `#` is
+ * prose, never a real command. Full-line only: a `#` inside a quoted string
+ * mid-line is left alone, so a genuine ref on a real code line is never
+ * dropped. Mirrors `hookBlockIssues`' `stripFullLineComments` discipline
+ * (core/hook-block-ineffective.ts).
+ */
+function stripShellComments(content: string): string {
+  return content
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n");
+}
+
 /**
  * Intra-plugin file references that don't resolve — the partial-vendor / broken-
  * path class (e.g. obra/superpowers' `hooks/session-start` reads
@@ -452,12 +475,34 @@ const DOC_SOURCE_RE = /\.(?:md|markdown|mdx|txt|rst)$/i;
  * static check that would have caught a bug the dogfood hit twice. Best-effort:
  * a warning, not an error.
  */
+/**
+ * Whether ref `ref` (a matched intra-plugin path) resolves under `root` — the
+ * direct plugin-relative reading first, then, as a fallback (issue #110), a
+ * REPO-CHECKOUT-RELATIVE reading: a usage comment/echo written as it would run
+ * from the repo root (`skills/<plugin>/hooks/setup.sh`) echoes the PLUGIN'S OWN
+ * containing surface dir + directory name ahead of the real plugin-relative
+ * path (`hooks/setup.sh`) — joining that straight onto `root` double-roots it
+ * and always misses. When the ref's first two segments are `<surfaceDir>/<name>`
+ * and `<name>` is this plugin's own directory name, strip them and retry. BOTH
+ * readings must miss before we call it dangling, so a genuinely broken ref is
+ * never masked by the fallback.
+ */
+function resolvesUnderRoot(ref: string, root: string): boolean {
+  if (existsSync(join(root, ref))) return true;
+  const segs = ref.split("/");
+  if (segs.length > 2 && segs[1] === basename(root)) {
+    const rest = segs.slice(2).join("/");
+    if (rest.length > 0 && existsSync(join(root, rest))) return true;
+  }
+  return false;
+}
+
 /** Path refs in `content` (matched by `re`) that don't resolve under `root`. */
 function missingRefsIn(content: string, re: RegExp, root: string): string[] {
   const out: string[] = [];
   for (const m of content.matchAll(re)) {
     if (m.index !== undefined && !isPluginRooted(content, m.index)) continue;
-    if (!existsSync(join(root, m[0]))) out.push(m[0]);
+    if (!resolvesUnderRoot(m[0], root)) out.push(m[0]);
   }
   return out;
 }
@@ -472,7 +517,10 @@ function executableSources(
     const dir = join(root, surface);
     if (!existsSync(dir) || !statSync(dir).isDirectory()) continue;
     for (const [path, content] of Object.entries(readTree(dir, root))) {
-      if (!DOC_SOURCE_RE.test(path)) sources[path] = content; // skip prose
+      if (DOC_SOURCE_RE.test(path)) continue; // skip prose
+      sources[path] = SCRIPT_COMMENT_RE.test(path)
+        ? stripShellComments(content)
+        : content;
     }
   }
   return sources;

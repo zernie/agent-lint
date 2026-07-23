@@ -16,62 +16,92 @@
 ## RESUME HERE
 
 **`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
-via `pages.yml` on push to main.
+via `pages.yml` on push to main. Demo UX + real-F default MERGED (PRs #100–#106).
 
-**DEMO UX REDESIGN is FULLY MERGED (PRs #100–#105, all squashed to `main`).** The live in-browser "grade any repo"
-demo + `@vigiles/report-view` + the founder-driven cohesive overhaul all shipped. Branch
-`claude/click-not-working-s9apfb` is now MERGED history — **restart it from `main` for any follow-up**
-(`git fetch origin main && git checkout -B claude/click-not-working-s9apfb origin/main`).
+**Branch `claude/click-not-working-s9apfb`: PR #114 — MERGE-IMMINENT (github.com/zernie/vigiles/pull/114), ~60 commits.**
+Merge conflict with main RESOLVED (only the compiled `research/CLAUDE.md`; main's #115 `loop-combinator.md`
+merged into the spec → recompiled), `origin/main` merged in, local full suite GREEN (2343 passed). CI running on
+the merge commit; auto-merge is OFF on the repo so MERGE MANUALLY (squash) when all 7 checks pass — closes
+#107/#109/#110/#111/#113 (added to the PR body; session URL scrubbed). A scheduled self-check (`send_later`) polls CI.
+It carries an adoption batch (VerbMap · OG card · share deep-link · dismissible nudge · full-HTML rules · leaderboard
+drill-in), the `--ci-only` opt-in, the DOGFOOD batch below, Vlad's 5 issues, AND this session's PREVENTION work:
+**one markdown-it fence oracle** replacing 5 copy-pasted `inFence` toggles (`src/core/markdown.ts` +
+`parse-structured-input-with-a-real-parser` rule) and **one js-yaml `parseDetektConfig`** replacing 3 regex parsers
+(fixes 2 Codex review P2s).
 
-**This session (2026-07-22): the cohesive demo overhaul + CI-hardening (landed via #102–#105).**
+**⚠️ DEFERRED FOLLOW-UP (founder chose patch-now + roadmap-P0): the linter subsystem is NOT hexagonal** — a linter is
+smeared across ~7 code sites in 3 files + 2 docs with NOTHING enforcing completeness (3 agent audits confirmed:
+architecture/test/doc). Founder's call: (1) PATCH the current holes as a fast FOLLOW-UP PR — 5 stale "7 catalogs"
+refs (`spec-format.md:316`, `verifying-instruction-files.md:83/144`, `examples/CLAUDE.md.spec.ts` ×3,
+`CLAUDE.md.spec.ts:173` keyfile, `skills/linter-docs/SKILL.md:3`), a new-4 capability-tier table + non-js caveats, and
+the golangci type-gen / ktlint+checkstyle missing-binary test gaps; (2) the STRUCTURAL fix is **roadmap P0**:
+`research/linter-adapter-architecture.md` — a `LinterAdapter` port + `Record<BuiltinLinter, LinterAdapter>` registry
+(missing = tsc error) + conformance loop, mirroring HarnessAdapter/rule-meta. Do as its OWN PR off main after #114.
 
-- **Credibility fix** — the report REVEALS every finding (not just names it) + a real verdict engine
-  (`src/audit-verdict.ts`): only claims "clean" at `overall===100`, else "A — nothing blocks, but N X flagged".
-  Added an additive `brokenReferences?: string[]` (from `report.danglingRefs`) so the report shows the concrete
-  broken path (e.g. superpowers → `skills/using-superpowers/SKILL.md`).
-- **Folded the model-gated tease into the report** (`LockedRow` in `report-view/src/Report.tsx`), stacks on mobile,
-  copies a `TRIGGER_RATE_PROMPT` (runs `measureTriggerRate`, not the read-only audit).
-- **Live stars on featured chips** (mini-leaderboard); source-tagged frame header (`example` vs `your repo`).
-- **VerbMap** explains audit/lint/test/eval (expandable `<details>` + examples); "example" tag on the
-  "Your rules → enforced" card (illustration, not a scan).
-- **Site e2e now runs in CI** (`site` job, per founder "whattt it should be ci") + a **390px mobile-overflow gate**
-  (`site/e2e/mobile.spec.ts`) — fails on horizontal page bleed or an unwrapped `<pre>`. Verified GREEN on #105.
-- **Verb-map alignment fix** — the model note needed `sm:col-start-3`; without it, on desktop it collided with the
-  answer's grid cell and bumped the answer to a middle-indented second row. Skill now carries the responsive-grid
-  cell-collision lesson (check BOTH breakpoints — the bug hides at 390px, it's the `sm:` layout that breaks).
-- **Docs** — new `docs/commands-and-how-they-relate.md` (audit/lint/test/eval/init model + why measuring skills
-  uses `init`, not `audit`), linked from README/cli.md/index.
-- **Roadmap** — added (Later) a **backend with rate-limited LLM access** running the real `vigiles audit`
-  server-side: the ONLY way to close the demo's reference/behavioral gap (client-side prose-ref parsing is
-  undecidable; trigger-rate needs a model). Public-repo only, vigiles-funded LLM. Interim: a muted demo caveat.
+**DOGFOOD BATCH — DONE.** A 4-agent Sonnet fan-out found **14 verified, source-traced bugs**; founder's call was
+**FIX, not file**. **All 14 fixed + pushed**, each with a regression test; full `vitest` suite green (2327 passing).
+The process is now CODIFIED as `.claude/skills/dogfood-cli` (the find+fix fan-out method + every lesson).
+
+Fixed (by commit): **#108** marketplace `owner` · **#112+C3/C4/C5** config parse-don't-validate · **I2** Codex install
+`-s`-scoped to `SHIPPED_SKILLS` · **D2** hook-block exit-2-in-comment · **A/I3** `audit`+`init` honor config `harness`
+(via `resolveHarnessSelection`) · **E1 (P0)** real on-disk surface paths not the phantom `.claude/...` key (both
+`ScanAgent/ScanSkill.path` AND frontmatter-family findings, disk+browser) · **C2** clean top-level error message (no
+stack trace) + exit 2 · **D1** `hook-script-exists` ignores a glob (`find -name "*.js"`) · **E2** default `lint`
+integrity-checks compiled subagents · **E3** `init` reports unmapped frontmatter keys even on malformed YAML · **I1/I4**
+CI-workflow gates `npm install` on package.json + the lint job on the lint pillar.
+Bonus finds fixed en route: a pre-existing `scanFiles`<->`scanPlugin` parity failure (browser `ownTestSignal`), a
+literal NUL byte in scan-core (read as binary), and a missed I2 e2e assertion (only the FULL suite caught it).
+
+**VLAD'S ISSUES #107/#109/#110/#111/#113 — ALL FIXED** (fanned out per the dogfood-cli skill: #109 linters +
+#110 scan-FPs on background agents, verified + integrated). #107 skill `allowed-tools` list + `context:fork` adopt
+(1d dirty-tree deferred as founder UX) · #109 JVM/Go linter catalogs (detekt/ktlint/checkstyle/golangci-lint, 7→11) ·
+#110 example-link + shell-comment scan FPs · #111 non-JS harness guide · #113 testGlobs docs. Full suite green.
+
+**PR #114 REVIEW-FIX + PREVENTION PASS — PUSHED.** After the meta-analysis, addressed the Codex bot P2s +
+prevention: (a) skill-resource-resolves LINK RECALL — a markdown link is real UNLESS an illustrative cue (don't
+also require a use-verb, or `Resources: [API](x.md)` goes unchecked); bare inline path keeps the stricter gate; +
+recall test. (b) detekt CLI check threads `basePath` not `process.cwd()`. (c) #4 adopt-surface ROUND-TRIP GATE
+(every standard skill frontmatter field survives adopt→compile→re-adopt — the #107 drift class). (d) dogfood-cli
+skill: "two recurring bug classes" (unverified external contract → parse-don't-validate + unit shape assertion;
+incomplete fix → grep siblings + one choke-point + gate test). Full suite green (2332 passing).
+
+**⏳ PENDING FOUNDER DECISION — adopt.ts markdown parsing.** Founder flagged (correctly) that `adopt.ts`
+`splitBlocks` parses CLAUDE.md/agent BODY structure with HAND-ROLLED REGEX (`HEADING_RE`/`FENCE_RE` + manual
+fence toggle), a `prefer-existing-solutions` gap. REAL BUG exposed: the fence toggle matches any 3+ backtick run,
+so a nested/mismatched fence (4-backtick block containing ```) mis-splits a `##`inside code as a heading; setext
+headings missed too. (Skills unaffected — body is verbatim; frontmatter IS js-yaml.) FIX = swap boundary-detection
+to`markdown-it` `token.map` line ranges, keep VERBATIM slicing on source offsets (never AST-reserialize — breaks
+round-trip), add a nested-fence fixture. Tradeoff: adds 1 runtime dep to a deliberately dep-light CLI (13 deps).
+Recommended DO IT (markdown-it, browser-safe, minimal). AWAITING founder: do-on-#114 vs file-separately.
 
 **GATE-FAILURE RULE (founder, standing): if a skill/hook/rule DIDN'T CATCH an issue the founder had to spot,
-FIX THE GATE FIRST.** This session's applications: the mobile-overflow CI gate (layout bugs reached a real phone —
-S23 Ultra), and the responsive-grid alignment lesson added to `.claude/skills/landing-site`. When founder feedback
-exposes a class of bug, encode the catch (a test, a checklist item, a rule) BEFORE/ALONGSIDE the one-off fix.
+FIX THE GATE FIRST.** (e.g. the mobile-overflow CI gate + the responsive-grid lesson in `.claude/skills/landing-site`.)
 
 **FLAG (founder's call):** the PR-CREATION harness auto-appends a `claude.ai/code/session_…` URL to PR bodies
-(public no-session-links rule). Using the GitHub MCP `create/update_pull_request` (as this session did) AVOIDS it —
-those bodies are clean. If a PR is opened another way, edit the body to end at the `claude.com/claude-code` line.
+(public no-session-links rule). Using the GitHub MCP `create/update_pull_request` (as this session did) AVOIDS it.
+If a PR is opened another way, edit the body to end at the `claude.com/claude-code` line.
 
-**FETCH-TAIL DOCUMENTED — do NOT keep chasing Codex's `fetchRepo` P2s.** The browser demo's `fetchRepo` does a
-BOUNDED, SELECTIVE fetch (harness-shaped paths + refs, to respect GitHub's 60-req/hr limit), NOT the CLI's
-whole-repo read. The safety invariant (NEVER GRADE PARTIAL DATA → bail to `too-large`/`error`) + closed edge cases
+**FETCH-TAIL DOCUMENTED — do NOT chase Codex's `fetchRepo` P2s.** Demo fetches a BOUNDED set; invariant = NEVER GRADE
+PARTIAL DATA. Canonical: `research/browser-demo-fetch-limits.md`.
 
-- non-goals are in the `fetchRepo.ts` header + `research/browser-demo-fetch-limits.md` (canonical). Founder's call:
-  DOCUMENT, don't fix piecemeal — unless a new case is a genuine WRONG GRADE not covered by the bail-outs.
-
-**TOP GOAL (codified in `.claude/skills/landing-site`): maximize the % of visitors who RUN `npx vigiles audit`.**
-Every site decision serves that ONE conversion. HOLD every `site/` change against the skill; **screenshot desktop
-AND the FULL mobile page** (390px); the mobile-overflow e2e is now the deterministic backstop but the visual pass
-still matters; run a Fable cold-visitor pass on anything nontrivial and ACT on its P0/P1 cuts.
+**TOP GOAL (`.claude/skills/landing-site`): maximize visitors who RUN `npx vigiles audit`.** HOLD every `site/` change
+against the skill (READ it before touching `site/`); screenshot desktop AND full 390px mobile.
 
 ### 🎯 DO NEXT
 
-No open founder task in flight — the demo overhaul + CI-hardening are merged. Candidate next work (founder's call):
-wire an analytics provider (`track()` funnel instrumented, no GoatCounter/Plausible script yet); the roadmap
-backend-audit-service item; Codex trigger-rate promotion (below). Durable record of the demo work is in
-`research/report-view-and-browser-demo.md` + `research/browser-demo-fetch-limits.md`.
+0. **PR #114 OPEN** (github.com/zernie/vigiles/pull/114), ~50 commits: adoption batch + dogfood 14/14 + Vlad's 5 issues). Watch CI; the
+   `Claude`-authored-commit gotcha (below) may need an Approve-and-run or Close→Reopen for checks to start.
+   The GHA PR-comment grade (item 6) stays deprioritized (later-adoption, not guaranteed after gate-first init).
+1. **Item 4b b2 (per-grade OG card)** — the ONLY remaining share-loop piece: a card showing `owner/repo · actual grade`.
+   Needs a SERVERLESS OG endpoint (GitHub Pages is static, can't vary `<meta>` by `?repo=`) → bundles with **4c**
+   (time-boxed upload, needs backend). b1 (generic card) is SHIPPED (`site/public/og.png` + tags in `site/index.html`).
+2. **Item 5 (one opt-in README badge)** — after the share loop; badge-fatigue data says exactly one.
+3. **STRENGTHEN THE IN-REPORT INVITATION (the real growth lever, per adoption-design.md §1 reasoning).** The terminal
+   nudge is now value-framed (why a spec), but the HTML report's adoption surface (Adopt/adoptability preview) deserves
+   its OWN focused pass with screenshots + a Fable cold-visitor review — "make a skeptic WANT a spec/eval by showing
+   what it'd catch". This is where richer-feature adoption is won (gate is opt-in, so the invitation must carry it).
+4. **davila7-F reconciliation** — featured at F but not MIT-vendored/opted-in; prefer the live `?repo=` grade or apply
+   the vendoring policy before the leaderboard hardens.
 
 ### Codex trigger-rate is EXPERIMENTAL
 
@@ -118,8 +148,6 @@ Deterministic Codex audit = full parity (KEEP). Real-model **trigger-rate** on C
 - `CLAUDE.md` (root + `src/` + `research/`) is COMPILED from `.spec.ts` — edit the spec +
   recompile (`node dist/cli.js compile <spec>`), NEVER hand-edit (a PostToolUse hook does).
 - **COMMIT SIGNING is BROKEN in-container** (0-byte pubkey) → "Unverified"; email correct.
-- `dialect-drift.test.ts` now SKIPS LOUDLY (not fails) when the located claude-code package ≠
-  the running `claude --version` (the stale-leftover case) — fixed this session (`a85228b`). CI pins CC so it gates for real there.
 - **`add_repo` is same-owner only** — fetch external files via
   `curl https://raw.githubusercontent.com/OWNER/REPO/BRANCH/PATH` (through the proxy).
 - Commits/PR: NO session links / NO raw model-id strings. Conventional-Commit titles;

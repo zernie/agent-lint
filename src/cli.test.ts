@@ -300,6 +300,27 @@ describe("CLI: vigiles lint", () => {
     );
   });
 
+  it("default lint integrity-checks a compiled subagent (dogfood E2)", () => {
+    // A compiled agents/<name>.md carries a vigiles hash, but the default glob
+    // only matched CLAUDE/AGENTS/SKILL — so a hand-edit of a compiled subagent
+    // slipped past lint. A tampered compiled agent must now be flagged.
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-lint-agent-"));
+    try {
+      mkdirSync(join(dir, "agents"), { recursive: true });
+      // A vigiles hash header whose body no longer matches (tampered).
+      writeFileSync(
+        join(dir, "agents", "reviewer.md"),
+        "<!-- vigiles:sha256:deadbeef compiled from agents/reviewer.md.spec.ts -->\n---\nname: reviewer\n---\nedited body\n",
+      );
+      const { stdout, exitCode } = run("lint", dir);
+      assert.match(stdout, /agents\/reviewer\.md/);
+      assert.match(stdout, /hash mismatch|modified directly/);
+      assert.equal(exitCode, 2, "a tampered compiled subagent fails lint");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("should detect duplicate rules via NCD", () => {
     const dupDir = mkdtempSync(join(tmpdir(), "vigiles-lint-dup-"));
     try {
@@ -1129,6 +1150,12 @@ describe("CLI: vigiles init (full setup)", () => {
     assert.equal(exitCode, 0);
     assert.ok(stdout.includes("Created CLAUDE.md.spec.ts"));
     assert.ok(stdout.includes("Setup complete"));
+    // Discovery: a non-interactive (agent/CI) run never saw the wizard's
+    // "gate vs full" fork, so the summary names `--ci-only` so the flag is findable.
+    assert.ok(
+      stdout.includes("npx vigiles init --ci-only"),
+      "non-interactive setup surfaces the --ci-only alternative",
+    );
     assert.ok(existsSync(join(tmpDir, "CLAUDE.md.spec.ts")));
     assert.ok(existsSync(join(tmpDir, ".vigiles/generated.d.ts")));
   });
@@ -1183,6 +1210,24 @@ describe("CLI: vigiles init auto-detection", () => {
     mkdirSync(join(dir, ".claude"), { recursive: true });
     const { stdout } = run("init --no-plugin", dir);
     assert.ok(stdout.includes("Claude Code"));
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("honors an existing .vigilesrc.json `harness` over auto-detection (dogfood I3)", () => {
+    // The repo would auto-detect as Claude Code (a CLAUDE.md), but config
+    // already declares codex — re-running init must target codex, not re-detect.
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-detect-cfg-"));
+    writeFileSync(
+      join(dir, "package.json"),
+      JSON.stringify({ name: "test", scripts: {} }),
+    );
+    writeFileSync(join(dir, "CLAUDE.md"), "# Hand-written\n");
+    writeFileSync(
+      join(dir, ".vigilesrc.json"),
+      JSON.stringify({ harness: "codex" }),
+    );
+    const { stdout } = run("init --no-plugin", dir);
+    assert.match(stdout, /Harness: codex/);
     rmSync(dir, { recursive: true, force: true });
   });
 });
@@ -1247,6 +1292,69 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
       );
       assert.match(yaml, /@anthropic-ai\/claude-code/);
       assert.match(yaml, /@openai\/codex/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("--test (with gha): the workflow has the harness job but NO lint job (dogfood I4)", () => {
+    const dir = freshProject();
+    try {
+      run("init --test --no-plugin", dir);
+      const wf = join(dir, ".github/workflows/vigiles.yml");
+      assert.ok(existsSync(wf), "workflow written");
+      const yaml = readFileSync(wf, "utf-8");
+      assert.match(yaml, /npx vigiles test/, "harness job present");
+      assert.doesNotMatch(
+        yaml,
+        /^ {2}lint:/m,
+        "no lint job when the lint pillar is off",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("no package.json: NO harness job (the JS test tier can't resolve vigiles/testing) — lint only (dogfood I1 / Codex review)", () => {
+    // A non-JS repo has no package.json, so `npx vigiles test` on the starter
+    // harness can't resolve its `vigiles/testing` import — the whole harness job
+    // would fail, not just an install step. So the workflow emits the lint job
+    // (needs no toolchain) and NO harness job.
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-init-nopkg-"));
+    try {
+      writeFileSync(join(dir, "CLAUDE.md"), "# proj\n");
+      run("init --no-plugin", dir);
+      const wf = join(dir, ".github/workflows/vigiles.yml");
+      assert.ok(existsSync(wf), "workflow written (lint job)");
+      const yaml = readFileSync(wf, "utf-8");
+      assert.match(
+        yaml,
+        /^ {2}lint:/m,
+        "lint job present (needs no toolchain)",
+      );
+      assert.doesNotMatch(
+        yaml,
+        /npx vigiles test/,
+        "no harness job without a package.json (can't resolve vigiles/testing)",
+      );
+      assert.doesNotMatch(yaml, /run: npm install/, "no npm install step");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("no package.json + --test only: no runnable job → no workflow written (Codex review: no empty jobs:)", () => {
+    // The only pillar is the JS test tier, which can't run without a package.json,
+    // so there is no job to emit — writing a bare `jobs:` would be an invalid
+    // workflow GitHub rejects. Emit nothing instead.
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-init-nopkg-testonly-"));
+    try {
+      writeFileSync(join(dir, "CLAUDE.md"), "# proj\n");
+      run("init --test --no-plugin", dir);
+      assert.ok(
+        !existsSync(join(dir, ".github/workflows/vigiles.yml")),
+        "no workflow when there is no runnable job",
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

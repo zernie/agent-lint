@@ -3,19 +3,28 @@
  *
  * Verifies that linter rule references (e.g., "eslint/no-console") point to
  * real rules that exist and are enabled in project config. Supports:
- *   ESLint, Stylelint (Node API), Ruff, Clippy, Pylint, RuboCop (CLI),
+ *   ESLint, Stylelint (Node API), Ruff, Clippy, Pylint, RuboCop, Detekt,
+ *   Ktlint, Checkstyle, golangci-lint (CLI),
  *   Cedar (filesystem policies for AWS Bedrock AgentCore / Vectimus).
  *
- * This is the core moat — no other tool resolves rules across 7 catalog APIs
- * (6 linters + Cedar policy language) and checks config-enabled status.
+ * This is the core moat — no other tool resolves rules across 11 catalog APIs
+ * (10 linters + Cedar policy language) and checks config-enabled status.
  */
 
-import { readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import {
+  readFileSync,
+  existsSync,
+  writeFileSync,
+  mkdtempSync,
+  rmSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { resolve, join } from "node:path";
 import { editDistance } from "./edit-distance.js";
 import { execSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { globSync } from "glob";
+import { load as loadYaml } from "js-yaml";
 
 /**
  * Prepend version-manager shim directories (rbenv / asdf / rvm) to PATH so
@@ -178,10 +187,377 @@ const LINTER_RESOLVERS: Record<
 };
 
 // ---------------------------------------------------------------------------
+// JVM + Go catalog helpers (detekt / ktlint / checkstyle / golangci-lint)
+//
+// All four follow the rubocop/clippy shape: a CLI-backed existence check in
+// CLI_RULE_CHECKS + a config-enabled checker in LINTER_CONFIG_CHECKERS. The
+// pure parsing halves are exported @internal so they are unit-testable with
+// no binary installed.
+// ---------------------------------------------------------------------------
+
+/** Escape a literal for use inside a RegExp. */
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+const DETEKT_CONFIG_FILES = [
+  "detekt.yml",
+  "detekt-config.yml",
+  "config/detekt/detekt.yml",
+] as const;
+
+/** The effective state of one detekt rule, read from a project's config. */
+export interface DetektRuleState {
+  /** The enclosing ruleset key (e.g. `style`, `complexity`). */
+  readonly ruleset: string;
+  /**
+   * `enabled`/`disabled` if the rule's own `active:` is set, else `disabled`
+   * when its ENCLOSING ruleset is `active: false` (a ruleset-level off disables
+   * every rule under it), else `unknown` — the rule inherits detekt's default.
+   */
+  readonly active: ConfigEnabledStatus;
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/** `active: true|false` → enabled/disabled; anything else (absent/non-bool) → null. */
+function readActive(v: unknown): "enabled" | "disabled" | null {
+  if (v === true) return "enabled";
+  if (v === false) return "disabled";
+  return null;
+}
+
+/**
+ * Parse a detekt YAML config into a map of PascalCase rule name → its effective
+ * state. Parsed with js-yaml, NOT a hand-rolled indent regex (see the
+ * `parse-structured-input-with-a-real-parser` rule) — so indentation, quoting,
+ * comments and inline maps all work, and a nested rule OPTION (`threshold:`,
+ * `ignoreNumbers:`) can never be mistaken for a rule. The ONE parser every
+ * detekt site derives from: rule-key discovery, the config-names-rule existence
+ * fallback, and the enabled-state check. Rulesets are the top-level maps; a rule
+ * is a PascalCase child key of a ruleset (detekt's meta sections — build,
+ * processors, console-reports — have only lowercase/kebab children, so they are
+ * never read as rules). Malformed YAML → an empty map (fail closed).
+ * @internal
+ */
+export function parseDetektConfig(yaml: string): Map<string, DetektRuleState> {
+  const out = new Map<string, DetektRuleState>();
+  let doc: unknown;
+  try {
+    doc = loadYaml(yaml);
+  } catch {
+    return out;
+  }
+  if (!isRecord(doc)) return out;
+  for (const [ruleset, body] of Object.entries(doc)) {
+    if (isRecord(body)) collectDetektRuleset(ruleset, body, out);
+  }
+  return out;
+}
+
+/** Collect the PascalCase rules of one ruleset block into `out`. */
+function collectDetektRuleset(
+  ruleset: string,
+  body: Record<string, unknown>,
+  out: Map<string, DetektRuleState>,
+): void {
+  const rulesetDisabled = readActive(body.active) === "disabled";
+  for (const [key, val] of Object.entries(body)) {
+    if (!/^[A-Z][A-Za-z0-9]*$/.test(key)) continue; // rule keys are PascalCase
+    const ruleActive = isRecord(val) ? readActive(val.active) : null;
+    const active: ConfigEnabledStatus =
+      ruleActive ?? (rulesetDisabled ? "disabled" : "unknown");
+    out.set(key, { ruleset, active });
+  }
+}
+
+/**
+ * The PascalCase rule names named by a detekt config — the discovery/existence
+ * surface. A thin projection of {@link parseDetektConfig} so key extraction and
+ * enabled-state can never disagree.
+ * @internal
+ */
+export function parseDetektRuleKeys(yaml: string): Set<string> {
+  return new Set(parseDetektConfig(yaml).keys());
+}
+
+/** Read the first present detekt config file's contents (null if none). @internal */
+export function readDetektConfig(basePath: string): string | null {
+  for (const rel of DETEKT_CONFIG_FILES) {
+    const p = resolve(basePath, rel);
+    if (!existsSync(p)) continue;
+    try {
+      return readFileSync(p, "utf-8");
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * detekt has no per-rule query CLI, but `detekt --generate-config` exports the
+ * default config, which names every bundled rule. Generated once into a temp
+ * dir and cached (the default catalog is project-independent). Newer CLIs
+ * export to the `--config` path; older ones write `default-detekt-config.yml`
+ * into the cwd — both locations are read back.
+ */
+let DETEKT_DEFAULT_RULE_CACHE: Set<string> | null = null;
+function getDetektDefaultRules(): Set<string> {
+  if (DETEKT_DEFAULT_RULE_CACHE) return DETEKT_DEFAULT_RULE_CACHE;
+  let rules = new Set<string>();
+  const tmp = mkdtempSync(join(tmpdir(), "vigiles-detekt-"));
+  try {
+    const target = join(tmp, "generated-default.yml");
+    execSync(`detekt --generate-config --config ${target}`, {
+      cwd: tmp,
+      stdio: "ignore",
+      timeout: 60000,
+    });
+    for (const p of [target, join(tmp, "default-detekt-config.yml")]) {
+      if (!existsSync(p)) continue;
+      rules = parseDetektRuleKeys(readFileSync(p, "utf-8"));
+      if (rules.size > 0) break;
+    }
+  } catch {
+    // Enumeration failed (old CLI / flag mismatch) — leave the set empty so
+    // the existence check fails OPEN rather than crying wolf on every rule.
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+  DETEKT_DEFAULT_RULE_CACHE = rules;
+  return rules;
+}
+
+function detektConfigNamesRule(ruleName: string, basePath: string): boolean {
+  const cfg = readDetektConfig(basePath);
+  if (!cfg) return false;
+  // Only a real PascalCase rule key counts — a nested option (`threshold:`)
+  // must NOT pass as a rule (parseDetektConfig filters those out).
+  return parseDetektConfig(cfg).has(ruleName);
+}
+
+/**
+ * Config-enabled status for a detekt rule, read from the project's detekt
+ * YAML (detekt.yml / detekt-config.yml / config/detekt/detekt.yml). The rule's
+ * own `active: true|false` decides; failing that, a ruleset-level `active: false`
+ * disables it; otherwise the rule inherits detekt's default, reported honestly
+ * as "unknown". Derived from the shared {@link parseDetektConfig}.
+ * @internal
+ */
+export function detektEnabledStatus(
+  ruleName: string,
+  basePath: string,
+): ConfigEnabledStatus {
+  const cfg = readDetektConfig(basePath);
+  if (!cfg) return "unknown";
+  return parseDetektConfig(cfg).get(ruleName)?.active ?? "unknown";
+}
+
+/**
+ * Config-enabled status for a ktlint rule, read from `.editorconfig`. The
+ * per-rule property is `ktlint_<ruleset>_<rule-id> = enabled|disabled`
+ * (e.g. `ktlint_standard_no-wildcard-imports = disabled`); a ruleset-level
+ * `ktlint_<ruleset> = enabled|disabled` is the fallback. An unqualified rule
+ * name defaults to the `standard` ruleset, matching ktlint.
+ * @internal
+ */
+export function ktlintEnabledStatus(
+  ruleName: string,
+  basePath: string,
+): ConfigEnabledStatus {
+  const p = resolve(basePath, ".editorconfig");
+  if (!existsSync(p)) return "unknown";
+  let content: string;
+  try {
+    content = readFileSync(p, "utf-8");
+  } catch {
+    return "unknown";
+  }
+  const colonIdx = ruleName.indexOf(":");
+  const ruleset =
+    colonIdx === -1 ? "standard" : ruleName.substring(0, colonIdx);
+  const id = colonIdx === -1 ? ruleName : ruleName.substring(colonIdx + 1);
+  const ruleProp = new RegExp(
+    `^\\s*ktlint_${escapeRe(ruleset)}_${escapeRe(id)}\\s*=\\s*(enabled|disabled)`,
+    "m",
+  );
+  const ruleMatch = ruleProp.exec(content);
+  if (ruleMatch) return ruleMatch[1] === "enabled" ? "enabled" : "disabled";
+  const setProp = new RegExp(
+    `^\\s*ktlint_${escapeRe(ruleset)}\\s*=\\s*(enabled|disabled)`,
+    "m",
+  );
+  const setMatch = setProp.exec(content);
+  if (setMatch) return setMatch[1] === "enabled" ? "enabled" : "disabled";
+  return "unknown";
+}
+
+const CHECKSTYLE_CONFIG_FILES = [
+  "checkstyle.xml",
+  "config/checkstyle/checkstyle.xml",
+  "google_checks.xml",
+  "sun_checks.xml",
+] as const;
+
+function readCheckstyleConfig(basePath: string): string | null {
+  for (const rel of CHECKSTYLE_CONFIG_FILES) {
+    const p = resolve(basePath, rel);
+    if (!existsSync(p)) continue;
+    try {
+      return readFileSync(p, "utf-8");
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Config-enabled status for a checkstyle module. A checkstyle config is a
+ * whitelist — only listed modules run — so a module absent from the config is
+ * "disabled", and a listed module is "enabled" unless its own `severity`
+ * property is `ignore`.
+ * @internal
+ */
+export function checkstyleEnabledStatus(
+  ruleName: string,
+  basePath: string,
+): ConfigEnabledStatus {
+  const xml = readCheckstyleConfig(basePath);
+  if (xml === null) return "unknown";
+  const moduleRe = new RegExp(
+    `<module\\s+name\\s*=\\s*["']${escapeRe(ruleName)}["']`,
+  );
+  const m = moduleRe.exec(xml);
+  if (!m) return "disabled";
+  const rest = xml.substring(m.index + m[0].length);
+  const bounds = [rest.indexOf("<module"), rest.indexOf("</module>")].filter(
+    (i) => i >= 0,
+  );
+  const scope =
+    bounds.length > 0 ? rest.substring(0, Math.min(...bounds)) : rest;
+  if (
+    /name\s*=\s*["']severity["'][^>]*value\s*=\s*["']ignore["']/.test(scope)
+  ) {
+    return "disabled";
+  }
+  return "enabled";
+}
+
+/**
+ * Whether `golangci-lint help linters` / `golangci-lint linters` output lists
+ * a linter of this name (names start a line, followed by `:`, whitespace, or
+ * an alt-name paren like `govet (vet, vetshadow):`).
+ * @internal
+ */
+export function golangciOutputListsLinter(
+  output: string,
+  name: string,
+): boolean {
+  return new RegExp(`^${escapeRe(name)}[:\\s(]`, "m").test(output);
+}
+
+/**
+ * Config-enabled status from `golangci-lint linters` output, which lists an
+ * "Enabled by your configuration linters:" section followed by a
+ * "Disabled by your configuration linters:" section (same section-split shape
+ * as the pylint checker).
+ * @internal
+ */
+export function golangciEnabledStatusFromOutput(
+  output: string,
+  name: string,
+): ConfigEnabledStatus {
+  const disabledIdx = output.search(/^Disabled by/m);
+  const enabledSection =
+    disabledIdx >= 0 ? output.substring(0, disabledIdx) : output;
+  const disabledSection = disabledIdx >= 0 ? output.substring(disabledIdx) : "";
+  if (golangciOutputListsLinter(disabledSection, name)) return "disabled";
+  if (golangciOutputListsLinter(enabledSection, name)) return "enabled";
+  return "unknown";
+}
+
+/** Linter names listed at line starts of `golangci-lint help linters` output. */
+function golangciLinterNames(output: string): string[] {
+  const names: string[] = [];
+  const nameRe = /^([a-z][a-z0-9_-]+)(?:\s*\([^)]*\))?:/gm;
+  let m: RegExpExecArray | null;
+  while ((m = nameRe.exec(output)) !== null) {
+    names.push(m[1]);
+  }
+  return names;
+}
+
+const CHECKSTYLE_PROBE_HEADER =
+  `<?xml version="1.0"?>\n` +
+  `<!DOCTYPE module PUBLIC "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN" ` +
+  `"https://checkstyle.org/dtds/configuration_1_3.dtd">\n`;
+
+function checkstyleProbeConfigs(ruleName: string): string[] {
+  return [
+    // Most checks are TreeWalker children (MagicNumber, WhitespaceAround, …).
+    `${CHECKSTYLE_PROBE_HEADER}<module name="Checker"><module name="TreeWalker"><module name="${ruleName}"/></module></module>\n`,
+    // File-level checks and filters sit directly under Checker
+    // (NewlineAtEndOfFile, FileLength, SuppressionFilter, …).
+    `${CHECKSTYLE_PROBE_HEADER}<module name="Checker"><module name="${ruleName}"/></module>\n`,
+  ];
+}
+
+function runCheckstyleProbe(configPath: string, probePath: string): boolean {
+  try {
+    execSync(`checkstyle -c ${configPath} ${probePath}`, {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 60000,
+    });
+    return true;
+  } catch (e) {
+    // A violation on the probe file still proves the module exists — only a
+    // module-instantiation failure means "no such check".
+    const err = e as { stdout?: string; stderr?: string; message?: string };
+    const out = `${err.stdout ?? ""}\n${err.stderr ?? ""}\n${err.message ?? ""}`;
+    return !/cannot initialize module|Unable to instantiate/i.test(out);
+  }
+}
+
+/**
+ * Checkstyle has no "does check X exist" query, so probe by running the real
+ * CLI over a tiny config that names the module, first as a TreeWalker child,
+ * then as a Checker child (file-level checks/filters). The module exists iff
+ * either placement instantiates.
+ */
+function checkstyleModuleInstantiates(ruleName: string): boolean {
+  const tmp = mkdtempSync(join(tmpdir(), "vigiles-checkstyle-"));
+  try {
+    const probe = join(tmp, "Probe.java");
+    writeFileSync(probe, "class Probe {}\n");
+    let i = 0;
+    for (const config of checkstyleProbeConfigs(ruleName)) {
+      const configPath = join(tmp, `probe-${String(i++)}.xml`);
+      writeFileSync(configPath, config);
+      if (runCheckstyleProbe(configPath, probe)) return true;
+    }
+    return false;
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // CLI-based per-rule checks
 // ---------------------------------------------------------------------------
 
-const CLI_RULE_CHECKS: Record<string, (ruleName: string) => void> = {
+// Each check throws if the rule doesn't exist. `basePath` is the TARGET project's
+// root (a monorepo package / a library caller's audited repo), NOT process.cwd —
+// a custom rule declared only in the target's own config must resolve against it
+// (Codex review). A check that doesn't need it may omit the 2nd param.
+const CLI_RULE_CHECKS: Record<
+  string,
+  (ruleName: string, basePath: string) => void
+> = {
   ruff(ruleName: string): void {
     execSync(`ruff rule ${ruleName}`, { stdio: "ignore" });
   },
@@ -204,6 +580,49 @@ const CLI_RULE_CHECKS: Record<string, (ruleName: string) => void> = {
     });
     if (!output || output.trim().length === 0) {
       throw new Error(`Unknown cop: ${ruleName}`);
+    }
+  },
+  detekt(ruleName: string, basePath: string): void {
+    // detekt has no per-rule query CLI; the bundled catalog is enumerated once
+    // via `detekt --generate-config` (see getDetektDefaultRules). A rule
+    // outside the bundled set may still come from a third-party ruleset
+    // plugin, so a rule named in the project's own detekt config is accepted
+    // too. If enumeration fails entirely, fail OPEN — never cry wolf.
+    const rules = getDetektDefaultRules();
+    if (rules.size === 0) return;
+    if (rules.has(ruleName)) return;
+    if (detektConfigNamesRule(ruleName, basePath)) return;
+    throw new Error(`Unknown detekt rule: ${ruleName}`);
+  },
+  ktlint(ruleName: string): void {
+    // ktlint ships NO rule-catalog CLI (its only subcommands are
+    // generateEditorConfig + the git hooks — verified against ktlint-cli
+    // source), so existence is format-only: a qualified "<ruleset>:<rule-id>"
+    // reference (e.g. "standard:no-wildcard-imports"). Enabled-status is
+    // still real: it reads the `.editorconfig` ktlint properties.
+    if (!/^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$/.test(ruleName)) {
+      throw new Error(
+        `ktlint rules must be "<ruleset>:<rule-id>" (e.g. "standard:no-wildcard-imports"), got: ${ruleName}`,
+      );
+    }
+  },
+  checkstyle(ruleName: string): void {
+    // Checkstyle has no "does check X exist" query; probe by running the real
+    // CLI over a tiny config naming the module (TreeWalker child first, then
+    // Checker child). Only an instantiation error means "no such module" —
+    // a violation on the probe file proves the module is real.
+    if (!checkstyleModuleInstantiates(ruleName)) {
+      throw new Error(`Unknown checkstyle module: ${ruleName}`);
+    }
+  },
+  "golangci-lint"(ruleName: string): void {
+    const output = execSync("golangci-lint help linters", {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 60000,
+    });
+    if (!golangciOutputListsLinter(output, ruleName)) {
+      throw new Error(`Unknown golangci-lint linter: ${ruleName}`);
     }
   },
 };
@@ -404,6 +823,29 @@ const LINTER_CONFIG_CHECKERS: Record<
       return null;
     }
   }),
+
+  detekt: detektEnabledStatus,
+
+  ktlint: ktlintEnabledStatus,
+
+  checkstyle: checkstyleEnabledStatus,
+
+  "golangci-lint": createCachedChecker(
+    (basePath: string): ConfigLoader | null => {
+      try {
+        const output = execSync("golangci-lint linters", {
+          encoding: "utf-8",
+          cwd: basePath,
+          stdio: ["pipe", "pipe", "pipe"],
+          timeout: 60000,
+        });
+        return (ruleName: string): ConfigEnabledStatus =>
+          golangciEnabledStatusFromOutput(output, ruleName);
+      } catch {
+        return null;
+      }
+    },
+  ),
 };
 
 function cliAvailable(command: string): boolean {
@@ -420,6 +862,10 @@ const CLI_TOOL_FOR_LINTER: Record<string, string> = {
   clippy: "cargo",
   pylint: "pylint",
   rubocop: "rubocop",
+  detekt: "detekt",
+  ktlint: "ktlint",
+  checkstyle: "checkstyle",
+  "golangci-lint": "golangci-lint",
 };
 
 // ---------------------------------------------------------------------------
@@ -616,7 +1062,19 @@ function getCliRuleSet(linterName: string, basePath: string): Set<string> {
           }
         }
       }
+    } else if (linterName === "detekt") {
+      // Reuse the cached default-config catalog the existence check built.
+      for (const r of getDetektDefaultRules()) rules.add(r);
+    } else if (linterName === "golangci-lint") {
+      const output = execSync("golangci-lint help linters", {
+        encoding: "utf-8",
+        cwd: basePath,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      for (const name of golangciLinterNames(output)) rules.add(name);
     }
+    // ktlint + checkstyle ship no rule-enumeration CLI — empty set, so the
+    // caller simply emits no did-you-mean suggestions.
   } catch {
     // CLI failed — return empty set, caller will just skip suggestions
   }
@@ -639,7 +1097,7 @@ function getCliRuleSet(linterName: string, basePath: string): Set<string> {
     );
   }
   try {
-    cliCheck(ctx.ruleName);
+    cliCheck(ctx.ruleName, ctx.basePath);
     const enabled = checkConfigEnabled(
       ctx.linterName,
       ctx.ruleName,
