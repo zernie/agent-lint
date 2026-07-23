@@ -78,6 +78,39 @@ Body.
     expect(spec.tools).toEqual(["Read", "Grep", "Glob"]);
   });
 
+  it("round-trips EVERY standard skill frontmatter field through adopt → compile → re-adopt (issue #107 class)", () => {
+    // The prevention for the #107 class — a field that compile EMITS but adopt
+    // never READS (or vice versa) silently drops on the round-trip. Populate every
+    // standard CC skill key and assert each one survives adopt → compile →
+    // re-adopt. A new field added to one side but not the other fails here.
+    const md = `---
+name: full-skill
+description: A fully specified skill covering every standard frontmatter field
+allowed-tools: Read, Grep, Glob
+context: fork
+argument-hint: <file> [flag]
+---
+
+Do the work.
+`;
+    const first = adoptSkill(md, "full-skill").spec as SkillSpec;
+    const { markdown, errors } = compileSkill(first, {
+      specFile: "skills/full-skill/SKILL.md.spec.ts",
+      dialect: claudeCodeDialect,
+    });
+    expect(errors).toEqual([]);
+    const back = adoptSkill(markdown, "full-skill").spec as SkillSpec;
+    // Every field the adopter reads must be identical after the round-trip.
+    expect(back.name).toBe(first.name);
+    expect(back.description).toBe(first.description);
+    expect(back.tools).toEqual(first.tools);
+    expect(back.context).toBe(first.context);
+    expect(back.argumentHint).toBe(first.argumentHint);
+    const bodyText = (b: SkillSpec["body"]): string =>
+      (typeof b === "string" ? b : (b ?? []).map(String).join("")).trim();
+    expect(bodyText(back.body)).toBe(bodyText(first.body));
+  });
+
   it("round-trips allowed-tools + context: fork through adopt → compile (issue #107)", () => {
     const md = `---
 name: reviewer

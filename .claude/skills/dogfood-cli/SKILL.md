@@ -87,6 +87,46 @@ Per fix:
 - **Coverage gate is an allowlist** (`vitest.config.mjs` `coverage.include`) — a
   new file under it needs 100%; scan/cli files are NOT in it today.
 
+## The two recurring bug classes — hunt for them, then PREVENT the class
+
+Almost every bug this repo has produced is one of two shapes. When you find one
+instance, GREP for its siblings, and add a GATE so the class can't come back.
+
+### 1. An unverified assumption about an EXTERNAL contract
+
+Code that guesses how an external thing behaves without checking: a CLI flag's
+format (the `skills` `-s` was assumed comma-separated, is space-separated → the
+install exited 1), a harness's frontmatter key (skills use `allowed-tools`, not
+`tools:`), git's behavior (`git config origin` in a subdir walks UP to the parent
+repo), module resolution (`vigiles/testing` can't resolve without a package.json),
+a linter's enabled-state (a checkstyle `severity=ignore` module is disabled).
+
+- **PARSE, DON'T VALIDATE the boundary.** Read the REAL contract before coding —
+  the tool's `--help`, its arg parser in `node_modules`, `git rev-parse`, the
+  linter's own status logic. Don't guess; verify.
+- **Add a UNIT assertion of the command/format's SHAPE**, not just a
+  network/binary-gated e2e. The e2e that runs the real command SKIPS in dev (no
+  network / no `claude` / no linter binary), so it's not a reliable guard — CI is
+  the only place it runs. A unit test that parses the constructed command the SAME
+  way the external tool does (e.g. the `-s` space-split assertion in
+  `setup-plan.test.ts`) fails fast, offline, on a regression.
+
+### 2. An incomplete fix — SOME call-sites of a pattern, not all
+
+A pattern fixed in one place but left live elsewhere: `audit`/`init` honoured
+`config.harness` but `test`/`eval`/`generate harness` didn't; `E1` fixed
+`ScanAgent.path` but not the frontmatter-family findings; comment-stripping was
+added to one detector but not the next.
+
+- **GREP for every instance** of the pattern the moment you fix one.
+- **MAKE-INVALID-STATES-IRREPRESENTABLE — one choke-point.** Route every caller
+  through a single helper (e.g. `resolveCommandHarness`) so a new call-site can't
+  bypass it, and add a gate test that FAILS if the old path reappears
+  (`cli-harness-resolution.test.ts` asserts `cli.ts` never calls the raw detector).
+- Detectors that scan raw text share a hazard (matching inside comments /
+  examples / illustrative prose) — check the shared text-context helpers exist and
+  are REUSED, not re-copied per detector, and keep the FP-guard fixtures green.
+
 ## NOT this skill
 
 The **blind-agent onboarding dogfood** (a fresh agent runs `npx vigiles init` on
