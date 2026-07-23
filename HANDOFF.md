@@ -43,6 +43,23 @@ literal NUL byte in scan-core (read as binary), and a missed I2 e2e assertion (o
 (1d dirty-tree deferred as founder UX) · #109 JVM/Go linter catalogs (detekt/ktlint/checkstyle/golangci-lint, 7→11) ·
 #110 example-link + shell-comment scan FPs · #111 non-JS harness guide · #113 testGlobs docs. Full suite green.
 
+**PR #114 REVIEW-FIX + PREVENTION PASS — PUSHED.** After the meta-analysis, addressed the Codex bot P2s +
+prevention: (a) skill-resource-resolves LINK RECALL — a markdown link is real UNLESS an illustrative cue (don't
+also require a use-verb, or `Resources: [API](x.md)` goes unchecked); bare inline path keeps the stricter gate; +
+recall test. (b) detekt CLI check threads `basePath` not `process.cwd()`. (c) #4 adopt-surface ROUND-TRIP GATE
+(every standard skill frontmatter field survives adopt→compile→re-adopt — the #107 drift class). (d) dogfood-cli
+skill: "two recurring bug classes" (unverified external contract → parse-don't-validate + unit shape assertion;
+incomplete fix → grep siblings + one choke-point + gate test). Full suite green (2332 passing).
+
+**⏳ PENDING FOUNDER DECISION — adopt.ts markdown parsing.** Founder flagged (correctly) that `adopt.ts`
+`splitBlocks` parses CLAUDE.md/agent BODY structure with HAND-ROLLED REGEX (`HEADING_RE`/`FENCE_RE` + manual
+fence toggle), a `prefer-existing-solutions` gap. REAL BUG exposed: the fence toggle matches any 3+ backtick run,
+so a nested/mismatched fence (4-backtick block containing ```) mis-splits a `##` inside code as a heading; setext
+headings missed too. (Skills unaffected — body is verbatim; frontmatter IS js-yaml.) FIX = swap boundary-detection
+to `markdown-it` `token.map` line ranges, keep VERBATIM slicing on source offsets (never AST-reserialize — breaks
+round-trip), add a nested-fence fixture. Tradeoff: adds 1 runtime dep to a deliberately dep-light CLI (13 deps).
+Recommended DO IT (markdown-it, browser-safe, minimal). AWAITING founder: do-on-#114 vs file-separately.
+
 **GATE-FAILURE RULE (founder, standing): if a skill/hook/rule DIDN'T CATCH an issue the founder had to spot,
 FIX THE GATE FIRST.** (e.g. the mobile-overflow CI gate + the responsive-grid lesson in `.claude/skills/landing-site`.)
 
