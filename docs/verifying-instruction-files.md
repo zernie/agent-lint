@@ -80,7 +80,7 @@ export default claude({
 "no-unwrap": enforce("clippy/unwrap_used", "Use expect() with context."),
 ```
 
-Supports ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, and Cedar policies. [Full linter support details →](linter-support.md)
+Supports ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar, detekt, ktlint, Checkstyle, and golangci-lint. [Full linter support details →](linter-support.md)
 
 **`guidance()`** — prose advice with no mechanical enforcement. Not untracked, though: guidance rules join the monotonicity proof system, so a rule can be strengthened (`guidance` → `enforce`) but never silently weakened or removed without an explicit allowlist.
 
@@ -141,7 +141,7 @@ A project can use **several linters at once** (a monorepo with JS _and_ Python).
 
 If no off-the-shelf rule fits, the **custom-rule** lane can synthesize a checker for **both** JS/TS (an ESLint rule) and Python (an ast-grep rule) — gated so it abstains rather than ship a checker it can't prove sound. Ruff and more linters are on the roadmap. Everything the map still can't match gets a lane — hook or judgment call — so nothing is silently dropped.
 
-> **Two different "which linters?" answers — don't conflate them.** The **rule map** (this feature) _suggests_ how prose could be enforced, and routes to **2** linters (ESLint, Pylint). Separately, [`enforce("eslint/no-console")`](#verified-references) — the reference-verification engine — _verifies_ a rule **you already named** exists and is enabled, across **7** catalogs (ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar). The map is discovery; `enforce()` is verification.
+> **Two different "which linters?" answers — don't conflate them.** The **rule map** (this feature) _suggests_ how prose could be enforced, and routes to **2** linters (ESLint, Pylint). Separately, [`enforce("eslint/no-console")`](#verified-references) — the reference-verification engine — _verifies_ a rule **you already named** exists and is enabled, across **11** catalogs (ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar, detekt, ktlint, Checkstyle, golangci-lint). The map is discovery; `enforce()` is verification.
 
 **What runs a model is always a skill _you_ invoke** — on your own subscription, behind consent. `audit` maps and reports; it never rewrites your config, compiles a rule, or calls a model on its own. Installing vigiles does **not** start compiling anything.
 

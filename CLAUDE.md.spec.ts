@@ -170,7 +170,7 @@ BUILD + TOOLING + GENERATED:
     "src/core/bash-effects.test.ts":
       "Bash-classifier suite (vitest, 95 tests): read-only corpus (cat/ls/grep/git status/pipes), side-effecting (rm/git push/redirects/find -delete/sed -i/tee), undecidable (eval/$CMD/sh -c/xargs/pipe-to-shell) + the load-bearing zero-false-read-only SOUNDNESS fixture over 43 dangerous/undecidable commands asserting isReadOnlyBash === false for each",
     "src/core/linters.ts":
-      "Cross-referencing engine (ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar)",
+      "Cross-referencing engine (ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar, detekt, ktlint, Checkstyle, golangci-lint)",
     "src/core/dialect.ts":
       "HarnessDialect — the format/dialect PORT (hexagonal format axis): the harness-specific vocabulary the compiler needs (built-in subagent tool catalog, never-available tools, side-effecting tools via sideEffectingTools — the effect-surface/purity basis, optional/additive — MCP tool shape, built-in MCP servers via knownMcpServers — the mcp-tool-resolves allowlist, optional/additive, e.g. Claude Code's `ide` — hook events, instruction targets, plugin-root token), behind one interface instead of literals hard-coded in compile.ts. core/dialect.ts defines ONLY the interface — the concrete dialects live in the adapters (claudeCodeDialect in src/adapters/claude-code/dialect.ts), symmetric with the other four ports; the compiler takes one by injection (compileAgent requires options.dialect, no core default). A second harness adds a sibling HarnessDialect in its adapter and injects it. See research/code-adapter-architecture.md",
     "src/core/dialect.test.ts":

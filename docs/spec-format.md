@@ -313,7 +313,7 @@ When you're writing a new rule, ask first which category it falls into. If the a
 
 Declares a rule delegated to an external linter or to a vigiles-internal check. The `ref` accepts template literal types:
 
-- `${BuiltinLinter}/${string}` where BuiltinLinter is `eslint`, `stylelint`, `ruff`, `clippy`, `pylint`, `rubocop`, or `cedar`
+- `${BuiltinLinter}/${string}` where BuiltinLinter is `eslint`, `stylelint`, `ruff`, `clippy`, `pylint`, `rubocop`, `cedar`, `detekt`, `ktlint`, `checkstyle`, or `golangci-lint`
 - `@${scope}/${rule}` for scoped ESLint plugins (e.g., `@typescript-eslint/no-explicit-any`)
 - `vigiles/${string}` for vigiles-internal assertions (e.g., `vigiles/orphan-docs`)
 
