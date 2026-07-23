@@ -17,7 +17,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@engine/scan-files": ["../dist/scan-files.d.ts"],
-      "@engine/audit-report": ["../dist/audit-report.d.ts"]
+      "@engine/audit-report": ["../dist/audit-report.d.ts"],
+      "@engine/spec": ["../dist/core/spec.d.ts"]
     }
   },
   "include": ["src", "vite.config.ts", "vite.aliases.ts"]

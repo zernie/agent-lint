@@ -15,6 +15,9 @@ export const aliases: Record<string, string> = {
   "@engine/audit-report": fileURLToPath(
     new URL("../dist/audit-report.js", import.meta.url),
   ),
+  "@engine/spec": fileURLToPath(
+    new URL("../dist/core/spec.js", import.meta.url),
+  ),
   "node:zlib": fileURLToPath(
     new URL("./src/lib/zlib-shim.ts", import.meta.url),
   ),

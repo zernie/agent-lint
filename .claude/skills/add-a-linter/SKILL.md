@@ -38,25 +38,28 @@ Work in this order — each step's gate tells you the next is needed.
 2. **Pick the existence-check kind** (`LinterCapabilities.existenceCheck` in
    `src/core/linter-adapter.ts`) — this decides which helper builds the adapter:
    - `node-api` — the rule set is resolved from an installed npm package
-     (eslint, stylelint). Use `nodeApiAdapter(name, discover)`.
+     (eslint, stylelint). Use
+     `nodeApiAdapter(name, resolver, configEnabled, discover)`.
    - `cli` — a real command asks the tool whether a rule exists (ruff, clippy,
      pylint, rubocop, detekt, ktlint, checkstyle, golangci-lint). Use
-     `cliAdapter(name, cliTool, discover, { enumerable })`.
+     `cliAdapter(name, cliTool, checkExists, configEnabled, discover, enumerate?)`.
    - `filesystem` — presence in a project file counts, no tool (cedar). Write a
      literal adapter (see cedar in `linters.ts`).
    - `format-only` — only the reference **shape** is validated, no tool exists
-     to list rules (ktlint's catalog is unlistable). Still a `cli` adapter with
-     `{ enumerable: false }`; the existence check is the qualified-shape rule.
+     to list rules (ktlint's catalog is unlistable). Still a `cli` adapter, just
+     omit the `enumerate` arg; the existence check is the qualified-shape rule.
 
 3. **Implement the discoverer** `discover<Name>Rules(basePath): DiscoveredRules
 | null` in `linters.ts` — reads the project's real linter config and returns
    its enabled rules for `generate-types` (fail **open**: return `null`, never
-   flag every rule, when you can't enumerate). If it's a `cli` linter, also add
-   the entry to `CLI_RULE_CHECKS` (the existence probe) and, for a real
-   config-enabled read, `LINTER_CONFIG_CHECKERS`. Parse structured config with a
-   **real parser** (js-yaml / @iarna/toml / the shared markdown-it helper), never
-   a hand-rolled regex — see the `parse-structured-input-with-a-real-parser`
-   rule; detekt's `parseDetektConfig` (js-yaml) is the model.
+   flag every rule, when you can't enumerate). If it's a `cli` linter, also write
+   its `<name>CheckExists` existence probe (throws when the rule is unknown) and,
+   for a real config-enabled read, its `<name>ConfigEnabled` checker — plain
+   named functions the adapter references directly in the `LINTERS` registry
+   (there is no separate map to touch). Parse structured config with a **real
+   parser** (js-yaml / @iarna/toml / the shared markdown-it helper), never a
+   hand-rolled regex — see the `parse-structured-input-with-a-real-parser` rule;
+   detekt's `parseDetektConfig` (js-yaml) is the model.
 
 4. **Register it** in `LINTERS` (`linters.ts`) via the matching helper. `tsc`
    goes green here — the registry is now complete.
@@ -67,9 +70,12 @@ Work in this order — each step's gate tells you the next is needed.
    The conformance test set-matches the table against the registry, so a missing
    row fails CI.
 
-6. **Show it on the site** — add the name to the `const LINTERS = [...]` array in
-   `site/src/components/sections/Wedge.tsx`. The conformance test also guards
-   this, so a stale front page fails CI (loud), not silently.
+6. **The site updates itself** — the vigiles.sh chip strip (`Wedge.tsx`) DERIVES
+   from `BUILTIN_LINTERS`, so a new linter appears automatically; there's no array
+   to edit. Optionally add a display label to `LINTER_LABELS` in `Wedge.tsx` if it
+   needs special casing (e.g. `ESLint`, `RuboCop`); with no entry it renders under
+   its lowercase name. The conformance test guards that the derivation stays in
+   place (a revert to a hand-typed list fails CI).
 
 7. **If it's a `cli` linter, make CI actually run it — no silent skips.** The
    real-binary tests are `describe.skipIf(!hasBinary("<tool>"))` in
@@ -101,14 +107,3 @@ src/core/linters.test.ts` + `tsc --noEmit`). You are done only when:
   **and** the site chip list (docs + site parity).
 - The new linter's config-parse unit test passes with **no binary**, and its
   real-binary test runs in CI (installed + sanity-gated), not skipped.
-
-## Known limit (not your job here)
-
-The runtime existence/config **dispatch** still reads four legacy maps
-(`LINTER_RESOLVERS`, `CLI_RULE_CHECKS`, `LINTER_CONFIG_CHECKERS`,
-`CLI_TOOL_FOR_LINTER`) that the adapter methods delegate to — so a `cli` linter
-still needs its `CLI_RULE_CHECKS`/`LINTER_CONFIG_CHECKERS` entries (step 3).
-Collapsing those maps into `LINTERS` so the registry is the **literal** single
-dispatch source is the tracked **Stage 4** follow-up in
-`research/linter-adapter-architecture.md` — don't attempt it as part of adding a
-linter.

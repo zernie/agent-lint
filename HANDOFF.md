@@ -18,27 +18,24 @@
 **`vigiles.sh` is LIVE** 🎉 — landing at `/`, TypeDoc docs at `/api`, valid TLS. Site auto-deploys
 via `pages.yml` on push to main. Demo UX + real-F default MERGED (PRs #100–#106).
 
-**PR #114 MERGED** (JVM/Go linters 7→11, audit/init/compile hardening, adoption UX; closed #107/#109/#110/#111/#113).
+**PR #114 MERGED** (JVM/Go linters 7→11, audit/init/compile hardening, adoption UX).
+**PR #116 MERGED** (`c8910bd`) — the LinterAdapter port stages 0–3 (registry + conformance + generate-types + CI
+parity + `add-a-linter` skill) + report-view card lightening. **Vlad's issues #107/#109/#110/#111/#113 — CLOSED +
+personally replied** (v14.12.0; #107 1d dirty-tree + #113 looser-match stated as deferred).
 
-**Branch `claude/click-not-working-s9apfb`: PR #116 OPEN (github.com/zernie/vigiles/pull/116), 12 commits ahead of main.**
-The follow-up to #114 — AND it BUILDS the LinterAdapter port (the founder wanted "the entire linterport", not just
-roadmapped). Stages 0–3 shipped: `BUILTIN_LINTERS` single-source array (`spec.ts`) → `BuiltinLinter`; the type-only
-`linter-adapter.ts` port leaf; `LINTERS: Record<BuiltinLinter, LinterAdapter>` in `linters.ts` (missing linter = tsc
-error); `generate-types` iterates the registry (no parallel `discoverers[]`); `linter-contract.test.ts` conformance
-loop (key===name, capability-flag⇄method, set-match vs BUILTIN_LINTERS **and** docs table **and** the site chip list).
-CI now INSTALLS detekt/ktlint/checkstyle/golangci-lint so their previously-`skipIf`-gated tests RUN (no silent skips).
-Plus doc parity (catalogs→linters, capability limits) + golangci/ktlint/checkstyle test gaps.
-Watching CI: 6/7 green; the `test` job (first real run of the JVM/Go linter tests) is the one to confirm. Subscribed
+**THE LINTERADAPTER PORT IS NOW COMPLETE.** `LINTERS: Record<BuiltinLinter, LinterAdapter>` (`src/core/linters.ts`)
+is the LITERAL single dispatch source — a missing linter is a tsc error, `linter-contract.test.ts` catches docs/site
+drift, and `add-a-linter` (`.claude/skills/`) is the authoring guide. To add a linter: `BUILTIN_LINTERS` (`spec.ts`)
+→ register in `LINTERS` via `nodeApiAdapter`/`cliAdapter` (checkExists/configEnabled inline) → docs row → CI install.
 
-- send_later fallback armed. PR body was REWRITTEN — old body had a leaked session URL (scrubbed) + wrongly said the
-  port "stays roadmap-P0" when it was actually built.
-
-**⚠️ STAGE 4 DEFERRED (own PR off main, tracked in `research/linter-adapter-architecture.md`):** route the runtime
-existence/config DISPATCH through `LINTERS` and delete the 4 legacy maps (`LINTER_RESOLVERS`, `CLI_RULE_CHECKS`,
-`LINTER_CONFIG_CHECKERS`, `CLI_TOOL_FOR_LINTER`) — ~200 lines of core-moat surgery, so LINTERS becomes the literal
-single dispatch source. Deferred to keep #116 low-risk. Also still-pending per founder: **cedar** public docs + a P1
-roadmap item (revisit its value — KEEP + document), and an **authoring-a-linter doc + add-a-linter skill** (parity via
-test structure, mirroring the harness adapter). Do NOT pile these onto #116 mid-watch.
+**Branch `claude/click-not-working-s9apfb`: a NEW follow-up PR (Stage 4 + site + cedar) about to open off main.**
+Stage 4 = collapsed the 4 legacy dispatch maps (`LINTER_RESOLVERS`/`CLI_RULE_CHECKS`/`LINTER_CONFIG_CHECKERS`/
+`CLI_TOOL_FOR_LINTER` + `getCliRuleSet`) into the adapters, behavior byte-preserved (golden `linters.test.ts` 307
+green; done by a background subagent, dispatch reviewed). Site = `Wedge.tsx` now DERIVES the linter chip strip from
+`BUILTIN_LINTERS` via a new `@engine/spec` alias (can't go stale; conformance test guards the derivation). Cedar =
+KEPT + P1 roadmap item ("Cedar verification depth — beyond presence"); its reference docs already exist in
+`docs/linter-support.md` § Cedar Policies. Stale-ref sweep: `CONTRIBUTING.md` + `ci.yml` comment + roadmap + research
+index all de-referenced the deleted maps. Full suite green (2352 passed | 24 skipped), site builds + bundles the names.
 
 **DOGFOOD BATCH — DONE.** A 4-agent Sonnet fan-out found **14 verified, source-traced bugs**; founder's call was
 **FIX, not file**. **All 14 fixed + pushed**, each with a regression test; full `vitest` suite green (2327 passing).
@@ -91,8 +88,9 @@ against the skill (READ it before touching `site/`); screenshot desktop AND full
 
 ### 🎯 DO NEXT
 
-0. **PR #116 OPEN** (LinterAdapter port + JVM/Go doc/test parity) — watch CI to green, then MERGE (auto-merge OFF →
-   squash manually). Then Stage 4 + cedar docs + authoring-a-linter skill as their own PRs off main (see above).
+0. **The Stage 4 + site + cedar follow-up PR** — open it, watch CI to green, MERGE (auto-merge OFF → squash manually).
+   Roadmap sweep leftover: the `## Now` §"Vlad's real-harness pass" #107–#113 items still read as OPEN but all shipped
+   in v14.12.0 (#114) — a cheap honesty pass to move them to "Shipped recently" (not done, out of this PR's scope).
    The GHA PR-comment grade (item 6) stays deprioritized (later-adoption, not guaranteed after gate-first init).
 1. **Item 4b b2 (per-grade OG card)** — the ONLY remaining share-loop piece: a card showing `owner/repo · actual grade`.
    Needs a SERVERLESS OG endpoint (GitHub Pages is static, can't vary `<meta>` by `?repo=`) → bundles with **4c**
