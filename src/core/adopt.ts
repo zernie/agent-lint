@@ -409,6 +409,11 @@ export function adoptSkill(
   const argumentHint = frontmatterScalar(fm, "argument-hint");
   const disableModelInvocation =
     frontmatterScalar(fm, "disable-model-invocation") === "true";
+  // `context: fork` is a supported skill key (a forked skill runs as a subagent);
+  // `"fork"` is the only valid value. Previously it was in SKILL_KNOWN_KEYS but
+  // never read, so an existing SKILL.md's `context: fork` was silently dropped on
+  // adopt with NO unmapped-key warning (the key was falsely marked "known"). (#107)
+  const isFork = frontmatterScalar(fm, "context") === "fork";
   const unmappedKeys = unmappedFrontmatterKeys(fm, SKILL_KNOWN_KEYS);
 
   const lines = [
@@ -417,6 +422,7 @@ export function adoptSkill(
   ];
   if (argumentHint)
     lines.push(`  argumentHint: ${JSON.stringify(argumentHint)},`);
+  if (isFork) lines.push(`  context: "fork",`);
   if (disableModelInvocation) lines.push(`  disableModelInvocation: true,`);
   if (tools && tools.length > 0)
     lines.push(`  tools: ${JSON.stringify(tools)},`);
@@ -427,6 +433,7 @@ export function adoptSkill(
     name,
     description,
     ...(argumentHint ? { argumentHint } : {}),
+    ...(isFork ? { context: "fork" as const } : {}),
     ...(disableModelInvocation ? { disableModelInvocation: true } : {}),
     ...(tools && tools.length > 0 ? { tools } : {}),
     ...(trimmedBody ? { body: trimmedBody } : {}),

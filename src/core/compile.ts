@@ -815,7 +815,12 @@ function renderSkillFrontmatter(
         : spec.argumentHint;
     if (argHint) fm.push(`argument-hint: ${argHint}`);
     if (spec.tools && spec.tools.length > 0) {
-      fm.push(`tools: ${spec.tools.join(", ")}`);
+      // A Claude Code SKILL declares its tool contract under `allowed-tools`
+      // (NOT `tools:` — that's the SUBAGENT key), as a real YAML sequence. Flow
+      // style keeps it one line while parsing as a list, not a single comma
+      // scalar. Previously this emitted `tools: a, b` — the wrong key AND an
+      // ambiguous scalar, so the restriction was lost on the CC round-trip. (#107)
+      fm.push(`allowed-tools: [${spec.tools.join(", ")}]`);
     }
   }
   fm.push("", "---");

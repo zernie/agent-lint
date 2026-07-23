@@ -78,6 +78,40 @@ Body.
     expect(spec.tools).toEqual(["Read", "Grep", "Glob"]);
   });
 
+  it("round-trips allowed-tools + context: fork through adopt → compile (issue #107)", () => {
+    const md = `---
+name: reviewer
+description: Review a changed file for defects
+allowed-tools: Read, Grep, Glob
+context: fork
+---
+
+Review the file.
+`;
+    const r = adoptSkill(md, "reviewer");
+    const spec = r.spec as SkillSpec;
+    expect(spec.tools).toEqual(["Read", "Grep", "Glob"]);
+    expect(spec.context).toBe("fork");
+    // context: fork is a known key → it must NOT surface as an unmapped-key note.
+    expect(r.unmappedKeys).not.toContain("context");
+
+    const { markdown, errors } = compileSkill(spec, {
+      specFile: "skills/reviewer/SKILL.md.spec.ts",
+      dialect: claudeCodeDialect,
+    });
+    expect(errors).toEqual([]);
+    // The skill tool key is `allowed-tools` (NOT `tools:`), emitted as a real
+    // YAML sequence, and `context: fork` survives.
+    expect(markdown).toMatch(/allowed-tools: \[Read, Grep, Glob\]/);
+    expect(markdown).not.toMatch(/\ntools: /); // never the subagent key for a skill
+    expect(markdown).toContain("context: fork");
+
+    // Re-reading the compiled skill yields the SAME tool contract (full round-trip).
+    const back = adoptSkill(markdown, "reviewer").spec as SkillSpec;
+    expect(back.tools).toEqual(["Read", "Grep", "Glob"]);
+    expect(back.context).toBe("fork");
+  });
+
   it("reports a non-standard frontmatter key instead of silently dropping it", () => {
     const md = `---
 name: x
