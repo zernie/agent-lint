@@ -155,7 +155,10 @@ programming with a subagent as the step:
   err | malformed), validated against the contract shape. The shared primitive.
 - **`railway({ steps, onError, recover })` + `delegate()`** (`src/spec.ts`) — the
   sub-Turing composer: a finite step list + bounded recovery, **no loop
-  combinator**, so termination is structural. **`compileRailway`/`validateRailway`**
+  combinator**, so termination is structural. (A proposed `loop()` extension that
+  keeps termination *checkable* for orchestrators that genuinely iterate — a
+  deterministic `until`-gate + a mandatory `maxIters` cap — is spec'd in
+  [`loop-combinator.md`](loop-combinator.md).) **`compileRailway`/`validateRailway`**
   (`src/compile.ts`) emit the orchestrator command and resolve every delegate
   target against the known agent set (stale-ref), reject an empty railway, and
   require `recover.max ≥ 1`.
