@@ -96,6 +96,57 @@ echo hi
     expect(spec.sections["Shell"]).toContain("## not a heading");
   });
 
+  it("does NOT mis-split on a ## inside a NESTED / UNBALANCED fence (the toggle-bug regression)", () => {
+    // A stray single ``` inside a 4-backtick block is an ODD number of
+    // fence-looking lines — the old naive `inFence = !inFence` toggle flipped to
+    // "outside" and promoted the following `##` to a bogus section, swallowing
+    // the real `## Rules` after it. The shared markdown-it oracle keeps the whole
+    // outer block fenced, so only Setup + Rules are real sections.
+    const md = `# CLAUDE.md
+
+## Setup
+
+\`\`\`\`markdown
+To open a code block, type:
+\`\`\`
+## Heading INSIDE the outer block
+\`\`\`\`
+
+## Rules
+
+Be nice.
+`;
+    const spec = adoptToSpec(md, "CLAUDE.md");
+    expect(Object.keys(spec.sections)).toEqual(["Setup", "Rules"]);
+    // The in-block `##` rides along verbatim in Setup; Rules survives as its own.
+    expect(spec.sections["Setup"]).toContain("## Heading INSIDE the outer block");
+    expect(spec.sections["Rules"]).toBe("Be nice.");
+  });
+
+  it("round-trips a nested-fence file through compile with zero drift", () => {
+    const md = `# CLAUDE.md
+
+## Setup
+
+\`\`\`\`markdown
+To open a code block, type:
+\`\`\`
+## Heading INSIDE the outer block
+\`\`\`\`
+
+## Rules
+
+Be nice.
+`;
+    const { markdown, errors } = recompile(md);
+    expect(errors).toEqual([]);
+    // The exact source of the outer block is reproduced (no blank lines injected
+    // around the in-block `##`, which the mis-split used to do).
+    expect(markdown).toContain(
+      "````markdown\nTo open a code block, type:\n```\n## Heading INSIDE the outer block\n````",
+    );
+  });
+
   it("dedupes duplicate headings instead of dropping content", () => {
     const md = `# CLAUDE.md\n\n## Notes\n\nfirst\n\n## Notes\n\nsecond\n`;
     const spec = adoptToSpec(md, "CLAUDE.md");

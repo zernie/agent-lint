@@ -10,6 +10,7 @@ import { globSync } from "glob";
 import { resolve, dirname, basename } from "node:path";
 
 import { sha256short, assertNever } from "./hash.js";
+import { fencedLineFlags } from "./markdown.js";
 import { fileDefinesSymbol, langForFile } from "./symbols.js";
 
 import type {
@@ -417,18 +418,14 @@ function validateSectionContent(
 
   // Reject markdown headers inside sections — sections compile to ## headings,
   // so raw # headers break document structure and signal pasted-in content.
-  // Skip lines inside fenced code blocks (``` or ~~~).
-  let inFence = false;
-  for (const line of contentLines) {
-    if (/^ {0,3}(`{3,}|~{3,})/.test(line)) {
-      inFence = !inFence;
-      continue;
-    }
-    if (inFence) continue;
-    if (/^ {0,3}#{1,2}\s/.test(line)) {
+  // Skip lines inside fenced code blocks (via the shared fence oracle).
+  const fenced = fencedLineFlags(text);
+  for (let i = 0; i < contentLines.length; i++) {
+    if (fenced[i]) continue;
+    if (/^ {0,3}#{1,2}\s/.test(contentLines[i])) {
       errors.push({
         type: "section-has-header",
-        message: `Section "${name}" contains a markdown header ("${line.trim().slice(0, 60)}"). Break into separate named sections instead.`,
+        message: `Section "${name}" contains a markdown header ("${contentLines[i].trim().slice(0, 60)}"). Break into separate named sections instead.`,
       });
       break;
     }

@@ -45,6 +45,7 @@
  * it bundles clean in a browser (path ops come from the node-free `posix-path`).
  */
 import { resolve } from "../posix-path.js";
+import { fencedLineFlags } from "./markdown.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -89,8 +90,6 @@ export interface SkillResourceOptions {
 // ---------------------------------------------------------------------------
 // Shapes we match vs deliberately skip (FP-safety)
 // ---------------------------------------------------------------------------
-
-const FENCE = /^\s*(?:`{3,}|~{3,})/;
 
 // The Agent-Skills standard bundle subdirectories. A path PREFIXED by one of
 // these is unambiguously a local bundled resource, even without a `./`.
@@ -325,13 +324,9 @@ export function skillResourceIssues(
   const seen = new Set<string>();
 
   const lines = skillBody.split("\n");
-  let inFence = false;
+  const fenced = fencedLineFlags(skillBody);
   for (let i = 0; i < lines.length; i++) {
-    if (FENCE.test(lines[i])) {
-      inFence = !inFence;
-      continue;
-    }
-    if (inFence) continue;
+    if (fenced[i]) continue;
 
     for (const c of candidatesInLine(lines[i], i + 1)) {
       if (resolvesAnywhere(c.resolved)) continue;

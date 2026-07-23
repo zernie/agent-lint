@@ -27,6 +27,7 @@ import {
   type FrontmatterRead,
 } from "./frontmatter-read.js";
 import { skill, agent, type SkillSpec, type AgentSpec } from "./spec.js";
+import { fencedLineFlags } from "./markdown.js";
 
 export type AdoptTier = "structured" | "raw";
 
@@ -71,7 +72,6 @@ interface Block {
 // A top-level heading is `#` or `##` (the levels the compiler reserves for
 // document/section structure). `###`+ stay inside a section body.
 const HEADING_RE = /^ {0,3}(#{1,2})\s+(.*)$/;
-const FENCE_RE = /^ {0,3}(?:`{3,}|~{3,})/;
 
 // Mirrors compile.ts RESERVED_SECTION_KEYS — keys that clash with the structured
 // `commands`/`keyFiles`/`rules` fields and would be a compile error as a section.
@@ -91,14 +91,14 @@ const RESERVED_SECTION_KEYS = new Set([
 function splitIntoBlocks(body: string): Block[] {
   const blocks: Block[] = [];
   let current: Block = { heading: null, level: null, lines: [] };
-  let inFence = false;
-  for (const line of body.split("\n")) {
-    if (FENCE_RE.test(line)) {
-      inFence = !inFence;
-      current.lines.push(line);
-      continue;
-    }
-    const m = inFence ? null : line.match(HEADING_RE);
+  const lines = body.split("\n");
+  const fenced = fencedLineFlags(body);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // A heading only splits when it is NOT inside a fenced code block. Fence
+    // lines (and everything inside) stay as verbatim content of the current
+    // block — matching the prior behavior, but fence-correct on nesting.
+    const m = fenced[i] ? null : line.match(HEADING_RE);
     if (m) {
       blocks.push(current);
       current = {
