@@ -34,7 +34,7 @@ export default claude({
     // ── adapters ──
     "research/adapter-api-design.md": `[active] Survey of core+adapter packaging patterns (unplugin/Drizzle/AI SDK); verdict for vigiles's subpath-export relayout`,
     "research/code-adapter-architecture.md": `[shipped] Plan for decoupling vigiles from Claude Code via ports/adapters (format vs runtime axes); import-based harness selection`,
-    "research/linter-adapter-architecture.md": `[idea] P0 — make a linter a cohesive type-enforced unit (LinterAdapter port + Record<BuiltinLinter> registry + conformance loop), mirroring HarnessAdapter/rule-meta; retires the scattered-registry whack-a-mole`,
+    "research/linter-adapter-architecture.md": `[active] P0 — make a linter a cohesive type-enforced unit (LinterAdapter port + Record<BuiltinLinter> registry + conformance loop), mirroring HarnessAdapter/rule-meta; retires the scattered-registry whack-a-mole. Stages 0–3 SHIPPED on #116 (port leaf + registry + conformance + generate-types + CI parity + add-a-linter skill); Stage 4 (collapse the 4 dispatch maps) remains`,
     "research/codex-prototype-findings.md": `[shipped] Records Codex adapter validation; transport tier proven against real codex binary, shipped as vigiles/codex`,
     "research/harness-capabilities.md": `[active] Exhaustive Claude Code vs Codex capability inventory stating vigiles's verify/test/record-only/n-a stance per capability`,
     "research/harness-landscape.md": `[active] Mid-2026 research into Codex internals unblocking the hook-protocol and model-mock adapter ports for the Codex adapter`,

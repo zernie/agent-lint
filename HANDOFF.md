@@ -29,8 +29,9 @@ loop (key===name, capability-flag⇄method, set-match vs BUILTIN_LINTERS **and**
 CI now INSTALLS detekt/ktlint/checkstyle/golangci-lint so their previously-`skipIf`-gated tests RUN (no silent skips).
 Plus doc parity (catalogs→linters, capability limits) + golangci/ktlint/checkstyle test gaps.
 Watching CI: 6/7 green; the `test` job (first real run of the JVM/Go linter tests) is the one to confirm. Subscribed
-+ send_later fallback armed. PR body was REWRITTEN — old body had a leaked session URL (scrubbed) + wrongly said the
-port "stays roadmap-P0" when it was actually built.
+
+- send_later fallback armed. PR body was REWRITTEN — old body had a leaked session URL (scrubbed) + wrongly said the
+  port "stays roadmap-P0" when it was actually built.
 
 **⚠️ STAGE 4 DEFERRED (own PR off main, tracked in `research/linter-adapter-architecture.md`):** route the runtime
 existence/config DISPATCH through `LINTERS` and delete the 4 legacy maps (`LINTER_RESOLVERS`, `CLI_RULE_CHECKS`,

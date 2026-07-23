@@ -1,12 +1,13 @@
 ---
-status: idea
+status: active
 topic: architecture
 ---
 
 # LinterAdapter — make a linter a cohesive, type-enforced unit (P0)
 
-**Status:** proposed (2026-07-23). The design of record for retiring the
-scattered-registry structure behind vigiles's linter cross-referencing engine.
+**Status:** stages 0–3 SHIPPED on PR #116 (2026-07-23); the dispatch-map collapse
+(Stage 4) remains. The design of record for retiring the scattered-registry
+structure behind vigiles's linter cross-referencing engine.
 Roadmap entry: `research/roadmap.md` → Now. Prompted by the PR #114 review:
 adding the JVM/Go linters (#109) produced a steady stream of the same bug class
 (3 detekt review P2s, 5 stale doc references, uneven tests) because **a "linter"
@@ -121,11 +122,49 @@ whole mole species into a compile error — the anti-whack-a-mole the founder
 asked for. Best delivered as its own PR off `main` (not stacked on the large
 #114), so the refactor diff is reviewable in isolation.
 
-## Interim (shipped on #114, not this refactor)
+## Shipped so far (stages 0–3, PR #116)
 
-Two consolidations already landed as down-payments in the same spirit — one
-shared parser replacing many copies: the **markdown-it fence oracle**
-(`src/core/markdown.ts`, retiring 5 regex fence toggles) and the **js-yaml
-detekt-config parser** (`parseDetektConfig`, retiring 3 regex parsers). The
-current-gap doc/test patches also ship on #114. This doc is the remaining
-**structural** work.
+The port and its gates are built — a linter is now one type-enforced unit:
+
+- **Stage 0** — `src/core/linter-adapter.ts`, the type-only leaf port
+  (`LinterAdapter`, `LinterCapabilities`, `ConfigEnabledStatus`,
+  `DiscoveredRules`), imports only the `BuiltinLinter` type (no cycle).
+- **Stage 1** — `BUILTIN_LINTERS` single-source array in `spec.ts` →
+  `BuiltinLinter`; the `LINTERS: Record<BuiltinLinter, LinterAdapter>` registry
+  in `linters.ts` built via `cliAdapter` / `nodeApiAdapter` helpers + a cedar
+  literal. A missing linter is now a **tsc error**.
+- **Stage 2** — `src/core/linter-contract.test.ts`, the conformance loop:
+  key === `name`, each capability flag ⇔ its method's presence,
+  `existenceCheck === "cli"` ⇔ `cliTool`, and a set-match against
+  `BUILTIN_LINTERS` **and** `docs/linter-support.md` **and** the site chip list
+  (`Wedge.tsx`) — the drift that shipped "only 7 catalogs" would fail here.
+- **Stage 3** — `generate-types.ts` iterates the registry
+  (`Object.values(LINTERS).map(a => a.discoverEnabled?.(…))`) instead of a
+  parallel `discoverers[]` list.
+- **CI parity** — the `test` job installs detekt/ktlint/checkstyle/golangci-lint
+  (pinned, cached, Temurin 21) + a `command -v` sanity gate, so their
+  previously-`skipIf`-gated tests RUN (no silent skips).
+- **Authoring surface** — `.claude/skills/add-a-linter/SKILL.md` (contributor
+  skill): "write one object; tsc + the conformance test tell you what's missing."
+  (A separate `docs/authoring-a-linter.md` + `assertLinterConformance` kit is not
+  needed while linters are a closed builtin set — no third-party extension path,
+  unlike harness adapters.)
+
+**Down-payments that landed earlier on #114**, same spirit — one shared parser
+replacing many copies: the **markdown-it fence oracle** (`src/core/markdown.ts`,
+retiring 5 regex fence toggles) and the **js-yaml detekt-config parser**
+(`parseDetektConfig`, retiring 3 regex parsers).
+
+## Remaining: Stage 4 — collapse the dispatch maps
+
+The one structural piece left. The adapter methods currently DELEGATE to the four
+legacy maps rather than replace them: `checkExists` calls `CLI_RULE_CHECKS` /
+`LINTER_RESOLVERS`, `configEnabled` is `LINTER_CONFIG_CHECKERS[name]`, the PATH
+tool is still `CLI_TOOL_FOR_LINTER`, and `checkLinterRule`'s `??`-chain
+(`tryNodeResolver` / `tryCliCheck` / `tryCedarPolicy` / …) still reads the maps
+directly. So `LINTERS` is the single source for the TYPE, discovery, and
+conformance, but not yet for runtime DISPATCH. Stage 4 inlines each map's bodies
+into the adapter methods and routes the `??`-chain through
+`capabilities.existenceCheck`, deleting the four maps so the registry is the
+literal single dispatch source. ~200 lines of core-moat surgery behind the
+existing `linters.test.ts` golden suites — best as its own PR off `main`.
