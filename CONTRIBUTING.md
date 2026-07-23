@@ -97,11 +97,20 @@ This project uses **TypeScript strict mode** with these compiler options enabled
 4. Add tests in `src/validate.test.ts`.
 5. Document the rule in `README.md` and `CLAUDE.md`.
 
-## Adding a new linter resolver
+## Adding a new linter
 
-1. Add a Node API resolver to `LINTER_RESOLVERS` (if the linter has a Node API).
-2. Or add a CLI checker to `CLI_RULE_CHECKS` and map it in `CLI_TOOL_FOR_LINTER`.
-3. Optionally add a config-enabled checker to `LINTER_CONFIG_CHECKERS`.
+A linter is ONE `LinterAdapter` in the `LINTERS` registry (`src/core/linters.ts`) —
+a `Record<BuiltinLinter, LinterAdapter>`, so a missing linter is a `tsc` error and
+`src/core/linter-contract.test.ts` catches any docs/site drift. The full
+step-by-step lives in the `add-a-linter` contributor skill
+(`.claude/skills/add-a-linter/SKILL.md`); in short:
+
+1. Add the lowercase name to `BUILTIN_LINTERS` in `src/core/spec.ts`.
+2. Register it in `LINTERS` via `nodeApiAdapter` (Node-API linter) or `cliAdapter`
+   (CLI linter), writing its `checkExists` / `configEnabled` / rule-enumerator
+   functions inline; `cedar` is a filesystem literal.
+3. Add a `docs/linter-support.md` row + section, and (for a CLI linter) install it
+   in the CI `test` job so its gated tests run.
 4. Add tests covering both existing and nonexistent rules.
 
 ## Pull requests

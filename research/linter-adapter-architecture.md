@@ -5,8 +5,9 @@ topic: architecture
 
 # LinterAdapter — make a linter a cohesive, type-enforced unit (P0)
 
-**Status:** stages 0–3 SHIPPED on PR #116 (2026-07-23); the dispatch-map collapse
-(Stage 4) remains. The design of record for retiring the scattered-registry
+**Status:** all stages (0–4) SHIPPED — stages 0–3 on PR #116 (2026-07-23), the
+dispatch-map collapse (Stage 4) after it. `LINTERS` is now the literal single
+dispatch source. The design of record for retiring the scattered-registry
 structure behind vigiles's linter cross-referencing engine.
 Roadmap entry: `research/roadmap.md` → Now. Prompted by the PR #114 review:
 adding the JVM/Go linters (#109) produced a steady stream of the same bug class
@@ -155,16 +156,37 @@ replacing many copies: the **markdown-it fence oracle** (`src/core/markdown.ts`,
 retiring 5 regex fence toggles) and the **js-yaml detekt-config parser**
 (`parseDetektConfig`, retiring 3 regex parsers).
 
-## Remaining: Stage 4 — collapse the dispatch maps
+## Stage 4 — SHIPPED (dispatch-map collapse)
 
-The one structural piece left. The adapter methods currently DELEGATE to the four
-legacy maps rather than replace them: `checkExists` calls `CLI_RULE_CHECKS` /
-`LINTER_RESOLVERS`, `configEnabled` is `LINTER_CONFIG_CHECKERS[name]`, the PATH
-tool is still `CLI_TOOL_FOR_LINTER`, and `checkLinterRule`'s `??`-chain
-(`tryNodeResolver` / `tryCliCheck` / `tryCedarPolicy` / …) still reads the maps
-directly. So `LINTERS` is the single source for the TYPE, discovery, and
-conformance, but not yet for runtime DISPATCH. Stage 4 inlines each map's bodies
-into the adapter methods and routes the `??`-chain through
-`capabilities.existenceCheck`, deleting the four maps so the registry is the
-literal single dispatch source. ~200 lines of core-moat surgery behind the
-existing `linters.test.ts` golden suites — best as its own PR off `main`.
+The last structural piece. Before Stage 4 the adapter methods DELEGATED back to
+four legacy maps rather than owning their behaviour — `checkExists` called
+`CLI_RULE_CHECKS` / `LINTER_RESOLVERS`, `configEnabled` was
+`LINTER_CONFIG_CHECKERS[name]`, the PATH tool was `CLI_TOOL_FOR_LINTER`, the typo
+enumerator was `getCliRuleSet`, and `checkLinterRule`'s `??`-chain read those maps
+directly — so `LINTERS` was the single source for the TYPE, discovery, and
+conformance, but NOT for runtime DISPATCH.
+
+Stage 4 made `LINTERS` the LITERAL single dispatch source:
+
+- Each map's per-linter bodies became plain named functions the adapter
+  references directly: the cli existence probes (`ruffCheckExists`,
+  `detektCheckExists`, …), the config-enabled reads (`eslintConfigEnabled`,
+  `rubocopConfigEnabled`, …, plus the shared detekt/ktlint/checkstyle
+  `*EnabledStatus`), the node-api resolvers (`eslintResolver`/`stylelintResolver`),
+  and the per-linter rule enumerators (`enumerateRuffRules`, …, each memoised by
+  `cachedByBasePath`). The `cliAdapter` / `nodeApiAdapter` helpers now take those
+  functions as arguments instead of looking them up by name; `cliTool` was already
+  a helper argument, so `CLI_TOOL_FOR_LINTER` was pure duplication.
+- `checkLinterRule`'s dispatch routes the per-builtin branches through
+  `LINTERS[name]` keyed on `capabilities.existenceCheck` (`node-api` →
+  `tryNodeResolver`, `cli` → `tryCliCheck`, `filesystem` → `tryCedarPolicy`), while
+  the non-registry branches (`tryVigilesInternal`, `tryScopedPlugin`,
+  `tryCustomRulesDir`, the final "Unknown linter") keep their exact order and
+  semantics. `checkConfigEnabled` reads `LINTERS[name].configEnabled` too.
+- The four maps (`LINTER_RESOLVERS`, `CLI_RULE_CHECKS`, `LINTER_CONFIG_CHECKERS`,
+  `CLI_TOOL_FOR_LINTER`) and `getCliRuleSet` were deleted.
+
+Behaviour is identical — the `linters.test.ts` + `spec.test.ts` per-linter golden
+suites stayed green with zero assertion changes, the public API surface is
+unchanged, and `linter-contract.test.ts`'s capability⇔method invariants still hold
+(`catalogEnumeration` is now derived from whether an `enumerate` arg was passed).

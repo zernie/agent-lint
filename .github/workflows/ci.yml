@@ -71,9 +71,9 @@ jobs:
       - name: Install JVM/Go linter CLIs (detekt, ktlint, checkstyle, golangci-lint)
         # Lets the gated real-binary catalog tests in src/core/linters.test.ts
         # actually RUN instead of skipping. Each tool must land on PATH under the
-        # exact name CLI_TOOL_FOR_LINTER expects (src/core/linters.ts): detekt,
-        # ktlint, checkstyle, golangci-lint. checkstyle ships only a fat jar, so
-        # it gets a 2-line `java -jar` shim; detekt's zip launcher is symlinked.
+        # exact name its LINTERS adapter's `cliTool` expects (src/core/linters.ts):
+        # detekt, ktlint, checkstyle, golangci-lint. checkstyle ships only a fat jar,
+        # so it gets a 2-line `java -jar` shim; detekt's zip launcher is symlinked.
         run: |
           TOOLS="$HOME/.vigiles-linter-tools"
           BIN="$TOOLS/bin"
