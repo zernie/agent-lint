@@ -14,7 +14,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 import { globSync } from "glob";
-import { checkstyleEnabledStatus } from "./linters.js";
+import {
+  checkstyleEnabledStatus,
+  parseDetektConfig,
+  readDetektConfig,
+} from "./linters.js";
 
 // ---------------------------------------------------------------------------
 // Linter config detection
@@ -58,13 +62,6 @@ function firstExisting(basePath: string, paths: string[]): string | null {
   return null;
 }
 
-function detektConfigPath(basePath: string): string | null {
-  return firstExisting(basePath, [
-    "detekt.yml",
-    "detekt-config.yml",
-    "config/detekt/detekt.yml",
-  ]);
-}
 
 function checkstyleConfigPath(basePath: string): string | null {
   return firstExisting(basePath, [
@@ -308,37 +305,18 @@ function discoverClippyRules(basePath: string): DiscoveredRules | null {
   }
 }
 
-/** Whether the detekt rule block starting after line `ruleLine` sets `active: false`. */
-function detektRuleDisabled(lines: string[], ruleLine: number): boolean {
-  for (let j = ruleLine + 1; j < lines.length; j++) {
-    const line = lines[j];
-    if (line.trim().length === 0) continue;
-    if (line.length - line.trimStart().length <= 2) break;
-    const act = /^\s*active:\s*(true|false)/.exec(line);
-    if (act) return act[1] === "false";
-  }
-  return false;
-}
-
 function discoverDetektRules(basePath: string): DiscoveredRules | null {
-  // Like discoverClippyRules, read the project's own config: rules are
-  // PascalCase keys at two-space indent under a ruleset section; a rule whose
-  // block sets `active: false` is excluded.
-  const configPath = detektConfigPath(basePath);
-  if (!configPath) return null;
-  try {
-    const lines = readFileSync(configPath, "utf-8").split(/\r?\n/);
-    const rules: string[] = [];
-    for (let i = 0; i < lines.length; i++) {
-      const m = /^ {2}([A-Z][A-Za-z0-9]*):/.exec(lines[i]);
-      if (!m) continue;
-      if (!detektRuleDisabled(lines, i)) rules.push(m[1]);
-    }
-    if (rules.length === 0) return null;
-    return { linter: "detekt", rules, via: "detekt config" };
-  } catch {
-    return null;
-  }
+  // Reuse the shared detekt-config parser (one-parser-no-drift): a rule is
+  // excluded when its own `active: false` OR its enclosing ruleset's
+  // `active: false` disables it — so a spec can't type-check against a rule
+  // detekt won't run.
+  const cfg = readDetektConfig(basePath);
+  if (cfg === null) return null;
+  const rules = [...parseDetektConfig(cfg)]
+    .filter(([, state]) => state.active !== "disabled")
+    .map(([name]) => name);
+  if (rules.length === 0) return null;
+  return { linter: "detekt", rules, via: "detekt config" };
 }
 
 function discoverKtlintRules(basePath: string): DiscoveredRules | null {

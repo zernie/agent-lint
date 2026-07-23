@@ -20,6 +20,7 @@ import { join } from "node:path";
 import {
   checkLinterRule,
   parseDetektRuleKeys,
+  parseDetektConfig,
   detektEnabledStatus,
   ktlintEnabledStatus,
   checkstyleEnabledStatus,
@@ -97,6 +98,39 @@ describe("detekt config parsing", () => {
     // ruleset options and nested rule options are not rules
     assert.equal(rules.has("active"), false);
     assert.equal(rules.has("threshold"), false);
+  });
+
+  it("detektConfigNamesRule matches a rule key but NOT a nested option (P2)", () => {
+    // A nested option like `threshold:` must never pass the existence fallback
+    // as if it were a real rule — the whole point of the js-yaml parser.
+    withTmpDir((dir) => {
+      writeFileSync(join(dir, "detekt.yml"), DETEKT_CONFIG);
+      const named = parseDetektConfig(DETEKT_CONFIG);
+      assert.equal(named.has("ComplexMethod"), true);
+      assert.equal(named.has("threshold"), false);
+      assert.equal(named.has("active"), false);
+      assert.equal(named.has("ignoreNumbers"), false);
+    });
+  });
+
+  it("a ruleset-level `active: false` disables every rule under it (P2)", () => {
+    const cfg = `style:
+  active: false
+  MagicNumber:
+    ignoreNumbers: ['-1']
+  WildcardImport:
+    active: true
+`;
+    withTmpDir((dir) => {
+      writeFileSync(join(dir, "detekt.yml"), cfg);
+      // Ruleset off + no rule-level active → disabled (inherited off).
+      assert.equal(detektEnabledStatus("MagicNumber", dir), "disabled");
+      // A rule's OWN active:true still wins over the ruleset default.
+      assert.equal(detektEnabledStatus("WildcardImport", dir), "enabled");
+    });
+    const parsed = parseDetektConfig(cfg);
+    assert.equal(parsed.get("MagicNumber")?.active, "disabled");
+    assert.equal(parsed.get("WildcardImport")?.active, "enabled");
   });
 
   it("detektEnabledStatus reads active: true/false per rule", () => {
@@ -323,6 +357,31 @@ describe("generateTypes JVM/Go discovery", () => {
         "MagicNumber",
       ]);
       assert.ok(result.dts.includes("DetektRule"));
+    });
+  });
+
+  it("excludes rules under a ruleset with active: false (P2)", () => {
+    // A whole ruleset turned off must not emit its rules into DetektRule — a
+    // spec would type-check against rules detekt won't run.
+    const cfg = `style:
+  active: false
+  MagicNumber:
+    active: true
+  WildcardImport:
+    ignoreImports: ['java.*']
+complexity:
+  active: true
+  LongMethod:
+    threshold: 60
+`;
+    withTmpDir((dir) => {
+      writeFileSync(join(dir, "detekt.yml"), cfg);
+      const result = generateTypes({ basePath: dir, fileGlobs: [] });
+      const detekt = result.linters.find((l) => l.linter === "detekt");
+      assert.ok(detekt, "detekt catalog should be discovered");
+      // style is off → MagicNumber (own active:true still counts) is kept, but
+      // WildcardImport (inherits the off ruleset) is excluded; complexity is on.
+      assert.deepEqual([...detekt.rules].sort(), ["LongMethod", "MagicNumber"]);
     });
   });
 

@@ -24,6 +24,7 @@ import { editDistance } from "./edit-distance.js";
 import { execSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { globSync } from "glob";
+import { load as loadYaml } from "js-yaml";
 
 /**
  * Prepend version-manager shim directories (rbenv / asdf / rvm) to PATH so
@@ -205,24 +206,85 @@ const DETEKT_CONFIG_FILES = [
   "config/detekt/detekt.yml",
 ] as const;
 
+/** The effective state of one detekt rule, read from a project's config. */
+export interface DetektRuleState {
+  /** The enclosing ruleset key (e.g. `style`, `complexity`). */
+  readonly ruleset: string;
+  /**
+   * `enabled`/`disabled` if the rule's own `active:` is set, else `disabled`
+   * when its ENCLOSING ruleset is `active: false` (a ruleset-level off disables
+   * every rule under it), else `unknown` — the rule inherits detekt's default.
+   */
+  readonly active: ConfigEnabledStatus;
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/** `active: true|false` → enabled/disabled; anything else (absent/non-bool) → null. */
+function readActive(v: unknown): "enabled" | "disabled" | null {
+  if (v === true) return "enabled";
+  if (v === false) return "disabled";
+  return null;
+}
+
 /**
- * Extract detekt rule names from a detekt YAML config. Rules are PascalCase
- * keys at exactly two-space indent under a ruleset section (`style:` →
- * `  MagicNumber:`); ruleset options (`active`, `excludes`) are lowercase and
- * per-rule options sit at deeper indents, so both are filtered out.
+ * Parse a detekt YAML config into a map of PascalCase rule name → its effective
+ * state. Parsed with js-yaml, NOT a hand-rolled indent regex (see the
+ * `parse-structured-input-with-a-real-parser` rule) — so indentation, quoting,
+ * comments and inline maps all work, and a nested rule OPTION (`threshold:`,
+ * `ignoreNumbers:`) can never be mistaken for a rule. The ONE parser every
+ * detekt site derives from: rule-key discovery, the config-names-rule existence
+ * fallback, and the enabled-state check. Rulesets are the top-level maps; a rule
+ * is a PascalCase child key of a ruleset (detekt's meta sections — build,
+ * processors, console-reports — have only lowercase/kebab children, so they are
+ * never read as rules). Malformed YAML → an empty map (fail closed).
+ * @internal
+ */
+export function parseDetektConfig(yaml: string): Map<string, DetektRuleState> {
+  const out = new Map<string, DetektRuleState>();
+  let doc: unknown;
+  try {
+    doc = loadYaml(yaml);
+  } catch {
+    return out;
+  }
+  if (!isRecord(doc)) return out;
+  for (const [ruleset, body] of Object.entries(doc)) {
+    if (isRecord(body)) collectDetektRuleset(ruleset, body, out);
+  }
+  return out;
+}
+
+/** Collect the PascalCase rules of one ruleset block into `out`. */
+function collectDetektRuleset(
+  ruleset: string,
+  body: Record<string, unknown>,
+  out: Map<string, DetektRuleState>,
+): void {
+  const rulesetDisabled = readActive(body.active) === "disabled";
+  for (const [key, val] of Object.entries(body)) {
+    if (!/^[A-Z][A-Za-z0-9]*$/.test(key)) continue; // rule keys are PascalCase
+    const ruleActive = isRecord(val) ? readActive(val.active) : null;
+    const active: ConfigEnabledStatus =
+      ruleActive ?? (rulesetDisabled ? "disabled" : "unknown");
+    out.set(key, { ruleset, active });
+  }
+}
+
+/**
+ * The PascalCase rule names named by a detekt config — the discovery/existence
+ * surface. A thin projection of {@link parseDetektConfig} so key extraction and
+ * enabled-state can never disagree.
  * @internal
  */
 export function parseDetektRuleKeys(yaml: string): Set<string> {
-  const rules = new Set<string>();
-  const ruleRe = /^ {2}([A-Z][A-Za-z0-9]*):/gm;
-  let m: RegExpExecArray | null;
-  while ((m = ruleRe.exec(yaml)) !== null) {
-    rules.add(m[1]);
-  }
-  return rules;
+  return new Set(parseDetektConfig(yaml).keys());
 }
 
-function readDetektConfig(basePath: string): string | null {
+/** Read the first present detekt config file's contents (null if none). @internal */
+export function readDetektConfig(basePath: string): string | null {
   for (const rel of DETEKT_CONFIG_FILES) {
     const p = resolve(basePath, rel);
     if (!existsSync(p)) continue;
@@ -272,15 +334,17 @@ function getDetektDefaultRules(): Set<string> {
 function detektConfigNamesRule(ruleName: string, basePath: string): boolean {
   const cfg = readDetektConfig(basePath);
   if (!cfg) return false;
-  return new RegExp(`^\\s+${escapeRe(ruleName)}:`, "m").test(cfg);
+  // Only a real PascalCase rule key counts — a nested option (`threshold:`)
+  // must NOT pass as a rule (parseDetektConfig filters those out).
+  return parseDetektConfig(cfg).has(ruleName);
 }
 
 /**
  * Config-enabled status for a detekt rule, read from the project's detekt
- * YAML (detekt.yml / detekt-config.yml / config/detekt/detekt.yml). Only an
- * explicit `active: true|false` under the rule's block decides; a rule absent
- * from the config (or listed without `active:`) inherits detekt's defaults,
- * which we report honestly as "unknown".
+ * YAML (detekt.yml / detekt-config.yml / config/detekt/detekt.yml). The rule's
+ * own `active: true|false` decides; failing that, a ruleset-level `active: false`
+ * disables it; otherwise the rule inherits detekt's default, reported honestly
+ * as "unknown". Derived from the shared {@link parseDetektConfig}.
  * @internal
  */
 export function detektEnabledStatus(
@@ -289,34 +353,7 @@ export function detektEnabledStatus(
 ): ConfigEnabledStatus {
   const cfg = readDetektConfig(basePath);
   if (!cfg) return "unknown";
-  const lines = cfg.split(/\r?\n/);
-  const ruleRe = new RegExp(`^(\\s+)${escapeRe(ruleName)}:\\s*$`);
-  for (let i = 0; i < lines.length; i++) {
-    const m = ruleRe.exec(lines[i]);
-    if (!m) continue;
-    return detektActiveInBlock(lines, i + 1, m[1].length) ?? "unknown";
-  }
-  return "unknown";
-}
-
-/**
- * Scan the lines of a rule's YAML block (everything indented deeper than the
- * rule key) for an explicit `active: true|false`; null when the block sets
- * neither (the rule inherits detekt's default).
- */
-function detektActiveInBlock(
-  lines: string[],
-  start: number,
-  ruleIndent: number,
-): ConfigEnabledStatus | null {
-  for (let j = start; j < lines.length; j++) {
-    const line = lines[j];
-    if (line.trim().length === 0) continue;
-    if (line.length - line.trimStart().length <= ruleIndent) break;
-    const act = /^\s*active:\s*(true|false)/.exec(line);
-    if (act) return act[1] === "true" ? "enabled" : "disabled";
-  }
-  return null;
+  return parseDetektConfig(cfg).get(ruleName)?.active ?? "unknown";
 }
 
 /**
