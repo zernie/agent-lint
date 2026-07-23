@@ -305,7 +305,7 @@ Everything vigiles compiles and lints is **deterministic** — same input, same 
 
 - [Markdown mode](markdown-mode.md) — the no-spec on-ramp (inline `<!-- vigiles:enforce -->` comments).
 - [Spec format reference](spec-format.md) — every section and rule kind.
-- [Linter support](linter-support.md) — the 7 catalogs + `generate-types` / `generate-schema`.
+- [Linter support](linter-support.md) — the 11 catalogs + `generate-types` / `generate-schema`.
 - [CLI & CI reference](cli.md) · [Agent setup](agent-setup.md).
 - [Compiled hooks](compiled-hooks.md) — the deterministic **gate** instrument: author a hook that can't be wrong.
 - [Skills monorepo adoption](skills-monorepo.md) — a CI-tested skill library or a plain `.claude/` repo (no `plugin.json`).
