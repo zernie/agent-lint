@@ -70,4 +70,19 @@ describe("LinterAdapter conformance", () => {
     // a linter added to the registry but not the table (or vice-versa) fails.
     expect([...docLinterNames()].sort()).toEqual(Object.keys(LINTERS).sort());
   });
+
+  it("the website's linter list covers every BUILTIN_LINTER (anti-stale site)", () => {
+    // Keep the marketing site honest: adding a linter but forgetting the
+    // vigiles.sh chips fails HERE (loud) rather than shipping a stale front page.
+    const wedge = readFileSync(
+      resolve(__dirname, "../../site/src/components/sections/Wedge.tsx"),
+      "utf8",
+    );
+    const arr = /const LINTERS = \[([\s\S]*?)\]/.exec(wedge)?.[1] ?? "";
+    const shown = new Set(
+      [...arr.matchAll(/"([^"]+)"/g)].map((m) => m[1].toLowerCase()),
+    );
+    const missing = BUILTIN_LINTERS.filter((l) => !shown.has(l.toLowerCase()));
+    expect(missing).toEqual([]);
+  });
 });
