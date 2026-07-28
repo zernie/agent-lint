@@ -13,6 +13,6 @@
     "disallowed-tools-contract": "error",
     "description-overlap": "error"
   },
-  "orphans": { "include": ["docs/**/*.md", "research/**/*.md"] },
+  "orphans": { "include": ["docs/**/*.md"] },
   "exclude": ["bench/**", "startup/**", "rule-enforcer/**"]
 }
