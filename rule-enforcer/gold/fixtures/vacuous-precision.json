@@ -1,0 +1,38 @@
+[
+  {
+    "rule": "max-function-lines",
+    "label": "violating",
+    "code": "function tooLong() {\n  let x = 0;\n  x += 1;\n  x += 2;\n  x += 3;\n  x += 4;\n  x += 5;\n  x += 6;\n  x += 7;\n  x += 8;\n  x += 9;\n  x += 10;\n  x += 11;\n  x += 12;\n  x += 13;\n  x += 14;\n  x += 15;\n  x += 16;\n  x += 17;\n  x += 18;\n  x += 19;\n  x += 20;\n  x += 21;\n  x += 22;\n  x += 23;\n  x += 24;\n  x += 25;\n  x += 26;\n  x += 27;\n  x += 28;\n  x += 29;\n  x += 30;\n  x += 31;\n  x += 32;\n  x += 33;\n  x += 34;\n  x += 35;\n  x += 36;\n  x += 37;\n  x += 38;\n  x += 39;\n  return x;\n}",
+    "note": "VACUOUS-PRECISION FIXTURE: violating-only slice, no compliant case (43 lines > 40-line max)"
+  },
+  {
+    "rule": "max-function-lines",
+    "label": "violating",
+    "code": "const f2 = () => {\n  let y = 0;\n  y += 1;\n  y += 2;\n  y += 3;\n  y += 4;\n  y += 5;\n  y += 6;\n  y += 7;\n  y += 8;\n  y += 9;\n  y += 10;\n  y += 11;\n  y += 12;\n  y += 13;\n  y += 14;\n  y += 15;\n  y += 16;\n  y += 17;\n  y += 18;\n  y += 19;\n  y += 20;\n  y += 21;\n  y += 22;\n  y += 23;\n  y += 24;\n  y += 25;\n  y += 26;\n  y += 27;\n  y += 28;\n  y += 29;\n  y += 30;\n  y += 31;\n  y += 32;\n  y += 33;\n  y += 34;\n  y += 35;\n  y += 36;\n  y += 37;\n  y += 38;\n  y += 39;\n  return y;\n};",
+    "note": "VACUOUS-PRECISION FIXTURE: violating-only slice, no compliant case (43 lines > 40-line max)"
+  },
+  {
+    "rule": "no-deprecated-import",
+    "label": "violating",
+    "code": "import { Card } from '@acme/legacy-ui';",
+    "note": "VACUOUS-PRECISION FIXTURE: violating-only slice, no compliant case"
+  },
+  {
+    "rule": "mk-prefix-exports",
+    "label": "violating",
+    "code": "export function createCard() {}",
+    "note": "VACUOUS-PRECISION FIXTURE: violating-only slice, no compliant case"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "violating",
+    "code": "console.log('x')",
+    "note": "VACUOUS-PRECISION FIXTURE: violating-only slice, no compliant case — same checker whose vacuous-RECALL slice (gold/fixtures/vacuous-recall.json) certifies it on compliant-only data; this is the mirror hole"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "violating",
+    "code": "console.log(a, b)",
+    "note": "VACUOUS-PRECISION FIXTURE: violating-only slice, no compliant case"
+  }
+]

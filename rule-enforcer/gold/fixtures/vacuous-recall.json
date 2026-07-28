@@ -1,0 +1,38 @@
+[
+  {
+    "rule": "max-function-lines",
+    "label": "compliant",
+    "code": "function tiny() { return 2; }",
+    "note": "VACUOUS-RECALL FIXTURE: compliant-only slice, no violating case"
+  },
+  {
+    "rule": "max-function-lines",
+    "label": "compliant",
+    "code": "const f2 = () => 3;",
+    "note": "VACUOUS-RECALL FIXTURE: compliant-only slice, no violating case"
+  },
+  {
+    "rule": "no-deprecated-import",
+    "label": "compliant",
+    "code": "import { Card } from '@acme/ui-next';",
+    "note": "VACUOUS-RECALL FIXTURE: compliant-only slice, no violating case"
+  },
+  {
+    "rule": "mk-prefix-exports",
+    "label": "compliant",
+    "code": "export function mkCard() {}",
+    "note": "VACUOUS-RECALL FIXTURE: compliant-only slice, no violating case"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "compliant",
+    "code": "logger.info('x');",
+    "note": "VACUOUS-RECALL FIXTURE: the SAME checker that leaks on window.console.log is certified P=R=1.00 here"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "compliant",
+    "code": "console.debug('x');",
+    "note": "VACUOUS-RECALL FIXTURE: compliant-only slice, no violating case"
+  }
+]
