@@ -25,18 +25,49 @@ const EXECUTORS = {
 
 const executorFor = (entry) => EXECUTORS[entry.engine || "eslint"];
 
+// Which gold set Stage 2 executes against. Default = gold/gold-blind.json — the set whose LABELS
+// were assigned by a second rater who saw only the identifier, the rule name and the code, with the
+// checker's behaviour withheld (built by build-blind-gold.js: blind.json codes + the independent
+// rater's labels; kappa=1.000, n=56 — see gold/SOUNDNESS.md). This is the run the paper's §6 reports
+// (fixed 2026-07-28: the default used to be gold/gold.json below, whose case NOTES were written with
+// the checker already in hand, and printed a verdict for R1/no-console-log that contradicts §6 — see
+// repro/2026-07-28-artifact-fixes.md). Set GOLD_SET to a path relative to this directory to run the
+// gate against another set, e.g. the OLD non-blind default (kept reachable, not deleted):
+//   GOLD_SET=gold/gold.json node gate.js         (= npm run gate:non-blind)
+const GOLD_SET = process.env.GOLD_SET || "gold/gold-blind.json";
+const IS_DEFAULT_GOLD = GOLD_SET === "gold/gold-blind.json";
 const gold = (() => {
   try {
-    return require("./gold/gold.json");
+    return require(path.resolve(__dirname, GOLD_SET));
   } catch {
     return [];
   }
 })();
 
+// Vacuous-recall guard. recall = tp/(tp+fn) defaults to 1 when a rule's gold slice contains NO
+// violating case, so a checker that fires on nothing would be "kept" at P=R=1.00 on a
+// compliant-only slice. A gold set that cannot exhibit a miss cannot certify recall. Set
+// VACUOUS_RECALL=allow to restore the pre-fix behaviour (for the before/after comparison).
+const ALLOW_VACUOUS_RECALL = process.env.VACUOUS_RECALL === "allow";
+
+// Vacuous-precision guard — the mirror of the one above, closed 2026-07-28. precision = tp/(tp+fp)
+// defaults to 1 when a rule's gold slice contains NO compliant case, so a checker that flags EVERY
+// program (fp can structurally never become nonzero) would be "kept" at P=R=1.00 on a
+// violating-only slice. A gold set that cannot exhibit a false alarm cannot certify precision, same
+// as one that cannot exhibit a miss cannot certify recall. Set VACUOUS_PRECISION=allow to restore
+// the pre-fix behaviour (for the before/after comparison; see gold/fixtures/vacuous-precision.json).
+const ALLOW_VACUOUS_PRECISION = process.env.VACUOUS_PRECISION === "allow";
+
 // Provenance guard — the mechanical half of the two-stage integrity. If a gold case's code appears
 // verbatim in the same rule's self-test, Stage 2 is no longer independent of Stage 1 (a synthesis
 // pass "helpfully" copying cases across would silently void the leak check). Engine-agnostic: each
 // executor reports its self-test's code strings; a collision fails the whole gate loudly.
+// The comparison is EXACT-STRING by default, which is what the committed baseline is calibrated
+// against. Set PROVENANCE=normalized to compare modulo whitespace and a trailing semicolon — the
+// stricter reading of "the same case", used to measure how much reuse the exact test misses.
+const NORMALIZED_PROVENANCE = process.env.PROVENANCE === "normalized";
+const canon = (s) => (NORMALIZED_PROVENANCE ? String(s).replace(/\s+/g, " ").replace(/;\s*$/, "").trim() : String(s).trim());
+
 function provenanceViolations(entry, ex) {
   // A malformed self-test may yield a non-string case (e.g. an ESLint invalid
   // object missing `.code`) — filter to strings so `.trim()` can't throw here
@@ -45,18 +76,28 @@ function provenanceViolations(entry, ex) {
     ex
       .selfTestCode(entry)
       .filter((c) => typeof c === "string")
-      .map((c) => c.trim()),
+      .map(canon),
   );
   return gold
     .filter((g) => g.rule === entry.slug)
-    .map((g) => g.code.trim())
+    .map((g) => canon(g.code))
     .filter((c) => stCodes.has(c));
 }
 
 // Stage 2: execute the checker on the independent gold set it did NOT author.
 function goldTest(entry, ex) {
   const cases = gold.filter((g) => g.rule === entry.slug);
-  if (cases.length === 0) return { covered: false };
+  if (cases.length === 0) return { covered: false, why: "no independent gold yet" };
+  // THE FIX (2 lines): a gold slice with no violating case cannot certify recall — recall would be
+  // vacuously 1. Downgrade to kept-ungraded rather than certifying soundness on it.
+  if (!ALLOW_VACUOUS_RECALL && !cases.some((c) => c.label === "violating"))
+    return { covered: false, why: "gold slice has no violating case — recall would be vacuous" };
+  // THE MIRROR FIX (2 lines, closed 2026-07-28): a gold slice with no compliant case cannot certify
+  // precision — a checker that flags EVERY program cannot produce a false positive on it (fp is
+  // structurally 0), so precision would be vacuously 1. Same disposition as the recall guard above:
+  // downgrade to kept-ungraded, do not certify soundness on a slice that cannot discriminate.
+  if (!ALLOW_VACUOUS_PRECISION && !cases.some((c) => c.label === "compliant"))
+    return { covered: false, why: "gold slice has no compliant case — precision would be vacuous" };
   const rule = ex.load(entry.slug);
   if (!rule) return { covered: true, ok: false, note: "no generated rule to execute" };
   let tp = 0,
@@ -124,7 +165,7 @@ function runGate() {
           id: entry.id,
           slug: entry.slug,
           status: "kept-ungraded",
-          note: "passed self-test; no independent gold yet (label honestly, do not claim sound)",
+          note: "passed self-test; " + (g.why || "no independent gold yet") + " (label honestly, do not claim sound)",
         });
       } else if (g.ok) {
         results.push({
@@ -132,10 +173,17 @@ function runGate() {
           slug: entry.slug,
           status: "kept",
           note: "self-test + gold OK (P=" + g.precision.toFixed(2) + " R=" + g.recall.toFixed(2) + ")",
+          metrics: { n: g.tp + g.fp + g.fn + g.tn, tp: g.tp, fp: g.fp, fn: g.fn, tn: g.tn, precision: g.precision, recall: g.recall },
         });
       } else {
         // The finding, operationalized: passed its own test, leaked on the independent gold.
-        results.push({ id: entry.id, slug: entry.slug, status: "abstain-gold", note: "SILENT LEAK caught: " + g.note });
+        results.push({
+          id: entry.id,
+          slug: entry.slug,
+          status: "abstain-gold",
+          note: "SILENT LEAK caught: " + g.note,
+          metrics: { n: g.tp + g.fp + g.fn + g.tn, tp: g.tp, fp: g.fp, fn: g.fn, tn: g.tn, precision: g.precision, recall: g.recall },
+        });
       }
     } catch (e) {
       results.push({
@@ -152,6 +200,13 @@ function runGate() {
 if (require.main === module) {
   const results = runGate();
   const pad = (s, n) => (String(s) + " ".repeat(n)).slice(0, n);
+  console.log(
+    "\n  gold set: " + GOLD_SET + "  (" + gold.length + " cases, " +
+      new Set(gold.map((g) => g.rule)).size + " slugs)" +
+      (ALLOW_VACUOUS_RECALL ? "   [VACUOUS_RECALL=allow — pre-fix behaviour]" : "") +
+      (ALLOW_VACUOUS_PRECISION ? "   [VACUOUS_PRECISION=allow — pre-fix behaviour]" : "") +
+      (NORMALIZED_PROVENANCE ? "   [PROVENANCE=normalized]" : ""),
+  );
   console.log("\n  id   " + pad("rule", 22) + pad("status", 22) + "note");
   console.log("  " + "-".repeat(94));
   for (const r of results) console.log("  " + pad(r.id, 5) + pad(r.slug, 22) + pad(r.status, 22) + r.note);
@@ -181,16 +236,42 @@ if (require.main === module) {
   );
   console.log("  Stage 2 caught " + abstainGold + " checker(s) that passed their OWN test but leaked on independent gold.");
   console.log("  Shipped = only rules that survived BOTH gates. The rest are downgraded to advisory/declare, not silently trusted.\n");
-  fs.writeFileSync(path.join(__dirname, "results.json"), JSON.stringify(results, null, 2));
+  // Never clobber the committed baseline when running against a non-default gold set.
+  const isBaselineRun = IS_DEFAULT_GOLD && !ALLOW_VACUOUS_RECALL && !ALLOW_VACUOUS_PRECISION && !NORMALIZED_PROVENANCE;
+  const outFile = isBaselineRun
+    ? "results.json"
+    : "results." +
+      path.basename(GOLD_SET, ".json") +
+      (ALLOW_VACUOUS_RECALL ? "-vacuous" : "") +
+      (ALLOW_VACUOUS_PRECISION ? "-vacuous-precision" : "") +
+      (NORMALIZED_PROVENANCE ? "-normprov" : "") +
+      ".json";
+  fs.writeFileSync(path.join(__dirname, outFile), JSON.stringify(results, null, 2));
+  console.log("  wrote " + outFile);
 
   // CI GATE: assert the known-correct verdicts so a regression in the synthesis
-  // or the two-stage gate FAILS the build instead of passing silently. The leaky
-  // checkers (R5 name-based secret, R10 text-scan eslint-disable, P2 naive $A
-  // print) MUST abstain; the sound ones MUST be kept. If a leaky checker flips to
-  // "kept" that is exactly the false-confidence failure this gate exists to catch.
+  // or the two-stage gate FAILS the build instead of passing silently.
+  //
+  // Calibrated against the DEFAULT gold set, which since 2026-07-28 is
+  // gold/gold-blind.json (independent-rater labels, kappa=1.000, n=56) — the
+  // same run §6 of the paper reports. See repro/2026-07-28-artifact-fixes.md
+  // for the before/after and why R1 moved.
+  //
+  // The three checkers §6 names as refusing, by three distinct mechanisms, MUST
+  // abstain: R5 no-hardcoded-secret (fails its OWN self-test — Stage 1), R1
+  // no-console-log (passes self-test, P=1.00 but recall 0.86 on blind gold —
+  // misses window.console.log(1)), R10 no-eslint-disable (fails both sides at
+  // once, P=0.60 R=0.60). The two AST-anchored sound checkers MUST be kept: R8
+  // no-empty-catch, R9 no-explicit-any. If any of these flip, that is exactly
+  // the false-confidence failure this gate exists to catch.
+  //
+  // The blind gold set has no Python (ast-grep) cases yet (5 rules / 56 cases,
+  // all ESLint-lane — see gold/SOUNDNESS.md), so P1-P3 are honestly
+  // kept-ungraded: "no independent gold yet" is not the same failure as a
+  // caught leak, and must not be reported as one.
   // See research/dogfood-corpus.md (this is CI-enforced via .github/workflows/ci.yml).
   const EXPECTED = {
-    R1: "kept",
+    R1: "abstain-gold",
     R2: "kept-ungraded",
     R3: "kept-ungraded",
     R4: "kept-ungraded",
@@ -200,11 +281,25 @@ if (require.main === module) {
     R8: "kept",
     R9: "kept",
     R10: "abstain-gold",
-    // Python (ast-grep) lane: two sound rules kept, one naive rule abstains on gold.
-    P1: "kept",
-    P2: "abstain-gold",
-    P3: "kept",
+    // Python (ast-grep) lane: no blind gold exists for it yet, so all three are
+    // honestly ungraded rather than certified sound or caught leaking.
+    P1: "kept-ungraded",
+    P2: "kept-ungraded",
+    P3: "kept-ungraded",
   };
+  // The committed expectation is calibrated against the DEFAULT gold set; a different gold set is
+  // an experiment, not a regression. Report the diff instead of failing the build.
+  if (!isBaselineRun) {
+    const diff = results.filter((r) => EXPECTED[r.id] && EXPECTED[r.id] !== r.status);
+    console.log("  (non-default run: committed-expectation check reported, not enforced)");
+    if (!diff.length) console.log("  no verdict changes vs the committed baseline.\n");
+    else {
+      console.log("  verdict CHANGES vs the committed baseline (" + diff.length + "):");
+      for (const r of diff) console.log("    " + r.id + " " + r.slug + ": " + EXPECTED[r.id] + " -> " + r.status);
+      console.log("");
+    }
+    return;
+  }
   const drift = results
     .filter((r) => EXPECTED[r.id] && EXPECTED[r.id] !== r.status)
     .map((r) => "    " + r.id + " " + r.slug + ": expected " + EXPECTED[r.id] + ", got " + r.status);

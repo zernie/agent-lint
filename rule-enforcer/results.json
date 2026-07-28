@@ -2,8 +2,17 @@
   {
     "id": "R1",
     "slug": "no-console-log",
-    "status": "kept",
-    "note": "self-test + gold OK (P=1.00 R=1.00)"
+    "status": "abstain-gold",
+    "note": "SILENT LEAK caught: MISS(CL14 (blind-labeled by independent rater))",
+    "metrics": {
+      "n": 15,
+      "tp": 6,
+      "fp": 0,
+      "fn": 1,
+      "tn": 8,
+      "precision": 1,
+      "recall": 0.8571428571428571
+    }
   },
   {
     "id": "R2",
@@ -45,36 +54,63 @@
     "id": "R8",
     "slug": "no-empty-catch",
     "status": "kept",
-    "note": "self-test + gold OK (P=1.00 R=1.00)"
+    "note": "self-test + gold OK (P=1.00 R=1.00)",
+    "metrics": {
+      "n": 8,
+      "tp": 4,
+      "fp": 0,
+      "fn": 0,
+      "tn": 4,
+      "precision": 1,
+      "recall": 1
+    }
   },
   {
     "id": "R9",
     "slug": "no-explicit-any",
     "status": "kept",
-    "note": "self-test + gold OK (P=1.00 R=1.00)"
+    "note": "self-test + gold OK (P=1.00 R=1.00)",
+    "metrics": {
+      "n": 13,
+      "tp": 7,
+      "fp": 0,
+      "fn": 0,
+      "tn": 6,
+      "precision": 1,
+      "recall": 1
+    }
   },
   {
     "id": "R10",
     "slug": "no-eslint-disable",
     "status": "abstain-gold",
-    "note": "SILENT LEAK caught: FALSE+(PROSE mention, not a directive -> must NOT flag)"
+    "note": "SILENT LEAK caught: MISS(ED2 (blind-labeled by independent rater)) MISS(ED4 (blind-labeled by independent rater)) FALSE+(ED6 (blind-labeled by independent rater)) FALSE+(ED7 (blind-labeled by independent rater))",
+    "metrics": {
+      "n": 12,
+      "tp": 3,
+      "fp": 2,
+      "fn": 2,
+      "tn": 5,
+      "precision": 0.6,
+      "recall": 0.6
+    }
   },
   {
     "id": "P1",
     "slug": "py-no-bare-except",
-    "status": "kept",
-    "note": "self-test + gold OK (P=1.00 R=1.00)"
+    "status": "kept-ungraded",
+    "note": "passed self-test; no independent gold yet (label honestly, do not claim sound)"
   },
   {
     "id": "P2",
     "slug": "py-no-print",
-    "status": "abstain-gold",
-    "note": "SILENT LEAK caught: MISS(zero-arg — MISSED by naive $A) MISS(multi-arg — MISSED by naive $A)"
+    "status": "kept-ungraded",
+    "note": "passed self-test; no independent gold yet (label honestly, do not claim sound)"
   },
   {
     "id": "P3",
     "slug": "py-no-eval",
-    "status": "kept",
-    "note": "self-test + gold OK (P=1.00 R=1.00)"
+    "status": "kept-ungraded",
+    "note": "passed self-test; no independent gold yet (label honestly, do not claim sound)"
   }
 ]
