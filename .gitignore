@@ -41,3 +41,6 @@ scratch-shots/
 
 # subagent isolated worktrees (transient, never committed)
 .claude/worktrees/
+
+# Design and strategy notes are NOT kept in this repository
+research/
