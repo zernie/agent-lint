@@ -2,6 +2,31 @@
 
 # CLAUDE.md
 
+
+## 🔴 Design notes, roadmap and competitive analysis do NOT live in this repository
+
+This repository is **public**. Anything committed here is readable by anyone — and deleting a file
+does not remove it from history or from other branches.
+
+**Never commit here, in any directory:**
+
+- roadmap / prioritisation / what-we-build-next
+- competitive analysis, competitor teardowns, positioning, "moat", poach lists
+- adoption, distribution, go-to-market, pricing, monetisation
+- design documents for capabilities that are **not yet shipped**
+
+**The line is built vs unbuilt, not engineering vs business.** Documentation of shipped behaviour
+belongs here and is useful. A design document for something unbuilt is a roadmap however technical
+it reads — publishing it hands a competitor the plan.
+
+Those notes live in the author's private knowledge base. `research/` is in `.gitignore`.
+
+*Established 2026-07-28, after `research/` (239 files, 3.1 MB) was found in this public repository —
+including `roadmap.md`, `competitive-landscape.md`, `competitor-rule-matrix.md`, `strategy-verdict.md`,
+`positioning-funnel.md`, six `adoption-*` files and two `*-poach.md` files. The content was preserved
+privately and purged from this repository's history.*
+
+
 ## Positioning
 
 vigiles verifies the rule references in agent instruction files — that each linter rule exists AND is enabled, that file paths and scripts are real. ⚠️ ADOPTION DIRECTION (committed 2026-07-15 — read `research/adoption-direction.md` before building ANY adoption/spec/adopt feature): audit-FIRST, not spec-first. The markdown the user hand-edits is the SOURCE OF TRUTH; enforcement of code-quality rules lands in the repo's NATIVE linter config (ruff/eslint), not the spec; the typed `.spec.ts` is an OPTIONAL authoring layer for harness-STRUCTURE rules only (subagent contracts, purity, railway, composition — what no linter can express). `init` is the GRADUATION to a spec, not the front door (`audit` is — see below); `adopt`/`strengthen` are skills, not verbs. The first pass writes nothing and asserts nothing false (ref-verification is advisory, never written into the file). `eject` always reverses. The rule: the spec AUTHORS, the native linter RUNS (same architecture as `@vigiles/rule-enforcer`) — Rule of Least Power applied to enforcement homes. [LEGACY, being retired: the earlier spec-first three-level ladder — inline/frontmatter/typed — and `init` adopting a CLAUDE.md into a spec-as-source-of-truth with the markdown as a build artifact. Treat as current-shipped, NOT the target.] Nobody else does this — other tools lint markdown after the fact. See `research/adoption-direction.md` (the lock + reconciliation ledger) and `docs/markdown-mode.md`.
