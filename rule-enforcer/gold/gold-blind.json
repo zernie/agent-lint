@@ -1,0 +1,338 @@
+[
+  {
+    "rule": "no-console-log",
+    "label": "violating",
+    "code": "console.log('x')",
+    "note": "CL1 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "violating",
+    "code": "console.log(a, b)",
+    "note": "CL2 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "violating",
+    "code": "void console.log(1)",
+    "note": "CL3 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "violating",
+    "code": "if (d) console.log(2)",
+    "note": "CL4 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "violating",
+    "code": "console.log(`total ${n}`)",
+    "note": "CL5 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "violating",
+    "code": "function f(){ console.log('starting'); }",
+    "note": "CL6 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "compliant",
+    "code": "console.error('x')",
+    "note": "CL7 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "compliant",
+    "code": "console.warn(1)",
+    "note": "CL8 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "compliant",
+    "code": "logger.log('x')",
+    "note": "CL9 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "compliant",
+    "code": "const s = 'console.log(1)'",
+    "note": "CL10 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "compliant",
+    "code": "// console.log(1)\nconst x = 1",
+    "note": "CL11 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "compliant",
+    "code": "/** @example console.log(1) */\nconst y = 1",
+    "note": "CL12 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "compliant",
+    "code": "const consoleLog = 1",
+    "note": "CL13 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "violating",
+    "code": "window.console.log(1)",
+    "note": "CL14 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-console-log",
+    "label": "compliant",
+    "code": "myconsole.log(1)",
+    "note": "CL15 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-explicit-any",
+    "label": "violating",
+    "code": "let x: any",
+    "note": "AN1 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-explicit-any",
+    "label": "violating",
+    "code": "function f(y: any) {}",
+    "note": "AN2 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-explicit-any",
+    "label": "violating",
+    "code": "const z = v as any",
+    "note": "AN3 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-explicit-any",
+    "label": "violating",
+    "code": "let a: any[]",
+    "note": "AN4 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-explicit-any",
+    "label": "violating",
+    "code": "type R = Record<string, any>",
+    "note": "AN5 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-explicit-any",
+    "label": "violating",
+    "code": "const cb: (response: any) => void = g",
+    "note": "AN6 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-explicit-any",
+    "label": "violating",
+    "code": "let p: Promise<any>",
+    "note": "AN7 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-explicit-any",
+    "label": "compliant",
+    "code": "let x: unknown",
+    "note": "AN8 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-explicit-any",
+    "label": "compliant",
+    "code": "type anything = string",
+    "note": "AN9 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-explicit-any",
+    "label": "compliant",
+    "code": "const anyOf = 1",
+    "note": "AN10 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-explicit-any",
+    "label": "compliant",
+    "code": "let s: 'any'",
+    "note": "AN11 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-explicit-any",
+    "label": "compliant",
+    "code": "// let x: any\nconst n = 1",
+    "note": "AN12 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-explicit-any",
+    "label": "compliant",
+    "code": "let n: number",
+    "note": "AN13 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-eslint-disable",
+    "label": "violating",
+    "code": "// eslint-disable-next-line no-console\nconsole.log(1)",
+    "note": "ED1 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-eslint-disable",
+    "label": "violating",
+    "code": "/* eslint-disable */\nconst x = 1",
+    "note": "ED2 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-eslint-disable",
+    "label": "violating",
+    "code": "/* eslint-disable no-console, no-alert */\nconst y = 1",
+    "note": "ED3 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-eslint-disable",
+    "label": "violating",
+    "code": "const z = 1 // eslint-disable-line",
+    "note": "ED4 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-eslint-disable",
+    "label": "violating",
+    "code": "// eslint-disable-next-line @typescript-eslint/no-explicit-any\nconst w = 1",
+    "note": "ED5 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-eslint-disable",
+    "label": "compliant",
+    "code": "const a = 1; // we should not eslint-disable this line",
+    "note": "ED6 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-eslint-disable",
+    "label": "compliant",
+    "code": "// TODO: stop using eslint-disable everywhere\nconst b = 2",
+    "note": "ED7 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-eslint-disable",
+    "label": "compliant",
+    "code": "const s = 'eslint-disable'",
+    "note": "ED8 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-eslint-disable",
+    "label": "compliant",
+    "code": "/* eslint-enable no-console */\nconst c = 3",
+    "note": "ED9 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-eslint-disable",
+    "label": "compliant",
+    "code": "/* prettier-ignore */\nconst d = 4",
+    "note": "ED10 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-eslint-disable",
+    "label": "compliant",
+    "code": "// normal comment\nconst e = 5",
+    "note": "ED11 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-eslint-disable",
+    "label": "compliant",
+    "code": "const f2 = 6; // disables are bad, avoid them",
+    "note": "ED12 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-empty-catch",
+    "label": "violating",
+    "code": "try { f() } catch (e) {}",
+    "note": "EC1 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-empty-catch",
+    "label": "violating",
+    "code": "try { f() } catch {}",
+    "note": "EC2 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-empty-catch",
+    "label": "violating",
+    "code": "try { f() } catch (e) { /* ignore */ }",
+    "note": "EC3 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-empty-catch",
+    "label": "violating",
+    "code": "try { g() } catch {}",
+    "note": "EC4 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-empty-catch",
+    "label": "compliant",
+    "code": "try { f() } catch (e) { log(e) }",
+    "note": "EC5 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-empty-catch",
+    "label": "compliant",
+    "code": "try { f() } catch (e) { throw e }",
+    "note": "EC6 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-empty-catch",
+    "label": "compliant",
+    "code": "try { f() } catch (e) { return null }",
+    "note": "EC7 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-empty-catch",
+    "label": "compliant",
+    "code": "try { f() } catch (e) { handle(e); report(e) }",
+    "note": "EC8 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-hardcoded-secret",
+    "label": "violating",
+    "code": "const password = 'hunter2'",
+    "note": "HS1 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-hardcoded-secret",
+    "label": "violating",
+    "code": "const apiKey = 'AKIA1234567890ABCD'",
+    "note": "HS2 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-hardcoded-secret",
+    "label": "violating",
+    "code": "const token = 'ghp_abcdefghijklmnop'",
+    "note": "HS3 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-hardcoded-secret",
+    "label": "violating",
+    "code": "const secret = 'sk-live-abcdef'",
+    "note": "HS4 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-hardcoded-secret",
+    "label": "compliant",
+    "code": "const password = process.env.PW",
+    "note": "HS5 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-hardcoded-secret",
+    "label": "compliant",
+    "code": "const apiKey = getKey()",
+    "note": "HS6 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-hardcoded-secret",
+    "label": "compliant",
+    "code": "const password = ''",
+    "note": "HS7 (blind-labeled by independent rater)"
+  },
+  {
+    "rule": "no-hardcoded-secret",
+    "label": "compliant",
+    "code": "const label = 'username'",
+    "note": "HS8 (blind-labeled by independent rater)"
+  }
+]

@@ -6,6 +6,13 @@
   "description": "Opt-in tier: compile natural-language agent rules into self-tested lint rules, gated by a blind adversarial gold-set. Loaded only by vigiles's opt-in power tier, never by the deterministic default surface.",
   "scripts": {
     "gate": "node gate.js",
+    "gold:blind": "node build-blind-gold.js",
+    "gate:blind": "GOLD_SET=gold/gold-blind.json node gate.js",
+    "gate:non-blind": "GOLD_SET=gold/gold.json node gate.js",
+    "gate:vacuous-before": "GOLD_SET=gold/fixtures/vacuous-recall.json VACUOUS_RECALL=allow node gate.js",
+    "gate:vacuous-after": "GOLD_SET=gold/fixtures/vacuous-recall.json node gate.js",
+    "gate:vacuous-precision-before": "GOLD_SET=gold/fixtures/vacuous-precision.json VACUOUS_PRECISION=allow node gate.js",
+    "gate:vacuous-precision-after": "GOLD_SET=gold/fixtures/vacuous-precision.json node gate.js",
     "demo": "node run-demo.js"
   },
   "dependencies": {
