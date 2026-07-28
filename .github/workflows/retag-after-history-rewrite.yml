@@ -101,11 +101,13 @@ jobs:
           fail=0; ok=0
           while read -r tag sha; do
             [ -z "$tag" ] && continue
-            if gh api -X PATCH "repos/${{ github.repository }}/git/refs/tags/$tag" \
-                 -f sha="$sha" -F force=true >/dev/null 2>&1; then
+            if out="$(gh api -X PATCH "repos/${{ github.repository }}/git/refs/tags/$tag" \
+                 -f sha="$sha" -F force=true 2>&1)"; then
               ok=$((ok+1))
             else
-              echo "FAILED: $tag -> $sha"; fail=$((fail+1))
+              echo "FAILED: $tag -> $sha"
+              echo "        $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-400)"
+              fail=$((fail+1))
             fi
           done <<< "$TAGMAP"
           echo "updated=$ok failed=$fail"
