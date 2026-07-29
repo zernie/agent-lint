@@ -1,0 +1,108 @@
+name: Delete merged branches
+
+# One-off maintenance. Every branch listed below has a MERGED pull request, so its work is
+# already in main (the repository squash-merges). Delete this workflow once it has run.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete branches whose pull request was merged
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCHES: |
+            chore/remove-research-from-public
+            chore/slim-npm-package
+            claude/add-glob-support-D4Ae
+            claude/add-installation-docs-qJW0c
+            claude/add-validation-rules-VXBk0
+            claude/add-vigiles-explanation-B4dan
+            claude/adoption-direction-v2
+            claude/ai-code-quality-research-Rvrmk
+            claude/ai-codebase-improvements-liK8H
+            claude/audit-rings-html-report-mh8sf8
+            claude/audit-rule-compile-tier
+            claude/ci-d1r0ud
+            claude/click-not-working-s9apfb
+            claude/code-adapter-architecture-tl1n0q
+            claude/confident-hawking-57fl9o
+            claude/deterministic-fixes-list-xGTOI
+            claude/doc-refs-orphans-visibility-h7kugm
+            claude/docs-linting-accuracy-4psb1g
+            claude/enforce-rules-format-IokHd
+            claude/eslint-documentation-XtOxw
+            claude/eval-cache-invalidation-vd1mzj
+            claude/expand-docs-freshness-research-qO3s5
+            claude/feedback-loop-companion-repo-Kvmn7
+            claude/fix-formatting-update-claude-dy2pn
+            claude/gate-release-completion-jh6j25
+            claude/gracious-planck-0x8vwz
+            claude/guard-hardening-benchmark
+            claude/guard-wrapper-assignment-fixes
+            claude/handoff-mylfen
+            claude/haretrail-dogfood-pvdo9t
+            claude/hook-sandboxing-bubblewrap-fk3jxt
+            claude/hook-typing-guard-bugs-xa0g4h
+            claude/improve-readme-examples-hnxI0
+            claude/lint-inline-mode-go56av
+            claude/loop-combinator-idea
+            claude/master-broken-mizpt0
+            claude/missing-new-rules-64olxk
+            claude/os-audit-adoption-3m528s
+            claude/os-plugin-bug-adoption-cy8j97
+            claude/pillar-2-label-qq174h
+            claude/pre-release-priorities-pw7myh
+            claude/promptfoo-evals-research-owg78c
+            claude/prototype-top-rule-E7LnU
+            claude/readme-duplication-cleanup-l1wc5n
+            claude/readme-eval-docs-fjwhhu
+            claude/readme-length-review-3vnx5h
+            claude/readme-readability-toc-d2te00
+            claude/readme-review-formatting-k8108k
+            claude/remove-startup-vault
+            claude/retire-legacy-evals-clean-reproduce
+            claude/review-guidance-validation-caYCF
+            claude/rules-compiler-python-3xqhtd
+            claude/rules-editor-autocomplete-01cjr2
+            claude/sandbox-untrusted-hooks-default-9wc4xi
+            claude/self-evolving-ai-system-Lmg8j
+            claude/skill-eval-cost-benefit-q4ivfp
+            claude/thesis-dependency-decoupling-ike90p
+            claude/tool-positioning-market-65fvvh
+            claude/typescript-spec-usage-NfPQS
+            claude/typescript-strict-rewrite-vtE54
+            claude/unencrypted-filenames-commits-f4lj9l
+            claude/unified-trace-predicates-oikw7j
+            claude/update-agent-lint-version-bKm0b
+            claude/validate-config-lint-rules-G5kNq
+            claude/validate-markdown-checkboxes-OGcr8
+            claude/vigilant-einstein-00ddk4
+            claude/vigiles-cost-analysis-9ko9mv
+            claude/vigiles-ecosystem-benchmark-a1-kceodn
+            claude/vigiles-eval-architecture-i9i7wp
+            claude/vigiles-init-flow-itq232
+            claude/vigiles-markdown-phase-1-HcpHp
+            claude/what-now-umafgi
+            fix/generate-types-config-detection
+            readme-surface-safety-hook-finding
+        run: |
+          repo="${{ github.repository }}"
+          ok=0; fail=0
+          while read -r b; do
+            [ -z "$b" ] && continue
+            if out="$(gh api -X DELETE "repos/$repo/git/refs/heads/$b" 2>&1)"; then
+              ok=$((ok+1))
+            else
+              echo "FAILED: $b"
+              echo "        $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-300)"
+              fail=$((fail+1))
+            fi
+          done <<< "$BRANCHES"
+          echo "deleted=$ok failed=$fail"
+          [ "$fail" -eq 0 ]
