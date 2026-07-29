@@ -98,17 +98,35 @@ jobs:
             v9.0.0 ff542b7c4b09d2471ac6ebb321fef47e3855f91c
             v9.1.0 c1dbc46828f6e7e3ea12633f18e2888106c55907
         run: |
-          fail=0; ok=0
+          repo="${{ github.repository }}"
+          brief() { printf '%s' "$1" | tr '\n' ' ' | cut -c1-300; }
+
+          fail=0; ok=0; recreated=0
           while read -r tag sha; do
             [ -z "$tag" ] && continue
-            if out="$(gh api -X PATCH "repos/${{ github.repository }}/git/refs/tags/$tag" \
+
+            # 1. normal path: move the ref
+            if out="$(gh api -X PATCH "repos/$repo/git/refs/tags/$tag" \
                  -f sha="$sha" -F force=true 2>&1)"; then
-              ok=$((ok+1))
-            else
-              echo "FAILED: $tag -> $sha"
-              echo "        $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-400)"
-              fail=$((fail+1))
+              ok=$((ok+1)); continue
             fi
+            echo "UPDATE REFUSED: $tag -> $sha"
+            echo "        $(brief "$out")"
+
+            # 2. fallback: delete the ref and create it again (a different permission check)
+            if del="$(gh api -X DELETE "repos/$repo/git/refs/tags/$tag" 2>&1)"; then
+              if new="$(gh api -X POST "repos/$repo/git/refs" \
+                   -f ref="refs/tags/$tag" -f sha="$sha" 2>&1)"; then
+                echo "        recreated OK"
+                recreated=$((recreated+1)); continue
+              fi
+              echo "        CREATE FAILED: $(brief "$new")"
+              echo "        !! the tag is now DELETED and could not be recreated -- recreate it by hand at $sha"
+            else
+              echo "        DELETE FAILED: $(brief "$del")"
+            fi
+            fail=$((fail+1))
           done <<< "$TAGMAP"
-          echo "updated=$ok failed=$fail"
+
+          echo "updated=$ok recreated=$recreated failed=$fail"
           [ "$fail" -eq 0 ]
