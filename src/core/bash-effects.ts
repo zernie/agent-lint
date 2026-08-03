@@ -61,6 +61,10 @@ interface MvdanNode {
 
 interface MvdanRedirect extends MvdanNode {
   Op: number;
+  /** The explicit source fd (`2> f` → a Lit "2"); absent when omitted. */
+  N?: MvdanNode;
+  /** The redirection target word (`> f` → the word `f`). */
+  Word?: MvdanWord;
 }
 
 interface MvdanWord extends MvdanNode {
@@ -85,6 +89,28 @@ interface MvdanAssign {
 // ---------------------------------------------------------------------------
 
 const WRITE_REDIR_OPS = new Set([54, 55, 60, 64, 65]);
+
+/**
+ * Op code → the operator as WRITTEN, so a normalized leaf can REPORT the
+ * redirection it carries instead of a bare number. Pinned by
+ * `bash-effects-normalized.test.ts`, which re-derives every entry by parsing the
+ * operator itself — an mvdan-sh upgrade that renumbers a token fails there
+ * LOUDLY instead of silently misclassifying a write as a read.
+ */
+const REDIR_OP_NAMES: ReadonlyMap<number, string> = new Map([
+  [54, ">"],
+  [55, ">>"],
+  [56, "<"],
+  [57, "<>"],
+  [58, "<&"],
+  [59, ">&"],
+  [60, ">|"],
+  [61, "<<"],
+  [62, "<<-"],
+  [63, "<<<"],
+  [64, "&>"],
+  [65, "&>>"],
+]);
 
 // ---------------------------------------------------------------------------
 // Shell-escape heads: commands that dispatch arbitrary code as an argument.
@@ -520,6 +546,34 @@ export function leafCommands(command: string): string[][] {
 // Lit-only extractor leaves open (see research/ before/after measurement).
 // ===========================================================================
 
+/**
+ * One redirection attached to a simple command (`cmd > f`, `cmd 2>> log`).
+ *
+ * The parser used to DROP these: `echo x > out.md` normalized to a leaf whose
+ * every field (`head`/`argv`/`args`/`flags`/`assigns`) mentioned only `echo` and
+ * `x`, so the file the command actually WROTE appeared nowhere. That made the
+ * single most common write shape invisible to any matcher built on the leaf.
+ */
+export interface LeafRedirect {
+  /** The operator as written: `>`, `>>`, `>|`, `&>`, `&>>`, `<`, `<<`, `>&`, … */
+  readonly op: string;
+  /**
+   * The redirection target, quote-unwrapped and `$HOME`-canonicalized like every
+   * other word. `null` when the target is dynamic (`> "$out"`, `> $(f)`) — present
+   * but unresolvable, never silently dropped. For an fd-dup (`2>&1`) this is the
+   * fd, not a path; for a heredoc it's the delimiter.
+   */
+  readonly target: string | null;
+  /** The explicit source fd (`2> f` → 2), or `null` when omitted. */
+  readonly fd: number | null;
+  /**
+   * True iff this redirection CREATES OR MODIFIES the file named by `target` —
+   * `>`, `>>`, `>|`, `&>`, `&>>`. False for input (`<`, `<<`, `<<<`) and for fd
+   * duplication (`2>&1`), whose "target" is an fd, not a path.
+   */
+  readonly writes: boolean;
+}
+
 /** A single simple command, normalized to its operation form. */
 export interface NormalizedLeaf {
   /** Head normalized to its basename, backslash-stripped: `/bin/rm`→`rm`, `\rm`→`rm`. */
@@ -550,6 +604,11 @@ export interface NormalizedLeaf {
   readonly assigns: ReadonlyMap<string, string | null>;
   /** True iff a command-level assignment for ANY of `names` is present (resolved or not). */
   hasAssign(...names: readonly string[]): boolean;
+  /**
+   * The redirections attached to this leaf, in source order — see
+   * {@link LeafRedirect}. Empty for a command with no redirection.
+   */
+  readonly redirects: readonly LeafRedirect[];
 }
 
 /**
@@ -789,6 +848,11 @@ function stripWrappers(argv: readonly string[]): {
  * compares against the OPERATION rather than the surface tokens, so it is robust
  * to quoting, interpreter path, backslash escaping, flag aliasing, and $HOME/~.
  *
+ * Each leaf also carries its REDIRECTIONS ({@link LeafRedirect}), which live on
+ * the enclosing `Stmt` rather than the `CallExpr` — walking CallExprs alone
+ * dropped them, hiding the file a command writes. Every CallExpr in the mvdan AST
+ * IS a `Stmt.Cmd`, so iterating statements finds exactly the same leaves.
+ *
  * Purely additive: reuses the same mvdan-sh parse, changes nothing above. Parse
  * failure → []. A leaf with a dynamic head is skipped (can't be normalized).
  */
@@ -801,11 +865,25 @@ export function leafCommandsNormalized(command: string): NormalizedLeaf[] {
   }
   const out: NormalizedLeaf[] = [];
   sh.syntax.Walk(file, (node) => {
-    const leaf = normalizeCallExpr(node);
+    if (sh.syntax.NodeType(node) !== "Stmt" || !node.Cmd) return true;
+    const leaf = normalizeCallExpr(node.Cmd, node.Redirs ?? []);
     if (leaf) out.push(leaf);
     return true;
   });
   return out;
+}
+
+/** Normalize a Stmt's redirections into {@link LeafRedirect}s (source order). */
+function normalizeRedirects(redirs: readonly MvdanRedirect[]): LeafRedirect[] {
+  return redirs.map((r) => {
+    const fd = Number(r.N?.Value);
+    return {
+      op: REDIR_OP_NAMES.get(r.Op) ?? String(r.Op),
+      target: r.Word ? normalizeParts(r.Word.Parts) : null,
+      fd: Number.isInteger(fd) ? fd : null,
+      writes: WRITE_REDIR_OPS.has(r.Op),
+    };
+  });
 }
 
 /** Collect a CallExpr's leading `NAME=value` env-assignments into a name→value map. */
@@ -821,8 +899,14 @@ function collectAssigns(node: MvdanNode): Map<string, string | null> {
   return assigns;
 }
 
-/** Normalize a single CallExpr node to a {@link NormalizedLeaf}, or null if it isn't one / has a dynamic head. */
-function normalizeCallExpr(node: MvdanNode): NormalizedLeaf | null {
+/**
+ * Normalize a single CallExpr node (plus the redirections of the `Stmt` that
+ * wraps it) to a {@link NormalizedLeaf}, or null if it isn't one / has a dynamic head.
+ */
+function normalizeCallExpr(
+  node: MvdanNode,
+  redirs: readonly MvdanRedirect[],
+): NormalizedLeaf | null {
   if (sh.syntax.NodeType(node) !== "CallExpr" || !node.Args?.length)
     return null;
   const headRaw = normalizeParts(node.Args[0]?.Parts);
@@ -852,5 +936,6 @@ function normalizeCallExpr(node: MvdanNode): NormalizedLeaf | null {
     hasFlag: (...names) => names.some((n) => flags.has(n)),
     assigns,
     hasAssign: (...names) => names.some((n) => assigns.has(n)),
+    redirects: normalizeRedirects(redirs),
   };
 }

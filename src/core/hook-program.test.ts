@@ -176,6 +176,104 @@ test("commandView.touches/pipesToShell: high-signal secret-read + curl|sh matche
 });
 
 // ---------------------------------------------------------------------------
+// writesTo() — "what does this command WRITE", which touches() cannot answer.
+//
+// Measured 2026-08-03 dogfooding a compiled gate meant to protect a directory
+// from Bash writes: the redirection and its target were DROPPED by the parser, so
+// `echo x > papers/x/paper.md` had the written file in NO field of any leaf, and
+// the gate was silently weaker than the grep it replaced. The only available
+// discriminator, isSideEffecting(), classifies the WHOLE line — so
+// `grep -c x notes/S.md 2>/dev/null` classified side-effecting, touches()
+// matched, and a plain READ got blocked. That happened twice within an hour.
+// ---------------------------------------------------------------------------
+test("commandView.writesTo: a redirection target is a write, wherever it hides", () => {
+  assert.equal(
+    commandView("echo x > papers/x/paper.md").writesTo(["papers"]),
+    true,
+  );
+  assert.equal(
+    commandView("echo x >> papers/x/paper.md").writesTo(["papers"]),
+    true,
+  );
+  assert.equal(commandView("echo x >| papers/p.md").writesTo(["papers"]), true);
+  assert.equal(commandView("cmd &> papers/p.md").writesTo(["papers"]), true);
+  // Nested in a compound command / pipeline, exactly like runs().
+  assert.equal(
+    commandView("cd x && echo hi > papers/n.md").writesTo(["papers"]),
+    true,
+  );
+  assert.equal(
+    commandView("curl -s http://x | tee papers/n.md").writesTo(["papers"]),
+    true,
+  );
+  // A dynamic target is unresolvable — reported as no match, never guessed.
+  assert.equal(commandView('echo x > "$OUT"').writesTo(["papers"]), false);
+});
+
+test("commandView.writesTo: a READ is never a write (the false-block regression)", () => {
+  const read = commandView("grep -c x notes/S.md 2>/dev/null");
+  // touches() matches (the path IS mentioned) and the whole line classifies
+  // side-effecting because of the redirection — the exact pair that blocked real
+  // reads. writesTo() separates them.
+  assert.equal(read.touches(["notes"]), true);
+  assert.equal(read.isSideEffecting(), true);
+  assert.equal(read.writesTo(["notes"]), false);
+
+  assert.equal(commandView("cat notes/S.md").writesTo(["notes"]), false);
+  assert.equal(commandView("cat < notes/S.md").writesTo(["notes"]), false);
+  assert.equal(commandView("ls notes 2>&1").writesTo(["notes"]), false);
+  // An fd-dup's "target" is an fd, not a path.
+  assert.equal(commandView("cmd 2>&1 > /tmp/o").writesTo(["notes"]), false);
+});
+
+test("commandView.writesTo: quoting is handled by the PARSER, not a regex", () => {
+  // The real target is /tmp/note.txt; the `> a/paper.md` inside the quoted word
+  // is data, not a redirection. A regex over the raw string gets this wrong.
+  const v = commandView("echo 'echo y > a/paper.md' > /tmp/note.txt");
+  assert.equal(v.writesTo(["a"]), false);
+  assert.equal(v.writesTo(["/tmp"]), true);
+});
+
+test("commandView.writesTo: file-writing programs, at the position that writes", () => {
+  // sed edits in place ONLY with -i; the script operand is not a file.
+  const sed = commandView("sed -i s/a/b/ papers/x.md");
+  assert.equal(sed.writesTo(["papers"]), true);
+  assert.equal(commandView("sed s/a/b/ papers/x.md").writesTo(["papers"]), false); // prettier-ignore
+  assert.equal(
+    commandView("sed -i -e s/a/b/ papers/x.md").writesTo(["papers"]),
+    true,
+  );
+  // cp/mv/install write the DESTINATION; the sources are read.
+  assert.equal(commandView("cp /tmp/y papers/x.md").writesTo(["papers"]), true);
+  assert.equal(
+    commandView("cp papers/x.md /tmp/y").writesTo(["papers"]),
+    false,
+  );
+  assert.equal(commandView("mv /tmp/y papers/x.md").writesTo(["papers"]), true);
+  assert.equal(
+    commandView("install -m 644 src/a papers/a").writesTo(["papers"]),
+    true,
+  );
+  // tee / truncate / shred write every operand; dd writes only `of=`.
+  assert.equal(commandView("sudo tee papers/n.md").writesTo(["papers"]), true);
+  assert.equal(
+    commandView("truncate -s 0 papers/x.md").writesTo(["papers"]),
+    true,
+  );
+  assert.equal(commandView("shred papers/a").writesTo(["papers"]), true);
+  assert.equal(
+    commandView("dd if=/dev/zero of=papers/x.md").writesTo(["papers"]),
+    true,
+  );
+  assert.equal(
+    commandView("dd if=papers/x.md of=/tmp/o").writesTo(["papers"]),
+    false,
+  );
+  // An unlisted head contributes no write target — no guessing.
+  assert.equal(commandView("wc -l papers/x.md").writesTo(["papers"]), false);
+});
+
+// ---------------------------------------------------------------------------
 // MULTI-HARNESS EMIT — one typed program, the settings block is per-harness.
 // The dogfood is NON-CC-shaped (TOML + regex matcher) so it can't pass by
 // accident on a Claude-Code-hardcoded path (the adapter-aware-lint discipline).

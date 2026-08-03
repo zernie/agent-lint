@@ -37,6 +37,7 @@ export interface CommandView {
         readonly force?: boolean;
     }): boolean;
     touches(prefixes: readonly string[]): boolean;
+    writesTo(prefixes: readonly string[]): boolean;
 }
 
 // @public (undocumented)
@@ -276,6 +277,14 @@ export interface InlineProvider<Name extends string = string> {
 export function leafCommandsNormalized(command: string): NormalizedLeaf[];
 
 // @public
+export interface LeafRedirect {
+    readonly fd: number | null;
+    readonly op: string;
+    readonly target: string | null;
+    readonly writes: boolean;
+}
+
+// @public
 export type NeedSpec = ProviderName | InlineProvider | RegisteredRef;
 
 // @public
@@ -287,6 +296,7 @@ export interface NormalizedLeaf {
     hasAssign(...names: readonly string[]): boolean;
     hasFlag(...names: readonly string[]): boolean;
     readonly head: string;
+    readonly redirects: readonly LeafRedirect[];
 }
 
 // @public
