@@ -79,12 +79,14 @@ describe("DemoAudit — typed run", () => {
     // Honest loading: the real tree count appears (suppressed <200ms, so findBy).
     await screen.findByText(/repo tree — 42 files/);
 
-    // Then the real report renders (grade D from the sample map) + slug header.
+    // Then the real report renders (grade F from the sample map) + slug header.
     await screen.findByText(/acme\/widgets/);
-    // The grade badge is a standalone "D" node (exact match, may co-exist with
-    // the score line); the sample map deterministically grades D.
+    // The grade badge is a standalone node (exact match, may co-exist with the
+    // score line); the sample map deterministically grades F — 2 of its 3
+    // model-invocable units hold the full lethal trifecta by inheriting all
+    // tools, which the Safety ring grades (see trifectaExposure).
     await waitFor(() =>
-      expect(screen.getAllByText("D").length).toBeGreaterThan(0),
+      expect(screen.getAllByText("F").length).toBeGreaterThan(0),
     );
     expect(mockFetch).toHaveBeenCalledWith(
       "acme/widgets",
