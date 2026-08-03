@@ -1072,3 +1072,64 @@ export function runHookProgram(
       return assertNever(kind);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Stale-stamp REPAIR detection — the bootstrap deadlock's escape hatch.
+//
+// `verifyStampOrRefuse` makes a compiled hook refuse to run once its source no
+// longer matches its stamp. That is correct for tampering, but it wedges the
+// AUTHOR: if the hook is a PreToolUse Bash gate wired into the same repo, editing
+// its source makes it block EVERY Bash command — including `vigiles compile`,
+// the only command that regenerates the stamp. Observed 2026-08-03; the only
+// escape was hand-editing `.claude/settings.json` to unwire the gate, compile,
+// and rewire.
+//
+// Fail-closed is kept for everything else. The ONE exception is the repair
+// action itself, and it is announced loudly on stderr. This does not weaken the
+// stamp's threat model in a way that matters: while the stamp is stale the hook
+// enforces NOTHING (it refuses every call), and an attacker who can rewrite a
+// hook's source can equally rewrite `.claude/settings.json` — the escape they'd
+// otherwise use. What the stamp buys is that a smuggled capability can never run
+// SILENTLY, and that is unchanged.
+// ---------------------------------------------------------------------------
+
+/** Compare two path references without node:path (core stays dependency-free). */
+function samePathRef(a: string, b: string): boolean {
+  const norm = (p: string) => p.replace(/\\/g, "/").replace(/^\.\//, "");
+  const [x, y] = [norm(a), norm(b)];
+  return x === y || x.endsWith("/" + y) || y.endsWith("/" + x);
+}
+
+/** The basename of a path token, for matching `npx vigiles` / `./bin/vigiles`. */
+function basenameOf(token: string): string {
+  const parts = token.replace(/\\/g, "/").split("/");
+  return parts[parts.length - 1] ?? token;
+}
+
+/**
+ * True when this event IS the author repairing the hook — the only thing a
+ * stale-stamp refusal must let through, or the repo wedges (see the note above):
+ *
+ * - a Bash command that invokes `vigiles compile` (however it's launched —
+ *   `npx vigiles compile`, `pnpm exec vigiles compile`, `./node_modules/.bin/vigiles compile`),
+ *   which is what regenerates the stamp; or
+ * - an edit/write whose target IS this hook's own source file, so a FILE gate
+ *   over the repo can still be fixed by editing the hook again.
+ *
+ * AST-backed (`leafCommandsNormalized`), so it sees the invocation through a
+ * compound command or a wrapper, exactly like every other matcher here.
+ */
+export function isStampRepairEvent(
+  event: RawHookEvent,
+  hookFile: string,
+): boolean {
+  const filePath = event.tool_input?.file_path;
+  if (typeof filePath === "string" && samePathRef(filePath, hookFile))
+    return true;
+  const command = event.tool_input?.command;
+  if (typeof command !== "string") return false;
+  return leafCommandsNormalized(command).some((leaf) => {
+    const i = leaf.argv.findIndex((a) => basenameOf(a) === "vigiles");
+    return i !== -1 && leaf.argv.slice(i + 1).includes("compile");
+  });
+}

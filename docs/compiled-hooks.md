@@ -242,6 +242,27 @@ Everything is committed, and the source is **adapter-agnostic** — one hook com
 
 Hooks are **not** auto-discovered by sitting just anywhere — they must be under `.vigiles/hooks/` (or named explicitly to `compile`). Because they share one dir, basenames are unique, so the stamp keys safely on the basename.
 
+### Editing a compiled hook (the stamp, and the one escape)
+
+The stamp makes the runtime **refuse** a hook whose source no longer matches what was compiled. That's the point — but it also applies while **you** are editing the hook, and a stale `PreToolUse` Bash gate blocks _every_ Bash command, `vigiles compile` included. That would wedge the repo: you couldn't recompile, because the stale gate refused to let you.
+
+So a stale stamp (or a hook that no longer loads at all, e.g. a typo mid-edit) lets exactly **one** thing through, and shouts about it on stderr:
+
+- a Bash command that invokes **`vigiles compile`** — the command that regenerates the stamp; or
+- an **edit to the hook's own source file** — so a file gate over the repo can still be fixed.
+
+```
+vigiles: hook guard.mjs does not match its compiled stamp.
+vigiles: ALLOWING this one call because it is the repair action …
+vigiles: every OTHER tool call stays BLOCKED until the hook is recompiled.
+```
+
+Everything else still fails closed. This doesn't soften the tamper guarantee that matters: while the stamp is stale the hook is enforcing **nothing** (it refuses every call), and anyone able to rewrite a hook's source can equally rewrite `.claude/settings.json`. What the stamp buys is that a smuggled capability can never run **silently** — unchanged. Just recompile:
+
+```bash
+npx vigiles compile .vigiles/hooks/guard.mjs
+```
+
 ## Testing a compiled hook
 
 **Because the decision is a pure function, you test it deterministically** — no model, and (cheapest) no subprocess. Three levels, by cost:

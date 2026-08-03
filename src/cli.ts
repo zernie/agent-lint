@@ -217,7 +217,9 @@ import {
   type InjectHook,
   type ReactHook,
   type HookProgram,
+  isStampRepairEvent,
   type Decision,
+  type RawHookEvent,
 } from "./core/hook-program.js";
 import {
   discoverHookFiles,
@@ -6247,11 +6249,34 @@ function emitGate(
 }
 
 /**
+ * Print the loud stderr banner that accompanies a REPAIR-only pass-through, and
+ * return true — the caller allows exactly this one tool call. Shared by the two
+ * refusal paths (stale stamp, unloadable program) so the wording can't drift.
+ */
+function announceRepairEscape(file: string, why: string): boolean {
+  console.error(
+    `vigiles: hook ${file} ${why}.\n` +
+      `vigiles: ALLOWING this one call because it is the repair action ` +
+      `(\`vigiles compile ${file}\`, or an edit to the hook itself) — without ` +
+      `this the gate blocks the only command that can fix it.\n` +
+      `vigiles: every OTHER tool call stays BLOCKED until the hook is recompiled.`,
+  );
+  return true;
+}
+
+/**
  * Fail closed if a stamp sidecar exists and the on-disk source no longer
  * matches it — a hand-edit that smuggles in a capability breaks the stamp.
  * No sidecar → run uncompiled (e.g. a test fixture or a not-yet-compiled hook).
+ *
+ * ONE exception, and it is loud: the author's own REPAIR action
+ * ({@link isStampRepairEvent}) is let through, or a repo WEDGES. A stale stamp on
+ * a PreToolUse Bash gate blocks every Bash command — including `vigiles compile`,
+ * the only command that regenerates the stamp — so a normal edit-compile cycle
+ * could paint you into a corner whose only escape was hand-editing
+ * `.claude/settings.json` to unwire the gate. Observed 2026-08-03.
  */
-function verifyStampOrRefuse(file: string): void {
+function verifyStampOrRefuse(file: string, event: RawHookEvent): void {
   const stampPath = hookStampPath(file);
   if (!existsSync(stampPath)) return;
   try {
@@ -6260,8 +6285,13 @@ function verifyStampOrRefuse(file: string): void {
     };
     const source = readFileSync(resolve(process.cwd(), file), "utf-8");
     if (stamp && !verifyHookStamp(source, stamp as SHA256Hash)) {
+      if (isStampRepairEvent(event, file)) {
+        announceRepairEscape(file, "does not match its compiled stamp");
+        return;
+      }
       console.error(
-        `vigiles: hook ${file} does not match its compiled stamp (tampered).`,
+        `vigiles: hook ${file} does not match its compiled stamp (tampered). ` +
+          `If YOU edited it, run \`vigiles compile ${file}\` to regenerate the stamp.`,
       );
       process.exit(2);
     }
@@ -6275,7 +6305,10 @@ function verifyStampOrRefuse(file: string): void {
  * points at. Reads the live event on stdin, loads the typed program, verifies
  * its stamp, and dispatches by role: a gate exits 2 + reason on `deny`; an
  * inject prints `additionalContext`; a react runs its effect-classified
- * command. A hook that won't load fails CLOSED (exit 2), never silent-allow.
+ * command. A hook that won't load — or whose stamp is stale — fails CLOSED
+ * (exit 2), never silent-allow, with ONE loudly-announced exception: the repair
+ * action itself ({@link isStampRepairEvent}), or the repo wedges with no way to
+ * recompile.
  */
 async function runHookProgramCommand(file: string | undefined): Promise<void> {
   if (!file) {
@@ -6307,11 +6340,20 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
   try {
     program = await loadHookProgram(file);
   } catch {
+    // Same bootstrap escape as the stale stamp below: an edit that leaves the
+    // hook unloadable (a typo mid-edit) otherwise blocks the recompile that
+    // would fix it. A hook that can't load enforces nothing either way, so
+    // refusing the repair only wedges the repo. Everything else still fails
+    // CLOSED (exit 2), never silent-allow.
+    if (isStampRepairEvent(event, file)) {
+      announceRepairEscape(file, "cannot be loaded");
+      return;
+    }
     console.error(`vigiles: cannot load hook program ${file}`);
     process.exit(2);
     return;
   }
-  verifyStampOrRefuse(file);
+  verifyStampOrRefuse(file, event);
 
   switch (dispatchKind(program)) {
     case "inject": {

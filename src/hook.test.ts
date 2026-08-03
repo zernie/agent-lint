@@ -279,6 +279,118 @@ test("compile (hook): recompiling is idempotent, whatever the path spelling", ()
   }
 });
 
+// The BOOTSTRAP DEADLOCK (observed 2026-08-03). A stamped PreToolUse Bash gate
+// wired into the same repo refuses on a stale stamp — correctly — but that means
+// editing the hook makes it block EVERY Bash command, `vigiles compile` included,
+// and compile is the only thing that regenerates the stamp. The repo wedges; the
+// only escape was hand-editing .claude/settings.json to unwire the gate, compile,
+// then rewire. The repair action is now let through, loudly, and ONLY it.
+test("compile (hook): a stale stamp does NOT wedge the repo — the recompile gets through", () => {
+  const dir = makeTmpDir();
+  try {
+    linkVigiles(dir);
+    writeFileSync(resolve(dir, "guard.mjs"), GATE_PKG);
+    const compiled = spawnSync("node", [CLI, "compile", "guard.mjs"], {
+      cwd: dir,
+      encoding: "utf-8",
+    });
+    assert.equal(compiled.status, 0, compiled.stderr);
+
+    // The author edits the hook (a normal edit-compile cycle) → stamp is stale.
+    writeFileSync(
+      resolve(dir, "guard.mjs"),
+      readFileSync(resolve(dir, "guard.mjs"), "utf-8").replace(
+        "no force-push to a protected branch",
+        "no force-push (updated reason)",
+      ),
+    );
+
+    const runBash = (command: string) =>
+      runHook(
+        `node ${CLI} hook-runtime run-program guard.mjs`,
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command },
+        },
+        { cwd: dir },
+      );
+
+    // Everything still fails CLOSED …
+    const benign = runBash("git status");
+    assert.equal(benign.exitCode, 2);
+    assert.match(benign.stderr, /does not match its compiled stamp/);
+
+    // … except the one command that can fix it, which is announced LOUDLY.
+    const repair = runBash("npx vigiles compile guard.mjs");
+    assert.equal(repair.exitCode, 0, repair.stderr);
+    assert.match(repair.stderr, /ALLOWING this one call/);
+    assert.match(repair.stderr, /every OTHER tool call stays BLOCKED/);
+
+    // Editing the hook itself is a repair too (for a FILE gate over the repo).
+    const editHook = runHook(
+      `node ${CLI} hook-runtime run-program guard.mjs`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Edit",
+        tool_input: { file_path: "guard.mjs" },
+      },
+      { cwd: dir },
+    );
+    assert.equal(editHook.exitCode, 0);
+
+    // Recompiling restores normal enforcement — nothing is permanently loosened.
+    const again = spawnSync("node", [CLI, "compile", "guard.mjs"], {
+      cwd: dir,
+      encoding: "utf-8",
+    });
+    assert.equal(again.status, 0, again.stderr);
+    assert.equal(runBash("git status").exitCode, 0);
+    assert.equal(runBash("git push -f").blocked, true);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+// The same wedge, reached by a typo instead of a stamp: a mid-edit hook that no
+// longer LOADS also blocks every call, including the recompile that fixes it.
+test("compile (hook): an UNLOADABLE hook still lets the repair through, blocks the rest", () => {
+  const dir = makeTmpDir();
+  try {
+    linkVigiles(dir);
+    writeFileSync(resolve(dir, "guard.mjs"), GATE_PKG);
+    assert.equal(
+      spawnSync("node", [CLI, "compile", "guard.mjs"], {
+        cwd: dir,
+        encoding: "utf-8",
+      }).status,
+      0,
+    );
+    writeFileSync(resolve(dir, "guard.mjs"), "export default {{{ broken");
+
+    const runBash = (command: string) =>
+      runHook(
+        `node ${CLI} hook-runtime run-program guard.mjs`,
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command },
+        },
+        { cwd: dir },
+      );
+
+    const benign = runBash("git status");
+    assert.equal(benign.exitCode, 2);
+    assert.match(benign.stderr, /cannot load hook program/);
+
+    const repair = runBash("npx vigiles compile guard.mjs");
+    assert.equal(repair.exitCode, 0, repair.stderr);
+    assert.match(repair.stderr, /ALLOWING this one call/);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
 test("compile --harness=codex (hook): merges TOML for a gate, warns LOUDLY on inject (the honest gap)", () => {
   const dir = makeTmpDir();
   try {
