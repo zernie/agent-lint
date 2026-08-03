@@ -65,8 +65,10 @@ test("types a repo → the real graded report renders in-frame", async ({
   // an example chip); the real <Report> renders its grade badge.
   await expect(page.getByText("your repo", { exact: true })).toBeVisible();
   await expect(page.getByText("acme/widgets").first()).toBeVisible();
-  // The real <Report> rendered its grade badge (the sample map grades D).
-  await expect(page.getByText("D", { exact: true }).first()).toBeVisible();
+  // The real <Report> rendered its grade badge. The sample map grades F: 2 of
+  // its 3 model-invocable units hold the full lethal trifecta by inheriting all
+  // tools, which the Safety ring grades (see trifectaExposure).
+  await expect(page.getByText("F", { exact: true }).first()).toBeVisible();
   // The model-gated lock row is present for a real report.
   await expect(page.getByText(/Do your skills actually fire/i)).toBeVisible();
 });

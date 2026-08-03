@@ -292,7 +292,7 @@ describe("auditScore", () => {
     expect(s.grade).toBe("C"); // NOT F — the whole point of halving the weight
   });
 
-  it("an ADVISORY (inherits-all) trifecta is SHOWN on Safety but NOT graded", () => {
+  it("an INHERITS-ALL trifecta is graded like an explicit one (never cheaper)", () => {
     const s = auditScore(
       makeReport({
         agents: [
@@ -316,13 +316,78 @@ describe("auditScore", () => {
         ] as unknown as ScanReport["trifectaFindings"],
       }),
     );
-    expect(cat(s, "Safety")?.score).toBe(100); // advisory not graded
+    // Same −10 as the explicit all-three contract above: an inherits-all unit holds
+    // the three legs implicitly AND every other capability, so it can never be the
+    // cheaper of the two.
+    expect(cat(s, "Safety")?.score).toBe(90);
     expect(
-      cat(s, "Safety")?.findings.some(
-        (f) => f.includes("inherits all tools") && f.includes("advisory"),
-      ),
+      cat(s, "Safety")?.findings.some((f) => f.includes("inherits all tools")),
     ).toBe(true);
-    expect(s.overall).toBe(100);
+    expect(s.overall).toBe(90);
+  });
+
+  // -------------------------------------------------------------------------
+  // The measured dogfooding regression (2026-08-03, a 35-skill repo): grading the
+  // EXPLICIT all-three contract while leaving the strictly-worse inherits-all case
+  // ungraded made the tool report a HARDENED harness as worse than its unhardened
+  // self — Safety 70 before (only 3 declared units counted, the 31 inheriting
+  // everything counted zero) → 0 after `allowed-tools` was added everywhere and the
+  // units holding the full trifecta fell 35/35 → 17/35.
+  // -------------------------------------------------------------------------
+  /** N model-invocable skills, the first `exposed` of them holding the trifecta. */
+  function harness(
+    total: number,
+    exposed: number,
+    severity: "hard" | "advisory",
+  ): ScanReport {
+    const skills = Array.from({ length: total }, (_, i) => ({
+      name: `skill-${String(i)}`,
+      path: `skills/skill-${String(i)}/SKILL.md`,
+      hasDescription: true,
+      userInvoked: false,
+      resourceIssues: [],
+      trifecta: i < exposed ? { severity } : null,
+    })) as unknown as ScanReport["skills"];
+    const trifectaFindings = skills.slice(0, exposed).map((s) => ({
+      path: s.path,
+      kind: "skill",
+      name: s.name,
+      finding: { severity },
+    })) as unknown as ScanReport["trifectaFindings"];
+    return makeReport({ skills, trifectaFindings });
+  }
+
+  it("hardening a 35-unit harness RAISES Safety (the measured 70 → 0 inversion)", () => {
+    // Before: every unit inherits all tools → the whole surface is an exfil path.
+    const before = auditScore(harness(35, 35, "advisory"));
+    // After: explicit `allowed-tools` everywhere; 17 units still name all three legs.
+    const after = auditScore(harness(35, 17, "hard"));
+
+    expect(cat(before, "Safety")?.score).toBe(70); // 35/35 exposed → capped −30
+    expect(cat(after, "Safety")?.score).toBe(85); // 17/35 exposed → −15
+    // The property, independent of the exact weights: hardening cannot lower it.
+    expect(after.overall).toBeGreaterThan(before.overall);
+  });
+
+  it("the penalty is monotone: dropping exposed units never lowers Safety", () => {
+    const scores = [35, 30, 20, 17, 5, 1, 0].map(
+      (exposed) => auditScore(harness(35, exposed, "hard")).overall,
+    );
+    for (let i = 1; i < scores.length; i++) {
+      expect(scores[i] ?? 0).toBeGreaterThanOrEqual(scores[i - 1] ?? 0);
+    }
+    expect(scores.at(-1)).toBe(100); // nothing exposed → clean
+  });
+
+  it("a large harness never saturates to 0 on the trifecta alone", () => {
+    // A flat per-unit weight put 35 AND 17 exposed units both past the clamp, so
+    // halving the exposure showed up as no change at all.
+    expect(cat(auditScore(harness(35, 35, "advisory")), "Safety")?.score).toBe(
+      70,
+    );
+    expect(cat(auditScore(harness(200, 200, "hard")), "Safety")?.score).toBe(
+      70,
+    );
   });
 
   it("Safety is n/a when there's no tool-bearing surface (no agents, no model-invocable skills)", () => {

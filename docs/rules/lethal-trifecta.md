@@ -42,8 +42,11 @@ only when all three legs are non-empty.
   declared exfil path). Reported with `✗`.
 - **`"advisory"`** — an **inherits-all** unit (a subagent with no `tools:` line, or
   a model-invocable skill with no `allowed-tools:`) that holds every leg only
-  because it inherits everything — a maximal blast radius. Reported with `⚠`,
-  aligned with the codebase's existing "inherits-all is advisory" stance.
+  because it inherits everything — a maximal blast radius. Reported with `⚠`.
+
+The two severities describe **how the unit got there**, not how much it costs: an
+inherits-all unit is graded exactly like an explicit one (see below), because it
+is strictly the worse of the two.
 
 ## In `vigiles audit`: graded, but a **ding — not a fail**
 
@@ -53,18 +56,26 @@ proves it will be. It's a **real risk worth surfacing in the grade**, yet
 Anthropic's own official plugins ship the pattern on their cleanest surfaces (e.g.
 the `feature-dev` plugin's `code-reviewer` subagent lists `Read, WebFetch,
 WebSearch`), so fail-grading such a plugin to **F** would cry wolf. `vigiles audit`
-threads that needle by grading a **HARD** trifecta at a **reduced weight**:
+threads that needle with a **capped exposure** penalty:
 
 - **SHOWS** every trifecta unit (hard _and_ inherits-all) in the **Safety** ring
   and the report — a real, useful heads-up.
-- **DEDUCTS a reduced −10 per HARD unit** — **half** the original −20, so a
-  trifecta dents the score without a catastrophic F. The **Safety** ring is a
-  **graded** ring again: it scores `100 − 10 × (hard units)`, is `n/a` only when
-  there's no tool-bearing surface to assess (never a false 0), and is a clean 100
-  when surfaces exist but no trifecta. The `feature-dev` plugin's 3 hard units →
-  `−30` → **C (70/100)**, not F and not A.
-- An **inherits-all (`"advisory"`)** unit is still **SHOWN but NOT graded** —
-  aligned with the codebase's existing "inherits-all is advisory" stance.
+- **DEDUCTS −10 per exposed unit, capped at −30 × the SHARE of the surface
+  exposed** — so a trifecta dents the score without a catastrophic F. The
+  **Safety** ring scores `100 − min(10 × exposed, 30 × exposed/assessable)`, is
+  `n/a` only when there's no tool-bearing surface to assess (never a false 0), and
+  is a clean 100 when surfaces exist but no trifecta. The `feature-dev` plugin's 3
+  hard units → `−30` → **C (70/100)**, not F and not A.
+- An **inherits-all (`"advisory"`)** unit is graded **exactly like an explicit
+  one**. It holds all three legs implicitly _and every other capability besides_,
+  so it cannot cost less than a declared all-three contract. Grading only the
+  explicit case made the score non-monotone in risk: **declaring** an
+  `allowed-tools` contract — a genuine risk reduction — could only ever LOWER the
+  score. Measured on a real 35-skill repo (2026-08-03): Safety read **70** while
+  35/35 units inherited everything (only the 3 declared units counted), and
+  dropped toward **0** after contracts were added everywhere and exposure fell to
+  **17/35**. The tool called the safer configuration strictly worse. Under the
+  capped-exposure model the same two states read **70 → 85**.
 
 The deduction lives on the single shared `reportDeductions` → `computeIntegrityScore`
 path, so the audit overall and the plugin-health leaderboard read the SAME number.

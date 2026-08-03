@@ -14,10 +14,13 @@
  * (`lethalTrifectaIssues` → `report.trifectaFindings`): a unit holding all three
  * capability legs is a prompt-injection exfil path detectable from the tool-SET
  * alone — nothing executes, so it sidesteps the confinement blocker. A `"hard"`
- * (explicit all-three) finding is GRADED into the overall at a REDUCED weight
- * (`W_TRIFECTA=10`, HALF the old 20 — a DING, not a fail: it dents the grade
- * without a catastrophic F for a pattern official plugins ship by design); a
- * `"advisory"` (inherits-all) finding is SHOWN in the ring but not graded. NB the EXECUTING
+ * (explicit all-three) finding AND an `"advisory"` (inherits-all) one are BOTH
+ * graded — an inherited contract holds the three legs implicitly and every other
+ * capability besides, so grading only the explicit case made hardening LOWER the
+ * score. The cost is capped against the SHARE of the surface exposed
+ * (`W_TRIFECTA=10` per unit, `W_TRIFECTA_MAX=30` total — a DING, not a fail: it
+ * dents the grade without a catastrophic F for a pattern official plugins ship by
+ * design). NB the EXECUTING
  * "do your hooks actually block?" disaster-battery is STILL not an `audit` ring:
  * running arbitrary hooks safely needs cross-platform confinement that isn't
  * shipped yet, so the battery lives in the `vigiles/testing` API via
@@ -36,8 +39,8 @@ import {
   W_DANGLING_REF,
   W_OVERLAP,
   W_NO_CONTRACT,
-  W_TRIFECTA,
   TRIFECTA_LABEL,
+  trifectaExposure,
   type PluginScore,
 } from "./score-core.js";
 import type { ScanReport } from "./scan.js";
@@ -253,12 +256,14 @@ function structure(r: ScanReport): CategoryScore {
 
 /**
  * SAFETY — fed by the STATIC lethal-trifecta check (`report.trifectaFindings`), a
- * GRADED ring. A `"hard"` finding (an explicit contract naming all three
- * capability legs) is a prompt-injection exfil path and is GRADED at a REDUCED
- * weight (`W_TRIFECTA=10` each — HALF the old 20, a DING not a fail; the same
- * weight `reportDeductions` sums into the overall, so the ring and the headline
- * agree). A `"advisory"` finding (inherits-all) is SHOWN in the ring's findings
- * but NOT graded — aligned with the inherits-all-is-advisory stance.
+ * GRADED ring. EVERY unit holding all three capability legs counts, whether the
+ * contract NAMED them (`"hard"`) or INHERITED them (`"advisory"` — no `tools:` /
+ * `allowed-tools:` line, so it holds all three legs implicitly AND every other
+ * capability besides). Grading only the explicit case made the ring non-monotone:
+ * declaring a tool contract — a genuine risk REDUCTION — could only ever lower the
+ * score. The penalty is the shared {@link trifectaExposure} (capped against the
+ * share of the surface exposed), the SAME number `reportDeductions` sums into the
+ * overall, so the ring and the headline agree.
  *
  * Scores `null` (n/a, excluded from the overall) when there's NO tool-bearing
  * surface to assess at all — no subagents AND no model-invocable skills. A
@@ -267,9 +272,8 @@ function structure(r: ScanReport): CategoryScore {
  * the ring is a clean 100.
  */
 function safety(r: ScanReport): CategoryScore {
-  const modelInvocableSkills = r.skills.filter((s) => !s.userInvoked).length;
-  const assessable = r.agents.length + modelInvocableSkills;
-  if (assessable === 0) {
+  const exposure = trifectaExposure(r);
+  if (exposure.assessable === 0) {
     return {
       key: "Safety",
       score: null,
@@ -277,27 +281,26 @@ function safety(r: ScanReport): CategoryScore {
       findings: ["no tool-bearing surface to assess"],
     };
   }
-  const hard = r.trifectaFindings.filter((f) => f.finding.severity === "hard");
-  const { score, findings } = scoreFrom([
-    {
-      n: hard.length,
-      weight: W_TRIFECTA,
-      label: TRIFECTA_LABEL,
-    },
-  ]);
-  // inherits-all trifecta findings are ADVISORY: surfaced as a maximal-blast-radius
-  // note but never graded (mirrors the Structure inherits-all advisory).
-  const advisory = r.trifectaFindings
-    .filter((f) => f.finding.severity === "advisory")
-    .map(
-      (f) =>
-        `${f.name} inherits all tools — the "lethal trifecta" (reads data, reaches the web, runs commands), so a prompt injection could exfiltrate secrets (advisory)`,
+  const findings: string[] = [];
+  if (exposure.exposed > 0) {
+    findings.push(
+      `${String(exposure.exposed)} of ${String(exposure.assessable)} ` +
+        pluralizeLabel(exposure.exposed, TRIFECTA_LABEL),
     );
+  }
+  // NAME the inherited ones: they're both the worst (every capability, not just
+  // the three legs) and the cheapest to fix — declare a contract that drops a leg.
+  for (const f of r.trifectaFindings) {
+    if (f.finding.severity !== "advisory") continue;
+    findings.push(
+      `${f.name} inherits all tools — the "lethal trifecta" (reads data, reaches the web, runs commands) plus every other capability, so a prompt injection could exfiltrate secrets`,
+    );
+  }
   return {
     key: "Safety",
-    score,
+    score: Math.max(0, 100 - exposure.penalty),
     weight: 1,
-    findings: [...findings, ...advisory],
+    findings,
   };
 }
 
