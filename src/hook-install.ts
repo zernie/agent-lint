@@ -10,12 +10,14 @@
  * result into the active harness's native config (`.claude/settings.json` JSON
  * / `config.toml` TOML) — so the harness is actually wired, not handed a
  * paste-this block. The merge is idempotent: an entry is keyed by the runtime
- * command's hook PATH, so recompiling updates in place and never duplicates,
- * while a user's own hand-written hooks are preserved untouched. One source dir
- * also means basenames are unique, so the stamp can key on the basename safely.
+ * command's hook path, CANONICALIZED ({@link normalizeHookRef}) so it identifies
+ * the FILE rather than the string the user typed — recompiling updates in place
+ * and never duplicates, while a user's own hand-written hooks are preserved
+ * untouched. One source dir also means basenames are unique, so the stamp can key
+ * on the basename safely.
  */
 import { readdirSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { stringify as stringifyToml } from "@iarna/toml";
 
 /** The agnostic, committed home for hook SOURCE — one dir, cross-adapter. */
@@ -63,9 +65,46 @@ interface SettingsJson {
   [k: string]: unknown;
 }
 
-/** True when an entry's command routes through the runtime for `hookPath`. */
+/**
+ * The CANONICAL form of a hook-source reference — how the path is written into
+ * the emitted runtime command AND how an existing entry is recognized as "this
+ * hook", so the merge is keyed by the FILE, not by the string the user typed.
+ *
+ * Without this, `vigiles compile x.hook.ts` and `vigiles compile ./x.hook.ts`
+ * wired the SAME file twice: the second run's `hookPath` (`./x.hook.ts`) wasn't a
+ * substring of the first run's command (`… run-program x.hook.ts`), so nothing
+ * was replaced and a second `{matcher, hooks:[…]}` block was appended. A few
+ * iterations of an edit-compile loop left duplicate wirings that all fire.
+ *
+ * Canonical = POSIX separators, no `./` prefix, resolved against the cwd and made
+ * relative when it lives under it (an absolute path outside the repo is kept
+ * absolute — still stable, just not relative to anything).
+ */
+export function normalizeHookRef(
+  hookPath: string,
+  cwd = process.cwd(),
+): string {
+  const abs = resolve(cwd, hookPath);
+  const rel = relative(cwd, abs);
+  const chosen = rel === "" || rel.startsWith("..") ? abs : rel;
+  return chosen.split(sep).join("/");
+}
+
+/**
+ * True when an entry's command routes through the runtime for `hookPath`.
+ *
+ * Compares CANONICALIZED path tokens rather than testing for a raw substring:
+ * `./x.hook.ts` and `x.hook.ts` are the same file (so the entry is replaced,
+ * which also de-duplicates settings written by an older version), while
+ * `x.hook.ts` and `my-x.hook.ts` are not (a substring test said they were).
+ */
 function managesHook(entry: HookEntry, hookPath: string): boolean {
-  return entry.hooks.some((h) => h.command.includes(hookPath));
+  const ref = normalizeHookRef(hookPath);
+  return entry.hooks.some((h) =>
+    h.command
+      .split(/\s+/)
+      .some((token) => token !== "" && normalizeHookRef(token) === ref),
+  );
 }
 
 /**
@@ -115,8 +154,9 @@ export function mergeHooksToml(
 ): ConfigToml {
   const hooks: Record<string, TomlHookEntry[]> = { ...(existing.hooks ?? {}) };
   for (const [event, entries] of Object.entries(compiled)) {
+    // Same canonical-path keying as the JSON merge (one flat command per entry).
     const kept = (hooks[event] ?? []).filter(
-      (e) => !e.command.includes(hookPath),
+      (e) => !managesHook({ hooks: [{ type: "command", command: e.command }] }, hookPath), // prettier-ignore
     );
     hooks[event] = [...kept, ...toTomlEntries(entries)];
   }

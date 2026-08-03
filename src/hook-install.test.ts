@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   mergeHooksJson,
   mergeHooksToml,
+  normalizeHookRef,
   serializeConfig,
   discoverHookFiles,
 } from "./hook-install.js";
@@ -53,6 +54,69 @@ describe("mergeHooksJson", () => {
     expect(twice.hooks?.PreToolUse).toHaveLength(1);
   });
 
+  // Measured 2026-08-03: `vigiles compile x.hook.ts` then
+  // `vigiles compile ./x.hook.ts` appended a SECOND {matcher, hooks:[…]} block
+  // for the same hook, because the merge key was the raw string the user typed
+  // and `"… run-program x.hook.mjs".includes("./x.hook.mjs")` is false. A few
+  // edit-compile iterations left duplicate wirings that all fire.
+  it("is idempotent across path SPELLINGS of the same file", () => {
+    const spellings = [
+      ".vigiles/hooks/g.mjs",
+      "./.vigiles/hooks/g.mjs",
+      ".vigiles//hooks/g.mjs",
+      ".vigiles/hooks/../hooks/g.mjs",
+      join(process.cwd(), ".vigiles/hooks/g.mjs"),
+    ];
+    let settings = mergeHooksJson({}, compiled, spellings[0] ?? "");
+    for (const spelling of spellings.slice(1)) {
+      settings = mergeHooksJson(settings, compiled, spelling);
+    }
+    expect(settings.hooks?.PreToolUse).toHaveLength(1);
+  });
+
+  it("replaces an entry written with a DIFFERENT spelling (migrates old dupes)", () => {
+    const legacy = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [
+              {
+                type: "command" as const,
+                command:
+                  "npx vigiles hook-runtime run-program ./.vigiles/hooks/g.mjs",
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const out = mergeHooksJson(legacy, compiled, ".vigiles/hooks/g.mjs");
+    expect(out.hooks?.PreToolUse).toHaveLength(1);
+  });
+
+  it("does NOT treat a path that merely CONTAINS ours as the same hook", () => {
+    // The old substring test said `my-g.mjs` was managed by `g.mjs`.
+    const neighbour = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [
+              {
+                type: "command" as const,
+                command:
+                  "npx vigiles hook-runtime run-program .vigiles/hooks/my-g.mjs",
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const out = mergeHooksJson(neighbour, compiled, ".vigiles/hooks/g.mjs");
+    expect(out.hooks?.PreToolUse).toHaveLength(2);
+  });
+
   it("keeps a sibling vigiles hook for a DIFFERENT file", () => {
     const other = {
       PreToolUse: [
@@ -96,6 +160,37 @@ describe("mergeHooksToml", () => {
     const once = mergeHooksToml({}, compiled, ".vigiles/hooks/g.mjs");
     const twice = mergeHooksToml(once, compiled, ".vigiles/hooks/g.mjs");
     expect(twice.hooks?.PreToolUse).toHaveLength(1);
+  });
+
+  it("is idempotent across path spellings too", () => {
+    const once = mergeHooksToml({}, compiled, "./.vigiles/hooks/g.mjs");
+    const twice = mergeHooksToml(once, compiled, ".vigiles/hooks/g.mjs");
+    expect(twice.hooks?.PreToolUse).toHaveLength(1);
+  });
+});
+
+describe("normalizeHookRef", () => {
+  it("canonicalizes every spelling of one file to the same ref", () => {
+    const cwd = process.cwd();
+    const refs = [
+      ".vigiles/hooks/g.mjs",
+      "./.vigiles/hooks/g.mjs",
+      ".vigiles/hooks/../hooks/g.mjs",
+      join(cwd, ".vigiles/hooks/g.mjs"),
+    ].map((p) => normalizeHookRef(p, cwd));
+    expect(new Set(refs).size).toBe(1);
+    expect(refs[0]).toBe(".vigiles/hooks/g.mjs");
+  });
+
+  it("keeps a path outside the cwd absolute (still stable)", () => {
+    const cwd = join(tmpdir(), "vig-cwd");
+    const ref = normalizeHookRef(join(tmpdir(), "elsewhere/h.mjs"), cwd);
+    expect(ref.endsWith("elsewhere/h.mjs")).toBe(true);
+    expect(normalizeHookRef(ref, cwd)).toBe(ref); // idempotent
+  });
+
+  it("emits POSIX separators so the ref is platform-stable", () => {
+    expect(normalizeHookRef(".vigiles/hooks/g.mjs")).not.toMatch(/\\/);
   });
 });
 
