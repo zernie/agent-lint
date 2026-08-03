@@ -71,6 +71,13 @@ export type {
 } from "./eval.js";
 
 export * from "./harness-assert.js";
+// The compiled-hook LOADER. The in-process assertions above take the hook
+// OBJECT, but a `.harness.mjs` test only has its PATH — without this the
+// intended in-process test path is unreachable from the file format
+// `vigiles test` actually runs, and authors fall back to spawning the runtime as
+// a subprocess (the very plumbing compiled hooks exist to remove). Same loader
+// the CLI runtime uses, so a hook that loads in a test loads identically in prod.
+export { loadHook } from "./load-hook.js";
 // The declarative check vocabulary is now first-class at the front door. Its
 // `hookFired` (a `Check<Trace>`) supersedes the legacy boolean predicate of the
 // same name — the explicit re-export below wins over the two `export *`s.

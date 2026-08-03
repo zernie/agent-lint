@@ -242,12 +242,13 @@ Hooks are **not** auto-discovered by sitting just anywhere — they must be unde
 
 **Because the decision is a pure function, you test it deterministically** — no model, and (cheapest) no subprocess. Three levels, by cost:
 
-**1. In-process (cheapest).** Pass the hook and a raw event to `assertHookDenies` / `assertHookAllows` — no `node` spawn, no CLI, milliseconds:
+**1. In-process (cheapest).** Load the hook FILE with `loadHook(path)` and pass it plus a raw event to the assertions — no `node` spawn, no CLI, milliseconds:
 
 ```ts
 import { it } from "vitest";
-import { assertHookDenies, assertHookAllows } from "vigiles/unit";
-import guard from "./safe-bash-guard.mjs"; // the hook's default export
+import { loadHook, assertHookDenies, assertHookAllows } from "vigiles/testing";
+
+const guard = await loadHook(".vigiles/hooks/guard.mjs");
 
 it("blocks a force-push, even hidden in a compound command", () => {
   assertHookDenies(guard, {
@@ -260,6 +261,28 @@ it("blocks a force-push, even hidden in a compound command", () => {
   });
 });
 ```
+
+`loadHook` is the same loader the runtime uses (so a hook that loads in a test loads identically in production) and it is what makes this tier reachable from a `.harness.mjs` file, which has a hook's PATH and not its object. A TypeScript hook (`guard.hook.ts`) loads the same way under tsx / Node ≥ 23.6. If you already have the object — a static `import guard from "./guard.mjs"` — pass it directly.
+
+**React hooks get their own pair.** A react can't block, so the gate assertions don't apply; use `assertHookNotices(hook, event, matcher?)` and `assertHookSilent(hook, event)`:
+
+```ts
+import { assertHookNotices, assertHookSilent } from "vigiles/testing";
+
+const warn = await loadHook(".vigiles/hooks/warn-on-failure.mjs");
+const after = (isError) => ({
+  tool_name: "Bash",
+  tool_input: { command: "npm test" },
+  tool_response: isError ? { error: "boom" } : { stdout: "ok" },
+});
+
+assertHookNotices(warn, after(true), /read the error/);
+assertHookSilent(warn, after(false));
+```
+
+> ⚠️ **Don't test a react hook by reading stdout.** `notice(…)` writes to **stderr**, so a probe built on `execFileSync` (which returns stdout only) sees nothing and reports a perfectly healthy react hook as **dead**. These assertions read the reaction itself, so the stream never enters into it.
+
+Runnable end to end: [`examples/harness/compiled-hook-inprocess.harness.mjs`](../examples/harness/compiled-hook-inprocess.harness.mjs) (with its two hook files) is exactly this pattern, and runs in CI.
 
 `runHookProgram(hook, event)` is the underlying primitive — it returns a normalized outcome (`{ kind: "decision" | "injection" | "reaction", … }`) dispatched by role, so an inject or react hook is just as testable as a gate.
 

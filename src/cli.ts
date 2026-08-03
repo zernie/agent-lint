@@ -291,6 +291,7 @@ import { adoptMarkdown, adoptSkill, adoptAgent } from "./core/adopt.js";
 import { computeScriptCoverage } from "./core/coverage.js";
 import { findOrphanDocs, formatOrphanReport } from "./core/orphans.js";
 import { findDocRefs, formatDocRefReport } from "./core/doc-refs.js";
+import { loadHook } from "./load-hook.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -5870,39 +5871,11 @@ function refsHookCommand(): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Load a compiled-hook program's default export. JS module formats
- * (`.mjs`/`.cjs`/`.js`) load via dynamic import directly; a TypeScript hook
- * loads only under a TS-capable runtime (tsx / Node >= 23.6) — otherwise an
- * actionable error points at authoring it as `.mjs`.
+ * Load a compiled-hook program's default export — the SHARED loader, also the
+ * public `vigiles/testing` `loadHook` a `.harness.mjs` test uses, so a hook that
+ * loads in a test loads identically here (one loader, no drift).
  */
-async function loadHookProgram(file: string): Promise<AnyHook> {
-  const abs = resolve(process.cwd(), file);
-  const { pathToFileURL } = require("node:url") as typeof import("node:url");
-  let mod: { default?: unknown };
-  try {
-    mod = (await import(pathToFileURL(abs).href)) as { default?: unknown };
-  } catch (e) {
-    if (/\.(?:m|c)?ts$/.test(file)) {
-      throw new HookCompileError(
-        `Cannot load TypeScript hook "${file}" in this Node runtime. Run under ` +
-          `tsx (npx tsx …) / Node >= 23.6, or author the hook as a .mjs file.`,
-      );
-    }
-    throw new HookCompileError(
-      `Cannot load hook "${file}": ${(e as Error).message}`,
-    );
-  }
-  // Unwrap the ESM/CJS double-default that `export default` can produce.
-  const program =
-    (mod.default as { default?: unknown } | undefined)?.default ?? mod.default;
-  if (!program || typeof program !== "object") {
-    throw new HookCompileError(
-      `${file} has no default-exported hook program ` +
-        `(use \`export default defineHook({…})\`).`,
-    );
-  }
-  return program as AnyHook;
-}
+const loadHookProgram = loadHook;
 
 /** Load a registered provider (`.vigiles/providers/<name>`) → its definition. */
 async function loadProvider(file: string): Promise<RegisteredProvider> {

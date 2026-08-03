@@ -22,6 +22,8 @@ import {
   assertHookAllowed,
   assertHookDenies,
   assertHookAllows,
+  assertHookNotices,
+  assertHookSilent,
   assertNoEgress,
   assertEgressOnly,
   egressHosts,
@@ -57,6 +59,8 @@ import {
   inject,
   defineReact,
   run,
+  notice,
+  nothing,
   tools,
 } from "./core/hook-program.js";
 import type { Check } from "./check.js";
@@ -785,4 +789,81 @@ test("assertHookDenies / assertHookAllows test a compiled hook in-process (no su
       tool_input: { file_path: "x.ts" },
     });
   }, /got run \(a reaction\)/);
+});
+
+// A react hook can't block, so the gate assertions don't apply to it — and until
+// now nothing else did either. `notice()` writes to STDERR, which is a live trap:
+// a probe built on `execFileSync` (stdout only) reported three perfectly healthy
+// react hooks as DEAD on 2026-08-03. These read the reaction in-process, so
+// stdout-vs-stderr never enters into it.
+test("assertHookNotices / assertHookSilent test a react hook in-process", () => {
+  const warnOnFailure = defineReact({
+    on: "PostToolUse",
+    match: tools("Bash"),
+    react: (e) =>
+      e.response.isError() ? notice("that command failed — check the log") : nothing(), // prettier-ignore
+  });
+  const ev = (isError: boolean) => ({
+    tool_name: "Bash",
+    tool_input: { command: "npm test" },
+    tool_response: isError ? { error: "boom" } : { stdout: "ok" },
+  });
+
+  assert.doesNotThrow(() => {
+    assertHookNotices(warnOnFailure, ev(true));
+  });
+  assert.doesNotThrow(() => {
+    assertHookSilent(warnOnFailure, ev(false));
+  });
+
+  // The message can be pinned by substring OR regexp.
+  assert.doesNotThrow(() => {
+    assertHookNotices(warnOnFailure, ev(true), "check the log");
+  });
+  assert.doesNotThrow(() => {
+    assertHookNotices(warnOnFailure, ev(true), /failed/);
+  });
+  assert.throws(() => {
+    assertHookNotices(warnOnFailure, ev(true), "totally different");
+  }, /expected the notice to match totally different, got "that command failed/);
+  assert.throws(() => {
+    assertHookNotices(warnOnFailure, ev(true), /^nope$/);
+  }, /expected the notice to match/);
+
+  // Each assertion throws loudly on the other outcome (never a silent pass).
+  assert.throws(() => {
+    assertHookNotices(warnOnFailure, ev(false));
+  }, /expected the hook to notice, got none \(a reaction\)/);
+  assert.throws(() => {
+    assertHookSilent(warnOnFailure, ev(true));
+  }, /expected the hook to stay silent, got notice \(a reaction\)/);
+
+  // A `run(…)` reaction is not silence — the hook still reacted.
+  const formatOnWrite = defineReact({
+    on: "PostToolUse",
+    match: tools("Write"),
+    react: () => run("prettier --write x"),
+  });
+  assert.throws(() => {
+    assertHookSilent(formatOnWrite, {
+      tool_name: "Write",
+      tool_input: { file_path: "x.ts" },
+    });
+  }, /expected the hook to stay silent, got run \(a reaction\)/);
+
+  // Aimed at the wrong ROLE, both name what they got instead of passing.
+  const guard = defineHook({
+    on: "PreToolUse",
+    match: tool("Bash"),
+    decide: () => allow(),
+  });
+  assert.throws(() => {
+    assertHookNotices(guard, { tool_name: "Bash", tool_input: { command: "x" } }); // prettier-ignore
+  }, /expected the hook to notice, got allow \(a gate decision\)/);
+  assert.throws(() => {
+    assertHookSilent(guard, {
+      tool_name: "Bash",
+      tool_input: { command: "x" },
+    });
+  }, /expected a react hook, got allow \(a gate decision\)/);
 });

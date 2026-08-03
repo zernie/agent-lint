@@ -49,6 +49,12 @@ export function assertHookFired(trace: Trace, name: string | RegExp, opts?: {
 }): void;
 
 // @public
+export function assertHookNotices(hook: AnyHook, event: RawHookEvent, matcher?: string | RegExp): void;
+
+// @public
+export function assertHookSilent(hook: AnyHook, event: RawHookEvent): void;
+
+// @public
 export function assertImproves(report: EvalReport, opts: {
     baseline: string;
     arm: string;
@@ -355,6 +361,9 @@ export type JudgeFn = (opts: {
 export function latency(opts: {
     maxMs: number;
 }): Check<UsageTrace>;
+
+// @public
+export function loadHook(file: string): Promise<AnyHook>;
 
 // @public
 export function mcp(server: string, toolName: string): Check<Trace>;

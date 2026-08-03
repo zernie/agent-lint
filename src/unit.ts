@@ -12,6 +12,10 @@
  * `vigiles/e2e`.
  */
 export * from "./harness-assert.js";
+// The compiled-hook loader belongs to the no-capability tier: it imports a local
+// module and nothing else. Without it the in-process assertions above are
+// unreachable from a test that only knows the hook's PATH.
+export { loadHook } from "./load-hook.js";
 export {
   runHook,
   parseHookOutput,
