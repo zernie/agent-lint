@@ -224,6 +224,7 @@ import {
   discoverProviderFiles,
   mergeHooksJson,
   mergeHooksToml,
+  normalizeHookRef,
   serializeConfig,
 } from "./hook-install.js";
 import {
@@ -5973,8 +5974,9 @@ interface HookInstallResult {
  * outside the sanctioned API does NOT compile (capability = API surface). The
  * emitted block routes the live event to `hook-runtime run-program`; a
  * tamper-evident stamp sidecar lets the runtime refuse a hand-edited artifact.
- * The merge is idempotent (keyed by the hook PATH), so recompiling updates in
- * place and never clobbers the user's own hooks.
+ * The merge is idempotent (keyed by the hook FILE via `normalizeHookRef`, not by
+ * the string the user typed — `x.hook.ts` and `./x.hook.ts` are the same wiring),
+ * so recompiling updates in place and never clobbers the user's own hooks.
  */
 async function installHookFile(
   file: string,
@@ -5983,8 +5985,12 @@ async function installHookFile(
 ): Promise<HookInstallResult> {
   const source = readFileSync(resolve(process.cwd(), file), "utf-8");
   const program = await loadHookProgram(file);
+  // Emit the CANONICAL path so two spellings of the same file produce the same
+  // command — the merge key and the emitted command must agree, or recompiling
+  // appends a duplicate block instead of replacing the existing one.
+  const ref = normalizeHookRef(file);
   const compiled = compileHookProgram(source, program, {
-    gateCommand: `npx vigiles hook-runtime run-program ${file}`,
+    gateCommand: `npx vigiles hook-runtime run-program ${ref}`,
     dialect: adapter.dialect,
     hookProtocol: adapter.hookProtocol,
     settingsFormat: adapter.layout.settingsFormat,
@@ -6014,8 +6020,8 @@ async function installHookFile(
     : {};
   const merged =
     format === "toml"
-      ? mergeHooksToml(existing, compiled.hooks, file)
-      : mergeHooksJson(existing, compiled.hooks, file);
+      ? mergeHooksToml(existing, compiled.hooks, ref)
+      : mergeHooksJson(existing, compiled.hooks, ref);
   mkdirSync(dirname(settingsAbs), { recursive: true });
   writeFileSync(settingsAbs, serializeConfig(merged, format));
 

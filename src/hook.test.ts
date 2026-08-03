@@ -231,6 +231,54 @@ test("compile (hook): a clean hook compiles, MERGES into settings.json, stamps, 
   }
 });
 
+// Measured 2026-08-03: recompiling the same hook under a different path
+// SPELLING appended a SECOND {matcher, hooks:[…]} block instead of replacing the
+// existing one, because the wiring was keyed by the raw string the user typed. A
+// few edit-compile iterations left duplicate wirings that ALL fire.
+test("compile (hook): recompiling is idempotent, whatever the path spelling", () => {
+  const dir = makeTmpDir();
+  try {
+    linkVigiles(dir);
+    writeFileSync(resolve(dir, "guard.mjs"), GATE_PKG);
+    const compile = (arg: string) =>
+      spawnSync("node", [CLI, "compile", arg], { cwd: dir, encoding: "utf-8" });
+
+    for (const spelling of [
+      "guard.mjs",
+      "./guard.mjs",
+      resolve(dir, "guard.mjs"),
+      "./guard.mjs",
+    ]) {
+      const r = compile(spelling);
+      assert.equal(r.status, 0, r.stderr);
+    }
+
+    const settings = JSON.parse(
+      readFileSync(resolve(dir, ".claude/settings.json"), "utf-8"),
+    ) as { hooks: Record<string, { hooks: { command: string }[] }[]> };
+    const entries = settings.hooks.PreToolUse;
+    assert.equal(entries.length, 1, "one wiring per hook file, not four");
+    assert.equal(
+      entries[0].hooks[0].command,
+      "npx vigiles hook-runtime run-program guard.mjs",
+    );
+
+    // And the single surviving wiring still enforces.
+    const blocked = runHook(
+      `node ${CLI} hook-runtime run-program guard.mjs`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "git push -f" },
+      },
+      { cwd: dir },
+    );
+    assert.equal(blocked.blocked, true);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
 test("compile --harness=codex (hook): merges TOML for a gate, warns LOUDLY on inject (the honest gap)", () => {
   const dir = makeTmpDir();
   try {
