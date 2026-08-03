@@ -188,3 +188,112 @@ test("non-HOME parameter makes an arg dynamic (dropped, not misparsed)", () => {
   assert.ok(l.args.includes("install"));
   assert.ok(!l.args.some((a) => a.includes("$PKG")));
 });
+
+// --- redirections are CAPTURED, not dropped ---------------------------------
+//
+// The parser walked CallExprs only, but a redirection lives on the enclosing
+// Stmt — so `echo x > papers/x/paper.md` normalized to a leaf whose head/argv/
+// args/flags/assigns mentioned only `echo` and `x`, and the file it WROTE
+// appeared in no field at all. Measured 2026-08-03: that made the single most
+// common write shape invisible to any matcher built on the leaf.
+
+test("a redirection target is captured on the leaf (it used to vanish)", () => {
+  const l = one("echo x > papers/x/paper.md");
+  assert.equal(l.head, "echo");
+  assert.deepEqual(l.args, ["x"]); // the target is NOT an argv word
+  assert.equal(l.redirects.length, 1);
+  assert.equal(l.redirects[0]?.op, ">");
+  assert.equal(l.redirects[0]?.target, "papers/x/paper.md");
+  assert.equal(l.redirects[0]?.fd, null);
+  assert.equal(l.redirects[0]?.writes, true);
+});
+
+test("append / clobber / all-streams redirections are writes", () => {
+  for (const [cmd, op] of [
+    ["a >> f", ">>"],
+    ["a >| f", ">|"],
+    ["a &> f", "&>"],
+    ["a &>> f", "&>>"],
+  ] as const) {
+    const r = one(cmd).redirects[0];
+    assert.equal(r?.op, op, cmd);
+    assert.equal(r?.writes, true, cmd);
+    assert.equal(r?.target, "f", cmd);
+  }
+});
+
+test("input redirections and fd-dups are NOT writes", () => {
+  for (const [cmd, op] of [
+    ["a < f", "<"],
+    ["a <<< f", "<<<"],
+  ] as const) {
+    const r = one(cmd).redirects[0];
+    assert.equal(r?.op, op, cmd);
+    assert.equal(r?.writes, false, cmd);
+  }
+  // `2>&1` duplicates an fd — its "target" is the fd 1, not a file named "1".
+  const dup = one("a 2>&1").redirects[0];
+  assert.equal(dup?.op, ">&");
+  assert.equal(dup?.fd, 2);
+  assert.equal(dup?.writes, false);
+});
+
+test("an explicit source fd is recorded", () => {
+  const r = one("a 2> err.log").redirects[0];
+  assert.equal(r?.fd, 2);
+  assert.equal(r?.op, ">");
+  assert.equal(r?.target, "err.log");
+  assert.equal(r?.writes, true);
+});
+
+test("a dynamic redirect target is null (present but unresolved), never a guess", () => {
+  const r = one('echo x > "$OUT"').redirects[0];
+  assert.equal(r?.op, ">");
+  assert.equal(r?.target, null);
+  assert.equal(r?.writes, true);
+});
+
+test("$HOME and quotes in a redirect target are normalized like any word", () => {
+  assert.equal(one('echo x > "$HOME/.bashrc"').redirects[0]?.target, "~/.bashrc"); // prettier-ignore
+  assert.equal(one("echo x > 'a b.md'").redirects[0]?.target, "a b.md");
+});
+
+test("a redirection inside a QUOTED word is data, not a redirection", () => {
+  const [outer] = leafCommandsNormalized(
+    "echo 'echo y > a/paper.md' > /tmp/note.txt",
+  );
+  assert.ok(outer);
+  assert.equal(outer.redirects.length, 1);
+  assert.equal(outer.redirects[0]?.target, "/tmp/note.txt");
+});
+
+test("every leaf of a compound command keeps its OWN redirections", () => {
+  const leaves = leafCommandsNormalized("cat a.md && echo x > b.md | tee c.md");
+  const byHead = new Map(leaves.map((l) => [l.head, l]));
+  assert.equal(byHead.get("cat")?.redirects.length, 0);
+  assert.equal(byHead.get("echo")?.redirects[0]?.target, "b.md");
+  assert.equal(byHead.get("tee")?.redirects.length, 0);
+});
+
+test("the mvdan redirect-op table is PINNED to the installed parser", () => {
+  // The op codes are numeric tokens with no public name mapping, so an mvdan-sh
+  // upgrade that renumbered one would silently reclassify a write as a read.
+  // Re-derive every entry from the parser itself: this fails LOUDLY instead.
+  const expected: Record<string, boolean> = {
+    ">": true,
+    ">>": true,
+    ">|": true,
+    "&>": true,
+    "&>>": true,
+    "<": false,
+    "<>": false,
+    "<<<": false,
+    ">&": false,
+    "<&": false,
+  };
+  for (const [op, writes] of Object.entries(expected)) {
+    const r = one(`a ${op} f`).redirects[0];
+    assert.equal(r?.op, op, `operator string for ${op}`);
+    assert.equal(r?.writes, writes, `write classification for ${op}`);
+  }
+});

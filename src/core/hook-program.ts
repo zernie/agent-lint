@@ -31,8 +31,10 @@
  */
 import {
   leafCommands,
+  leafCommandsNormalized,
   classifyBashCommand,
   type BashEffect,
+  type NormalizedLeaf,
 } from "./bash-effects.js";
 import { sha256short, assertNever, type SHA256Hash } from "./hash.js";
 import { stringify as stringifyToml } from "@iarna/toml";
@@ -117,11 +119,41 @@ export interface CommandView {
   /** True iff the command is provably side-effecting (bash-effects classifier). */
   isSideEffecting(): boolean;
   /**
-   * True iff a leaf command references a path under one of the prefixes (e.g.
+   * True iff a leaf command MENTIONS a path under one of the prefixes (e.g.
    * `~/.ssh`, `.env`) — the secret-read / sensitive-path matcher. Sees the path
    * however the command is wrapped (`cd x && cat ~/.ssh/id_rsa`).
+   *
+   * MENTIONS, not writes. `grep -c x notes/S.md` touches `notes` — so does
+   * `rm -rf notes`. Pairing this with {@link isSideEffecting}, which classifies
+   * the WHOLE command line, does NOT recover the difference: a plain read whose
+   * line happens to be side-effecting for an unrelated reason (`grep -c x
+   * notes/S.md 2>/dev/null`) matches both and gets blocked. To gate WRITES to a
+   * directory, use {@link writesTo}; conflating the two is the trap.
    */
   touches(prefixes: readonly string[]): boolean;
+  /**
+   * True iff a leaf command CREATES OR MODIFIES a file under one of the prefixes
+   * — the "don't let Bash write here" matcher, and the precise counterpart to
+   * {@link touches}. Two sources, both AST-backed:
+   *
+   * - **Redirection targets** — `cmd > f`, `cmd >> f`, `cmd >| f`, `cmd &> f`.
+   *   This is the single most common write shape, and it lives on the statement,
+   *   not in any argv.
+   * - **File-writing programs**, at the argv positions that actually name the
+   *   file written: `sed -i`, `cp`/`mv`/`install` (destination), `tee`, `dd of=`,
+   *   `truncate`, `shred`.
+   *
+   * A path merely READ never matches — `cat a/paper.md`, `grep x a/paper.md`,
+   * `cp a/paper.md /tmp/x` (the source is read, `/tmp/x` is the write) are all
+   * false for `writesTo(["a"])`. Quoting is handled by the parser, so a write
+   * QUOTED inside another command does not match: in
+   * `echo 'echo y > a/paper.md' > /tmp/note.txt` the only real target is
+   * `/tmp/note.txt`.
+   *
+   * Deletion is a different question and is deliberately NOT reported here —
+   * pair with `runs("rm")` if a gate cares about removal too.
+   */
+  writesTo(prefixes: readonly string[]): boolean;
   /**
    * True iff the command pipes into a BARE shell interpreter (`curl … | sh`,
    * `… | bash -s`) — the remote-code-execution shape. High-signal: a shell leaf
@@ -160,8 +192,90 @@ function isBareShellLeaf(argv: readonly string[]): boolean {
   );
 }
 
+// ---------------------------------------------------------------------------
+// writesTo — which argv positions of a known file-writing program name the file
+// it WRITES. Deliberately small and high-precision: an unlisted head contributes
+// no write target (the redirection half above already covers `cmd > f`), so this
+// never guesses. Anything that only READS its operands (cat/grep/…) is absent by
+// construction.
+// ---------------------------------------------------------------------------
+
+/** Options that consume a SEPARATE following token, per writer head. */
+const WRITER_VALUE_OPTS: Readonly<Record<string, ReadonlySet<string>>> = {
+  sed: new Set(["-e", "--expression", "-f", "--file", "-l", "--line-length"]),
+  truncate: new Set(["-s", "--size", "-r", "--reference"]),
+  tee: new Set(["-p", "--output-error"]),
+  install: new Set(["-m", "--mode", "-o", "--owner", "-g", "--group", "-t"]),
+  cp: new Set(["-t", "--target-directory", "-S", "--suffix"]),
+  mv: new Set(["-t", "--target-directory", "-S", "--suffix"]),
+  shred: new Set(["-n", "--iterations", "-s", "--size"]),
+  dd: new Set(),
+};
+
+/** The non-option operands of a leaf, with each option's separate value skipped. */
+function operandsOf(leaf: NormalizedLeaf): string[] {
+  const valueOpts = WRITER_VALUE_OPTS[leaf.head] ?? new Set<string>();
+  const out: string[] = [];
+  for (let i = 0; i < leaf.args.length; i++) {
+    const a = leaf.args[i];
+    if (a === undefined) continue;
+    if (a === "--") {
+      out.push(...leaf.args.slice(i + 1).filter((x) => x !== undefined));
+      break;
+    }
+    if (a.length > 1 && a.startsWith("-")) {
+      if (valueOpts.has(a)) i++; // this option's value is not an operand
+      continue;
+    }
+    out.push(a);
+  }
+  return out;
+}
+
+/**
+ * The paths a leaf WRITES, by head. Empty for anything not known to write —
+ * including every read-only command, so a read can never be mistaken for a write.
+ */
+function writeTargetsOf(leaf: NormalizedLeaf): string[] {
+  const operands = operandsOf(leaf);
+  switch (leaf.head) {
+    case "sed":
+      // Only `sed -i` edits in place; otherwise it writes to stdout. The first
+      // operand is the SCRIPT unless it was supplied via -e/-f.
+      if (!leaf.hasFlag("i", "in-place")) return [];
+      return leaf.hasFlag("e", "expression", "f", "file")
+        ? operands
+        : operands.slice(1);
+    case "cp":
+    case "mv":
+    case "install":
+      // The LAST operand is the destination; every earlier one is read.
+      return operands.length >= 2 ? operands.slice(-1) : [];
+    case "tee":
+    case "truncate":
+    case "shred":
+      return operands;
+    case "dd":
+      // `dd if=src of=dest` — only the output file is written.
+      return leaf.args.flatMap((a) =>
+        a.startsWith("of=") ? [a.slice(3)] : [],
+      );
+    default:
+      return [];
+  }
+}
+
 export function commandView(raw: string): CommandView {
   const leaves = leafCommands(raw);
+  // The operation-normalized leaves carry the redirections (and quote-unwrapped,
+  // wrapper-resolved argv) that `writesTo` needs; `leafCommands` cannot see them.
+  const normalized = leafCommandsNormalized(raw);
+  const writeTargets = normalized.flatMap((leaf) => [
+    ...leaf.redirects.flatMap((r) =>
+      r.writes && r.target !== null ? [r.target] : [],
+    ),
+    ...writeTargetsOf(leaf),
+  ]);
   return {
     raw,
     runs(program, opts) {
@@ -176,6 +290,8 @@ export function commandView(raw: string): CommandView {
       leaves.some((argv) =>
         argv.slice(1).some((tok) => prefixes.some((p) => tokenUnder(tok, p))),
       ),
+    writesTo: (prefixes) =>
+      writeTargets.some((t) => prefixes.some((p) => tokenUnder(t, p))),
     pipesToShell: () => leaves.some(isBareShellLeaf),
   };
 }
