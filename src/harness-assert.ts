@@ -166,6 +166,57 @@ export function assertHookAllows(hook: AnyHook, event: RawHookEvent): void {
   }
 }
 
+/**
+ * Assert a COMPILED **react** hook emits a `notice(…)` for an event, optionally
+ * matching its message — the react-tier twin of {@link assertHookDenies}.
+ *
+ * A react hook can't block, so the gate assertions don't apply to it, and there
+ * was no assertion that did. That left `notice()` a live trap: its message goes
+ * to **stderr**, so a probe built on `execFileSync` (which returns stdout only)
+ * sees nothing and reports a perfectly healthy react hook as DEAD — measured
+ * against three real hooks on 2026-08-03. Reading the reaction in-process means
+ * stdout-vs-stderr never enters into it.
+ */
+export function assertHookNotices(
+  hook: AnyHook,
+  event: RawHookEvent,
+  matcher?: string | RegExp,
+): void {
+  const o = runHookProgram(hook, event);
+  if (o.kind !== "reaction" || o.reaction.kind !== "notice") {
+    fail(`expected the hook to notice, got ${describeOutcome(o)}`);
+  }
+  if (matcher === undefined) return;
+  const { message } = o.reaction;
+  const matched =
+    typeof matcher === "string"
+      ? message.includes(matcher)
+      : matcher.test(message);
+  if (!matched) {
+    fail(
+      `expected the notice to match ${String(matcher)}, got ${JSON.stringify(message)}`,
+    );
+  }
+}
+
+/**
+ * Assert a COMPILED **react** hook stays silent for an event — it returns
+ * `nothing()` (a `"none"` reaction). The twin of {@link assertHookNotices}: together they pin both
+ * halves of a react hook's behaviour — it fires when it should, and (the half
+ * that actually regresses) it does NOT fire when it shouldn't.
+ *
+ * A `run(…)` reaction is not silent for this purpose: the hook still reacted.
+ */
+export function assertHookSilent(hook: AnyHook, event: RawHookEvent): void {
+  const o = runHookProgram(hook, event);
+  if (o.kind !== "reaction") {
+    fail(`expected a react hook, got ${describeOutcome(o)}`);
+  }
+  if (o.reaction.kind !== "none") {
+    fail(`expected the hook to stay silent, got ${describeOutcome(o)}`);
+  }
+}
+
 // --- egress (network) — recordEgress runs ----------------------------------
 //
 // A `runHook(..., { recordEgress: true })` confines the hook AND records every
