@@ -197,7 +197,7 @@ test("the NEW non-advisory detectors are scored (not ranked A/100 while printing
   assert.ok(skillRes < 100, "a broken bundled resource must drag the score");
 });
 
-test("a HARD lethal-trifecta finding deducts W_TRIFECTA (-10); advisory does not", () => {
+test("a lethal-trifecta unit deducts W_TRIFECTA (-10) — explicit AND inherits-all alike", () => {
   // A hard (explicit all-three) trifecta is an exfil path → graded -10 (half the
   // old 20 — a ding, not a fail).
   const hard = scoreReport(
@@ -228,8 +228,9 @@ test("a HARD lethal-trifecta finding deducts W_TRIFECTA (-10); advisory does not
   assert.equal(hard.score, 90); // 100 - 10
   assert.ok(hard.issues.some((i) => i.includes("lethal trifecta")));
 
-  // An advisory (inherits-all) trifecta is NOT graded — it's surfaced elsewhere
-  // (the Safety ring) as an advisory, never a leaderboard penalty.
+  // An inherits-all trifecta is graded the SAME — it holds all three legs
+  // implicitly AND every other capability, so it can't cost LESS than the
+  // explicit contract above (that inversion is the bug this pins).
   const advisory = scoreReport(
     report({
       agents: [
@@ -255,7 +256,8 @@ test("a HARD lethal-trifecta finding deducts W_TRIFECTA (-10); advisory does not
       ] as unknown as ScanReport["trifectaFindings"],
     }),
   );
-  assert.equal(advisory.score, 100); // inherits-all advisory not graded
+  assert.equal(advisory.score, 90); // 100 - 10, never cheaper than the explicit one
+  assert.ok(advisory.score <= hard.score);
 });
 
 test("the audit overall == leaderboard health, even with a HARD trifecta", () => {

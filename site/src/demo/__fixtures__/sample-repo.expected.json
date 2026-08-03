@@ -8,8 +8,8 @@
     "dir": "acme/widgets"
   },
   "score": {
-    "overall": 61,
-    "grade": "D",
+    "overall": 41,
+    "grade": "F",
     "categories": [
       {
         "key": "Truthfulness",
@@ -34,11 +34,12 @@
       },
       {
         "key": "Safety",
-        "score": 100,
+        "score": 80,
         "weight": 1,
         "findings": [
-          "deploy inherits all tools — the \"lethal trifecta\" (reads data, reaches the web, runs commands), so a prompt injection could exfiltrate secrets (advisory)",
-          "release inherits all tools — the \"lethal trifecta\" (reads data, reaches the web, runs commands), so a prompt injection could exfiltrate secrets (advisory)"
+          "2 of 3 units can read data, reach the web, and run commands — the \"lethal trifecta\", so a prompt injection could exfiltrate secrets",
+          "deploy inherits all tools — the \"lethal trifecta\" (reads data, reaches the web, runs commands) plus every other capability, so a prompt injection could exfiltrate secrets",
+          "release inherits all tools — the \"lethal trifecta\" (reads data, reaches the web, runs commands) plus every other capability, so a prompt injection could exfiltrate secrets"
         ]
       },
       {
@@ -52,10 +53,10 @@
     "empty": false
   },
   "verdict": {
-    "sentence": "One fix away from a C.",
-    "grade": "D",
-    "pointsToNextGrade": 9,
-    "fixesToNextGrade": 1,
+    "sentence": "Two fixes away from a D.",
+    "grade": "F",
+    "pointsToNextGrade": 19,
+    "fixesToNextGrade": 2,
     "perRecommendation": [
       {
         "index": 0,

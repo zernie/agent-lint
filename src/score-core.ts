@@ -40,7 +40,16 @@ export const W_NO_DESCRIPTION = 10; // a skill with no usable description → ca
 export const W_DANGLING_REF = 8; // a referenced intra-plugin file that's missing → broken path
 export const W_OVERLAP = 8; // a description collision → the wrong skill fires
 export const W_NO_CONTRACT = 5; // generic small-footgun weight (disallowedTools typo, invalid model/color)
-export const W_TRIFECTA = 10; // a HARD lethal-trifecta contract (all three legs, explicit) → a prompt-injection exfil path. HALF the old 20: a DING, not a fail — a trifecta is a real risk worth surfacing in the grade, but official plugins ship the pattern by design, so it dents the score (e.g. feature-dev's 3 hard units → −30 → C) without a catastrophic F.
+export const W_TRIFECTA = 10; // per-unit cost of a lethal-trifecta unit (all three legs, explicit OR inherited) → a prompt-injection exfil path. HALF the old 20: a DING, not a fail — a trifecta is a real risk worth surfacing in the grade, but official plugins ship the pattern by design, so it dents the score (e.g. feature-dev's 3-of-3 hard units → −30 → C) without a catastrophic F.
+/**
+ * CAP on the TOTAL lethal-trifecta penalty, charged against the SHARE of the
+ * model-invocable surface that holds the trifecta (see {@link trifectaExposure}).
+ * A pure per-unit count saturates the clamp on any sizeable harness — which is
+ * how the old model reported a HARDENED harness as strictly worse than its
+ * unhardened self. Same value as the `feature-dev` anchor (3-of-3 units → −30),
+ * so a fully-exposed harness still lands on a C-band ding, never an automatic F.
+ */
+export const W_TRIFECTA_MAX = 30;
 /**
  * The one canonical, jargon-free finding string for a HARD lethal-trifecta unit —
  * shared by the Safety category card (audit-score) AND the verdict sentence / overall
@@ -56,8 +65,8 @@ export const TRIFECTA_LABEL =
 // Two things are advisory, NOT graded penalties (shown, never scored — see scoreReport):
 //   - untested surfaces — a hardening gap, not breakage.
 //   - an agent that inherits all tools (no `tools:` line) — see reportDeductions for why.
-//   - an inherits-all (severity "advisory") trifecta finding — shown by the Safety
-//     ring but never scored; only the HARD, explicit all-three-legs finding grades.
+// NB: an inherits-all TRIFECTA finding (severity "advisory") IS graded — see
+// trifectaExposure. Only the tool-CONTRACT nudge above stays ungraded.
 
 /** Map a 0–100 structural-health score to its letter grade (A ≥90 … F <60). */
 export function gradeFor(score: number): PluginScore["grade"] {
@@ -73,6 +82,73 @@ export interface Deduction {
   readonly n: number;
   readonly weight: number;
   readonly label: string;
+  /**
+   * TOTAL penalty for this deduction, overriding the default `n × weight`. Only
+   * used where the cost is not linear in the count — today that's the trifecta
+   * exposure penalty, which is capped against the share of the surface affected
+   * (see {@link trifectaExposure}). `n` still drives the human-readable label.
+   */
+  readonly points?: number;
+}
+
+/** The graded lethal-trifecta exposure of a report. */
+export interface TrifectaExposure {
+  /** Units holding all three legs — EXPLICIT (`hard`) and INHERITED alike. */
+  readonly exposed: number;
+  /** Model-invocable units that could hold them (subagents + non-user-invoked skills). */
+  readonly assessable: number;
+  /** The graded penalty, `min(W_TRIFECTA × exposed, W_TRIFECTA_MAX × exposed/assessable)`. */
+  readonly penalty: number;
+}
+
+/**
+ * The lethal-trifecta exposure a report incurs — the ONE number the Safety ring
+ * and the overall grade both read.
+ *
+ * TWO properties this model must have, both learned the hard way from dogfooding
+ * (2026-08-03, a 35-skill repo):
+ *
+ * 1. **MONOTONE in risk.** A unit that INHERITS all tools holds the full trifecta
+ *    *implicitly* and is strictly WORSE than one whose explicit `allowed-tools`
+ *    happens to name all three legs — it holds every other capability too. The old
+ *    model graded the explicit case at −10 and left the inherited case UNGRADED, so
+ *    declaring a tool contract (a genuine risk reduction) could only ever LOWER the
+ *    score: a repo measured 70 with 31 of 35 units inheriting everything, then 0
+ *    after `allowed-tools` was added to all 35 and the units holding the full
+ *    trifecta fell 35/35 → 17/35. The tool called the safer configuration strictly
+ *    worse and said nothing about the unsafe one. So BOTH severities count here.
+ *
+ * 2. **Non-saturating.** With a flat per-unit weight, 35 exposed units and 17
+ *    exposed units both blow past the clamp and score 0 — halving your exposure
+ *    shows up as no change at all. So the total is ALSO capped against the SHARE
+ *    of the model-invocable surface that is exposed: a 35-unit harness with 3
+ *    exposed units is genuinely safer than a 3-unit harness where all 3 are.
+ *
+ * The `min` of the two keeps every existing calibration anchor for small harnesses
+ * (1 exposed unit of 1 → −10; the `feature-dev` 3-of-3 shape → −30 → C) while
+ * giving a large harness real resolution (34/35 → −29, 17/35 → −15).
+ */
+export function trifectaExposure(r: ScanReport): TrifectaExposure {
+  const exposed = r.trifectaFindings.length;
+  // The assessable surface mirrors the Safety ring's own n/a rule: subagents plus
+  // model-invocable skills (a user-invoked skill can't be hijacked by attacker
+  // content, so it is neither exposed nor assessable). Never below the exposed
+  // count — a finding always comes FROM a unit, so a report that carries findings
+  // without the units (a hand-built fixture) still charges for them.
+  const assessable = Math.max(
+    r.agents.length + r.skills.filter((s) => !s.userInvoked).length,
+    exposed,
+  );
+  if (exposed === 0 || assessable === 0) {
+    return { exposed, assessable, penalty: 0 };
+  }
+  const perUnit = W_TRIFECTA * exposed;
+  // Never round a real finding away to a free 0 on a very large harness.
+  const share = Math.max(
+    1,
+    Math.round((W_TRIFECTA_MAX * exposed) / assessable),
+  );
+  return { exposed, assessable, penalty: Math.min(perUnit, share) };
 }
 
 /**
@@ -91,20 +167,18 @@ export function reportDeductions(r: ScanReport): Deduction[] {
     (n, a) => n + a.disallowedToolIssues.length,
     0,
   );
-  // HARD lethal-trifecta findings only — an EXPLICIT contract naming all three
-  // legs (a prompt-injection exfil path). Graded at W_TRIFECTA=10 (HALF the old
-  // 20): a DING that surfaces a real risk in the grade without a catastrophic F
-  // for an accepted design pattern official plugins ship. Advisory (inherits-all)
-  // trifecta findings are surfaced but NEVER graded (aligned with the inherits-all
-  // stance), so they're excluded here.
-  const hardTrifecta = r.trifectaFindings.filter(
-    (f) => f.finding.severity === "hard",
-  ).length;
+  // Lethal-trifecta EXPOSURE — every unit holding all three legs, whether it
+  // declared them (`hard`) or inherited them (an inherits-all contract holds them
+  // implicitly AND everything else, so it can't be the cheaper of the two). Capped
+  // against the share of the surface affected so the model stays monotone in risk
+  // and doesn't saturate — see trifectaExposure for the measured failure this fixes.
+  const trifecta = trifectaExposure(r);
 
   return [
     {
-      n: hardTrifecta,
+      n: trifecta.exposed,
       weight: W_TRIFECTA,
+      points: trifecta.penalty,
       label: TRIFECTA_LABEL,
     },
     {
@@ -233,7 +307,7 @@ export function computeIntegrityScore(deductions: readonly Deduction[]): {
   let penalty = 0;
   for (const d of deductions) {
     if (d.n <= 0) continue;
-    penalty += d.n * d.weight;
+    penalty += d.points ?? d.n * d.weight;
   }
   return { score: Math.max(0, 100 - penalty), penalty };
 }

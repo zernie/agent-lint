@@ -962,8 +962,12 @@ export function formatScanReport(r: ScanReport): string {
     r.pluginLayoutIssues.length +
     r.hookBlockFindings.length +
     r.hookMatcherFindings.length +
-    // HARD trifectas render ✗ and are graded into the score, so they count; the
-    // ADVISORY (inherits-all) ones and the delegation-trifecta ⚠ risk do NOT.
+    // Only HARD trifectas (✗) count as STRUCTURAL defects here. Both severities are
+    // now GRADED (see trifectaExposure — an inherits-all unit holds the three legs
+    // implicitly and everything else besides), but this line tallies structural
+    // defects, not the safety axis; promoting every idiomatic inherits-all unit to
+    // "broken" in the CLI summary is a separate, louder call. The delegation-trifecta
+    // ⚠ risk is ungraded and does NOT count either.
     r.trifectaFindings.filter((t) => t.finding.severity === "hard").length;
   out.push(
     broken === 0
