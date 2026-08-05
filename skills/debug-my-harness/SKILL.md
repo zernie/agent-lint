@@ -1,5 +1,6 @@
 ---
 name: debug-my-harness
+allowed-tools: Read, Glob, Grep
 description: Diagnose why an agent harness misbehaved by reading the local flight-recorder ledger (.vigiles/runs.jsonl) — which skills fired or got hijacked, which hooks blocked or wrongly allowed, which subagent tool-contract violations happened, and how a skill's trigger rate moved. Use when asked why a skill stopped firing, why a hook didn't block, why the wrong skill ran, or to debug/investigate what the harness actually did. NOT for writing new rules (use strengthen) or editing the spec (use edit-spec).
 ---
 
