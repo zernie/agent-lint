@@ -1,5 +1,6 @@
 ---
 name: test-harness
+allowed-tools: Read, Edit, Write, Glob, Grep, Bash
 description: Install vigiles and test a Claude Code harness — hooks, skills, settings, CLAUDE.md — by picking the right tier (unit / deterministic / eval) and writing a test that passes. Use when the user wants to check that a hook fires or blocks, that a skill triggers, that injected context lands, or that a harness change moves what the agent does.
 ---
 
