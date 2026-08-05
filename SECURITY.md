@@ -21,11 +21,11 @@ expected the boundary to do instead.
 
 vigiles is maintained by one person, so these are honest targets rather than a corporate SLA:
 
-| Stage | Target |
-| --- | --- |
-| Acknowledge receipt | 5 business days |
-| Triage — confirmed, needs-info, or out of scope | 10 business days |
-| Fix for a confirmed high-impact issue | best effort, with progress notes in the advisory thread |
+| Stage                                           | Target                                                  |
+| ----------------------------------------------- | ------------------------------------------------------- |
+| Acknowledge receipt                             | 5 business days                                         |
+| Triage — confirmed, needs-info, or out of scope | 10 business days                                        |
+| Fix for a confirmed high-impact issue           | best effort, with progress notes in the advisory thread |
 
 The clock starts when a report is confirmed as a valid vulnerability, not on first receipt. If a
 report goes quiet for more than two weeks, please ping the advisory thread — that's a dropped ball,
@@ -62,13 +62,13 @@ Not vulnerabilities in vigiles. Reported in good faith, these get a pointer rath
 - **Vulnerabilities in the harness itself** — Claude Code, Codex, or another agent runtime. Report
   those to the vendor.
 - **Vulnerabilities in a third-party plugin, skill, or MCP server that vigiles audits.** Report to
-  that project. If vigiles *failed to warn* about it, that's a coverage gap (above).
+  that project. If vigiles _failed to warn_ about it, that's a coverage gap (above).
 - **Vulnerabilities in linters vigiles shells out to** (ESLint, Ruff, RuboCop, Clippy, …) or in npm
   dependencies with no vigiles-specific exposure — report upstream.
 - **Missing confinement on a platform where it is documented as unavailable** — bwrap is Linux-only
   by design and macOS confinement is not shipped yet ([`docs/sandboxing.md`](docs/sandboxing.md)).
   Running untrusted code there without a sandbox is documented behaviour, not a bypass. A case
-  where vigiles *claims* confinement it doesn't have is in scope, above.
+  where vigiles _claims_ confinement it doesn't have is in scope, above.
 
 If you're unsure which side of the line something falls on, report it anyway and we'll sort it out.
 
