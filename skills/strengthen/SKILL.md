@@ -1,5 +1,6 @@
 ---
 name: strengthen
+allowed-tools: Read, Edit, Write, Glob, Grep, Bash
 description: Upgrade a vigiles spec's guidance() rules to enforce() — scan the guidance rules in a CLAUDE.md/AGENTS.md spec and find existing linter rules (ESLint, Ruff, Clippy, Pylint, RuboCop, Stylelint) that back them. Use when asked to strengthen, harden, or make vigiles rules enforceable; NOT for general linting or fixing lint errors.
 ---
 

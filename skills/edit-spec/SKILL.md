@@ -1,5 +1,6 @@
 ---
 name: edit-spec
+allowed-tools: Read, Edit, Write, Glob, Grep, Bash
 description: Edit a vigiles .spec.ts to change a compiled instruction file (CLAUDE.md / AGENTS.md) — add, modify, or remove a rule, section, command, or key file. Use whenever you need to change a CLAUDE.md/AGENTS.md that carries a vigiles hash (edit the spec, never the artifact), including adding a new enforce()/check()/guidance() rule.
 argument-hint: <what to change — e.g., "add a rule about error handling" or "update the testing section">
 ---

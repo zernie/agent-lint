@@ -27,9 +27,13 @@ discussions — and when someone is representing the project in public.
 
 ## Reporting
 
-Report a concern privately to the maintainer, using the contact listed on
-[their GitHub profile](https://github.com/zernie). Reports are handled confidentially, and the
-person reporting will not be named without their agreement.
+Report a concern privately to the maintainer — the contact on
+[their GitHub profile](https://github.com/zernie), or a DM on any platform linked there. If you'd
+rather not contact the maintainer directly, or the concern is about them, use GitHub's own
+[report abuse](https://github.com/contact/report-abuse) flow, which goes to GitHub staff instead.
+
+Reports are handled confidentially, and the person reporting will not be named without their
+agreement.
 
 Reports about a **security vulnerability** go somewhere else — see [SECURITY.md](SECURITY.md).
 
