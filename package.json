@@ -65,6 +65,7 @@
     "!dist/**/*.test.js",
     "!dist/**/*.test.d.ts",
     "action.yml",
+    "plugin.json",
     ".claude-plugin",
     "hooks",
     "skills",

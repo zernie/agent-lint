@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "vigiles",
+  "version": "4.0.1",
+  "description": "Verify CLAUDE.md/AGENTS.md references, compile typed specs, and test the agent harness",
+  "author": {
+    "name": "zernie",
+    "url": "https://github.com/zernie"
+  },
+  "homepage": "https://vigiles.sh",
+  "repository": "https://github.com/zernie/vigiles",
+  "license": "MIT",
+  "keywords": ["linting", "claude-md", "agents-md", "feedback-loops", "harness"]
+}
