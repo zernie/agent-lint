@@ -424,7 +424,16 @@ export function suggestedTestPath(surface: Surface): string {
 export function formatUntestedReport(report: UntestedReport): string {
   if (report.untested.length === 0) {
     const tail = report.exempt > 0 ? ` (${String(report.exempt)} exempt)` : "";
-    return `✓ all ${String(report.total)} surface(s) have a test or eval${tail}`;
+    const ok = `✓ all ${String(report.total)} surface(s) have a test or eval${tail}`;
+    // A clean UNION can still hide a whole unanswered question: every surface may
+    // have a deterministic harness and NOTHING may ever have measured that a
+    // skill fires. The gate is unchanged (still the union), but the ✓ must not
+    // read as "firing verified" when nothing asked.
+    const unevaluated = report.evals.untested.length;
+    return unevaluated === 0
+      ? ok
+      : `${ok}\n  …but ${String(unevaluated)} of them have no \`*.eval.mjs\`, so ` +
+          `nothing has measured whether they actually fire (a harness can't tell you that).`;
   }
   const lines = [
     `⚠ ${String(report.untested.length)} surface(s) with no test or eval:`,

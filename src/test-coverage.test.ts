@@ -334,6 +334,28 @@ test("a `*.test.ts` is a HARNESS, never an eval (it spends no model calls)", () 
   cleanupTmpDir(dir);
 });
 
+test("a clean UNION still says when nothing has measured firing", () => {
+  // Every surface has a deterministic harness, so the gate passes — but no
+  // `*.eval.mjs` exists, so nothing has measured that the skill fires. A bare ✓
+  // there would read as "firing verified" when the question was never asked.
+  const dir = makeTmpDir("cov-clean-noeval");
+  write(dir, "skills/a/SKILL.md", skill("a"));
+  write(dir, "skills/a/a.harness.mjs", "// deterministic only\n");
+  const harnessOnly = formatUntestedReport(
+    findUntestedSurfaces({ basePath: dir }),
+  );
+  assert.ok(harnessOnly.startsWith("✓"), harnessOnly);
+  assert.ok(harnessOnly.includes("no `*.eval.mjs`"), harnessOnly);
+  assert.ok(harnessOnly.includes("actually fire"), harnessOnly);
+
+  // Add the eval and the caveat disappears — a plain ✓, nothing left unasked.
+  write(dir, "skills/a/a.eval.mjs", "// real model\n");
+  const both = formatUntestedReport(findUntestedSurfaces({ basePath: dir }));
+  assert.ok(both.startsWith("✓"), both);
+  assert.ok(!both.includes("eval.mjs`"), both);
+  cleanupTmpDir(dir);
+});
+
 test("formatUntestedReport names the two gaps SEPARATELY (no test/eval slash)", () => {
   const dir = makeTmpDir("cov-tier-fmt");
   write(dir, "skills/a/SKILL.md", skill("a"));
