@@ -209,8 +209,10 @@ Or run it yourself:
 
 ```bash
 npx vigiles init   # sets up the typed spec for structural rules (non-destructive — eject reverses), adds CI,
-                   # installs vigiles's skills + hooks as a Claude Code plugin (in
-                   # ~/.claude/, not your repo). On Codex, skills install globally too.
+                   # installs vigiles's skills + hooks as a Claude Code plugin. The plugin
+                   # CONTENT goes to ~/.claude/, never your repo; init also commits a two-key
+                   # reference to it in .claude/settings.json so teammates get prompted to
+                   # install it rather than silently missing it. Codex: skills install globally.
 ```
 
 **Already have a harness, or a non-JS repo?** `npx vigiles init --ci-only` sets up just the CI integrity gate — nothing installed, zero conflict. **[When to use gate vs full →](docs/agent-setup.md#non-interactive-setup-agents--ci)**
@@ -231,6 +233,7 @@ The **hooks** keep it honest in-loop — nudging the agent to tag a linter-rule 
 - **Both lint and test** by default; scope with `--lint` / `--test`.
 - **Already have a CLAUDE.md / AGENTS.md, skills, or subagents? `audit` and `lint` read them as-is** — nothing is moved or rewritten. For the structural rules that want a typed spec, `init` sets one up **non-destructively** (`eject` undoes it).
 - Adds `vigiles` to `devDependencies`; installs the Claude Code plugin (skills + hooks) via the marketplace — globally, never vendored.
+- Declares that plugin in your repo's `.claude/settings.json` (`extraKnownMarketplaces` + `enabledPlugins`, merged into whatever is already there). This is a **reference, not content** — nothing is vendored, and it does **not** install the plugin for a teammate: an external-source plugin declared project-level [doesn't load until each person installs it](https://code.claude.com/docs/en/discover-plugins#configure-team-marketplaces). What it buys is that Claude Code **prompts** them with the install command, instead of a fresh clone silently having the npm package and none of its skills.
 - Wires CI as a `zernie/vigiles@v1` workflow (needs only read + PR-comment permissions) that posts a sticky PR comment + a `valid` output.
 
 Targets Claude Code and Codex out of the box, or [your own harness](docs/authoring-an-adapter.md). Prefer to write tests yourself? JS **or** TS (`*.harness.{mjs,ts}`) — run with `npx vigiles test`.

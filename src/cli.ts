@@ -100,6 +100,7 @@ import {
   checkSkillReachability,
   formatSkillReachability,
 } from "./skill-reachability.js";
+import { addVigilesDeclaration } from "./plugin-declaration.js";
 import {
   probePluginTriggers,
   formatBehavioralReport,
@@ -3301,6 +3302,74 @@ function installPlugins(harnesses: string[]): void {
   // global store, so wire vigiles's proactive nudge hooks into the repo's
   // .codex/config.toml directly (the idiomatic, repo-committed place).
   if (harnesses.includes("codex")) wireCodexHooks();
+  // Claude Code additionally gets a committed DECLARATION, so a collaborator who
+  // clones and never runs `init` is told the project wants this plugin instead
+  // of hitting the silence that costs a day. It does not install anything.
+  if (harnesses.includes("claude")) declareVigilesPlugin();
+}
+
+/**
+ * Write the project-level plugin declaration into `.claude/settings.json`.
+ *
+ * 🔴 **The honest claim.** This does NOT make the plugin available to a
+ * collaborator: an external-source plugin declared project-level does not load
+ * until each person installs it on their own machine (the boundary is
+ * deliberate — plugins run arbitrary code with the user's privileges). What it
+ * buys is that Claude Code then PROMPTS them with the install command, instead
+ * of the silence a fresh clone gets today. Silent absence → a prompt.
+ *
+ * MERGES, never clobbers: this file holds the user's hooks, permissions and
+ * other plugins. The merge rules are the pure, unit-tested
+ * `addVigilesDeclaration`; this is only the IO around it. Invalid JSON is a loud
+ * skip, never a rewrite — mirrors `wireCodexHooks`.
+ */
+function declareVigilesPlugin(): void {
+  const path = resolve(process.cwd(), ".claude", "settings.json");
+  // The vigiles repo IS the plugin — it must not declare itself as a consumer.
+  const pkgPath = resolve(process.cwd(), "package.json");
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as {
+        name?: string;
+      };
+      if (pkg.name === "vigiles") return;
+    } catch {
+      /* unreadable package.json — fall through, the declaration is harmless */
+    }
+  }
+
+  let settings: Record<string, unknown> = {};
+  if (existsSync(path)) {
+    try {
+      settings = JSON.parse(readFileSync(path, "utf-8")) as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      console.log(
+        "⚠ .claude/settings.json is not valid JSON — skipping the project plugin declaration (fix it, then re-run `vigiles init`).",
+      );
+      return;
+    }
+  }
+
+  const edit = addVigilesDeclaration(settings);
+  if (!edit.changed) {
+    console.log(
+      "  .claude/settings.json already declares the vigiles plugin — left as-is.",
+    );
+    return;
+  }
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(edit.settings, null, 2) + "\n");
+  console.log(
+    "✓ Declared the vigiles plugin in .claude/settings.json (commit it)\n" +
+      "  This does NOT install it for anyone else — Claude Code will PROMPT a\n" +
+      "  collaborator to run `claude plugin install vigiles@vigiles`, instead of\n" +
+      "  the silence a fresh clone gets today.\n" +
+      "  Nothing is vendored: the entry is a reference; the plugin still lives in\n" +
+      "  the global cache, one copy shared across your repos.",
+  );
 }
 
 /**
