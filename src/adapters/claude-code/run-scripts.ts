@@ -100,9 +100,21 @@ export function discoverScripts(
       found.add(p);
       continue;
     }
+    // 🔴 `dot: true`, because the harness for a Claude Code harness lives in `.claude/`.
+    // Without it, `vigiles test` and `vigiles eval` print "no files found" in a repository
+    // that has them, and `Tested` then measures visibility rather than coverage — the author
+    // reads "you have no tests" when the honest reading is "I looked in the wrong place".
+    // Observed 2026-08-07 on a repo with two harnesses under `.claude/`, both invisible; it
+    // stayed hidden because that repo's CI happened to pass explicit paths.
+    //
+    // This codebase already fixed the same defect elsewhere and missed it here:
+    // `test-coverage.ts` and `cli.ts` both pass `dot: true` with comments saying why, and
+    // `test-coverage.test.ts` records "glob without `dot:true` never found it and the surface
+    // looked untested". Coverage learned it; the runner did not.
     for (const m of globSync(p, {
       cwd,
       ignore: ["node_modules/**", "dist/**"],
+      dot: true,
     })) {
       found.add(m);
     }

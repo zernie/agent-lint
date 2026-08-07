@@ -37,6 +37,34 @@ test("discoverScripts expands the default glob, deduped and sorted", () => {
   }
 });
 
+// 🔴 The regression this exists for: a harness under `.claude/` was invisible to
+// `vigiles test` and `vigiles eval`, in a tool whose whole subject is Claude Code
+// harnesses — `.claude/` is where one lives by definition. The symptom was "no files
+// found" printed at a repository holding two of them, and a `Tested` score reporting
+// visibility rather than coverage. `node_modules` must stay excluded, so this asserts
+// both halves: dot-directories in, dependencies still out.
+test("discoverScripts finds harnesses inside dot-directories", () => {
+  const dir = makeTmpDir("run-scripts");
+  try {
+    mkdirSync(join(dir, ".claude", "hooks"), { recursive: true });
+    writeFileSync(join(dir, ".claude", "hooks", "hooks.harness.mjs"), "");
+    mkdirSync(join(dir, ".claude", "pipeline"), { recursive: true });
+    writeFileSync(join(dir, ".claude", "pipeline", "gates.harness.mjs"), "");
+    writeFileSync(join(dir, "top.harness.mjs"), "");
+    mkdirSync(join(dir, "node_modules", ".bin"), { recursive: true });
+    writeFileSync(join(dir, "node_modules", ".bin", "dep.harness.mjs"), "");
+
+    const found = discoverScripts([], "**/*.harness.mjs", dir);
+    assert.deepEqual(found, [
+      ".claude/hooks/hooks.harness.mjs",
+      ".claude/pipeline/gates.harness.mjs",
+      "top.harness.mjs",
+    ]);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
 test("discoverScripts passes an explicit file path through", () => {
   const dir = makeTmpDir("run-scripts");
   try {
