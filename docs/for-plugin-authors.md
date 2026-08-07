@@ -13,6 +13,7 @@ If you run agents on your own repo, start with the [linting guide](verifying-ins
 3. [Make your skills actually fire](#3-make-your-skills-actually-fire)
 4. [Rank against the field](#4-rank-against-the-field)
 5. [Test and gate it in CI](#5-test-and-gate-it-in-ci)
+6. [Ship it in the portable Agent Plugins format](#6-ship-it-in-the-portable-agent-plugins-format)
 
 ## The workflow at a glance
 
@@ -109,6 +110,54 @@ npx vigiles eval    # the real-model tiers — on your own subscription
 Wire `lint` and `test` into CI via the [GitHub Action](github-action.md). `lint` is the deterministic gate — `audit` is a local report, not a CI step. The deterministic tiers run on every commit for free; the real-model evals stay on a dev's subscription, not a metered CI token.
 
 If your plugin ships **safety hooks**, author them as compiled hooks so they can't silently fail open — see [compiled hooks](compiled-hooks.md).
+
+## 6. Ship it in the portable Agent Plugins format
+
+[Agent Plugins](https://agent-plugins.org) is a vendor-neutral packaging standard for agent plugins, published at v1.0.0 by a steering committee from Amazon, Cursor, Microsoft, OpenAI and Vercel. One manifest at your plugin root, skills where the spec says to look — and a client implementing the standard loads your plugin without a per-vendor repackage.
+
+⚠️ **Be realistic about reach today.** Adoption is early, and the manifest location is where clients differ:
+
+| Client          | Reads the standard's root `plugin.json`? | Where it looks               |
+| --------------- | ---------------------------------------- | ---------------------------- |
+| **VS Code**     | ✅ Yes — `skills/` + `mcp.json`          | root `plugin.json`           |
+| **Claude Code** | ❌ Not documented                        | `.claude-plugin/plugin.json` |
+| **Codex**       | ❌ Not documented                        | `.codex-plugin/plugin.json`  |
+
+So conforming is **additive, not a replacement**: it buys portability to clients that implement the standard, while the harness you actually target still reads its own manifest. That's why vigiles ships both.
+
+**vigiles ships in this shape itself.** Its root [`plugin.json`](https://github.com/zernie/vigiles/blob/main/plugin.json) targets the 1.0.0 schema, and a CI gate keeps it conformant and in sync with the Claude Code manifest beside it.
+
+The smallest conformant plugin is two files:
+
+```
+my-plugin/
+├── plugin.json                 # required manifest
+└── skills/
+    └── my-skill/
+        └── SKILL.md            # discovered at this fixed path
+```
+
+```json
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "my-plugin"
+}
+```
+
+`$schema` and `name` are the only required fields. `version`, `description`, `author`, `homepage`, `repository`, `license` and `keywords` are optional metadata — and the schema is **closed**, so an unrecognised top-level key is a warning, not a place to stash extras. Vendor-specific data goes under `extensions`, keyed by a reverse-domain namespace.
+
+**Two things the standard does not cover yet**, so plan for them:
+
+| Surface       | Where it lives                                                                             |
+| ------------- | ------------------------------------------------------------------------------------------ |
+| **Hooks**     | Not in 1.0.0. Claude Code hooks stay in `.claude-plugin/plugin.json`; Codex's in its TOML. |
+| **Subagents** | Not in 1.0.0. Same — they stay in your harness's own layout.                               |
+
+So a plugin that ships hooks carries **both** manifests: the neutral `plugin.json` for portability, and the harness's own for what the harness alone understands. Keep their `name` / `version` / `description` identical — two hand-maintained manifests drift, and the drift is invisible until something loads the stale one. A three-line test that compares them is cheaper than finding out later ([ours](https://github.com/zernie/vigiles/blob/main/src/agent-plugins-manifest.test.ts)).
+
+**`vigiles audit` reads a plugin laid out this way** — no flag, no config. Everything under `skills/` (descriptions, trigger collisions, the lethal-trifecta check, test coverage), plus the MCP servers in your root `mcp.json`, so a server that can't start or a tool naming an undeclared server is still caught.
+
+One detail worth knowing: the standard's `mcp.json` is read **only when your root `plugin.json` pins an `agent-plugins.org` `$schema`**. `mcp.json` is a generic filename, so without that declaration vigiles leaves the file alone rather than guessing it's yours.
 
 ## See also
 

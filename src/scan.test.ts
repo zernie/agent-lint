@@ -682,6 +682,51 @@ test("scanPlugin flags an MCP server that can't start (no command/url)", () => {
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin reads the Agent Plugins standard's root mcp.json", () => {
+  // A plugin packaged to the vendor-neutral standard puts its MCP servers in a
+  // root `mcp.json`, not the harness's `.mcp.json`. Before this was wired, every
+  // MCP check silently passed over such a plugin (it looked like "no servers").
+  const dir = makeTmpDir("scan-agent-plugins");
+  write(
+    dir,
+    "plugin.json",
+    JSON.stringify({
+      $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+      name: "demo-plugin",
+    }),
+  );
+  write(
+    dir,
+    "mcp.json",
+    JSON.stringify({
+      $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+      mcpServers: {
+        ok: { type: "stdio", command: "node", args: ["s.js"] },
+        broken: { type: "stdio" }, // no command — can't start
+      },
+    }),
+  );
+  const r = scanPlugin(dir);
+  assert.equal(r.mcpIssues.length, 1);
+  assert.equal(r.mcpIssues[0].server, "broken");
+  cleanupTmpDir(dir);
+});
+
+test("a root mcp.json is IGNORED without an Agent Plugins manifest", () => {
+  // `mcp.json` is a generic name. With no manifest declaring the standard, the
+  // file belongs to something else and must not be read as the plugin's config
+  // (the don't-cry-wolf half of the same decision).
+  const dir = makeTmpDir("scan-bare-mcp-json");
+  write(
+    dir,
+    "mcp.json",
+    JSON.stringify({ mcpServers: { broken: { args: ["x"] } } }),
+  );
+  const r = scanPlugin(dir);
+  assert.equal(r.mcpIssues.length, 0);
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin flags an mcp__server__tool whose server the plugin doesn't declare", () => {
   const dir = makeTmpDir("scan-mcptool");
   write(

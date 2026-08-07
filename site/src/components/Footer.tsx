@@ -56,7 +56,16 @@ export function Footer() {
           </div>
         </div>
         <div className="mt-10 border-t border-border pt-6 text-xs text-muted-foreground">
-          MIT licensed.
+          MIT licensed. Ships as an{" "}
+          <a
+            href="https://agent-plugins.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground"
+          >
+            Agent Plugins
+          </a>{" "}
+          1.0.0 plugin.
         </div>
       </div>
     </footer>
