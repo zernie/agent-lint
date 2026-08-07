@@ -37,7 +37,7 @@ const QA: { q: string; a: ReactNode }[] = [
     a: (
       <>
         No — Claude Code and Codex are both first-class, and the checks read
-        whichever one your repo targets. It also reads plugins packaged to{" "}
+        whichever one your repo targets. If your plugin is packaged to{" "}
         <a
           href="https://agent-plugins.org"
           target="_blank"
@@ -45,9 +45,9 @@ const QA: { q: string; a: ReactNode }[] = [
           className="text-foreground underline underline-offset-2"
         >
           Agent Plugins
-        </a>
-        , the vendor-neutral standard from Amazon, Cursor, Microsoft, OpenAI and
-        Vercel — vigiles ships as one itself.
+        </a>{" "}
+        — a packaging format, not another agent — its skills and root{" "}
+        <span className="font-mono">mcp.json</span> are audited too.
       </>
     ),
   },

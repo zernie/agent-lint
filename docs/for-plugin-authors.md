@@ -113,7 +113,17 @@ If your plugin ships **safety hooks**, author them as compiled hooks so they can
 
 ## 6. Ship it in the portable Agent Plugins format
 
-[Agent Plugins](https://agent-plugins.org) is a vendor-neutral packaging standard for agent plugins, published at v1.0.0 by a steering committee from Amazon, Cursor, Microsoft, OpenAI and Vercel. One manifest at your plugin root, skills where the spec says to look — and any client implementing the standard can load your plugin without a per-vendor repackage.
+[Agent Plugins](https://agent-plugins.org) is a vendor-neutral packaging standard for agent plugins, published at v1.0.0 by a steering committee from Amazon, Cursor, Microsoft, OpenAI and Vercel. One manifest at your plugin root, skills where the spec says to look — and a client implementing the standard loads your plugin without a per-vendor repackage.
+
+⚠️ **Be realistic about reach today.** Adoption is early, and the manifest location is where clients differ:
+
+| Client          | Reads the standard's root `plugin.json`? | Where it looks               |
+| --------------- | ---------------------------------------- | ---------------------------- |
+| **VS Code**     | ✅ Yes — `skills/` + `mcp.json`          | root `plugin.json`           |
+| **Claude Code** | ❌ Not documented                        | `.claude-plugin/plugin.json` |
+| **Codex**       | ❌ Not documented                        | `.codex-plugin/plugin.json`  |
+
+So conforming is **additive, not a replacement**: it buys portability to clients that implement the standard, while the harness you actually target still reads its own manifest. That's why vigiles ships both.
 
 **vigiles ships in this shape itself.** Its root [`plugin.json`](https://github.com/zernie/vigiles/blob/main/plugin.json) targets the 1.0.0 schema, and a CI gate keeps it conformant and in sync with the Claude Code manifest beside it.
 

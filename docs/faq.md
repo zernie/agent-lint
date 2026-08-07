@@ -45,10 +45,12 @@ Yes. vigiles targets Claude Code today and OpenAI Codex via
 Test layer drives the real `claude` / `codex` CLI. You can even
 [teach it your own harness](authoring-an-adapter.md).
 
-It also reads plugins packaged to [Agent Plugins](https://agent-plugins.org) —
-the vendor-neutral packaging standard from Amazon, Cursor, Microsoft, OpenAI and
-Vercel. Skills and the standard's root `mcp.json` are audited with no flag and no
-config, and vigiles ships as a conformant plugin itself
+Separately, vigiles reads plugins packaged to
+[Agent Plugins](https://agent-plugins.org). That is a **packaging format, not
+another agent** — a plugin shipped that way still runs inside Claude Code, Codex
+or VS Code, so it does not add a harness. What it does add: if your plugin uses
+that layout, its skills and its root `mcp.json` are audited with no flag and no
+config. vigiles ships as a conformant plugin itself
 ([how to do the same](for-plugin-authors.md#6-ship-it-in-the-portable-agent-plugins-format)).
 
 ## Do I need an API key? What does it cost?
