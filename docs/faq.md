@@ -45,6 +45,12 @@ Yes. vigiles targets Claude Code today and OpenAI Codex via
 Test layer drives the real `claude` / `codex` CLI. You can even
 [teach it your own harness](authoring-an-adapter.md).
 
+It also reads plugins packaged to [Agent Plugins](https://agent-plugins.org) —
+the vendor-neutral packaging standard from Amazon, Cursor, Microsoft, OpenAI and
+Vercel. Skills and the standard's root `mcp.json` are audited with no flag and no
+config, and vigiles ships as a conformant plugin itself
+([how to do the same](for-plugin-authors.md#6-ship-it-in-the-portable-agent-plugins-format)).
+
 ## Do I need an API key? What does it cost?
 
 **Most of vigiles needs no model and no key.** Lint and the deterministic Test tiers run in milliseconds on every commit, free.

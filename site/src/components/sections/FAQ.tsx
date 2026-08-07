@@ -33,6 +33,25 @@ const QA: { q: string; a: ReactNode }[] = [
     ),
   },
   {
+    q: "Does it only work with Claude Code?",
+    a: (
+      <>
+        No — Claude Code and Codex are both first-class, and the checks read
+        whichever one your repo targets. It also reads plugins packaged to{" "}
+        <a
+          href="https://agent-plugins.org"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-foreground underline underline-offset-2"
+        >
+          Agent Plugins
+        </a>
+        , the vendor-neutral standard from Amazon, Cursor, Microsoft, OpenAI and
+        Vercel — vigiles ships as one itself.
+      </>
+    ),
+  },
+  {
     q: "Can I grade a private repo?",
     a: (
       <>

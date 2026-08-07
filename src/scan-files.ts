@@ -48,6 +48,7 @@ import {
   confidentHookEventIssues,
 } from "./core/hook-events.js";
 import { verifyMcpServers } from "./core/mcp-config.js";
+import { agentPluginsMcpSources } from "./core/agent-plugins.js";
 import { verifyMcpHookTargets } from "./core/mcp-hook.js";
 import { pluginDirLayoutIssues } from "./core/plugin-dir-layout.js";
 import { hookBlockIssues } from "./core/hook-block-ineffective.js";
@@ -577,8 +578,9 @@ function collectMcpServers(
   layout: PluginLayout,
 ): Record<string, unknown> {
   const servers: Record<string, unknown> = {};
+  const read = (file: string): string | undefined => files[file];
   const collect = (file: string): void => {
-    const text = files[file];
+    const text = read(file);
     if (text === undefined) return;
     try {
       const parsed = JSON.parse(text) as { mcpServers?: unknown };
@@ -589,8 +591,16 @@ function collectMcpServers(
       /* malformed JSON is the loader's concern, not this check's */
     }
   };
-  collect(".mcp.json");
-  collect(layout.manifestPath);
+  // Mirrors the fs-backed collector in scan.ts: the layout's own locations plus
+  // the Agent Plugins standard's root `mcp.json` when this repo ships that
+  // manifest (no harness layout names it, so the MCP checks would miss it).
+  for (const file of [
+    layout.mcpConfigFile,
+    layout.manifestPath,
+    ...agentPluginsMcpSources(read),
+  ]) {
+    collect(file);
+  }
   return servers;
 }
 
@@ -673,7 +683,12 @@ export function scanFiles(
     inlineHooks: inline,
     manualHookCount: manual,
     commands: Object.keys(loaded.files).filter(cls.isCommand).length,
-    mcp: loaded.warnings.some((w) => w.includes("MCP server")),
+    // A declared server set counts even when the loader emitted no warning —
+    // otherwise a plugin whose servers come from the Agent Plugins `mcp.json`
+    // reports "MCP servers: no" while the report lists an MCP finding.
+    mcp:
+      loaded.warnings.some((w) => w.includes("MCP server")) ||
+      declaredServers.length > 0,
     danglingRefs: danglingRefs(files, lay, repoName ?? basename(BROWSER_ROOT)),
     hookEventIssues,
     frontmatterIssues: remap(frontmatterIssuesFor(loaded.files, cls)),

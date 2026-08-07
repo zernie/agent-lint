@@ -145,7 +145,9 @@ my-plugin/
 
 So a plugin that ships hooks carries **both** manifests: the neutral `plugin.json` for portability, and the harness's own for what the harness alone understands. Keep their `name` / `version` / `description` identical — two hand-maintained manifests drift, and the drift is invisible until something loads the stale one. A three-line test that compares them is cheaper than finding out later ([ours](https://github.com/zernie/vigiles/blob/main/src/agent-plugins-manifest.test.ts)).
 
-**What `vigiles audit` reads in a plugin laid out this way:** everything under `skills/` — descriptions, trigger collisions, the lethal-trifecta check, test coverage. MCP servers are read from `.mcp.json` and the harness manifest, **not** from the standard's root `mcp.json`, so declare them in the harness location if you want them checked.
+**`vigiles audit` reads a plugin laid out this way** — no flag, no config. Everything under `skills/` (descriptions, trigger collisions, the lethal-trifecta check, test coverage), plus the MCP servers in your root `mcp.json`, so a server that can't start or a tool naming an undeclared server is still caught.
+
+One detail worth knowing: the standard's `mcp.json` is read **only when your root `plugin.json` pins an `agent-plugins.org` `$schema`**. `mcp.json` is a generic filename, so without that declaration vigiles leaves the file alone rather than guessing it's yours.
 
 ## See also
 

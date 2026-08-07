@@ -28,6 +28,7 @@ import {
   type HookEventIssue,
 } from "./core/hook-events.js";
 import { verifyMcpServers, type McpIssue } from "./core/mcp-config.js";
+import { agentPluginsMcpSources } from "./core/agent-plugins.js";
 import { normalizeHooks, hookEventNames } from "./core/hook-normalize.js";
 import type { DescriptionOverlap } from "./core/description-overlap.js";
 import type { DescriptionBudgetIssue } from "./core/skill-description-budget.js";
@@ -376,13 +377,15 @@ function collectMcpServers(
   layout: PluginLayout,
 ): Record<string, unknown> {
   const servers: Record<string, unknown> = {};
-  const collect = (file: string): void => {
+  const read = (file: string): string | undefined => {
     const p = join(root, file);
-    if (!existsSync(p)) return;
+    return existsSync(p) ? readFileSync(p, "utf-8") : undefined;
+  };
+  const collect = (file: string): void => {
+    const text = read(file);
+    if (text === undefined) return;
     try {
-      const parsed = JSON.parse(readFileSync(p, "utf-8")) as {
-        mcpServers?: unknown;
-      };
+      const parsed = JSON.parse(text) as { mcpServers?: unknown };
       if (parsed.mcpServers !== null && typeof parsed.mcpServers === "object") {
         Object.assign(servers, parsed.mcpServers);
       }
@@ -390,8 +393,18 @@ function collectMcpServers(
       /* malformed JSON is the loader's concern, not this check's */
     }
   };
-  collect(".mcp.json");
-  collect(layout.manifestPath);
+  // The harness's own locations (from the layout — never a hard-coded literal),
+  // plus the Agent Plugins standard's root `mcp.json` when the repo ships that
+  // manifest. A plugin in the vendor-neutral format declares its servers there,
+  // which no harness layout names — without this the MCP checks would silently
+  // pass over it.
+  for (const file of [
+    layout.mcpConfigFile,
+    layout.manifestPath,
+    ...agentPluginsMcpSources(read),
+  ]) {
+    collect(file);
+  }
   return servers;
 }
 
@@ -502,7 +515,12 @@ export function scanPlugin(
     inlineHooks: inline,
     manualHookCount: manual,
     commands: Object.keys(loaded.files).filter(cls.isCommand).length,
-    mcp: loaded.warnings.some((w) => w.includes("MCP server")),
+    // A declared server set counts even when the loader emitted no warning —
+    // otherwise a plugin whose servers come from the Agent Plugins `mcp.json`
+    // reports "MCP servers: no" while the report lists an MCP finding.
+    mcp:
+      loaded.warnings.some((w) => w.includes("MCP server")) ||
+      declaredServers.length > 0,
     danglingRefs: danglingRefs(resolve(dir), lay),
     hookEventIssues,
     frontmatterIssues: remap(frontmatterIssuesFor(loaded.files, cls)),
