@@ -97,6 +97,18 @@ export interface AuditInventory {
   commands: number;
   mcp: boolean;
   untested: number;
+  /**
+   * The per-tier split behind `untested`, emitted since the Evaluated ring landed: surfaces with no
+   * deterministic harness, and surfaces whose firing was never measured. Optional because a report
+   * produced before the split carries neither, and the view must still render an older artifact.
+   *
+   * 🔴 These reached the ENGINE's inventory and not this mirror, so `sample.ts` set two fields the
+   * type did not have. It went unnoticed because CI typechecks the root project and `test/types` and
+   * never `-p site/tsconfig.json` — the same shape as every other defect in this PR: a check that
+   * exists, passes, and does not cover the thing that broke.
+   */
+  untestedHarness?: number;
+  unevaluated?: number;
 }
 
 export interface BrokenRef {

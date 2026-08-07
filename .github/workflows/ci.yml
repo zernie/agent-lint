@@ -160,6 +160,16 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      # 🔴 site/ and packages/report-view have their OWN tsconfig and were never typechecked here.
+      # A field added to the engine's inventory and not to the view's mirror therefore compiled
+      # clean through all three steps above and failed only for whoever ran
+      # `tsc -p site/tsconfig.json` by hand. That is precisely what happened to `untestedHarness`
+      # and `unevaluated` earlier in this PR: three green typecheck steps, none covering the project
+      # that broke. A check that passes without covering the thing that broke is the defect this
+      # whole PR is about, so it gets a step rather than a note.
+      - name: Type check (site + report-view)
+        run: npx tsc --noEmit -p site/tsconfig.json
+
       - name: Check generated types compile
         run: node dist/cli.js generate types && npx tsc --noEmit
 
