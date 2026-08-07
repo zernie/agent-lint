@@ -87,6 +87,7 @@ import {
   isMeteredAccess,
   decideExecute,
   formatExecuteSkip,
+  type ExecuteDecision,
 } from "./scan-trigger-suggest.js";
 import { checkDialectDrift, formatDialectDrift } from "./dialect-drift.js";
 import {
@@ -6730,20 +6731,10 @@ interface ExecutableSurfaces {
  */
 async function resolveExecution(
   s: ExecutableSurfaces,
+  decision: ExecuteDecision,
   json: boolean,
-  args: string[],
   harness: string,
 ): Promise<{ execute: boolean; note: string | null }> {
-  const decision = decideExecute({
-    hasExecutable: s.hasMcp || s.triggerableSkills > 0 || s.adoptableRefs,
-    // A human is "interactive" only when BOTH streams are a terminal — `askOnce`
-    // reads stdin, so a TTY stdout with piped/redirected stdin (agents, shell
-    // pipelines) must NOT block on a read that never gets input.
-    isTTY: process.stdout.isTTY && process.stdin.isTTY,
-    json,
-    noInteractive: args.includes("--no-interactive") || args.includes("--yes"),
-    remembered: loadConfig().audit?.measure,
-  });
   if (decision.kind === "run") return { execute: true, note: null };
   if (decision.kind === "skip")
     return {
@@ -7075,6 +7066,43 @@ async function main(): Promise<void> {
         // Read the local flight recorder ONCE — feeds both the JSON report
         // (structured summary, the product boundary) and the terminal render.
         const ledgerRecords = readObservations(root);
+        // What the EXECUTING checks would have to work with. Computed BEFORE the
+        // report is built (it's a pure read off the scan) because the report's
+        // `Evaluated` ring needs to know whether this run will ever ask the
+        // skill-firing question — see `firingMeasured` below.
+        const isForeign = root !== process.cwd();
+        const surfaces: ExecutableSurfaces = {
+          hasMcp: report.mcp && !isForeign,
+          triggerableSkills: report.skills.filter(
+            (s) => s.hasDescription && !s.userInvoked,
+          ).length,
+          gateSkills: detectGateSkills(report.skills).length,
+          adoptableRefs:
+            adapter.name === "claude-code" &&
+            existsSync(resolve(root, adapter.layout.instructionFile)),
+        };
+        // `decideExecute` is PURE and prompt-free, so the read-vs-run outcome can
+        // be known before anything prints. Only a settled `run` (a remembered yes)
+        // means the firing question actually gets asked on this run; a `skip`
+        // (headless / `--json` / a remembered no) means it never does, and an
+        // `ask` isn't resolved until after the read has printed. Anything but a
+        // certain `run` → the `Evaluated` ring reports "not measured" rather than
+        // scoring a 0 it never earned.
+        const execDecision = decideExecute({
+          hasExecutable:
+            surfaces.hasMcp ||
+            surfaces.triggerableSkills > 0 ||
+            surfaces.adoptableRefs,
+          isTTY: process.stdout.isTTY && process.stdin.isTTY,
+          json,
+          noInteractive:
+            args.includes("--no-interactive") || args.includes("--yes"),
+          remembered: config.audit?.measure,
+        });
+        const firingMeasured =
+          execDecision.kind === "run" &&
+          surfaces.triggerableSkills > 0 &&
+          (adapter.name === "codex" || hasModelAccess(process.env));
         // The report scaffold WITHOUT the rule map — the map's catalog
         // enrichment (enabled-state / "documented but OFF") enumerates the repo's
         // linter, which is gated on the SAME audit.measure consent as the
@@ -7090,6 +7118,7 @@ async function main(): Promise<void> {
             root,
             adapter.layout.instructionFile,
           ),
+          firingMeasured,
         });
         const sc = auditReportBase.score;
         const plan = optimize(report);
@@ -7133,21 +7162,12 @@ async function main(): Promise<void> {
         // BEFORE the rule map is routed, so a first-time "yes" enriches THIS run.
         // (The safety battery is NOT here — it needs cross-platform confinement
         // that isn't shipped, so it lives in the vigiles/testing API.)
-        const isForeign = root !== process.cwd();
-        const surfaces: ExecutableSurfaces = {
-          hasMcp: report.mcp && !isForeign,
-          triggerableSkills: report.skills.filter(
-            (s) => s.hasDescription && !s.userInvoked,
-          ).length,
-          gateSkills: detectGateSkills(report.skills).length,
-          adoptableRefs:
-            adapter.name === "claude-code" &&
-            existsSync(resolve(root, adapter.layout.instructionFile)),
-        };
+        // `surfaces` + `execDecision` were resolved above (the ring needed them);
+        // this only turns an `ask` into a prompt and remembers the answer.
         const { execute, note: execNote } = await resolveExecution(
           surfaces,
+          execDecision,
           json,
-          args,
           adapter.name,
         );
         // Consent is now settled (and remembered via .vigilesrc.json, which

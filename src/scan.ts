@@ -337,7 +337,26 @@ export interface ScanReport {
   /** Skills/agents whose `---` block isn't valid YAML — informational (may still load via salvage). */
   readonly malformedFrontmatter: readonly FrontmatterParseIssue[];
   readonly warnings: readonly string[];
+  /** Surfaces covered by NEITHER tier — the union count (unchanged). */
   readonly untested: number;
+  /**
+   * Surfaces with no DETERMINISTIC harness (`*.harness.mjs` / `*.test.*`) — free,
+   * millisecond, every-push. Feeds the `Tested` ring. Optional so a hand-built
+   * report (and any producer predating the split) falls back to `untested`.
+   */
+  readonly untestedHarness?: number;
+  /**
+   * Surfaces whose FIRING was never measured — no `*.eval.mjs` covers them. Paid,
+   * scheduled, real-model. Feeds the `Evaluated` ring. A DIFFERENT gap from
+   * `untestedHarness`, at a cost three orders of magnitude apart — which is
+   * exactly why it is a different number and not a slash in one finding.
+   */
+  readonly unevaluated?: number;
+  /**
+   * Surfaces whose firing COULD be measured at all — the `Evaluated` ring's
+   * denominator. 0 → the ring is n/a (nothing to evaluate), never a false 0.
+   */
+  readonly evaluable?: number;
   /**
    * Whether the repo has its OWN test setup (a real `package.json` `test` script or
    * a conventional test dir). When true, the `untested` count — which only counts
@@ -506,6 +525,11 @@ export function scanPlugin(
   >(
     findings: readonly T[],
   ): T[] => remapFindingPaths(findings, loaded.sources, resolve(dir));
+  // ONE discovery pass, read three ways: the union (unchanged `untested`), the
+  // deterministic tier (`Tested`), and the real-model tier (`Evaluated`). The
+  // tiers differ in cost, cadence AND in the question they answer, so collapsing
+  // them here would make the difference unrecoverable downstream.
+  const coverage = findUntestedSurfaces({ basePath: dir, layout: lay });
   return {
     dir,
     instructions,
@@ -570,8 +594,10 @@ export function scanPlugin(
     ),
     malformedFrontmatter: remap(malformedFrontmatterFor(loaded.files, cls)),
     warnings: loaded.warnings,
-    untested: findUntestedSurfaces({ basePath: dir, layout: lay }).untested
-      .length,
+    untested: coverage.untested.length,
+    untestedHarness: coverage.harness.untested.length,
+    unevaluated: coverage.evals.untested.length,
+    evaluable: coverage.total,
     ownTestSignal: ownTestSignalOnDisk(dir),
     puritySummary,
   };
@@ -912,6 +938,14 @@ export function formatScanReport(r: ScanReport): string {
   if (r.commands > 0) facts.push(`Commands: ${String(r.commands)}`);
   facts.push(`MCP servers: ${r.mcp ? "yes" : "no"}`);
   facts.push(`Untested surfaces: ${String(r.untested)}`);
+  // The two tiers, named separately — a surface with a deterministic harness and
+  // no eval is NOT the same position as one with neither. Shown only when the
+  // producer supplied the split (a hand-built report may not have).
+  if (r.untestedHarness !== undefined && r.unevaluated !== undefined) {
+    facts.push(
+      `  no harness: ${String(r.untestedHarness)} · firing never measured: ${String(r.unevaluated)}`,
+    );
+  }
   // Effect surface: harness-level purity summary across all scanned agents.
   // Informational (higher pure% = more constrained, cheaper to test); shown
   // only when there are agents to summarize (no agents → no summary line).

@@ -11,7 +11,11 @@
  * timestamp is attached by the CLI at write time, never by this pure builder, so
  * the embedded-in-HTML form stays deterministic).
  */
-import { auditScore, type AuditScore } from "./audit-score.js";
+import {
+  auditScore,
+  type AuditScore,
+  type AuditScoreOptions,
+} from "./audit-score.js";
 import { optimize, type Recommendation } from "./optimize.js";
 import { computeVerdict, type Verdict } from "./audit-verdict.js";
 import type { LedgerSummary } from "./observe.js";
@@ -58,7 +62,16 @@ export interface AuditInventory {
   readonly hooks: number;
   readonly commands: number;
   readonly mcp: boolean;
+  /** Surfaces covered by NEITHER tier — the union count (unchanged). */
   readonly untested: number;
+  /**
+   * The two tiers, carried SEPARATELY so a consumer can tell "has deterministic
+   * coverage, no evals" from "has neither" — a distinction the single `untested`
+   * count erased. `untestedHarness` is free-and-every-push work; `unevaluated` is
+   * paid real-model work. Additive/optional — schema version unchanged.
+   */
+  readonly untestedHarness?: number;
+  readonly unevaluated?: number;
 }
 
 /**
@@ -92,7 +105,7 @@ export interface Adoptable {
  */
 export interface AuditReport {
   readonly meta: AuditReportMeta;
-  /** The five deterministic category rings + the weighted overall + grade. */
+  /** The six category rings + the weighted overall + grade. */
   readonly score: AuditScore;
   /**
    * The one-line verdict + per-recommendation `pointsIfFixed`, both derived by
@@ -154,7 +167,7 @@ export interface AuditReport {
   readonly ruleRouting?: RuleRouting;
 }
 
-export interface BuildAuditReportOptions {
+export interface BuildAuditReportOptions extends AuditScoreOptions {
   readonly harness: string;
   readonly vigilesVersion: string;
   /** The flight-recorder summary from the local ledger (omit when empty). */
@@ -211,7 +224,7 @@ export function buildAuditReport(
   opts: BuildAuditReportOptions,
 ): AuditReport {
   const adoptable = buildAdoptable(opts.adoptableSurfaces);
-  const score = auditScore(report);
+  const score = auditScore(report, { firingMeasured: opts.firingMeasured });
   const recommendations = optimize(report).recommendations;
   const verdict = computeVerdict({ report, score, recommendations });
   return {
@@ -236,6 +249,12 @@ export function buildAuditReport(
       commands: report.commands,
       mcp: report.mcp,
       untested: report.untested,
+      ...(report.untestedHarness !== undefined
+        ? { untestedHarness: report.untestedHarness }
+        : {}),
+      ...(report.unevaluated !== undefined
+        ? { unevaluated: report.unevaluated }
+        : {}),
     },
     ...(report.danglingRefs.length
       ? { brokenReferences: report.danglingRefs }

@@ -15,6 +15,7 @@ import type {
   Recommendation,
   Verdict,
 } from "./schema";
+import { categoryScoreLabel } from "./schema";
 import { Card } from "./components/ui/card";
 import { Badge } from "./components/ui/badge";
 import { Adoptability } from "./components/Adoptability";
@@ -275,8 +276,8 @@ function SafetyCard({ finding }: { finding: string }) {
   );
 }
 
-/** A compact category cell — a thin band bar + score, so the five read as one
- * scannable strip rather than five heavy rings competing with the verdict. */
+/** A compact category cell — a thin band bar + score, so the six read as one
+ * scannable strip rather than six heavy rings competing with the verdict. */
 function CategoryCell({ c }: { c: CategoryScore }) {
   const b: Band = c.advisory ? "na" : band(c.score);
   const pct = c.score === null ? 0 : Math.max(0, Math.min(100, c.score));
@@ -284,8 +285,21 @@ function CategoryCell({ c }: { c: CategoryScore }) {
     <Card className="flex flex-col gap-2 p-3">
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-xs font-semibold">{c.key}</span>
-        <span className={cn("text-sm font-bold", TEXT[b])}>
-          {c.advisory ? "—" : c.score === null ? "n/a" : c.score}
+        {/* An UNASKED question gets its own label — never the advisory em-dash
+            (which reads "measured, just not graded") and never a 0. */}
+        <span
+          className={cn(
+            c.notMeasured ? "text-[11px] font-semibold" : "text-sm font-bold",
+            TEXT[b],
+          )}
+        >
+          {c.notMeasured
+            ? "not measured"
+            : c.advisory
+              ? "—"
+              : c.score === null
+                ? "n/a"
+                : c.score}
         </span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-border">
@@ -295,7 +309,11 @@ function CategoryCell({ c }: { c: CategoryScore }) {
         />
       </div>
       <div className="h-8 overflow-hidden text-[11px] leading-tight text-muted-foreground">
-        {c.advisory ? (
+        {c.notMeasured ? (
+          <span className="line-clamp-2 text-na">
+            {c.findings[c.findings.length - 1] ?? "never measured"}
+          </span>
+        ) : c.advisory ? (
           <span className="text-na">advisory — not graded</span>
         ) : c.findings.length > 0 ? (
           <span className="line-clamp-2">
@@ -348,7 +366,10 @@ function CategoryRow({
   // move the grade. Show that number (muted, `na` tone) so the number and the bar
   // AGREE; the "advisory, not graded" tag in the finding line says it doesn't count.
   // (A "—" beside a 94%-filled bar reads as a rendering bug.)
-  const scoreLabel = c.score === null ? "n/a" : String(c.score);
+  // `categoryScoreLabel` keeps THREE states apart: a number, `n/a` (nothing to
+  // assess), and `not measured` (nobody asked). A 0 and an unasked question are
+  // different facts and must not render the same string.
+  const scoreLabel = categoryScoreLabel(c);
   return (
     <div className="py-3">
       <div className="flex items-baseline justify-between gap-3">
@@ -798,7 +819,7 @@ export function Report({
       <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
         Categories
       </h2>
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
         {score.categories.map((c) => (
           <CategoryCell key={c.key} c={c} />
         ))}

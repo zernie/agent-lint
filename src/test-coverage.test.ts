@@ -287,3 +287,68 @@ test("a root SKILL.md is COVERED by a colocated eval (single-skill-dir target)",
   );
   cleanupTmpDir(dir);
 });
+
+// ── Two tiers, split at DISCOVERY ────────────────────────────────────────────
+// A harness (`*.harness.mjs`, `*.test.*`) is free and runs on every push; an eval
+// (`*.eval.mjs`) spends real model calls on a schedule and is the ONLY thing that
+// answers "does this skill fire?". Erasing that at discovery makes it
+// unrecoverable downstream — hence a per-tier split, not a display tweak.
+
+test("tiers split at discovery: a harness-only skill is NOT evaluated, and vice versa", () => {
+  const dir = makeTmpDir("cov-tiers");
+  write(dir, "skills/harnessed/SKILL.md", skill("harnessed"));
+  write(dir, "skills/harnessed/harnessed.harness.mjs", "// deterministic\n");
+  write(dir, "skills/evaled/SKILL.md", skill("evaled"));
+  write(dir, "skills/evaled/evaled.eval.mjs", "// real model\n");
+  write(dir, "skills/bare/SKILL.md", skill("bare"));
+
+  const r = findUntestedSurfaces({ basePath: dir });
+  const names = (ss: readonly { name: string }[]) =>
+    ss.map((s) => s.name).sort();
+
+  // The UNION is unchanged: a test anywhere counts.
+  assert.deepEqual(names(r.untested), ["bare"]);
+  assert.deepEqual(names(r.covered), ["evaled", "harnessed"]);
+
+  // The tiers disagree, which is the whole point — "has deterministic coverage,
+  // no evals" is a different position from "has neither".
+  assert.deepEqual(names(r.harness.covered), ["harnessed"]);
+  assert.deepEqual(names(r.harness.untested), ["bare", "evaled"]);
+  assert.deepEqual(names(r.evals.covered), ["evaled"]);
+  assert.deepEqual(names(r.evals.untested), ["bare", "harnessed"]);
+  cleanupTmpDir(dir);
+});
+
+test("a `*.test.ts` is a HARNESS, never an eval (it spends no model calls)", () => {
+  const dir = makeTmpDir("cov-tier-ts");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  write(dir, "suite/foo.test.ts", 'import "../skills/foo/SKILL.md";\n');
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.equal(r.untested.length, 0, "content-reference covers the union");
+  assert.equal(r.harness.untested.length, 0, "…and the deterministic tier");
+  assert.deepEqual(
+    r.evals.untested.map((s) => s.name),
+    ["foo"],
+    "but firing is still unmeasured — a .test.ts cannot answer that",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("formatUntestedReport names the two gaps SEPARATELY (no test/eval slash)", () => {
+  const dir = makeTmpDir("cov-tier-fmt");
+  write(dir, "skills/a/SKILL.md", skill("a"));
+  write(dir, "skills/a/a.harness.mjs", "// deterministic only\n");
+  write(dir, "skills/b/SKILL.md", skill("b"));
+  const text = formatUntestedReport(findUntestedSurfaces({ basePath: dir }));
+  // Only `b` is in the union list…
+  assert.ok(text.includes("1 surface(s) with no test"));
+  // …but the breakdown says 1 needs a harness and 2 need firing measured, with
+  // the cost of each named. One number could not have said that.
+  assert.ok(
+    text.includes(
+      "Two gaps, two costs: 1 with no deterministic harness (free, every push) · 2 whose firing was never measured",
+    ),
+    text,
+  );
+  cleanupTmpDir(dir);
+});

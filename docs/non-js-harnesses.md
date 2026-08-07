@@ -15,10 +15,10 @@ through `npx vigiles`.
 Everything below runs with **only `npx`** (Node is fetched on demand) — no
 `package.json`, no install step, identical output on every OS:
 
-| Command             | Works? | What it checks                                                                                                                                                                                                                      |
-| ------------------- | :----: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npx vigiles audit` |   ✅   | The four deterministic rings — Truthfulness (references resolve), Triggering (skills fire / don't collide), Structure (tool contracts, MCP, frontmatter), Safety — plus the advisory Tested count. A local report, like Lighthouse. |
-| `npx vigiles lint`  |   ✅   | The CI gate — reference integrity, subagent tool contracts, hook events/scripts, MCP resolution, skill triggers, lethal-trifecta. Exit codes 0/1/2.                                                                                 |
+| Command             | Works? | What it checks                                                                                                                                                                                                                                                                                                     |
+| ------------------- | :----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npx vigiles audit` |   ✅   | The four deterministic rings — Truthfulness (references resolve), Triggering (skills fire / don't collide), Structure (tool contracts, MCP, frontmatter), Safety — plus the advisory Tested (deterministic harnesses) and Evaluated (real-model evals, or `not measured`) counts. A local report, like Lighthouse. |
+| `npx vigiles lint`  |   ✅   | The CI gate — reference integrity, subagent tool contracts, hook events/scripts, MCP resolution, skill triggers, lethal-trifecta. Exit codes 0/1/2.                                                                                                                                                                |
 
 None of these read your repo's source language — they read the **harness**
 (`CLAUDE.md`/`AGENTS.md`, `skills/`, `agents/`, hooks, MCP config), which is
@@ -76,10 +76,14 @@ verify less):
 See [`docs/linter-support.md`](linter-support.md) for the full linter list and
 each tool's config conventions.
 
-## The Tested metric for a native test loop
+## The Tested / Evaluated metrics for a native test loop
 
-`audit`/`lint` count vigiles-native `*.eval.mjs` / `*.harness.mjs` files for the
-advisory **Tested** metric. If you test your skills through a native loop instead
+`audit`/`lint` count vigiles-native files for two advisory metrics, split by what
+they cost and what they answer: `*.harness.mjs` (plus `*.test.*`) feeds **Tested**
+— free, deterministic, every push — and `*.eval.mjs` feeds **Evaluated**, the
+paid real-model tier that is the only thing that can say whether a skill fires.
+A file matched by a custom `testGlobs` counts toward **Tested**. If you test your
+skills through a native loop instead
 (a Kotlin test suite, a Go benchmark, a promptfoo config), point `testGlobs` at
 it so those files count — see
 [the external-suite section in the untested-skill rule](rules/untested-skill.md#counting-an-external-test-suite-promptfoo-a-home-grown-eval-loop).

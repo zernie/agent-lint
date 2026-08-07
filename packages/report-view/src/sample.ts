@@ -40,7 +40,22 @@ export const SAMPLE: AuditReport = {
         key: "Tested",
         score: 88,
         weight: 1,
-        findings: ["4 untested surfaces"],
+        advisory: true,
+        findings: ["4 surfaces with no vigiles harness (deterministic, free)"],
+      },
+      // The THIRD state, in the sample on purpose: a deterministic read never
+      // asks whether a skill fires, so the ring says so rather than reporting an
+      // unearned 0.
+      {
+        key: "Evaluated",
+        score: null,
+        weight: 1,
+        advisory: true,
+        notMeasured: true,
+        findings: [
+          "4 surfaces whose firing was never measured",
+          "not measured — run `npx vigiles audit` interactively to measure, or add a `*.eval.mjs` (`measureTriggerRate`, vigiles/testing)",
+        ],
       },
     ],
   },
@@ -81,6 +96,8 @@ export const SAMPLE: AuditReport = {
     commands: 0,
     mcp: false,
     untested: 4,
+    untestedHarness: 4,
+    unevaluated: 4,
   },
   adoptable: {
     createAllCommand: "npx vigiles init",

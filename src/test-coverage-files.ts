@@ -15,12 +15,15 @@
 import { basename, dirname } from "./posix-path.js";
 
 import type { PluginLayout } from "./core/layout.js";
-import type { Surface, SurfaceKind } from "./test-coverage.js";
+import type { CoverageTier, Surface, SurfaceKind } from "./test-coverage.js";
 
-// Mirrors src/test-coverage.ts constants.
+// Mirrors src/test-coverage.ts constants. VALUES are re-declared, never imported
+// — test-coverage.ts pulls in node:fs/glob, and this twin must stay browser-safe.
+const EVAL_SUFFIX = ".eval.mjs";
+
 const DEFAULT_TEST_SUFFIXES = [
   ".harness.mjs",
-  ".eval.mjs",
+  EVAL_SUFFIX,
   ".test.ts",
   ".test.mts",
   ".test.cts",
@@ -214,15 +217,28 @@ function isCovered(surface: Surface, tests: readonly TestFile[]): boolean {
   return false;
 }
 
+/** Mirror of test-coverage.ts `tierOf` — one tier's covered/untested split. */
+function tierOf(
+  considered: readonly Surface[],
+  tests: readonly TestFile[],
+): CoverageTier {
+  const covered: Surface[] = [];
+  const untested: Surface[] = [];
+  for (const s of considered)
+    (isCovered(s, tests) ? covered : untested).push(s);
+  return { covered, untested };
+}
+
 /**
  * The untested harness surfaces (skills / agents / hooks) in a file map — the
- * browser-safe twin of `findUntestedSurfaces`, returning only the `untested` list
- * (`scanFiles` needs the count). Same coverage rules as the disk detector.
+ * browser-safe twin of `findUntestedSurfaces`, returning the union `untested` list
+ * plus the same per-tier split (`scanFiles` needs the counts). Same coverage rules
+ * as the disk detector; the tier split is by suffix, exactly as on disk.
  */
 export function findUntestedSurfacesInFiles(
   files: Record<string, string>,
   layout: PluginLayout,
-): { untested: Surface[] } {
+): { untested: Surface[]; harness: CoverageTier; evals: CoverageTier } {
   const surfaces: Surface[] = [
     ...discoverSkills(files, layout),
     ...discoverAgents(files, layout),
@@ -231,5 +247,15 @@ export function findUntestedSurfacesInFiles(
   const considered = surfaces.filter((s) => !s.ignored);
   const tests = discoverTests(files);
   const untested = considered.filter((s) => !isCovered(s, tests));
-  return { untested };
+  return {
+    untested,
+    harness: tierOf(
+      considered,
+      tests.filter((t) => !t.path.endsWith(EVAL_SUFFIX)),
+    ),
+    evals: tierOf(
+      considered,
+      tests.filter((t) => t.path.endsWith(EVAL_SUFFIX)),
+    ),
+  };
 }

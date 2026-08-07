@@ -130,13 +130,14 @@ It's free and open-source, runs entirely on your machine, and never bills per to
   <img src="vigiles-audit.png" width="760" alt="vigiles audit report for my-plugin: a verdict header reading 'Two one-line fixes away from a B.' next to a C (77/100) grade, a five-category strip (Truthfulness, Triggering, Structure, Safety, Tested), ranked fix cards with '+N pts' impact badges, broken-reference findings — and, lower down and badged experimental, a 'Your rules → enforced' preview mapping a prose rule the config silently turns off" />
 </p>
 
-**Like Google's Lighthouse, but for your agent harness.** One command grades it A–F across five categories, leads with a plain-English verdict — _"two one-line fixes away from a B"_ — and ranks every fix by the points it buys back:
+**Like Google's Lighthouse, but for your agent harness.** One command grades it A–F across six categories, leads with a plain-English verdict — _"two one-line fixes away from a B"_ — and ranks every fix by the points it buys back:
 
 - **Truthfulness** — do the references resolve?
 - **Triggering** — do skills fire, without colliding?
 - **Structure** — are tool contracts and configs valid?
 - **Safety** — any way for the agent to leak your data?
-- **Tested** — does the harness ship tests?
+- **Tested** — does the harness ship deterministic tests?
+- **Evaluated** — has anything measured whether your skills actually _fire_? (Distinct from `0`: if nothing asked, it says **not measured**.)
 
 And it closes the loop from prose to enforcement: **your rules → enforced** maps each rule you wrote to the lint rule that actually enforces it — already on, one config line away, or silently turned off (below).
 

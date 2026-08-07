@@ -20,6 +20,20 @@
  * skill still DOES something when invoked, and that behaviour is worth a test).
  * The only opt-out is explicit: a `vigiles:ignore-test` marker in the surface
  * file, which is reported as `exempt` so the skip is visible, never silent.
+ *
+ * TWO TIERS, discovered SEPARATELY — a harness and an eval are not the same thing
+ * and collapsing them at discovery makes the difference unrecoverable downstream:
+ *
+ *   | | harness (`*.harness.mjs`, `*.test.*`) | eval (`*.eval.mjs`) |
+ *   |---|---|---|
+ *   | cost    | free                          | paid model calls    |
+ *   | cadence | every push                    | scheduled           |
+ *   | answers | "does this gate still catch what it claims?" | "does this skill FIRE at all?" |
+ *
+ * So a repo with complete deterministic coverage and no evals is a DIFFERENT
+ * position from a repo with neither, and "add a test/eval" spans three orders of
+ * magnitude in cost without saying which. {@link UntestedReport} therefore carries
+ * a per-tier {@link CoverageTier} alongside the (unchanged) union fields.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -63,13 +77,31 @@ export interface Surface {
   readonly ignored: boolean;
 }
 
+/** One tier's split of the considered surfaces — covered by THAT tier, or not. */
+export interface CoverageTier {
+  readonly covered: readonly Surface[];
+  readonly untested: readonly Surface[];
+}
+
 export interface UntestedReport {
   /** Total surfaces considered (after exemptions). */
   readonly total: number;
+  /** Covered by EITHER tier — the union, unchanged (a test anywhere counts). */
   readonly covered: readonly Surface[];
+  /** Covered by NEITHER tier — the union, unchanged. */
   readonly untested: readonly Surface[];
   /** Surfaces explicitly opted out via `vigiles:ignore-test`. */
   readonly exempt: number;
+  /**
+   * DETERMINISTIC coverage only — `*.harness.mjs` and `*.test.*`. Free,
+   * millisecond, every-push. Answers "does this gate still catch what it claims?"
+   */
+  readonly harness: CoverageTier;
+  /**
+   * REAL-MODEL coverage only — `*.eval.mjs`. Paid, minutes, scheduled. Answers
+   * the one question the deterministic tier cannot: "does this skill FIRE at all?"
+   */
+  readonly evals: CoverageTier;
 }
 
 export interface TestCoverageOptions {
@@ -97,9 +129,12 @@ export interface TestCoverageOptions {
 // Internals
 // ---------------------------------------------------------------------------
 
+/** The REAL-MODEL tier's suffix — the one file kind that costs money to run. */
+const EVAL_SUFFIX = ".eval.mjs";
+
 const DEFAULT_TEST_GLOBS = [
   "**/*.harness.mjs",
-  "**/*.eval.mjs",
+  `**/*${EVAL_SUFFIX}`,
   "**/*.test.ts",
   "**/*.test.mts",
   "**/*.test.cts",
@@ -292,6 +327,36 @@ function isCovered(surface: Surface, tests: readonly TestFile[]): boolean {
   return false;
 }
 
+/**
+ * Split the discovered tests into the two tiers by SUFFIX — `*.eval.mjs` is the
+ * paid real-model tier, everything else (`*.harness.mjs`, `*.test.*`, and any
+ * user-supplied `testGlobs`) is the free deterministic tier. Suffix, not glob set,
+ * so a custom `testGlobs` (a promptfoo suite, a home-grown loop) still lands in a
+ * tier instead of silently disappearing from the split.
+ */
+function partitionTests(tests: readonly TestFile[]): {
+  harness: TestFile[];
+  evals: TestFile[];
+} {
+  const harness: TestFile[] = [];
+  const evals: TestFile[] = [];
+  for (const t of tests)
+    (t.path.endsWith(EVAL_SUFFIX) ? evals : harness).push(t);
+  return { harness, evals };
+}
+
+/** Split the considered surfaces by whether ONE tier's tests cover them. */
+function tierOf(
+  considered: readonly Surface[],
+  tests: readonly TestFile[],
+): CoverageTier {
+  const covered: Surface[] = [];
+  const untested: Surface[] = [];
+  for (const s of considered)
+    (isCovered(s, tests) ? covered : untested).push(s);
+  return { covered, untested };
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -302,6 +367,11 @@ function isCovered(surface: Surface, tests: readonly TestFile[]): boolean {
  * test that references its path/namespace. EVERY skill, agent, and hook is held
  * to this — the only exemption is an explicit `vigiles:ignore-test` marker in the
  * surface file (counted as `exempt`).
+ *
+ * The `covered`/`untested` union fields are UNCHANGED (a test anywhere counts).
+ * `harness` and `evals` carry the per-tier split so a caller can tell "has
+ * deterministic coverage, no evals" from "has neither" — two positions the single
+ * count made indistinguishable.
  */
 export function findUntestedSurfaces(
   options: TestCoverageOptions = {},
@@ -325,13 +395,17 @@ export function findUntestedSurfaces(
   const exempt = surfaces.length - considered.length;
 
   const tests = discoverTests(basePath, globs, ignore);
-  const covered: Surface[] = [];
-  const untested: Surface[] = [];
-  for (const s of considered) {
-    (isCovered(s, tests) ? covered : untested).push(s);
-  }
+  const split = partitionTests(tests);
+  const union = tierOf(considered, tests);
 
-  return { total: considered.length, covered, untested, exempt };
+  return {
+    total: considered.length,
+    covered: union.covered,
+    untested: union.untested,
+    exempt,
+    harness: tierOf(considered, split.harness),
+    evals: tierOf(considered, split.evals),
+  };
 }
 
 /** Suggested colocated test path for an untested surface (shown in the warning). */
@@ -358,6 +432,16 @@ export function formatUntestedReport(report: UntestedReport): string {
   for (const s of report.untested) {
     lines.push(`    ${s.kind} ${s.path} — add e.g. ${suggestedTestPath(s)}`);
   }
+  // Name the two gaps SEPARATELY — they lead to different work at wildly
+  // different cost. "add a test/eval" is one sentence for two prescriptions three
+  // orders of magnitude apart; a reader can't tell whether it's ten minutes or a
+  // model budget.
+  lines.push(
+    `  Two gaps, two costs: ${String(report.harness.untested.length)} with no ` +
+      `deterministic harness (free, every push) · ` +
+      `${String(report.evals.untested.length)} whose firing was never measured ` +
+      `(needs a real model, run on a schedule).`,
+  );
   // Already testing these another way (a promptfoo suite, a home-grown evals
   // file)? Point `testGlobs` at it so it counts toward coverage (issue #113).
   lines.push(

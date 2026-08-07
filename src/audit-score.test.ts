@@ -2,12 +2,21 @@
  * Category-scoring suite (vitest): pure over a hand-built ScanReport (no fs/model)
  * — each finding buckets into the right deterministic category, the overall
  * excludes n/a categories, an empty machine is empty (but an instruction-only
- * repo is NOT), and the formatter renders rings + the overall. The five rings are
- * all deterministic; Safety is fed by the STATIC lethal-trifecta check (the
- * EXECUTING disaster-battery is still not an `audit` ring).
+ * repo is NOT), and the formatter renders rings + the overall. Safety is fed by
+ * the STATIC lethal-trifecta check (the EXECUTING disaster-battery is still not
+ * an `audit` ring).
+ *
+ * Tested and Evaluated are two rings on purpose (defect #9): a harness and an
+ * eval differ on cost, cadence and the question they answer, and `Evaluated` has
+ * a THIRD state (`not measured`) that must stay distinguishable from a measured 0.
  */
 import { describe, it, expect } from "vitest";
-import { auditScore, formatAuditScore } from "./audit-score.js";
+import {
+  auditScore,
+  categoryScoreLabel,
+  formatAuditScore,
+} from "./audit-score.js";
+import type { CategoryScore } from "./audit-score.js";
 import type { ScanReport } from "./scan.js";
 
 /** A clean, loaded report; override fields per test. */
@@ -49,6 +58,14 @@ function makeReport(over: Partial<ScanReport> = {}): ScanReport {
 const cat = (s: ReturnType<typeof auditScore>, key: string) =>
   s.categories.find((c) => c.key === key);
 
+/** `cat`, but it fails loudly instead of yielding `undefined` — for assertions
+ *  that pass the ring itself to a helper (no non-null assertions in tests). */
+const ring = (s: ReturnType<typeof auditScore>, key: string): CategoryScore => {
+  const c = cat(s, key);
+  if (!c) throw new Error(`no ${key} ring`);
+  return c;
+};
+
 describe("auditScore", () => {
   it("a clean report scores 100 on every (deterministic) category", () => {
     const s = auditScore(makeReport());
@@ -62,7 +79,7 @@ describe("auditScore", () => {
     expect(s.grade).toBe("A");
   });
 
-  it("has five deterministic rings — Safety fed by the static lethal-trifecta check", () => {
+  it("has six rings — Safety fed by the static lethal-trifecta check, Tested and Evaluated split", () => {
     const keys = auditScore(makeReport()).categories.map((c) => c.key);
     expect(keys).toEqual([
       "Truthfulness",
@@ -70,6 +87,7 @@ describe("auditScore", () => {
       "Structure",
       "Safety",
       "Tested",
+      "Evaluated",
     ]);
   });
 
@@ -191,10 +209,15 @@ describe("auditScore", () => {
     // the overall ignores the advisory Tested ring — a clean-but-untested repo is A
     expect(s.overall).toBe(100);
     expect(s.grade).toBe("A");
-    // The finding names the vigiles-native tier, not a bare "untested" (honesty).
-    expect(cat(s, "Tested")?.findings.some((f) => /vigiles test/.test(f))).toBe(
-      true,
-    );
+    // The finding names the vigiles-native tier, not a bare "untested" (honesty),
+    // and names the DETERMINISTIC tier specifically — no "test/eval" slash, which
+    // spanned two prescriptions three orders of magnitude apart in one sentence.
+    expect(
+      cat(s, "Tested")?.findings.some((f) => /vigiles harness/.test(f)),
+    ).toBe(true);
+    expect(
+      cat(s, "Tested")?.findings.some((f) => f.includes("test/eval")),
+    ).toBe(false);
   });
 
   it("own-test signal contextualizes Tested — never reads as 'you don't test'", () => {
@@ -210,6 +233,182 @@ describe("auditScore", () => {
     expect(
       cat(bare, "Tested")?.findings.some((f) => /your own test setup/.test(f)),
     ).toBe(false);
+  });
+
+  // ── Tested vs Evaluated: two tiers, not one number ────────────────────────
+  // A harness (`*.harness.mjs`, `*.test.*`) is free, runs on every push, and asks
+  // "does this gate still catch what it claims?". An eval (`*.eval.mjs`) costs
+  // real model calls, runs on a schedule, and asks "does this skill FIRE at all?".
+  // Collapsed into one ring, a repo with complete deterministic coverage and no
+  // evals scored IDENTICALLY to a repo with neither.
+
+  it("Tested reads the DETERMINISTIC tier, not the union — eval-only coverage is not a harness", () => {
+    // 4 surfaces: 3 have no harness, only 1 has neither harness nor eval. The old
+    // single count would have read 1 (the union) and called the repo nearly clean.
+    const s = auditScore(
+      makeReport({
+        untested: 1,
+        untestedHarness: 3,
+        evaluable: 4,
+        unevaluated: 2,
+      }),
+    );
+    expect(cat(s, "Tested")?.score).toBe(91); // 100 − 3×3
+    expect(cat(s, "Evaluated")?.score).toBe(50); // 2 of 4 covered
+    // Two different sentences, two different prescriptions.
+    expect(cat(s, "Tested")?.findings[0]).toMatch(/no vigiles harness/);
+    expect(cat(s, "Evaluated")?.findings[0]).toMatch(
+      /firing was never measured/,
+    );
+    // Neither sentence carries the old "test/eval" slash.
+    for (const c of s.categories)
+      for (const f of c.findings) expect(f).not.toContain("test/eval");
+  });
+
+  it("Tested falls back to the union count for a report predating the split", () => {
+    const s = auditScore(makeReport({ untested: 3 }));
+    expect(cat(s, "Tested")?.score).toBe(91);
+  });
+
+  it("Evaluated is plain n/a when there is no surface whose firing could be measured", () => {
+    const e = ring(auditScore(makeReport({ evaluable: 0 })), "Evaluated");
+    expect(e.score).toBeNull();
+    // n/a is NOT the "nobody asked" state — nothing was there to ask about.
+    expect(e.notMeasured).toBeUndefined();
+    expect(categoryScoreLabel(e)).toBe("n/a");
+  });
+
+  it("🔴 Evaluated: `not measured` is a THIRD state, distinguishable from a measured 0", () => {
+    // The SAME report, differing only in whether this run asked the question.
+    const report = makeReport({ evaluable: 4, unevaluated: 4 });
+
+    // (a) headless read — the executing checks never ran, no eval file on disk.
+    //     The audit knows NOTHING about firing. Reporting 0 here would present
+    //     the ABSENCE of a check as the RESULT of one.
+    const unasked = ring(auditScore(report), "Evaluated");
+    expect(unasked.score).toBeNull();
+    expect(unasked.notMeasured).toBe(true);
+    expect(categoryScoreLabel(unasked)).toBe("not measured");
+
+    // (b) the firing tier RAN and found nothing covered → an earned, literal 0.
+    const asked = ring(
+      auditScore(report, { firingMeasured: true }),
+      "Evaluated",
+    );
+    expect(asked.score).toBe(0);
+    expect(asked.notMeasured).toBeUndefined();
+    expect(categoryScoreLabel(asked)).toBe("0");
+
+    // The whole point: these two must not be the same value OR the same label.
+    expect(unasked.score).not.toBe(asked.score);
+    expect(categoryScoreLabel(unasked)).not.toBe(categoryScoreLabel(asked));
+  });
+
+  it("Evaluated nudges with the COMMAND when it wasn't measured (no bare zero)", () => {
+    const e = cat(
+      auditScore(makeReport({ evaluable: 2, unevaluated: 2 })),
+      "Evaluated",
+    );
+    expect(e?.findings.some((f) => f.startsWith("not measured —"))).toBe(true);
+    expect(e?.findings.some((f) => f.includes("npx vigiles audit"))).toBe(true);
+    expect(e?.findings.some((f) => f.includes("measureTriggerRate"))).toBe(
+      true,
+    );
+    // And it still NAMES the gap in skills-whose-firing terms.
+    expect(e?.findings[0]).toBe("2 surfaces whose firing was never measured");
+  });
+
+  it("Evaluated is a real number as soon as ANY eval exists — the read doesn't have to run", () => {
+    // One of four covered by an on-disk `*.eval.mjs`: something DOES measure
+    // firing here, so the ring reports coverage rather than "not measured".
+    const e = cat(
+      auditScore(makeReport({ evaluable: 4, unevaluated: 3 })),
+      "Evaluated",
+    );
+    expect(e?.score).toBe(25);
+    expect(e?.notMeasured).toBeUndefined();
+    expect(e?.findings[0]).toBe("3 surfaces whose firing was never measured");
+  });
+
+  it("Evaluated is a clean 100 with no findings when every surface has an eval", () => {
+    const e = cat(
+      auditScore(makeReport({ evaluable: 3, unevaluated: 0 })),
+      "Evaluated",
+    );
+    expect(e?.score).toBe(100);
+    expect(e?.notMeasured).toBeUndefined();
+    expect(e?.findings).toEqual([]);
+  });
+
+  it("both tiers are ADVISORY — the split moves NO grade, in any of the three states", () => {
+    const base = auditScore(makeReport()).overall;
+    for (const over of [
+      { untestedHarness: 9, evaluable: 9, unevaluated: 9 }, // not measured
+      { untestedHarness: 9, evaluable: 9, unevaluated: 0 }, // fully evaluated
+      { untestedHarness: 0, evaluable: 0, unevaluated: 0 }, // n/a
+    ]) {
+      for (const firingMeasured of [false, true]) {
+        const s = auditScore(makeReport(over), { firingMeasured });
+        expect(cat(s, "Tested")?.advisory).toBe(true);
+        expect(cat(s, "Evaluated")?.advisory).toBe(true);
+        expect(s.overall).toBe(base);
+        expect(s.grade).toBe("A");
+      }
+    }
+  });
+
+  it("RENDERED: the terminal keeps `not measured`, `n/a` and `0` apart", () => {
+    const report = makeReport({ evaluable: 4, unevaluated: 4 });
+    const unasked = formatAuditScore(auditScore(report));
+    const asked = formatAuditScore(
+      auditScore(report, { firingMeasured: true }),
+    );
+
+    const line = (out: string, key: string): string =>
+      out.split("\n").find((l) => l.includes(key)) ?? "";
+
+    // The unasked run says so, in the ring itself — not only in tail prose.
+    expect(line(unasked, "Evaluated")).toContain("not measured");
+    expect(line(unasked, "Evaluated")).toMatch(/^\s*\?/); // its own glyph
+    // The asked run renders a real 0 with a real (empty) bar and the ✗ band.
+    expect(line(asked, "Evaluated")).toMatch(/Evaluated\s+0\s+░+/);
+    expect(line(asked, "Evaluated")).not.toContain("not measured");
+    expect(line(asked, "Evaluated")).toMatch(/^\s*✗/);
+    // Plain n/a is a third, distinct rendering.
+    const na = formatAuditScore(auditScore(makeReport({ evaluable: 0 })));
+    expect(line(na, "Evaluated")).toContain("n/a");
+    expect(line(na, "Evaluated")).not.toContain("not measured");
+    expect(line(na, "Evaluated")).toMatch(/^\s*○/);
+    // The nudge names the command right under the ring.
+    expect(unasked).toContain("npx vigiles audit");
+  });
+
+  it("categoryScoreLabel is total over the three states", () => {
+    expect(
+      categoryScoreLabel({
+        key: "Evaluated",
+        score: 0,
+        weight: 1,
+        findings: [],
+      }),
+    ).toBe("0");
+    expect(
+      categoryScoreLabel({
+        key: "Evaluated",
+        score: null,
+        weight: 1,
+        findings: [],
+      }),
+    ).toBe("n/a");
+    expect(
+      categoryScoreLabel({
+        key: "Evaluated",
+        score: null,
+        notMeasured: true,
+        weight: 1,
+        findings: [],
+      }),
+    ).toBe("not measured");
   });
 
   it("Safety is clean (100) when there IS a tool-bearing surface but no trifecta", () => {
@@ -428,9 +627,13 @@ describe("auditScore", () => {
     expect(s.empty).toBe(true);
     expect(s.overall).toBe(0);
     expect(s.categories.every((c) => c.score === null)).toBe(true);
-    // Safety is included in the empty-machine null list (5 categories, all n/a).
+    // Safety is included in the empty-machine null list (6 categories, all n/a).
     expect(s.categories.map((c) => c.key)).toContain("Safety");
-    expect(s.categories.length).toBe(5);
+    expect(s.categories.map((c) => c.key)).toContain("Evaluated");
+    expect(s.categories.length).toBe(6);
+    // An empty machine has nothing to measure — that's plain n/a, NOT the
+    // "nobody asked" state (which is reserved for a real surface + no answer).
+    expect(s.categories.every((c) => c.notMeasured)).toBe(false);
   });
 
   it("an inline-hook-only harness is NOT empty (inline hooks are a real surface)", () => {

@@ -31,7 +31,10 @@ export interface CheckDoc {
     | "Triggering"
     | "Structure"
     | "Safety"
-    | "Tested";
+    /** Deterministic harness coverage — free, every push. */
+    | "Tested"
+    /** Real-model eval coverage — paid, scheduled. Does a skill FIRE? */
+    | "Evaluated";
 }
 
 const GH = "https://github.com/zernie/vigiles/blob/main/docs/rules";
