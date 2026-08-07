@@ -24,17 +24,13 @@
         "key": "Triggering",
         "score": 92,
         "weight": 1,
-        "findings": [
-          "1 near-identical skill description (wrong one fires)"
-        ]
+        "findings": ["1 near-identical skill description (wrong one fires)"]
       },
       {
         "key": "Structure",
         "score": 92,
         "weight": 1,
-        "findings": [
-          "1 unavailable agent tool (typo / never-available)"
-        ]
+        "findings": ["1 unavailable agent tool (typo / never-available)"]
       },
       {
         "key": "Safety",
@@ -51,9 +47,7 @@
         "score": 91,
         "weight": 1,
         "advisory": true,
-        "findings": [
-          "3 surfaces with no vigiles harness (deterministic, free)"
-        ]
+        "findings": ["3 surfaces with no vigiles harness (deterministic, free)"]
       },
       {
         "key": "Evaluated",
@@ -130,7 +124,5 @@
       "mention": 0
     }
   },
-  "brokenReferences": [
-    "hooks/guard.sh"
-  ]
+  "brokenReferences": ["hooks/guard.sh"]
 }
