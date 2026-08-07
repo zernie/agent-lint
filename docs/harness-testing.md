@@ -63,16 +63,54 @@ Start here. Pick the row that matches your question — each links to its sectio
 
 | I want to check…                                             | Use                                                            | Needs               |
 | ------------------------------------------------------------ | -------------------------------------------------------------- | ------------------- |
+| my **helper script** does what it claims                     | [`runScript`](#test-a-plain-program-runscript)                 | nothing             |
 | my **hook** blocks/allows an event                           | [`runHook`](#test-a-hook-in-isolation-runhook)                 | nothing             |
 | my hook/skill is **wired in** and actually fires             | [`runHarnessTest`](#test-the-assembled-machine-runharnesstest) | harness CLI, no key |
 | my **skill fires** on the right prompts (recall + precision) | [`measureTriggerRate`](#test-a-skill-fires-measuretriggerrate) | a real model        |
 | a change **moves the agent's behaviour** (A/B, with stats)   | [`runEval`](#test-a-change-moves-behaviour-runeval)            | a real model        |
 | the **references** my CLAUDE.md cites are real               | [`vigiles lint`](verifying-instruction-files.md)               | nothing             |
 
-The first two are **deterministic** — assert pass/fail, run on every commit, free.
-The model tiers **measure** (a rate ± error across trials) — run them occasionally
-on a keyed job, never gate a single run. Full API detail lives in the
-**[Testing API reference](testing-api.md)**.
+The first three are **deterministic** — assert pass/fail, run on every commit,
+free. The model tiers **measure** (a rate ± error across trials) — run them
+occasionally on a keyed job, never gate a single run. Full API detail lives in
+the **[Testing API reference](testing-api.md)**.
+
+## Test a plain program (`runScript`)
+
+Your harness is not only hooks and skills — it's also the helper scripts they
+shell out to. `runScript` runs any program and reports **what it did**: exit
+code, **both** streams, and (when confined) what it wrote and what it reached.
+
+```ts
+import { runScript } from "vigiles/unit";
+
+const r = runScript("bash scripts/check-links.sh", { cwd: repoDir });
+assert.equal(r.exitCode, 0);
+assert.match(r.stderr, /0 broken links/); // advisory output lives on STDERR
+```
+
+> ⚠️ **Don't hand-roll this with `execFileSync`.** It returns **stdout alone** on
+> success, so advisory output — including vigiles's own compiled-hook `notice()`
+> — silently vanishes, and a perfectly healthy react hook reports as **dead**.
+> Every vigiles runner returns both streams, which makes that bug
+> unrepresentable.
+
+**`runScript` vs `runHook`.** `runHook` _is_ `runScript` plus the hook protocol
+(serialize the event to stdin, read the exit code as allow/deny). Pick by the
+question: a **hook** has a _decision_, a **script** has _effects_. That is why
+`ScriptRunResult` carries no `decision` field — an always-meaningless field
+teaches the reader the field means nothing.
+
+**Asserting what it wrote needs confinement.** `filesWritten` comes from diffing
+the work dir, which only a confined run does, so it is `undefined` after a plain
+run — deliberately not `[]` ("recorded, wrote nothing"). `assertNoWrite` /
+`assertWroteOnly` **throw** on an unrecorded result rather than pass having
+looked at nothing:
+
+```ts
+const r = runScript("bash scripts/build.sh", { cwd: repoDir, sandbox: "auto" });
+assertWroteOnly(r, [/^dist\//]); // meaningful: writes were actually recorded
+```
 
 ## Test a hook in isolation (`runHook`)
 

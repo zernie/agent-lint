@@ -867,3 +867,49 @@ test("assertHookNotices / assertHookSilent test a react hook in-process", () => 
     });
   }, /expected a react hook, got allow \(a gate decision\)/);
 });
+
+// --- "nobody looked" is not "nothing happened" -----------------------------
+//
+// `filesWritten` is recorded only on CONFINED runs. Before this, an unconfined
+// run produced `[]`, so `assertNoWrite(r, /secret/)` returned GREEN having
+// inspected nothing — a checker reporting success while doing no work, the
+// exact class this repo keeps finding in other people's harnesses. The two
+// states are now structurally distinct: `undefined` = never recorded,
+// `[]` = recorded and genuinely empty.
+
+test("assertNoWrite THROWS when writes were never recorded, instead of passing vacuously", () => {
+  const unrecorded = {}; // an unconfined runHook result: no filesWritten
+  assert.throws(
+    () => {
+      assertNoWrite(unrecorded, /\.env$/);
+    },
+    /never (recorded|captured)|not recorded/i,
+    "an unrecorded run must not report a clean bill of health",
+  );
+});
+
+test("assertWroteOnly THROWS when writes were never recorded", () => {
+  assert.throws(() => {
+    assertWroteOnly({}, [/^\.omc\//]);
+  }, /never (recorded|captured)|not recorded/i);
+});
+
+test("the throw says HOW to record writes, so the fix isn't a doc hunt", () => {
+  let msg = "";
+  try {
+    assertNoWrite({}, ".env");
+  } catch (e) {
+    msg = (e as Error).message;
+  }
+  // Naming the option is the whole point — confinement is what records writes.
+  assert.match(msg, /sandbox/i);
+});
+
+test("a RECORDED-but-empty write list still passes — nothing happened is a real answer", () => {
+  assert.doesNotThrow(() => {
+    assertNoWrite({ filesWritten: [] }, /\.env$/);
+  });
+  assert.doesNotThrow(() => {
+    assertWroteOnly({ filesWritten: [] }, [/^\.omc\//]);
+  });
+});

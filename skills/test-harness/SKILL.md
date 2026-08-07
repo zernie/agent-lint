@@ -187,24 +187,32 @@ unrepresentable:
 
 | Runner           | Result              | Carries                                             |
 | ---------------- | ------------------- | --------------------------------------------------- |
-| `runHook`        | `HookRunResult`     | `exitCode`, `stdout`, `stderr`, `blocked`           |
+| `runScript`      | `ScriptRunResult`   | `exitCode`, `stdout`, `stderr`, `filesWritten?`     |
+| `runHook`        | `HookRunResult`     | all of the above, **plus** `blocked` / `decision`   |
 | `runHarnessTest` | `HarnessTestResult` | `exitCode`, `stdout`, `stderr`, `cwd` + the `Trace` |
 
 **Testing a plain helper script** (a bash/node/python program that isn't a hook)?
-`runHook` is the right tier: it runs any command, pipes it the event JSON on
-stdin (a script that ignores stdin simply ignores it), and hands back exit code
-plus both streams.
+Use **`runScript`** — it runs any command and reports what it did:
 
 ```ts
-const r = runHook("bash scripts/check-links.sh", {}, { cwd: repoDir });
+import { runScript } from "vigiles/testing";
+
+const r = runScript("bash scripts/check-links.sh", { cwd: repoDir });
 assert.equal(r.exitCode, 0);
 assert.match(r.stderr, /0 broken links/); // advisory output lives HERE
 ```
 
-⚠️ One real limit: `r.filesWritten` is recorded only on **confined** runs, so
-`assertNoWrite` / `assertWroteOnly` pass **vacuously** after a plain unconfined
-run. Pass `{ sandbox: "auto" }` (Linux + bubblewrap) when you actually need to
-assert on what the script wrote.
+`runHook` is exactly `runScript` plus the hook protocol (event → stdin, exit code
+→ allow/deny). Pick by the question you're asking: a **hook** has a _decision_, a
+**script** has _effects_. That's why `ScriptRunResult` has no `decision` field —
+a field that is always meaningless is worse than no field.
+
+⚠️ **Asserting what a script wrote requires confinement.** `filesWritten` is
+recorded by diffing the work dir, which only a confined run does — so it is
+`undefined` after a plain run. That is deliberately _not_ the same as `[]`
+("recorded, wrote nothing"): `assertNoWrite` / `assertWroteOnly` **throw** on an
+unrecorded result rather than pass having inspected nothing. Pass
+`{ sandbox: "auto" }` (Linux + bubblewrap) to actually record writes.
 
 ## Step 4 — Run it
 

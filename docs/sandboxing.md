@@ -46,7 +46,7 @@ kernel.apparmor_restrict_unprivileged_userns=0` (see `.github/workflows/ci.yml`)
 1. ❌ **Reading is NOT isolated.** The whole host `/` is mounted read-only, so a hook can `cat /home/you/.ssh/id_rsa` or `cat /home/you/.aws/credentials`. Environment secrets are cleared (`--clearenv`, so `ANTHROPIC_API_KEY` isn't visible), but **secrets on disk are readable**. What saves you is that egress is blocked — it can read but can't send. (A future `strictFs` mode would bind a minimal rootfs instead of all of `/`, at the cost of compatibility.)
 2. ⚠️ **Only Tier A.** With `sandbox: false` / trusted-inline, the hook runs with **full host access** — `rm -rf ~` really deletes your home. That's by design (it's code you wrote), but it means the protection above applies only to _confined_ runs.
 
-**Record what it wrote.** A confined `runHook` also reports the files the hook touched in its work dir (`r.filesWritten`, relative paths) — so you can assert a hook stayed in its lane:
+**Record what it wrote.** A confined `runHook` / `runScript` also reports the files it touched in its work dir (`r.filesWritten`, relative paths) — so you can assert it stayed in its lane:
 
 ```ts
 import { assertWroteOnly, assertNoWrite } from "vigiles/testing";
@@ -56,6 +56,15 @@ const r = runHook(thirdPartyHookCmd, event, { trusted: false });
 assertWroteOnly(r, [/^\.omc\//]); // only its own state cache
 assertNoWrite(r, /\.(env|pem|key)$/); // never a secret-shaped file
 ```
+
+🔴 **Recording requires confinement, and an unrecorded run refuses.** The write list comes from diffing the work dir before and after, which only happens under confinement. An **unconfined** run therefore leaves `filesWritten` as **`undefined`** — which is deliberately _not_ `[]`:
+
+| Value       | Means                                      |
+| ----------- | ------------------------------------------ |
+| `undefined` | nobody looked — writes were never recorded |
+| `[]`        | looked, and it wrote nothing               |
+
+`assertNoWrite` / `assertWroteOnly` **throw** on `undefined` rather than return green, and the message tells you to pass `{ sandbox: "auto" }`. Collapsing the two would let a write assertion report success having inspected no evidence — a checker that passes while doing nothing is precisely what vigiles exists to catch elsewhere, so it must not be the default here.
 
 Dogfood: `src/run-hook.test.ts` confines oh-my-claudecode's `keyword-detector` and asserts it writes **only** under `.omc/` — its keyword-state cache, nothing else.
 

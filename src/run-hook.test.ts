@@ -14,6 +14,7 @@ import {
   assertNoEgress,
   assertEgressOnly,
   assertWroteOnly,
+  assertNoWrite,
 } from "./harness-assert.js";
 import {
   runHook,
@@ -22,9 +23,8 @@ import {
   decideHook,
   propertyHook,
   type HookOutput,
-  type RunHookDeps,
-  type HookSpawnResult,
 } from "./run-hook.js";
+import type { RunScriptDeps, ScriptSpawnResult } from "./run-script.js";
 import { sandboxAvailable } from "./sandbox.js";
 
 test("propertyHook: holds for a correct guard, finds a counterexample for a buggy one", () => {
@@ -188,7 +188,7 @@ test("runHook: governs MCP tools by name (no server needed)", () => {
 
 // --- the sandbox seam (runHookWith with fake spawners) ---------------------
 
-const spawnRes = (o: Partial<HookSpawnResult> = {}): HookSpawnResult => ({
+const spawnRes = (o: Partial<ScriptSpawnResult> = {}): ScriptSpawnResult => ({
   status: 0,
   signal: null,
   stdout: "",
@@ -198,7 +198,7 @@ const spawnRes = (o: Partial<HookSpawnResult> = {}): HookSpawnResult => ({
 
 test("runHookWith routes direct vs sandbox by policy, refuses when unavailable", () => {
   let used = "";
-  const deps = (available: boolean): RunHookDeps => ({
+  const deps = (available: boolean): RunScriptDeps => ({
     available,
     egressAvailable: available,
     direct: () => {
@@ -235,7 +235,7 @@ test("runHookWith routes direct vs sandbox by policy, refuses when unavailable",
 
 test("runHookWith: trusted:false confines by default, refuses without bwrap", () => {
   let used = "";
-  const deps = (available: boolean): RunHookDeps => ({
+  const deps = (available: boolean): RunScriptDeps => ({
     available,
     egressAvailable: available,
     direct: () => {
@@ -280,7 +280,7 @@ test("runHookWith: trusted:false confines by default, refuses without bwrap", ()
 
 test("runHookWith routes egress:{allow} to the egress seam, refuses when unavailable", () => {
   let used = "";
-  const deps = (egressAvailable: boolean): RunHookDeps => ({
+  const deps = (egressAvailable: boolean): RunScriptDeps => ({
     available: true,
     egressAvailable,
     direct: () => {
@@ -326,7 +326,7 @@ test("runHookWith routes egress:{allow} to the egress seam, refuses when unavail
 });
 
 test("runHookWith maps a signal kill to exit 1", () => {
-  const deps: RunHookDeps = {
+  const deps: RunScriptDeps = {
     available: true,
     egressAvailable: true,
     direct: () => spawnRes({ status: null, signal: "SIGKILL" }),
@@ -438,6 +438,8 @@ test.skipIf(!sandboxAvailable())(
       },
       { sandbox: "auto", env: { CLAUDE_PLUGIN_ROOT: root }, timeoutMs: 30000 },
     );
+    // A confined run RECORDS writes, so this is a real list, not `undefined`.
+    assert.ok(r.filesWritten, "a confined run records writes");
     assert.ok(r.filesWritten.length > 0, "it writes its state cache");
     assertWroteOnly(r, [/^\.omc\//]); // …and only under .omc/
   },
@@ -479,13 +481,22 @@ test("a failing script still surfaces its stdout AND stderr, not an exception", 
   assert.equal(r.stderr, "boom\n");
 });
 
-test("filesWritten is EMPTY on an unconfined run — so a write assertion is vacuous there", () => {
-  // The skill warns about this explicitly: `assertNoWrite`/`assertWroteOnly`
-  // read `filesWritten`, which is only recorded under confinement. Pinned so
-  // the warning stays true (and so a future always-on snapshot must update it).
+test("an unconfined run leaves filesWritten UNDEFINED — and a write assertion refuses rather than passing", () => {
+  // The regression this locks: the script below DOES write a file. Previously
+  // an unconfined run reported `filesWritten: []`, so `assertNoWrite` returned
+  // GREEN against a run that had just written — success with no evidence
+  // inspected. Now the absence of a recording is visible in the data, and the
+  // assertion refuses.
   const dir = mkdtempSync(join(tmpdir(), "vigiles-script-"));
   writeFileSync(join(dir, "w.sh"), "echo hi > wrote-a-file.txt\n");
   const r = runHook("bash w.sh", {}, { cwd: dir });
   assert.equal(r.exitCode, 0);
-  assert.deepEqual([...r.filesWritten], []);
+  assert.equal(r.filesWritten, undefined, "unconfined records nothing");
+  assert.throws(
+    () => {
+      assertNoWrite(r, "wrote-a-file.txt");
+    },
+    /never recorded/i,
+    "must not green-light a run whose writes were never captured",
+  );
 });

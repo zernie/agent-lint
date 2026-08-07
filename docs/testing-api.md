@@ -6,6 +6,7 @@ how-to; this is the reference you reach for when you need the exact name or knob
 
 ## Contents
 
+- [Picking a runner](#picking-a-runner)
 - [The `Trace` model](#the-trace-model)
 - [Predicates](#predicates)
 - [Assertions](#assertions)
@@ -16,6 +17,37 @@ how-to; this is the reference you reach for when you need the exact name or knob
 - [`runEval`, `measure`, `measureArms`](#runeval-measure-measurearms)
 - [Significance &amp; regression gating](#significance--regression-gating)
 - [Imports &amp; harness selection](#imports--harness-selection)
+
+## Picking a runner
+
+Four runners, keyed on the question you actually have. The first three are free
+and deterministic; only the last needs a model.
+
+| Your question                                                  | Runner                           | Result              | Cost                |
+| -------------------------------------------------------------- | -------------------------------- | ------------------- | ------------------- |
+| does my **helper script** do what it claims?                   | `runScript`                      | `ScriptRunResult`   | free                |
+| does my **hook** block what it says it blocks?                 | `runHook`                        | `HookRunResult`     | free                |
+| does the **assembled harness** behave (hooks+settings+skills)? | `runHarnessTest`                 | `HarnessTestResult` | free, needs the CLI |
+| does the **real model** pick my skill / do the job?            | `measureTriggerRate` / `runEval` | reports             | **paid**            |
+
+`runHarnessTest` is deterministic and **free** despite its `model:` field — those
+are _scripted_ turns (`ModelTurn[]`) served by a mock. Nothing reaches a real
+model at that tier.
+
+**`runScript` is the primitive; `runHook` is it plus the hook protocol** (event →
+stdin, exit code → allow/deny). A **hook** has a _decision_; a **script** has
+_effects_ — so `ScriptRunResult` deliberately carries no `decision` field.
+
+**Both streams, always.** `ScriptRunResult`, `HookRunResult` and
+`HarnessTestResult` all carry `stdout` **and** `stderr`. That matters more than
+it looks: advisory output — including vigiles's own compiled-hook `notice()` —
+goes to **stderr**, so a hand-rolled `execFileSync` runner (which returns stdout
+alone on success) silently deletes it and reports a healthy react hook as dead.
+
+**`filesWritten` is `undefined` until something records it.** Writes are captured
+by diffing the work dir, which only a confined run does. `undefined` means
+"nobody looked"; `[]` means "looked, wrote nothing" — `assertNoWrite` /
+`assertWroteOnly` throw on the former instead of passing vacuously.
 
 ## The `Trace` model
 

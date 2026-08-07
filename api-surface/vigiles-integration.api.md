@@ -368,22 +368,10 @@ export interface HookPropertyResult<E> {
 }
 
 // @public (undocumented)
-export interface HookRunResult {
+export interface HookRunResult extends ScriptRunResult {
     readonly blocked: boolean;
     readonly decision: HookOutput["decision"] | "allow" | "deny" | "ask" | undefined;
-    readonly egress: readonly EgressAttempt[];
-    readonly egressDropped?: {
-        readonly packets: number;
-        readonly bytes: number;
-    };
-    // (undocumented)
-    readonly exitCode: number;
-    readonly filesWritten: readonly string[];
     readonly json: HookOutput | null;
-    // (undocumented)
-    readonly stderr: string;
-    // (undocumented)
-    readonly stdout: string;
 }
 
 // @public
@@ -522,8 +510,14 @@ export interface RunHarnessTestOptions {
 // @public
 export function runHook(command: string, input: HookInput, opts?: RunHookOptions): HookRunResult;
 
+// @public
+export type RunHookOptions = Omit<RunScriptOptions, "stdin">;
+
+// @public
+export function runScript(command: string, opts?: RunScriptOptions): ScriptRunResult;
+
 // @public (undocumented)
-export interface RunHookOptions {
+export interface RunScriptOptions {
     readonly cwd?: string;
     readonly egress?: {
         readonly allow: readonly string[];
@@ -531,6 +525,7 @@ export interface RunHookOptions {
     readonly env?: Record<string, string>;
     readonly recordEgress?: boolean;
     readonly sandbox?: SandboxMode;
+    readonly stdin?: string;
     readonly timeoutMs?: number;
     readonly trusted?: boolean;
 }
@@ -540,6 +535,20 @@ export function sandboxAvailable(): boolean;
 
 // @public
 export type SandboxMode = "auto" | "strict" | false;
+
+// @public
+export interface ScriptRunResult {
+    readonly egress: readonly EgressAttempt[];
+    readonly egressDropped?: {
+        readonly packets: number;
+        readonly bytes: number;
+    };
+    readonly exitCode: number;
+    readonly filesWritten?: readonly string[];
+    readonly stderr: string;
+    // (undocumented)
+    readonly stdout: string;
+}
 
 // @public
 export function significantlyBeats(report: EvalReport, baseline: string, arm: string, metric: string, alpha?: number): boolean;
