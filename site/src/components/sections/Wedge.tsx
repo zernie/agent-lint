@@ -98,7 +98,7 @@ export function Wedge() {
           ))}
         </div>
 
-        {/* The resolution — one line (the five graded categories are shown live in
+        {/* The resolution — one line (the six categories are shown live in
             the report above, so we don't re-list them here), then the linter strip
             as Truthfulness's deepest detail. */}
         <div className="mt-16 border-t border-border pt-12">
@@ -106,9 +106,9 @@ export function Wedge() {
             <span className="font-semibold text-foreground">
               vigiles grades all of it
             </span>{" "}
-            — one deterministic, model-free score across five categories (see
-            the report above). The deepest check: every rule your instructions
-            name is resolved against your real linter — it must exist{" "}
+            — one deterministic, model-free score across six categories (see the
+            report above). The deepest check: every rule your instructions name
+            is resolved against your real linter — it must exist{" "}
             <span className="text-foreground">and</span> be enabled — across
             eleven linters, from JS to Rust to Go to Kotlin:
           </p>
