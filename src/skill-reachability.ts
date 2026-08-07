@@ -17,13 +17,31 @@
  * observed in a real consumer repo, where a full day went into re-deriving what
  * `test-harness` teaches while it sat three directories away.
  *
- * ⚠️ The part that is easy to get wrong, and did get wrong: the authoritative
- * record of a `claude plugin install` is the GLOBAL
- * `~/.claude/plugins/installed_plugins.json`. A repo's `.claude/settings.json`
- * carries PROJECT-level `enabledPlugins`, which a correctly-installed user-scope
- * plugin does not appear in. Judging "is it wired?" from `settings.json` alone
- * reports a working install as broken — that misread is what made this look like
- * an npm packaging bug. Both are checked here, and either one counts.
+ * ⚠️ The part that is easy to get wrong, and did get wrong TWICE, in opposite
+ * directions:
+ *
+ * 1. The authoritative record of a `claude plugin install` is the GLOBAL
+ *    `~/.claude/plugins/installed_plugins.json`. A repo's `.claude/settings.json`
+ *    carries PROJECT-level `enabledPlugins`, which a correctly-installed
+ *    user-scope plugin does not appear in. Judging "is it wired?" from
+ *    `settings.json` alone reports a working install as broken — the misread
+ *    that made this look like an npm packaging bug.
+ * 2. The converse is ALSO false: a project `enabledPlugins` entry does not make
+ *    the plugin load. Per the Claude Code docs (Discover plugins → "Configure
+ *    team marketplaces"), as of CC v2.1.195 — "A plugin that only the project's
+ *    `.claude/settings.json` enables, and that comes from an external source
+ *    such as a GitHub repository or npm package, doesn't load until the team
+ *    member installs it." vigiles ships from a GitHub marketplace, so that is
+ *    exactly our case. Committing `extraKnownMarketplaces` + `enabledPlugins`
+ *    makes Claude Code PROMPT each collaborator to install; it does not install.
+ *    Confirmed empirically: in a repo whose committed settings.json declares an
+ *    external plugin project-level, the global registry had no marketplace
+ *    entry, no cache dir, and no install record for it, while a plugin installed
+ *    the normal way on the same machine had all three.
+ *
+ * So a project declaration is a THIRD state — declared, not installed — that
+ * still warrants a warning, with a different fix line: the collaborator runs the
+ * install, the repo cannot run it for them.
  *
  * Shape follows `src/dialect-drift.ts`: pure parsers + a best-effort local read
  * that NEVER throws + a formatter that returns null when there is nothing to
@@ -41,13 +59,15 @@ import { SHIPPED_SKILLS } from "./setup-plan.js";
 /** The plugin id `claude plugin install` records — `<plugin>@<marketplace>`. */
 export const VIGILES_PLUGIN_ID = "vigiles@vigiles";
 
-/** Where a reachable install was found. */
+/**
+ * Where a reachable install was found. Deliberately does NOT include a project
+ * `enabledPlugins` entry: that declares the plugin, it does not install it (see
+ * the header). It is reported as {@link SkillReachability.declaredNotInstalled}.
+ */
 export type ReachabilitySource =
   /** `~/.claude/plugins/installed_plugins.json` — what `claude plugin install` writes. */
   | "global-plugin"
-  /** The repo's `.claude/settings.json` `enabledPlugins`. */
-  | "enabled-plugin"
-  /** The skills vendored into the repo's own `.claude/skills/`. */
+  /** The skills vendored into the repo's own `.claude/skills/` (standalone config, always loaded). */
   | "repo-skills";
 
 /** The advisory: can the agent see vigiles's skills from this repo? */
@@ -56,6 +76,13 @@ export interface SkillReachability {
   readonly reachable: boolean;
   /** Every source that resolved, in check order. Empty when un-wired. */
   readonly sources: readonly ReachabilitySource[];
+  /**
+   * The repo's `.claude/settings.json` enables the plugin, but no install was
+   * found. Claude Code will prompt this collaborator to install it; until they
+   * do, it does not load. A distinct state from "nothing configured at all",
+   * because the fix belongs to the person, not the repo.
+   */
+  readonly declaredNotInstalled: boolean;
   /**
    * Shipped skills found under `node_modules/vigiles/skills/` while UNREACHABLE
    * — present on disk, invisible to the agent. Empty when reachable (there is
@@ -166,10 +193,6 @@ export function checkSkillReachability(
   if (installed !== null && hasGlobalPluginInstall(installed))
     sources.push("global-plugin");
 
-  const settings = readOrNull(join(dir, ".claude", "settings.json"));
-  if (settings !== null && hasEnabledPlugin(settings))
-    sources.push("enabled-plugin");
-
   // Vendored copies: only vigiles's OWN skill names count. A repo with 38
   // unrelated skills in `.claude/skills/` is still un-wired.
   const repoSkills = new Set(dirNames(join(dir, ".claude", "skills")));
@@ -177,12 +200,20 @@ export function checkSkillReachability(
     sources.push("repo-skills");
 
   const reachable = sources.length > 0;
+
+  // A project declaration is NOT a source — it makes Claude Code prompt for an
+  // install, it does not perform one. Only meaningful while unreachable.
+  const settings = readOrNull(join(dir, ".claude", "settings.json"));
+  const declaredNotInstalled =
+    !reachable && settings !== null && hasEnabledPlugin(settings);
+
   const vendored = new Set(
     dirNames(join(dir, "node_modules", "vigiles", "skills")),
   );
   return {
     reachable,
     sources,
+    declaredNotInstalled,
     strandedSkills: reachable
       ? []
       : SHIPPED_SKILLS.filter((s) => vendored.has(s)),
@@ -204,12 +235,18 @@ export function formatSkillReachability(
       ? ` ${String(r.strandedSkills.length)} of them are sitting in ` +
         `node_modules/vigiles/skills/, which the agent never scans.`
       : "";
+  const why = r.declaredNotInstalled
+    ? `This repo DECLARES the vigiles plugin in .claude/settings.json, but a ` +
+      `project declaration doesn't install it — Claude Code loads an ` +
+      `external-source plugin only once each collaborator installs it on their ` +
+      `own machine.`
+    : `This repo depends on vigiles, but its plugin isn't installed.`;
   return (
-    `⚠ vigiles's skills are NOT reachable by your agent here. This repo depends on ` +
-    `vigiles, but its plugin isn't installed, so the shipped skills ` +
-    `(${SHIPPED_SKILLS.join(", ")}) can't be selected — including test-harness, ` +
-    `which picks the testing tier for you.${stranded}\n` +
-    `  Fix: claude plugin marketplace add zernie/vigiles && claude plugin install ${VIGILES_PLUGIN_ID}\n` +
+    `⚠ vigiles's skills are NOT reachable by your agent here. ${why} So the ` +
+    `shipped skills (${SHIPPED_SKILLS.join(", ")}) can't be selected — ` +
+    `including test-harness, which picks the testing tier for you.${stranded}\n` +
+    `  Fix (per machine): claude plugin marketplace add zernie/vigiles && ` +
+    `claude plugin install ${VIGILES_PLUGIN_ID}\n` +
     `  (or run \`vigiles init\`, which does both)`
   );
 }

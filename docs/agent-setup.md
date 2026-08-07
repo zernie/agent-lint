@@ -77,6 +77,28 @@ user-scope install. A repo's `.claude/settings.json` carries _project_-level
 `enabledPlugins`, and a correctly-installed user-scope plugin **does not appear
 there**; judging it from `settings.json` alone reports a working install as broken.
 
+### Why the plugin isn't wired per-repo
+
+A reasonable question: why not commit `extraKnownMarketplaces` + `enabledPlugins`
+to the repo's `.claude/settings.json`, so every clone gets vigiles? Because that
+is not what those keys do. Per the Claude Code
+[team-marketplaces docs](https://code.claude.com/docs/en/discover-plugins#configure-team-marketplaces),
+as of CC v2.1.195:
+
+> A plugin that only the project's `.claude/settings.json` enables, and that
+> comes from an external source such as a GitHub repository or npm package,
+> doesn't load until the team member installs it. Until then, Claude Code reports
+> the plugin as not installed and shows the `claude plugin install` command to run.
+
+vigiles ships from a GitHub marketplace, so that is exactly our case. Committing
+those keys makes Claude Code **prompt** each collaborator to install — useful,
+but it does not install, and a fresh clone or a CI job still has no plugin.
+Plugins can execute arbitrary code with your privileges, so requiring a
+per-machine, trusted install is deliberate, not an oversight.
+
+That is why the reachability warning above is **advisory and never scored**: it
+reports machine state that no repo-committed file can determine.
+
 ### Codex / GitHub Copilot
 
 Instruction file: `AGENTS.md`, read directly — there is no plugin or hook system.

@@ -140,21 +140,63 @@ test("a user-scope install in the GLOBAL registry counts as reachable, even when
   }
 });
 
-test("a project-level enabledPlugins entry counts as reachable", () => {
+test("a project-level enabledPlugins entry is NOT reachable on its own — Claude Code still requires an install", () => {
+  // Per the Claude Code docs (Discover plugins → "Configure team marketplaces"),
+  // as of CC v2.1.195: "A plugin that only the project's `.claude/settings.json`
+  // enables, and that comes from an external source such as a GitHub repository
+  // or npm package, doesn't load until the team member installs it."
+  // vigiles ships from a GitHub marketplace, so it is exactly that case.
+  // Treating this as reachable would silence the warning for a repo that is in
+  // fact un-wired — the precise failure the check exists to prevent.
   const s = scaffold({
     settings: JSON.stringify({ enabledPlugins: { "vigiles@vigiles": true } }),
   });
   try {
     const r = checkSkillReachability(s.dir, { home: s.home });
     assert.ok(r);
-    assert.equal(r.reachable, true);
-    assert.deepEqual([...r.sources], ["enabled-plugin"]);
+    assert.equal(r.reachable, false);
+    assert.deepEqual([...r.sources], []);
+    assert.equal(r.declaredNotInstalled, true);
   } finally {
     s.cleanup();
   }
 });
 
-test("enabledPlugins set to FALSE is not reachable — an explicit disable is not an install", () => {
+test("declared-but-not-installed says so specifically, and names the per-machine install", () => {
+  const s = scaffold({
+    settings: JSON.stringify({ enabledPlugins: { "vigiles@vigiles": true } }),
+  });
+  try {
+    const msg = formatSkillReachability(
+      checkSkillReachability(s.dir, { home: s.home }),
+    );
+    assert.ok(msg);
+    // It must NOT read as "you forgot to configure it" — the repo DID declare
+    // it. The missing step is the per-machine install.
+    assert.match(msg, /declares/i);
+    assert.match(msg, /claude plugin install vigiles@vigiles/);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test("a global install PLUS a project declaration is reachable — the declaration is not harmful, just insufficient", () => {
+  const s = scaffold({
+    installedPlugins: INSTALLED,
+    settings: JSON.stringify({ enabledPlugins: { "vigiles@vigiles": true } }),
+  });
+  try {
+    const r = checkSkillReachability(s.dir, { home: s.home });
+    assert.ok(r);
+    assert.equal(r.reachable, true);
+    assert.deepEqual([...r.sources], ["global-plugin"]);
+    assert.equal(formatSkillReachability(r), null);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test("enabledPlugins set to FALSE is not reachable, and is not 'declared' either", () => {
   const s = scaffold({
     settings: JSON.stringify({ enabledPlugins: { "vigiles@vigiles": false } }),
   });
@@ -162,6 +204,7 @@ test("enabledPlugins set to FALSE is not reachable — an explicit disable is no
     const r = checkSkillReachability(s.dir, { home: s.home });
     assert.ok(r);
     assert.equal(r.reachable, false);
+    assert.equal(r.declaredNotInstalled, false);
   } finally {
     s.cleanup();
   }
