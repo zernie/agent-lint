@@ -50,6 +50,12 @@ import {
   DEFAULT_LOCK_DIR,
 } from "./eval-lock.js";
 import { applyConfigFlags } from "./cli-flags.js";
+import { VERBS, type Verb } from "./cli-commands.js";
+import {
+  formatUnknownFlag,
+  knownFlagsFor,
+  unknownFlags,
+} from "./cli-flag-check.js";
 import {
   parseSetupArgs,
   shouldPrompt,
@@ -5304,44 +5310,113 @@ function capabilitiesOfReport(
   return computeHarnessCapabilities(agents, dialect);
 }
 
+/**
+ * The help text, ONE entry per verb, so `vigiles --help` (all of them) and
+ * `vigiles <verb> --help` (one of them) cannot drift apart. `vigiles audit
+ * --help` used to RUN AN AUDIT — help lived only on the bare invocation — which
+ * is the least helpful possible response to someone asking what a flag is
+ * called, and part of the same defect as silently swallowing an unknown flag.
+ */
+interface CommandHelp {
+  /** The signature line, aligned with its description in the banner. */
+  readonly usage: string;
+  /** Continuation lines (flags, caveats), indented under the signature. */
+  readonly detail?: readonly string[];
+}
+
+const COMMAND_HELP: Record<Verb, CommandHelp> = {
+  init: {
+    usage:
+      "  vigiles init [flags]           Setup project (--ci-only for the CI gate only; --lint, --test, --harness=, --strict, --report-only, --no-gha, --force)",
+  },
+  compile: { usage: "  vigiles compile [files...]     Compile .spec.ts → .md" },
+  eject: {
+    usage:
+      "  vigiles eject [file]           Un-manage a compiled file → plain hand-owned markdown (--keep-spec)",
+  },
+  lint: {
+    usage:
+      "  vigiles lint [files...]        Verify references, find gaps in instruction files",
+  },
+  audit: {
+    usage:
+      "  vigiles audit [dir...]          Lighthouse for your harness — a LOCAL report: rings + what's broken + fixes (a deterministic read; 2+ dirs → leaderboard)",
+    detail: [
+      "                                 writes vigiles-report.html + .json (auto-gitignored; --out=<dir> · --no-html/--no-json · --no-open · --json for machine output). NOT a CI step — use `vigiles lint` in CI.",
+      "                                 the executing checks (run your hooks · live MCP · do skills fire?) run only interactively — `audit` asks once (remembered); automation uses the vigiles/testing API",
+      "                                 --serve opens a LIVE local report whose buttons create specs in one click (own repo only; loopback + token-guarded) · --no-serve to skip the prompt",
+    ],
+  },
+  test: {
+    usage:
+      "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
+  },
+  eval: {
+    usage:
+      "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N, --min=N, --no-skip)",
+    detail: [
+      "                                 --update records each named eval's result to a committed lock (run locally on your subscription)",
+      "                                 --check verifies committed eval results against current inputs WITHOUT a model — the CI staleness gate",
+    ],
+  },
+  generate: {
+    usage:
+      "  vigiles generate <kind>       Emit a dev-toolchain artifact: types (.d.ts) · schema (JSON Schema) · harness (harness.gen.ts)",
+    detail: [
+      "  vigiles generate <kind> --check  Verify the generated file is up to date",
+    ],
+  },
+  "hook-runtime": {
+    usage:
+      "  vigiles hook-runtime <kind>   (emitted into hooks configs — never typed by hand)",
+  },
+};
+
+/** Display order of the human-facing verbs in the banner's "Commands:" block. */
+const HELP_ORDER: readonly Verb[] = [
+  "init",
+  "compile",
+  "eject",
+  "lint",
+  "audit",
+  "test",
+  "eval",
+];
+
+function printHelpEntry(v: Verb): void {
+  console.log(COMMAND_HELP[v].usage);
+  for (const line of COMMAND_HELP[v].detail ?? []) console.log(line);
+}
+
+/**
+ * The loud "there is nothing here to audit" block. Deliberately says WHAT was
+ * looked at and WHY it found nothing, because the commonest cause is that the
+ * target isn't the directory the operator thinks it is.
+ */
+function formatNothingToAudit(root: string, harness: string): string {
+  return [
+    `✗ vigiles audit: nothing to audit in ${root}`,
+    `  No instruction file and no ${harness} surface (skills / subagents / hooks / commands / MCP) was found there.`,
+    "  This is NOT a grade — there was nothing to measure, so no score is reported.",
+    "  Check that the path is the repo you meant, and that a flag didn't swallow it",
+    "  (flags take values with `=`: `--out=dir`, never `--out dir`).",
+  ].join("\n");
+}
+
+/** `vigiles <verb> --help` — that verb's entry plus its complete flag list. */
+function printCommandHelp(command: Verb): void {
+  printHelpEntry(command);
+  const flags = knownFlagsFor(command);
+  console.log("");
+  console.log(`Flags: ${[...flags].sort().join(" ")}`);
+  console.log("(`vigiles --help` lists every command.)");
+}
+
 function printUsage(command: string | undefined): void {
   console.log("vigiles — compile typed specs to instruction files");
   console.log("");
   console.log("Commands:");
-  console.log(
-    "  vigiles init [flags]           Setup project (--ci-only for the CI gate only; --lint, --test, --harness=, --strict, --report-only, --no-gha, --force)",
-  );
-  console.log("  vigiles compile [files...]     Compile .spec.ts → .md");
-  console.log(
-    "  vigiles eject [file]           Un-manage a compiled file → plain hand-owned markdown (--keep-spec)",
-  );
-  console.log(
-    "  vigiles lint [files...]        Verify references, find gaps in instruction files",
-  );
-  console.log(
-    "  vigiles audit [dir...]          Lighthouse for your harness — a LOCAL report: rings + what's broken + fixes (a deterministic read; 2+ dirs → leaderboard)",
-  );
-  console.log(
-    "                                 writes vigiles-report.html + .json (auto-gitignored; --out=<dir> · --no-html/--no-json · --no-open · --json for machine output). NOT a CI step — use `vigiles lint` in CI.",
-  );
-  console.log(
-    "                                 the executing checks (run your hooks · live MCP · do skills fire?) run only interactively — `audit` asks once (remembered); automation uses the vigiles/testing API",
-  );
-  console.log(
-    "                                 --serve opens a LIVE local report whose buttons create specs in one click (own repo only; loopback + token-guarded) · --no-serve to skip the prompt",
-  );
-  console.log(
-    "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
-  );
-  console.log(
-    "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N, --min=N, --no-skip)",
-  );
-  console.log(
-    "                                 --update records each named eval's result to a committed lock (run locally on your subscription)",
-  );
-  console.log(
-    "                                 --check verifies committed eval results against current inputs WITHOUT a model — the CI staleness gate",
-  );
+  for (const v of HELP_ORDER) printHelpEntry(v);
   console.log("");
   console.log("Examples:");
   console.log(
@@ -5353,12 +5428,7 @@ function printUsage(command: string | undefined): void {
   );
   console.log("");
   console.log("Plumbing:");
-  console.log(
-    "  vigiles generate <kind>       Emit a dev-toolchain artifact: types (.d.ts) · schema (JSON Schema) · harness (harness.gen.ts)",
-  );
-  console.log(
-    "  vigiles generate <kind> --check  Verify the generated file is up to date",
-  );
+  printHelpEntry("generate");
   console.log("  vigiles --version             Print the version number");
   if (command && command !== "--help") {
     console.log(`\nUnknown command: "${command}"`);
@@ -6875,6 +6945,31 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Refuse an argument we did not understand, BEFORE anything runs. Every verb
+  // parses its own flags by asking `args.includes("--x")` and ignoring the rest,
+  // so `audit --this-flag-does-not-exist` used to run a complete audit and exit
+  // 0. audit's flags govern what LEAVES the machine (`--no-html`, `--no-json`,
+  // `--out=`, `--serve`), so a typo silently produced the opposite of what was
+  // asked for. `<verb> --help` is handled here too: it used to fall through and
+  // RUN the verb, the least useful answer to "what is this flag called?".
+  // `hook-runtime` is exempt — its argv comes from the harness, not a human.
+  if (VERBS.includes(command as Verb) && command !== "hook-runtime") {
+    const flagArgs = args.slice(1);
+    if (flagArgs.includes("--help")) {
+      printCommandHelp(command as Verb);
+      return;
+    }
+    const bad = unknownFlags(command, flagArgs);
+    if (bad.length > 0) {
+      for (const flag of bad) console.error(formatUnknownFlag(command, flag));
+      // 2, not 1. Across this CLI, 1 means "I ran, and the thing you asked about
+      // is bad" (lint findings, a failing harness script); 2 means "I could not
+      // do what you asked" (the top-level error handler, `eval`'s refusal,
+      // `generate` with an unknown kind). A misspelled flag is the second.
+      process.exit(2);
+    }
+  }
+
   const restArgs = args.slice(1).filter((a) => !a.startsWith("--"));
   // Shared flags (--max-rules, --catalog-only) override the loaded config so
   // every GitHub Action input maps to a real CLI flag. See src/cli-flags.ts.
@@ -7121,6 +7216,31 @@ async function main(): Promise<void> {
           firingMeasured,
         });
         const sc = auditReportBase.score;
+        // NOTHING TO AUDIT is not a bad grade — and it used to be reported as
+        // one. `score.empty` means the target has no instruction file AND no
+        // surface: there was never anything to measure. That printed as rings of
+        // `F (0)` at exit 0, which is BYTE-INDISTINGUISHABLE from a genuine audit
+        // of a harness that scores badly. The way it actually bit: `vigiles audit
+        // --json /some/path` — `--json` takes no value, so the path fell through
+        // to the positional scan dir, the audit ran over a directory with no
+        // harness in it, and reported `skills: 0`, grade F, exit 0. A confident
+        // measurement of the wrong object, silently. The flag check added
+        // alongside this does NOT catch that one — `--json` is a real flag and
+        // `audit --json ./dir` is legitimate — so THIS branch is what makes it
+        // visible, and it covers every other way of pointing at the wrong place
+        // too (a moved repo, a bad `$PWD`, a path that doesn't exist).
+        //
+        // Exit 2, matching the unknown-flag decision above: 1 is "I measured, and
+        // it's bad"; 2 is "I could not do what you asked". A script that greps for
+        // a grade needs those to differ, and a grade is exactly what this run does
+        // NOT have. `--json` still emits the report (it self-describes with
+        // `score.empty: true`), so a machine consumer keeps its contract; the
+        // human-readable explanation goes to stderr either way.
+        if (sc.empty) {
+          if (json) console.log(JSON.stringify(auditReportBase, null, 2));
+          console.error(formatNothingToAudit(root, adapter.name));
+          process.exit(2);
+        }
         const plan = optimize(report);
         // The deterministic READ leads: rings + report + fixes + nudges print
         // BEFORE the consent prompt, so a plain `audit` shows its findings first.

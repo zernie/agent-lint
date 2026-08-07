@@ -29,6 +29,9 @@ import { join, resolve, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 
+import { VERBS } from "./cli-commands.js";
+import { knownFlagsFor } from "./cli-flag-check.js";
+
 // __dirname is src/ when vitest resolves the .ts source → ".." is the repo root.
 const CLI = resolve(__dirname, "..", "dist", "cli.js");
 const VENDOR = resolve(__dirname, "..", "test/dogfood");
@@ -246,7 +249,11 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
     // ignored config.harness and reported claude-code. Config resolves from the
     // cwd (like `lint`), so run audit from INSIDE the fixture.
     const r = run("audit .", join(root, "cfgharness"));
-    assert.equal(r.exitCode, 0);
+    // Exit 2, not 0: scanned AS CODEX this fixture holds no AGENTS.md and no
+    // codex surface, so there is nothing to measure — which `audit` now reports
+    // as a distinct outcome instead of a silent grade F at exit 0. The harness
+    // resolution (the point of this test) is unchanged and still printed.
+    assert.equal(r.exitCode, 2);
     assert.match(r.stdout, /Detected harness: codex/);
     // A single configured harness is unambiguous → no override notice.
     assert.doesNotMatch(r.stdout, /repo matches/);
@@ -978,5 +985,164 @@ describe("audit share-link only for a whole-repo audit (Codex review)", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+// ── Argument handling: refuse what we didn't understand ──────────────────────
+// MEASURED before the fix:
+//   $ npx vigiles audit --this-flag-does-not-exist
+//   Detected harness: claude-code … a complete audit … EXIT=0
+// audit's flags decide what LEAVES the machine (--no-html, --no-json, --out=,
+// --serve), so `--no-htlm` silently wrote the HTML report the author believed
+// they had suppressed.
+
+describe("unknown flags are refused, not swallowed", () => {
+  it("audit: an unknown flag stops the run with a non-zero exit and names it", () => {
+    const r = run("audit --this-flag-does-not-exist");
+    assert.equal(r.exitCode, 2, r.stdout + r.stderr);
+    assert.match(r.stderr, /unknown flag "--this-flag-does-not-exist"/);
+    assert.doesNotMatch(
+      r.stdout,
+      /Detected harness/,
+      "nothing may run before the argument is understood",
+    );
+  });
+
+  it("audit: a TYPO of a real flag suggests the real one", () => {
+    const r = run("audit --no-htlm");
+    assert.equal(r.exitCode, 2);
+    assert.match(r.stderr, /Did you mean `--no-html`\?/);
+  });
+
+  it("the hole is closed on every verb, not only audit", () => {
+    // Run from a THROWAWAY cwd. If this guard ever regresses, `init
+    // --definitely-not-a-flag` runs a real `vigiles init`, which writes specs, a
+    // workflow and a config into whatever directory the test happened to be in —
+    // observed once, in this repo, while proving the fix by reverting it.
+    const sandbox = mkdtempSync(join(tmpdir(), "scan-flags-"));
+    try {
+      for (const verb of ["lint", "test", "eval", "compile", "eject", "init"]) {
+        const r = run(`${verb} --definitely-not-a-flag`, sandbox);
+        assert.equal(
+          r.exitCode,
+          2,
+          `${verb} accepted an unknown flag: ${r.stdout}${r.stderr}`,
+        );
+        assert.match(r.stderr, /unknown flag "--definitely-not-a-flag"/);
+      }
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
+  it("real flags still work (the fix must not over-reject)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "scan-flagok-"));
+    try {
+      writeFileSync(join(dir, "CLAUDE.md"), "# repo\nRun `npm test`.\n");
+      const audit = run(`audit ${dir} --no-open --harness=claude-code`);
+      assert.equal(audit.exitCode, 0, audit.stdout + audit.stderr);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("`vigiles <verb> --help` prints help instead of running the verb", () => {
+  it("audit --help does not audit", () => {
+    const r = run("audit --help");
+    assert.equal(r.exitCode, 0, r.stderr);
+    assert.match(r.stdout, /vigiles audit \[dir\.\.\.\]/);
+    assert.match(r.stdout, /^Flags: /m);
+    assert.doesNotMatch(
+      r.stdout,
+      /Detected harness/,
+      "asking what a flag is called must not run the command",
+    );
+  });
+
+  it("every verb answers --help", () => {
+    // Same throwaway cwd for the same reason: a regression here means the verb
+    // RUNS, and `init` running is a side effect on whatever dir we are in.
+    const sandbox = mkdtempSync(join(tmpdir(), "scan-help-"));
+    try {
+      for (const verb of ["init", "compile", "eject", "lint", "test", "eval"]) {
+        const r = run(`${verb} --help`, sandbox);
+        assert.equal(r.exitCode, 0, `${verb} --help: ${r.stderr}`);
+        assert.match(r.stdout, new RegExp(`vigiles ${verb}`));
+      }
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("`nothing to audit here` is a distinct outcome, not a grade of F", () => {
+  // The measured trap: `vigiles audit --json /some/path` — `--json` takes no
+  // value, so the PATH became the positional scan dir, the audit ran over a
+  // directory with no harness, and printed `skills: 0`, grade F, EXIT 0. That is
+  // indistinguishable from a real audit of a repo that scores badly.
+  it("an empty target exits non-zero and says there was nothing to measure", () => {
+    const root = mkdtempSync(join(tmpdir(), "scan-empty-"));
+    try {
+      const r = run(`audit ${root}`);
+      assert.equal(r.exitCode, 2, r.stdout + r.stderr);
+      assert.match(r.stderr, /nothing to audit in/);
+      assert.match(r.stderr, /NOT a grade/);
+      assert.doesNotMatch(
+        r.stdout,
+        /Overall|Grade/i,
+        "no score may be printed for a target that was never measurable",
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("a real-but-bad harness still grades, and still exits 0", () => {
+    // The other side of the distinction: `audit` remains a read, so a repo that
+    // scores badly is NOT an error — only "there was nothing here" is.
+    const root = mkdtempSync(join(tmpdir(), "scan-bad-"));
+    try {
+      writeFileSync(join(root, "CLAUDE.md"), "# repo\nSee docs/nope.md\n");
+      const r = run(`audit ${root}`);
+      assert.equal(r.exitCode, 0, r.stdout + r.stderr);
+      assert.doesNotMatch(r.stderr, /nothing to audit/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("--json still emits the report for an empty target (machine contract kept)", () => {
+    const root = mkdtempSync(join(tmpdir(), "scan-empty-json-"));
+    try {
+      const r = run(`audit --json ${root}`);
+      assert.equal(r.exitCode, 2);
+      const parsed = JSON.parse(r.stdout) as { score: { empty: boolean } };
+      assert.equal(parsed.score.empty, true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("the flag registry and the help text can't drift apart", () => {
+  it("every flag the help text advertises is accepted by some verb", () => {
+    // The registry is derived from what the HANDLERS read. This is the other
+    // direction: a flag we document but forgot to register would now be
+    // rejected in a user's face, so fail here instead.
+    const help = run("--help").stdout;
+    const advertised = new Set(help.match(/--[a-z][a-z0-9-]*/g) ?? []);
+    // Top-level, handled before dispatch (not a verb flag).
+    advertised.delete("--version");
+    const accepted = new Set<string>();
+    for (const verb of VERBS)
+      for (const spec of knownFlagsFor(verb))
+        accepted.add(spec.endsWith("=") ? spec.slice(0, -1) : spec);
+    const missing = [...advertised].filter((f) => !accepted.has(f));
+    assert.deepEqual(
+      missing,
+      [],
+      `documented but unregistered: ${String(missing)}`,
+    );
   });
 });

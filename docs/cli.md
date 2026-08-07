@@ -27,6 +27,40 @@ npx vigiles generate schema         # Emit JSON Schema for vigiles: frontmatter 
 npx vigiles generate harness [dir]  # Emit harness.gen.ts — one typed registry over every spec (--check to verify)
 ```
 
+### Arguments the CLI does not recognise are refused
+
+Every verb **rejects an unknown flag** with a non-zero exit (`2`), names it, and
+suggests the nearest real one:
+
+```bash
+$ npx vigiles audit --no-htlm
+✗ vigiles audit: unknown flag "--no-htlm".
+  Did you mean `--no-html`?
+```
+
+This matters most on `audit`, whose flags decide what **leaves the machine**
+(`--no-html`, `--no-json`, `--out=<dir>`, `--serve`). A swallowed typo produced
+the opposite of what was asked for, silently. Value flags take their value with
+`=` only (`--out=dir`, never `--out dir`) — the space-separated form is rejected
+rather than being read as a positional.
+
+`vigiles <verb> --help` prints that verb's help and its complete flag list
+instead of running the verb.
+
+### Exit codes
+
+| Code | Meaning                                                                           |
+| ---- | --------------------------------------------------------------------------------- |
+| `0`  | ran, nothing blocking                                                             |
+| `1`  | ran, and what you asked about is bad — lint findings, a failing harness script    |
+| `2`  | **could not do what you asked** — unknown flag, unknown harness, nothing to audit |
+
+`audit` in particular exits `2` when the target has **no instruction file and no
+surface at all**: there was nothing to measure, so no grade is reported. That is
+deliberately distinct from a harness that was audited and scored badly (exit
+`0`) — a script must be able to tell "this repo is unhealthy" from "I was
+pointed at the wrong directory".
+
 `vigiles test` / `vigiles eval` run scripts in JS **or** TS and report each as
 **pass / skip / fail** — a tier that can't run (e.g. deterministic with no
 `claude`) reports a loud `⊘ SKIPPED`, tallied separately, never a fake green.
