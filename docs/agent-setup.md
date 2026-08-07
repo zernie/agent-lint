@@ -65,6 +65,18 @@ has to remember to compile:
 
 ⚠️ **Without the plugin**, run `vigiles compile` manually after editing specs. CI still catches stale files.
 
+⚠️ **`npm install vigiles` does NOT wire the skills.** The npm tarball ships them
+(it doubles as the plugin payload), so they land in `node_modules/vigiles/skills/`
+— a directory Claude Code never scans. Until the plugin install above has run, all
+six shipped skills, `test-harness` included, are present on disk and unselectable.
+`vigiles audit` says so out loud when it sees a repo in that state.
+
+Checking by hand? Look in **`~/.claude/plugins/installed_plugins.json`** for a
+`vigiles@vigiles` entry — that is what `claude plugin install` writes for a
+user-scope install. A repo's `.claude/settings.json` carries _project_-level
+`enabledPlugins`, and a correctly-installed user-scope plugin **does not appear
+there**; judging it from `settings.json` alone reports a working install as broken.
+
 ### Codex / GitHub Copilot
 
 Instruction file: `AGENTS.md`, read directly — there is no plugin or hook system.

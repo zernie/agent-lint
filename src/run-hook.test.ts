@@ -442,3 +442,50 @@ test.skipIf(!sandboxAvailable())(
     assertWroteOnly(r, [/^\.omc\//]); // …and only under .omc/
   },
 );
+
+// --- the contract the `test-harness` skill teaches for plain helper scripts ---
+//
+// A knowledgeable user hand-rolled an `execFileSync` runner to test 13 helper
+// scripts and hit the same bug three times: `execFileSync` returns stdout ALONE
+// on success, so advisory output — which tools (including vigiles's own compiled
+// hook `notice()`) write to stderr — vanished, and healthy react hooks were
+// reported dead. `runHook` is the tier for a plain program, and it carries BOTH
+// streams. These pin that promise so a refactor can't quietly invalidate the
+// skill's advice.
+
+test("runHook drives a plain helper script and returns BOTH streams, not just stdout", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vigiles-script-"));
+  writeFileSync(
+    join(dir, "check-links.sh"),
+    'echo "scanning..."\necho "0 broken links" >&2\nexit 0\n',
+  );
+  // A plain script ignores the event payload entirely — `{}` is fine.
+  const r = runHook("bash check-links.sh", {}, { cwd: dir });
+  assert.equal(r.exitCode, 0);
+  assert.equal(r.stdout, "scanning...\n");
+  // The load-bearing one: an execFileSync-shaped runner drops exactly this.
+  assert.equal(r.stderr, "0 broken links\n");
+});
+
+test("a failing script still surfaces its stdout AND stderr, not an exception", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vigiles-script-"));
+  writeFileSync(
+    join(dir, "fail.sh"),
+    'echo "partial output"\necho "boom" >&2\nexit 3\n',
+  );
+  const r = runHook("bash fail.sh", {}, { cwd: dir });
+  assert.equal(r.exitCode, 3);
+  assert.equal(r.stdout, "partial output\n");
+  assert.equal(r.stderr, "boom\n");
+});
+
+test("filesWritten is EMPTY on an unconfined run — so a write assertion is vacuous there", () => {
+  // The skill warns about this explicitly: `assertNoWrite`/`assertWroteOnly`
+  // read `filesWritten`, which is only recorded under confinement. Pinned so
+  // the warning stays true (and so a future always-on snapshot must update it).
+  const dir = mkdtempSync(join(tmpdir(), "vigiles-script-"));
+  writeFileSync(join(dir, "w.sh"), "echo hi > wrote-a-file.txt\n");
+  const r = runHook("bash w.sh", {}, { cwd: dir });
+  assert.equal(r.exitCode, 0);
+  assert.deepEqual([...r.filesWritten], []);
+});

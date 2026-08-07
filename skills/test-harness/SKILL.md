@@ -173,6 +173,39 @@ const report = await runEval({
 assertSignificant(report, { baseline: "off", arm: "on", metric: "ok" });
 ```
 
+### Never hand-roll the runner — it silently eats stderr
+
+Do **not** reach for `execFileSync` / `spawnSync` to drive the thing under test.
+The failure is quiet and repeats: `execFileSync` returns **stdout only** on
+success, while advisory output — including vigiles's own compiled-hook
+`notice()` — is written to **stderr**. A hand-rolled runner therefore reports a
+perfectly healthy react hook as **dead**, and an assertion about a warning can
+never pass. (Observed three times in one repo, twice after the first fix.)
+
+Every vigiles result already carries **both streams**, so the bug is
+unrepresentable:
+
+| Runner           | Result              | Carries                                             |
+| ---------------- | ------------------- | --------------------------------------------------- |
+| `runHook`        | `HookRunResult`     | `exitCode`, `stdout`, `stderr`, `blocked`           |
+| `runHarnessTest` | `HarnessTestResult` | `exitCode`, `stdout`, `stderr`, `cwd` + the `Trace` |
+
+**Testing a plain helper script** (a bash/node/python program that isn't a hook)?
+`runHook` is the right tier: it runs any command, pipes it the event JSON on
+stdin (a script that ignores stdin simply ignores it), and hands back exit code
+plus both streams.
+
+```ts
+const r = runHook("bash scripts/check-links.sh", {}, { cwd: repoDir });
+assert.equal(r.exitCode, 0);
+assert.match(r.stderr, /0 broken links/); // advisory output lives HERE
+```
+
+⚠️ One real limit: `r.filesWritten` is recorded only on **confined** runs, so
+`assertNoWrite` / `assertWroteOnly` pass **vacuously** after a plain unconfined
+run. Pass `{ sandbox: "auto" }` (Linux + bubblewrap) when you actually need to
+assert on what the script wrote.
+
 ## Step 4 — Run it
 
 In a runner (node:test / vitest / jest) the tests are plain async functions. Or

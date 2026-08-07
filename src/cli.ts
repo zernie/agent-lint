@@ -97,6 +97,10 @@ import {
 } from "./scan-trigger-suggest.js";
 import { checkDialectDrift, formatDialectDrift } from "./dialect-drift.js";
 import {
+  checkSkillReachability,
+  formatSkillReachability,
+} from "./skill-reachability.js";
+import {
   probePluginTriggers,
   formatBehavioralReport,
   measurePluginSelection,
@@ -7143,6 +7147,13 @@ async function main(): Promise<void> {
           if (adapter.name === "claude-code") {
             const drift = formatDialectDrift(checkDialectDrift());
             if (drift) console.log(drift);
+            // Adoption: this repo depends on vigiles, but can the agent SEE the
+            // skills it ships? `npm install` drops them in node_modules, which
+            // Claude Code never scans — the plugin install is what wires them,
+            // and until it runs the whole teaching surface is silently absent.
+            // Advisory only (machine state, not repo state) — never scored.
+            const reach = formatSkillReachability(checkSkillReachability(root));
+            if (reach) console.log(reach);
           }
           console.log("");
         }
