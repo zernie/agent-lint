@@ -24,13 +24,17 @@
         "key": "Triggering",
         "score": 92,
         "weight": 1,
-        "findings": ["1 near-identical skill description (wrong one fires)"]
+        "findings": [
+          "1 near-identical skill description (wrong one fires)"
+        ]
       },
       {
         "key": "Structure",
         "score": 92,
         "weight": 1,
-        "findings": ["1 unavailable agent tool (typo / never-available)"]
+        "findings": [
+          "1 unavailable agent tool (typo / never-available)"
+        ]
       },
       {
         "key": "Safety",
@@ -47,7 +51,20 @@
         "score": 91,
         "weight": 1,
         "advisory": true,
-        "findings": ["3 surfaces with no vigiles test/eval"]
+        "findings": [
+          "3 surfaces with no vigiles harness (deterministic, free)"
+        ]
+      },
+      {
+        "key": "Evaluated",
+        "score": null,
+        "weight": 1,
+        "advisory": true,
+        "notMeasured": true,
+        "findings": [
+          "3 surfaces whose firing was never measured",
+          "not measured — run `npx vigiles audit` interactively to measure, or add a `*.eval.mjs` (`measureTriggerRate`, vigiles/testing)"
+        ]
       }
     ],
     "empty": false
@@ -104,7 +121,11 @@
     "hooks": 1,
     "commands": 0,
     "mcp": false,
-    "untested": 3
+    "untested": 3,
+    "untestedHarness": 3,
+    "unevaluated": 3
   },
-  "brokenReferences": ["hooks/guard.sh"]
+  "brokenReferences": [
+    "hooks/guard.sh"
+  ]
 }
