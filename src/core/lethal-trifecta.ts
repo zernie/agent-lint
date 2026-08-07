@@ -158,6 +158,65 @@ function baseTool(raw: string): string {
   return raw.split("(")[0].trim();
 }
 
+/** The restriction inside `Tool(...)`, or null when the grant is unrestricted. */
+function restriction(raw: string): string | null {
+  const open = raw.indexOf("(");
+  if (open === -1) return null;
+  const close = raw.lastIndexOf(")");
+  if (close <= open) return null;
+  return raw.slice(open + 1, close).trim();
+}
+
+/**
+ * Does a `Bash(...)` grant still supply the shell's legs — reading a secret and
+ * curling it out — or has it been narrowed to a command that cannot?
+ *
+ * 🔴 WHY THIS EXISTS. Narrowing the grant is the remedy this tool RECOMMENDS: drop a
+ * leg, allow at most two. Before this, `Bash(node ./scripts/log.mjs:*)` was read as
+ * plain `Bash` — the whole shell, in both leg A and leg C — so an author who took the
+ * advice saw their score not move, and the reasonable next conclusion is that
+ * narrowing is pointless. A diagnosis blind to its own prescription teaches the wrong
+ * lesson. Observed 2026-08-07 on a repo that narrowed nine skills to two named ledger
+ * commands and stayed at "17 units can read data, reach the web, and run commands".
+ *
+ * HIGH-PRECISION, deliberately. The grant loses the legs ONLY when the pattern pins a
+ * program AND at least one concrete argument, e.g. `node ./x.mjs:*`. These stay full
+ * shell, because each still runs whatever the caller likes:
+ *
+ *   Bash            no restriction at all
+ *   Bash(*)         Bash(:*)        the wildcard forms
+ *   Bash(node:*)    program pinned, arguments free — `node -e "..."` is a shell
+ *   Bash(sh ...)    Bash(bash ...)  Bash(eval ...)  the shell itself, however pinned
+ *   Bash(curl ...)  Bash(scp ...)   a pinned program whose whole job IS exfiltration
+ *
+ * When in doubt it returns true (keeps the legs): a false "you are exposed" costs the
+ * author an argument, a false "you are safe" costs them the finding.
+ */
+const SHELL_LIKE = new Set([
+  "sh", "bash", "zsh", "dash", "ksh", "fish", "eval", "exec", "env", "xargs",
+  "sudo", "doas", "nohup", "setsid", "script", "ssh", "docker", "podman", "make",
+]);
+const EXFIL_PROGRAMS = new Set([
+  "curl", "wget", "scp", "sftp", "rsync", "nc", "ncat", "netcat", "telnet",
+  "ftp", "git", "gh", "aws", "gcloud", "az", "kubectl", "npm", "npx", "pip",
+]);
+
+export function bashGrantIsUnbounded(raw: string): boolean {
+  const r = restriction(raw);
+  if (r === null) return true; // bare `Bash`
+  const pattern = r.replace(/^["']|["']$/g, "").trim();
+  if (pattern === "" || pattern === "*" || pattern === ":*") return true;
+
+  // `Bash(node ./x.mjs:*)` — the trailing `:*` is Claude Code's prefix marker, not an
+  // argument. Strip it before deciding whether any concrete argument was pinned.
+  const words = pattern.replace(/:\*$/, "").trim().split(/\s+/).filter(Boolean);
+  if (words.length < 2) return true; // program pinned, arguments free
+
+  const program = (words[0].split("/").pop() ?? words[0]).toLowerCase();
+  if (SHELL_LIKE.has(program) || EXFIL_PROGRAMS.has(program)) return true;
+  return false;
+}
+
 /** Returns true for the wildcard sentinels that mean "inherits-all". */
 function isWildcard(tool: string): boolean {
   return tool === "" || tool === "*";
@@ -216,10 +275,14 @@ export function classifyTrifectaLegs(
     const base = baseTool(raw);
     if (isWildcard(base)) continue; // handled by the issues fn, not a named leg
 
-    // Dual-role shell: leg A AND leg C.
+    // Dual-role shell: leg A AND leg C — unless the grant has been narrowed to a
+    // command that is neither a shell nor an exfiltration tool, which is the remedy
+    // this checker itself recommends. See {@link bashGrantIsUnbounded}.
     if (LEG_BASH_DUAL.has(base)) {
-      priv.add(base);
-      exfil.add(base);
+      if (bashGrantIsUnbounded(raw)) {
+        priv.add(base);
+        exfil.add(base);
+      }
       continue;
     }
     if (PRIVATE_BUILTINS.has(base)) priv.add(base);
