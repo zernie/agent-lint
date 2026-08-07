@@ -34,10 +34,12 @@ Scans `agents/*.md` and `.claude/agents/*.md`.
 
 ## What counts as "tested"
 
-Two detectors, OR'd: **colocation** (`agents/bar.harness.mjs` next to
-`agents/bar.md`) OR **content-reference** (any test naming the agent by path,
-e.g. `agents/bar`). See [`untested-skill`](untested-skill.md#what-counts-as-tested)
-for the shared mechanics.
+Three detectors, OR'd: **declaration** (`// vigiles:covers agents/bar` in the test
+file) OR **colocation** (`agents/bar.harness.mjs` next to `agents/bar.md`) OR
+**content-reference** (any test whose _code_ names the agent by path, e.g.
+`agents/bar` — comments don't count). See
+[`untested-skill`](untested-skill.md#what-counts-as-tested) for the shared
+mechanics.
 
 ## Exemptions
 

@@ -9,13 +9,28 @@
  * and the materialize-root form), the hook-script discovery from the
  * manifest/settings/`.local` settings, the test-file globs (harness/eval/test
  * suffixes) with the same ignore set, the `vigiles:ignore-test` exemption, and the
- * colocation + content-reference coverage rules. See the parity test in
- * src/scan-files.test.ts.
+ * declaration + colocation + content-reference coverage rules. See the parity
+ * test in src/scan-files.test.ts.
+ *
+ * The part that DECIDES coverage is not mirrored — it is imported from
+ * `coverage-evidence.ts` (pure, browser-safe), so the twins cannot drift on the
+ * one thing whose divergence would change a grade.
  */
 import { basename, dirname } from "./posix-path.js";
 
 import type { PluginLayout } from "./core/layout.js";
-import type { CoverageTier, Surface, SurfaceKind } from "./test-coverage.js";
+import type {
+  CoverageDecision,
+  CoverageTier,
+  Surface,
+  SurfaceKind,
+} from "./test-coverage.js";
+import {
+  evidenceFor,
+  isStronger,
+  prepareTest,
+  type PreparedTest,
+} from "./coverage-evidence.js";
 
 // Mirrors src/test-coverage.ts constants. VALUES are re-declared, never imported
 // — test-coverage.ts pulls in node:fs/glob, and this twin must stay browser-safe.
@@ -178,17 +193,12 @@ function discoverHooks(
   }));
 }
 
-interface TestFile {
-  readonly path: string;
-  readonly content: string;
-}
-
-function discoverTests(files: Record<string, string>): TestFile[] {
-  const out: TestFile[] = [];
+function discoverTests(files: Record<string, string>): PreparedTest[] {
+  const out: PreparedTest[] = [];
   for (const [path, content] of Object.entries(files)) {
     if (isIgnored(path)) continue;
     if (DEFAULT_TEST_SUFFIXES.some((s) => path.endsWith(s))) {
-      out.push({ path, content });
+      out.push(prepareTest(path, content));
     }
   }
   return out;
@@ -208,25 +218,40 @@ function isColocated(surface: Surface, testPath: string): boolean {
   );
 }
 
-function isCovered(surface: Surface, tests: readonly TestFile[]): boolean {
+/** Mirror of test-coverage.ts `coverageOf` — strongest evidence across tests. */
+function coverageOf(
+  surface: Surface,
+  tests: readonly PreparedTest[],
+): CoverageDecision | null {
+  let best: CoverageDecision | null = null;
   for (const t of tests) {
     if (t.path === surface.path) continue;
-    if (isColocated(surface, t.path)) return true;
-    if (surface.tokens.some((tok) => t.content.includes(tok))) return true;
+    const ev = evidenceFor(surface, t, isColocated(surface, t.path));
+    if (!ev) continue;
+    if (!best || isStronger(ev, best.evidence))
+      best = { surface, evidence: ev, by: t.path };
   }
-  return false;
+  return best;
 }
 
 /** Mirror of test-coverage.ts `tierOf` — one tier's covered/untested split. */
 function tierOf(
   considered: readonly Surface[],
-  tests: readonly TestFile[],
+  tests: readonly PreparedTest[],
 ): CoverageTier {
   const covered: Surface[] = [];
   const untested: Surface[] = [];
-  for (const s of considered)
-    (isCovered(s, tests) ? covered : untested).push(s);
-  return { covered, untested };
+  const decisions: CoverageDecision[] = [];
+  for (const s of considered) {
+    const decision = coverageOf(s, tests);
+    if (decision) {
+      covered.push(s);
+      decisions.push(decision);
+    } else {
+      untested.push(s);
+    }
+  }
+  return { covered, untested, decisions };
 }
 
 /**
@@ -238,7 +263,12 @@ function tierOf(
 export function findUntestedSurfacesInFiles(
   files: Record<string, string>,
   layout: PluginLayout,
-): { untested: Surface[]; harness: CoverageTier; evals: CoverageTier } {
+): {
+  untested: Surface[];
+  decisions: readonly CoverageDecision[];
+  harness: CoverageTier;
+  evals: CoverageTier;
+} {
   const surfaces: Surface[] = [
     ...discoverSkills(files, layout),
     ...discoverAgents(files, layout),
@@ -246,9 +276,10 @@ export function findUntestedSurfacesInFiles(
   ];
   const considered = surfaces.filter((s) => !s.ignored);
   const tests = discoverTests(files);
-  const untested = considered.filter((s) => !isCovered(s, tests));
+  const union = tierOf(considered, tests);
   return {
-    untested,
+    untested: [...union.untested],
+    decisions: union.decisions,
     harness: tierOf(
       considered,
       tests.filter((t) => !t.path.endsWith(EVAL_SUFFIX)),

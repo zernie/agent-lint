@@ -12,6 +12,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  coverageEvidenceCounts,
   findUntestedSurfaces,
   formatUntestedReport,
   suggestedTestPath,
@@ -372,5 +373,145 @@ test("formatUntestedReport names the two gaps SEPARATELY (no test/eval slash)", 
     ),
     text,
   );
+  cleanupTmpDir(dir);
+});
+
+// ── Evidence: a STRING is not a test ─────────────────────────────────────────
+// The detector used to count any occurrence of a surface's path/namespace ANYWHERE
+// in a discovered test file. Measured on a real repo (37 skills, 14 hooks),
+// appending one COMMENT line — `// probe: skills/argument-arc` — moved the
+// untested count 33 → 32. Meanwhile a harness that genuinely asserts over 21
+// skills but builds its paths at runtime contained no literal `skills/<name>` and
+// covered nothing: generality was penalised, gaming was free.
+
+test("a surface named ONLY in a comment is NOT covered (the one-line probe)", () => {
+  const dir = makeTmpDir("cov-comment-probe");
+  write(dir, "skills/argument-arc/SKILL.md", skill("argument-arc"));
+  // Verbatim shape of the reproduction: a real harness file, plus a comment that
+  // happens to spell the surface's path. Nothing asserts anything about it.
+  write(
+    dir,
+    "test/pipeline.harness.mjs",
+    [
+      "import { readFileSync } from 'node:fs';",
+      "// probe: skills/argument-arc",
+      "export default () => readFileSync('unrelated.txt');",
+      "",
+    ].join("\n"),
+  );
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(
+    r.untested.map((s) => s.name),
+    ["argument-arc"],
+    "a comment is prose about a test, not a test",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("a mention in CODE still counts — the zero-config path is kept, and labelled", () => {
+  // The bare substring detector is deliberately RETAINED for code: it is what
+  // makes an ordinary `foo.test.ts` naming `skills/foo` count without anyone
+  // learning a marker. What it no longer reads is comments.
+  const dir = makeTmpDir("cov-code-mention");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  write(dir, "test/foo.test.ts", 'loadSkill("skills/foo/SKILL.md");\n');
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.equal(r.untested.length, 0);
+  assert.deepEqual(coverageEvidenceCounts(r), {
+    declared: 0,
+    colocated: 0,
+    mention: 1,
+  });
+  cleanupTmpDir(dir);
+});
+
+test("a URL in a string literal survives comment-stripping", () => {
+  // The stripper must not treat `//` inside a string as a comment opener, or a
+  // fixture URL would swallow the rest of the line and drop real coverage.
+  const dir = makeTmpDir("cov-url");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  write(
+    dir,
+    "test/foo.test.ts",
+    'const u = "https://example.com"; loadSkill("skills/foo");\n',
+  );
+  assert.equal(findUntestedSurfaces({ basePath: dir }).untested.length, 0);
+  cleanupTmpDir(dir);
+});
+
+test("a runtime-path harness that DECLARES its surfaces is counted", () => {
+  // The false NEGATIVE half: this harness really does assert over both skills,
+  // but assembles the paths at runtime, so it contains ZERO literal `skills/<name>`
+  // strings. Substring matching can never see it; a declaration can.
+  const dir = makeTmpDir("cov-declared");
+  write(dir, "skills/alpha/SKILL.md", skill("alpha"));
+  write(dir, "skills/beta/SKILL.md", skill("beta"));
+  const runtimeHarness = [
+    "import { join } from 'node:path';",
+    "// vigiles:covers skills/alpha, skills/beta",
+    "for (const name of ['alpha', 'beta']) {",
+    "  assertFrontmatter(join(root, 'skills', name, 'SKILL.md'));",
+    "}",
+    "",
+  ].join("\n");
+  write(dir, "test/pipeline.harness.mjs", runtimeHarness);
+  // The literal path exists ONLY on the declaration line: strike that line and
+  // no substring detector could ever have found either skill.
+  const codeOnly = runtimeHarness
+    .split("\n")
+    .filter((l) => !l.includes("vigiles:covers"))
+    .join("\n");
+  assert.ok(!codeOnly.includes("skills/alpha"), codeOnly);
+  assert.ok(!codeOnly.includes("skills/beta"), codeOnly);
+
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.equal(r.untested.length, 0, "both surfaces are covered");
+  assert.deepEqual(coverageEvidenceCounts(r), {
+    declared: 2,
+    colocated: 0,
+    mention: 0,
+  });
+  cleanupTmpDir(dir);
+});
+
+test("evidence provenance is REPORTED, and names the weakest case explicitly", () => {
+  const dir = makeTmpDir("cov-provenance");
+  write(dir, "skills/mentioned/SKILL.md", skill("mentioned"));
+  write(dir, "test/a.test.ts", 'loadSkill("skills/mentioned");\n');
+  const mentionOnly = formatUntestedReport(
+    findUntestedSurfaces({ basePath: dir }),
+  );
+  assert.ok(mentionOnly.includes("How coverage was decided"), mentionOnly);
+  assert.ok(
+    mentionOnly.includes("ALL of it is a name appearing in a test file"),
+    mentionOnly,
+  );
+
+  // Add a colocated test and the "all of it" escalation must drop away.
+  write(dir, "skills/colo/SKILL.md", skill("colo"));
+  write(dir, "skills/colo/colo.harness.mjs", "export default () => {};\n");
+  const mixed = formatUntestedReport(findUntestedSurfaces({ basePath: dir }));
+  assert.ok(mixed.includes("1 colocated"), mixed);
+  assert.ok(!mixed.includes("ALL of it"), mixed);
+  cleanupTmpDir(dir);
+});
+
+test("a declaration OUTRANKS a mention for the same surface", () => {
+  // Provenance must not depend on glob order: the strongest evidence wins.
+  const dir = makeTmpDir("cov-rank");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  write(dir, "test/a-mention.test.ts", 'loadSkill("skills/foo");\n');
+  write(
+    dir,
+    "test/z-declared.harness.mjs",
+    "// vigiles:covers skills/foo\nexport default () => {};\n",
+  );
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(coverageEvidenceCounts(r), {
+    declared: 1,
+    colocated: 0,
+    mention: 0,
+  });
+  assert.equal(r.decisions[0].by, "test/z-declared.harness.mjs");
   cleanupTmpDir(dir);
 });

@@ -123,7 +123,12 @@
     "mcp": false,
     "untested": 3,
     "untestedHarness": 3,
-    "unevaluated": 3
+    "unevaluated": 3,
+    "coverageEvidence": {
+      "declared": 0,
+      "colocated": 0,
+      "mention": 0
+    }
   },
   "brokenReferences": [
     "hooks/guard.sh"

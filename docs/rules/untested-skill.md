@@ -48,11 +48,28 @@ skills — not vendored, fixture, or nested copies).
 
 ## What counts as "tested"
 
-Two detectors, OR'd — a test placed **anywhere** counts:
+Three detectors, OR'd — a test placed **anywhere** counts — and the audit report
+prints **which one** decided each surface, because the three are not equally
+strong:
 
-1. **Colocation** — a `*.{harness,eval}.mjs` inside the skill dir (`skills/foo/`).
-2. **Content-reference** — any discovered test (incl. `*.test.ts`) that names the
-   skill by **path** (`skills/foo`) or **namespace** (`vigiles:foo`).
+1. **Declaration** — a `vigiles:covers <surface>` marker in the test file. The
+   strongest evidence: it cannot happen by accident, and it is the only detector a
+   harness that builds its paths at **runtime** can reach.
+
+   ```js
+   // vigiles:covers skills/foo, skills/bar
+   for (const name of ["foo", "bar"]) assertSkill(join(root, "skills", name));
+   ```
+
+2. **Colocation** — a `*.{harness,eval}.mjs` inside the skill dir (`skills/foo/`).
+3. **Content-reference** — any discovered test (incl. `*.test.ts`) whose **code**
+   names the skill by **path** (`skills/foo`) or **namespace** (`vigiles:foo`).
+   The weakest: it only says the name appears.
+
+> **Comments do not count.** A skill path written in a comment is prose _about_ a
+> test, not a test — and counting it made the coverage number gameable by one
+> line. If a test really does cover a surface its code never names, say so with
+> `vigiles:covers`.
 
 ## Counting an external test suite (promptfoo, a home-grown eval loop)
 
@@ -79,16 +96,20 @@ surface reading as "untested":
 ```
 
 A discovered file counts as covering a skill when it **names that skill by its
-path or namespace token** (`skills/foo` or `vigiles:foo`) — the same
-content-reference rule above. So an external suite counts as long as it references
-each skill by path/namespace somewhere (a comment, a `file://` path, a
-`description` field), not only by free-text prompt.
+path or namespace token** (`skills/foo` or `vigiles:foo`) outside a comment — the
+same content-reference rule above — or when it **declares** the skill with
+`vigiles:covers`.
 
 > **Heads-up:** an external config that references a skill **only** by prose
-> prompt text (never its path/namespace) won't match yet, even when added to
-> `testGlobs` — add the skill's path in a comment or a `file://` reference to make
-> it count. A looser, name-based match is under consideration (it trades
-> precision, so it's not the default).
+> prompt text (never its path/namespace) won't match, even when added to
+> `testGlobs`. Declare it instead:
+>
+> ```yaml
+> # vigiles:covers skills/foo
+> ```
+>
+> Comment syntax is fine for the marker — the marker is read before comments are
+> stripped. What does _not_ work is hoping a bare mention in a comment is noticed.
 
 ## Exemptions
 

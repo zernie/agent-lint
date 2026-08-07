@@ -55,7 +55,11 @@ import {
   hookMatcherIssues,
   type HookMatcherFinding,
 } from "./core/hook-matcher.js";
-import { findUntestedSurfaces } from "./test-coverage.js";
+import {
+  coverageEvidenceCounts,
+  findUntestedSurfaces,
+} from "./test-coverage.js";
+import { formatEvidence, type EvidenceCounts } from "./coverage-evidence.js";
 import type { PurityLevel, EffectSurface } from "./core/effects.js";
 import {
   makeClassifier,
@@ -358,6 +362,13 @@ export interface ScanReport {
    */
   readonly evaluable?: number;
   /**
+   * HOW the covered surfaces were decided to be covered — declared / colocated /
+   * name-mentioned. A coverage count with no provenance is what let a one-line
+   * COMMENT confer coverage unnoticed; carrying the derivation makes "28 covered"
+   * distinguishable from "28 names that happen to appear in some file".
+   */
+  readonly coverageEvidence?: EvidenceCounts;
+  /**
    * Whether the repo has its OWN test setup (a real `package.json` `test` script or
    * a conventional test dir). When true, the `untested` count — which only counts
    * vigiles-native `.eval.mjs`/`.harness.mjs` — is misleading: the team clearly
@@ -598,6 +609,7 @@ export function scanPlugin(
     untestedHarness: coverage.harness.untested.length,
     unevaluated: coverage.evals.untested.length,
     evaluable: coverage.total,
+    coverageEvidence: coverageEvidenceCounts(coverage),
     ownTestSignal: ownTestSignalOnDisk(dir),
     puritySummary,
   };
@@ -946,6 +958,12 @@ export function formatScanReport(r: ScanReport): string {
       `  no harness: ${String(r.untestedHarness)} · firing never measured: ${String(r.unevaluated)}`,
     );
   }
+  // …and HOW the rest passed. Without this the count is unfalsifiable from the
+  // outside: "28 covered" and "28 names that appear in some file" print the same.
+  const evidenceLine = r.coverageEvidence
+    ? formatEvidence(r.coverageEvidence)
+    : "";
+  if (evidenceLine) facts.push(`  ${evidenceLine}`);
   // Effect surface: harness-level purity summary across all scanned agents.
   // Informational (higher pure% = more constrained, cheaper to test); shown
   // only when there are agents to summarize (no agents → no summary line).

@@ -24,6 +24,7 @@ import type { ScanReport, MarketplaceInfo } from "./scan.js";
 import type { PluginScore } from "./score-core.js";
 import type { RuleInventoryItem } from "./rule-inventory.js";
 import type { RuleRouting } from "./rule-routing.js";
+import type { EvidenceCounts } from "./coverage-evidence.js";
 
 /**
  * The current schema version. Bump only on a BREAKING change to the shape.
@@ -72,6 +73,16 @@ export interface AuditInventory {
    */
   readonly untestedHarness?: number;
   readonly unevaluated?: number;
+  /**
+   * HOW the covered surfaces were decided to be covered — `declared` (an explicit
+   * `vigiles:covers` marker), `colocated` (a test placed at the surface), or
+   * `mention` (the surface's path/namespace appears in a test's code). Carried in
+   * the product boundary because a coverage count without its derivation is not
+   * auditable: a repo whose coverage is entirely `mention` looks, in a bare
+   * number, exactly like one with real tests. Additive/optional — schema version
+   * unchanged.
+   */
+  readonly coverageEvidence?: EvidenceCounts;
 }
 
 /**
@@ -254,6 +265,9 @@ export function buildAuditReport(
         : {}),
       ...(report.unevaluated !== undefined
         ? { unevaluated: report.unevaluated }
+        : {}),
+      ...(report.coverageEvidence
+        ? { coverageEvidence: report.coverageEvidence }
         : {}),
     },
     ...(report.danglingRefs.length
