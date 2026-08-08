@@ -1485,12 +1485,19 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
-  it("clean break: old --pillars / --verify flags no longer scope a pillar", () => {
+  it("clean break: old --pillars / --verify flags are REJECTED, not ignored", () => {
     const dir = freshProject();
     try {
-      // --verify is now an unknown flag — both pillars stay on (the default).
-      const out = run("init --verify --no-plugin --no-gha", dir).stdout;
-      assert.match(out, /pillars: lint \+ test/);
+      // These flags were removed. They used to be silently ignored, so `init
+      // --verify` ran the full default setup while the author believed they had
+      // scoped it — the same "the argument is present, so the property must be
+      // enforced" failure the unknown-flag check exists to stop. A removed flag
+      // now stops the run and says so.
+      for (const stale of ["--verify", "--pillars=lint"]) {
+        const r = run(`init ${stale} --no-plugin --no-gha`, dir);
+        assert.equal(r.exitCode, 2, `${stale}: ${r.stdout}${r.stderr}`);
+        assert.match(r.stderr, /unknown flag/);
+      }
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

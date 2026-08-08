@@ -3,8 +3,8 @@
  *
  * A single structural-health number (the leaderboard's `scoreReport`) ranks
  * plugins, but it hides WHERE a harness is weak. This buckets the SAME
- * deterministic findings into five categories — Truthfulness, Triggering,
- * Structure, Safety, Tested — each a 0–100 ring, as a DIAGNOSTIC breakdown
+ * deterministic findings into six categories — Truthfulness, Triggering,
+ * Structure, Safety, Tested, Evaluated — each a 0–100 ring, as a DIAGNOSTIC breakdown
  * beneath one headline `overall` = `100 − Σ(all graded penalties)` (the SAME
  * summed model as the leaderboard's single health number, via the shared
  * `computeIntegrityScore` — so the two surfaces never disagree). Same detectors,
@@ -26,8 +26,16 @@
  * shipped yet, so the battery lives in the `vigiles/testing` API via
  * `guardrail-check`/`assertBlocksDisasters`, where you opt in explicitly.
  *
+ * TESTED vs EVALUATED are two rings, not one, because a harness and an eval differ
+ * on COST (free vs paid model calls), on CADENCE (every push vs scheduled) and on
+ * the QUESTION ANSWERED (does this gate still catch what it claims? vs does this
+ * skill fire at all?). Folded together, a repo with complete deterministic coverage
+ * and no evals scored identically to a repo with neither.
+ *
  * A category that can't be assessed scores `null` (n/a) and is EXCLUDED from the
- * overall — never a false 0. Pure over the `ScanReport`, so it's fully testable.
+ * overall — never a false 0. `Evaluated` adds a THIRD state on top of that
+ * (`notMeasured`): the run never asked the firing question, which is not the same
+ * fact as "asked and got zero". Pure over the `ScanReport`, so it's fully testable.
  */
 import {
   gradeFor,
@@ -50,7 +58,8 @@ export type CategoryKey =
   | "Triggering"
   | "Structure"
   | "Safety"
-  | "Tested";
+  | "Tested"
+  | "Evaluated";
 
 export interface CategoryScore {
   readonly key: CategoryKey;
@@ -58,6 +67,15 @@ export interface CategoryScore {
   readonly score: number | null;
   /** Relative weight in the overall (equal by default — tune later). */
   readonly weight: number;
+  /**
+   * `score: null` because this run never ASKED the question — as distinct from
+   * `null` because there was nothing to ask about (plain n/a) and from a measured
+   * `0`. Reporting the absence of a check as the result of a check is exactly what
+   * this tool flags in other people's harnesses; the `Evaluated` ring would do it
+   * if a headless read scored 0 for "no firing measured". A `notMeasured` ring
+   * carries a finding NAMING the command that would measure it.
+   */
+  readonly notMeasured?: boolean;
   /**
    * Advisory categories are shown but EXCLUDED from the overall grade. An untested
    * surface (or any best-practice gap) is a HARDENING signal, not a broken harness
@@ -89,6 +107,23 @@ export interface AuditScore {
 // category rings and the single health number can never drift. W_UNTESTED is
 // audit-only — untested surfaces are advisory (shown, never scored into overall).
 const W_UNTESTED = 3;
+
+/** The command that answers the firing question — named, not alluded to. */
+const MEASURE_FIRING_COMMAND =
+  "run `npx vigiles audit` interactively to measure, or add a `*.eval.mjs` " +
+  "(`measureTriggerRate`, vigiles/testing)";
+
+export interface AuditScoreOptions {
+  /**
+   * Did THIS run actually execute the skill-firing tier? A plain `audit` is a
+   * deterministic read: headless (`--json`, `--no-interactive`, a pipe) it never
+   * runs the executing checks and prints "Executing checks (safety battery · live
+   * MCP · skill firing) skipped". That skip is a real signal and it is threaded
+   * here, so the `Evaluated` ring can say "not measured" instead of scoring a 0 it
+   * did not earn. Default false — the honest default for a pure read.
+   */
+  readonly firingMeasured?: boolean;
+}
 
 /** One deduction: a count, its per-item weight, and the label if non-zero. */
 interface Deduction {
@@ -304,14 +339,28 @@ function safety(r: ScanReport): CategoryScore {
   };
 }
 
+/**
+ * TESTED — DETERMINISTIC harness coverage only (`*.harness.mjs`, `*.test.*`):
+ * free, milliseconds, every push. It answers "does this gate still catch what it
+ * claims?" The real-model tier is a SEPARATE ring ({@link evaluated}) because it
+ * differs on cost, on cadence AND on the question it answers — folding both into
+ * one number made "complete deterministic coverage, no evals" score identically
+ * to "neither", and made the prescription ("add a test/eval") span three orders of
+ * magnitude in cost without saying which.
+ *
+ * Falls back to the union `untested` when a producer predates the split, so the
+ * ring never silently reports 0 for a report that simply doesn't carry the field.
+ */
 function tested(r: ScanReport): CategoryScore {
+  const untestedHarness = r.untestedHarness ?? r.untested;
   const { score, findings } = scoreFrom([
     {
-      n: r.untested,
-      // Say VIGILES-NATIVE explicitly — this counts `.eval.mjs`/`.harness.mjs`, not
+      n: untestedHarness,
+      // Say VIGILES-NATIVE explicitly — this counts `.harness.mjs`/`.test.*`, not
       // whether a surface is tested at all, so the label must not read as "untested".
+      // No slash: this sentence is about the FREE tier and nothing else.
       weight: W_UNTESTED,
-      label: "surface(s) with no vigiles test/eval",
+      label: "surface(s) with no vigiles harness (deterministic, free)",
     },
   ]);
   // ADVISORY: a hardening gap, not breakage — shown but EXCLUDED from the overall
@@ -320,7 +369,7 @@ function tested(r: ScanReport): CategoryScore {
   // note so the number is read as "optional", not "you don't test" (G3 — don't
   // measure the wrong thing).
   const contextualized =
-    r.ownTestSignal && r.untested > 0
+    r.ownTestSignal && untestedHarness > 0
       ? [
           ...findings,
           "your own test setup detected — vigiles-native skill coverage is optional",
@@ -336,6 +385,70 @@ function tested(r: ScanReport): CategoryScore {
 }
 
 /**
+ * EVALUATED — REAL-MODEL coverage (`*.eval.mjs`): paid, minutes, scheduled. It
+ * answers the one question the deterministic read cannot — does a skill FIRE at
+ * all? Advisory, like Tested.
+ *
+ * THREE states, not two, and the third is the point:
+ *
+ *   - a NUMBER  — measured: evals exist here, this is their coverage percentage.
+ *   - `0`       — the firing tier RAN this session and nothing covers these
+ *                 surfaces. A real, earned zero.
+ *   - NOT MEASURED (`score: null` + `notMeasured`) — nothing asked. No evals on
+ *                 disk AND the executing checks were skipped (headless / `--json`
+ *                 / a remembered no). The audit knows NOTHING about firing here.
+ *
+ * Collapsing the third into the first would report the ABSENCE of a check as the
+ * RESULT of a check — precisely the pattern this product exists to name in other
+ * people's repositories. The report already states the distinction in prose ("Do
+ * your N skills actually fire? The deterministic read can't tell…") and used to
+ * fold it into one score anyway. In the `notMeasured` state the ring NUDGES with
+ * the command that would answer the question.
+ *
+ * `null` WITHOUT `notMeasured` is the ordinary n/a: no surface to evaluate at all.
+ */
+function evaluated(r: ScanReport, firingMeasured: boolean): CategoryScore {
+  const evaluable = r.evaluable ?? 0;
+  if (evaluable === 0) {
+    return {
+      key: "Evaluated",
+      score: null,
+      weight: 1,
+      advisory: true,
+      findings: ["no surface whose firing could be measured"],
+    };
+  }
+  const unevaluated = r.unevaluated ?? evaluable;
+  const evalCovered = evaluable - unevaluated;
+  const gap = `${String(unevaluated)} ${pluralizeLabel(
+    unevaluated,
+    "surface(s) whose firing was never measured",
+  )}`;
+  // Nothing on disk measures firing AND nothing ran this session → the question
+  // was never asked. Say that, and name the command — do NOT score it a 0.
+  if (evalCovered === 0 && !firingMeasured) {
+    return {
+      key: "Evaluated",
+      score: null,
+      weight: 1,
+      advisory: true,
+      notMeasured: true,
+      findings: [gap, `not measured — ${MEASURE_FIRING_COMMAND}`],
+    };
+  }
+  // A straight coverage percentage, so the zero state is a LITERAL 0 — "the
+  // firing tier was available and nothing covers these surfaces" — and can never
+  // be confused with the null above.
+  return {
+    key: "Evaluated",
+    score: Math.round((100 * evalCovered) / evaluable),
+    weight: 1,
+    advisory: true,
+    findings: unevaluated > 0 ? [gap] : [],
+  };
+}
+
+/**
  * An instruction-only repo (just a CLAUDE.md/AGENTS.md, no plugin surface) is NOT
  * empty — the scan records `instructions` precisely so it isn't graded F/0 "no
  * loadable surface". Only a dir with NO instruction file AND no surface is empty.
@@ -347,13 +460,17 @@ function isEmptyAudit(r: ScanReport): boolean {
 }
 
 /**
- * Bucket a scan report into the five deterministic Lighthouse categories as a
- * DIAGNOSTIC breakdown, with the headline `overall` = `100 − Σ(all graded
- * penalties)` (the shared summed model — NOT the average of the rings — so it
- * equals the leaderboard's single health number). The advisory Tested ring and
- * any n/a ring are shown but excluded from the headline.
+ * Bucket a scan report into the six Lighthouse categories as a DIAGNOSTIC
+ * breakdown, with the headline `overall` = `100 − Σ(all graded penalties)` (the
+ * shared summed model — NOT the average of the rings — so it equals the
+ * leaderboard's single health number). The advisory Tested / Evaluated rings and
+ * any n/a ring are shown but excluded from the headline — the grade weighting is
+ * UNCHANGED by the Tested/Evaluated split.
  */
-export function auditScore(report: ScanReport): AuditScore {
+export function auditScore(
+  report: ScanReport,
+  opts: AuditScoreOptions = {},
+): AuditScore {
   if (isEmptyAudit(report)) {
     const categories: CategoryKey[] = [
       "Truthfulness",
@@ -361,6 +478,7 @@ export function auditScore(report: ScanReport): AuditScore {
       "Structure",
       "Safety",
       "Tested",
+      "Evaluated",
     ];
     return {
       overall: 0,
@@ -380,11 +498,12 @@ export function auditScore(report: ScanReport): AuditScore {
     structure(report),
     safety(report),
     tested(report),
+    evaluated(report, opts.firingMeasured === true),
   ];
   // The headline is the SUMMED model (the shared integrity score), NOT the average
   // of the rings — averaging would let a real problem in one category be diluted
-  // by clean siblings. The rings above stay a diagnostic breakdown; Tested
-  // (advisory) is never summed in (untested surfaces don't drag the grade).
+  // by clean siblings. The rings above stay a diagnostic breakdown; Tested and
+  // Evaluated (both advisory) are never summed in (neither drags the grade).
   const { score: overall } = computeIntegrityScore(reportDeductions(report));
   return { overall, grade: gradeFor(overall), categories, empty: false };
 }
@@ -392,29 +511,41 @@ export function auditScore(report: ScanReport): AuditScore {
 // A 22-cell bar gauge ("ring" in the terminal; the real rings are the HTML).
 const BAR_CELLS = 22;
 
-/** A glyph that signals the band at a glance (green/amber/red, no ANSI needed). */
-function bandGlyph(score: number | null): string {
-  if (score === null) return "○";
-  if (score >= 90) return "●";
-  if (score >= 70) return "◑";
+/** A glyph that signals the band at a glance (green/amber/red, no ANSI needed).
+ *  `?` is its own glyph: an UNASKED question is not the same as "not applicable"
+ *  (`○`) and emphatically not the same as a measured failure (`✗`). */
+function bandGlyph(c: CategoryScore): string {
+  if (c.score === null) return c.notMeasured ? "?" : "○";
+  if (c.score >= 90) return "●";
+  if (c.score >= 70) return "◑";
   return "✗";
 }
 
-function bar(score: number | null): string {
-  if (score === null) return "n/a";
-  const filled = Math.round((score / 100) * BAR_CELLS);
+function bar(c: CategoryScore): string {
+  if (c.score === null) return c.notMeasured ? "not measured" : "n/a";
+  const filled = Math.round((c.score / 100) * BAR_CELLS);
   return "█".repeat(filled) + "░".repeat(BAR_CELLS - filled);
+}
+
+/**
+ * The ring's number as the reader sees it — THREE distinct labels, never two.
+ * A measured `0` and an unasked question are different facts and must not render
+ * the same; `n/a` (nothing to assess) is a third, also distinct.
+ */
+export function categoryScoreLabel(c: CategoryScore): string {
+  if (c.score !== null) return String(c.score);
+  return c.notMeasured ? "not measured" : "n/a";
 }
 
 /** Render the category rings (diagnostic) + the summed overall for the terminal. */
 export function formatAuditScore(s: AuditScore): string {
   const lines: string[] = ["Harness audit", ""];
   for (const c of s.categories) {
-    const glyph = bandGlyph(c.score);
+    const glyph = bandGlyph(c);
     const label = c.key.padEnd(13);
-    const num = (c.score === null ? "n/a" : String(c.score)).padStart(4);
+    const num = categoryScoreLabel(c).padStart(4);
     const tag = c.advisory ? "  · advisory (not graded)" : "";
-    lines.push(`  ${glyph} ${label} ${num}  ${bar(c.score)}${tag}`);
+    lines.push(`  ${glyph} ${label} ${num}  ${bar(c)}${tag}`);
     if (c.findings.length > 0) {
       lines.push(`       └ ${c.findings.join("; ")}`);
     }

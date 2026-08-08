@@ -173,6 +173,47 @@ const report = await runEval({
 assertSignificant(report, { baseline: "off", arm: "on", metric: "ok" });
 ```
 
+### Never hand-roll the runner — it silently eats stderr
+
+Do **not** reach for `execFileSync` / `spawnSync` to drive the thing under test.
+The failure is quiet and repeats: `execFileSync` returns **stdout only** on
+success, while advisory output — including vigiles's own compiled-hook
+`notice()` — is written to **stderr**. A hand-rolled runner therefore reports a
+perfectly healthy react hook as **dead**, and an assertion about a warning can
+never pass. (Observed three times in one repo, twice after the first fix.)
+
+Every vigiles result already carries **both streams**, so the bug is
+unrepresentable:
+
+| Runner           | Result              | Carries                                             |
+| ---------------- | ------------------- | --------------------------------------------------- |
+| `runScript`      | `ScriptRunResult`   | `exitCode`, `stdout`, `stderr`, `filesWritten?`     |
+| `runHook`        | `HookRunResult`     | all of the above, **plus** `blocked` / `decision`   |
+| `runHarnessTest` | `HarnessTestResult` | `exitCode`, `stdout`, `stderr`, `cwd` + the `Trace` |
+
+**Testing a plain helper script** (a bash/node/python program that isn't a hook)?
+Use **`runScript`** — it runs any command and reports what it did:
+
+```ts
+import { runScript } from "vigiles/testing";
+
+const r = runScript("bash scripts/check-links.sh", { cwd: repoDir });
+assert.equal(r.exitCode, 0);
+assert.match(r.stderr, /0 broken links/); // advisory output lives HERE
+```
+
+`runHook` is exactly `runScript` plus the hook protocol (event → stdin, exit code
+→ allow/deny). Pick by the question you're asking: a **hook** has a _decision_, a
+**script** has _effects_. That's why `ScriptRunResult` has no `decision` field —
+a field that is always meaningless is worse than no field.
+
+⚠️ **Asserting what a script wrote requires confinement.** `filesWritten` is
+recorded by diffing the work dir, which only a confined run does — so it is
+`undefined` after a plain run. That is deliberately _not_ the same as `[]`
+("recorded, wrote nothing"): `assertNoWrite` / `assertWroteOnly` **throw** on an
+unrecorded result rather than pass having inspected nothing. Pass
+`{ sandbox: "auto" }` (Linux + bubblewrap) to actually record writes.
+
 ## Step 4 — Run it
 
 In a runner (node:test / vitest / jest) the tests are plain async functions. Or

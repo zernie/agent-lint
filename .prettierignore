@@ -18,6 +18,10 @@ api-surface/
 site/test-results/
 site/playwright-report/
 site/blob-report/
+# Generated per-rule check pages (`site` prebuild → `gen-check-pages.ts`,
+# gitignored by site/.gitignore) — same class: building the site locally would
+# otherwise redden `fmt:check` on files nobody commits.
+site/checks/
 
 # Ecosystem-benchmark run artifacts (machine-written JSON) + vendored upstream
 # SKILL.md snapshots (pinned by SHA, formatted by their upstreams, not us).

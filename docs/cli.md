@@ -27,6 +27,40 @@ npx vigiles generate schema         # Emit JSON Schema for vigiles: frontmatter 
 npx vigiles generate harness [dir]  # Emit harness.gen.ts — one typed registry over every spec (--check to verify)
 ```
 
+### Arguments the CLI does not recognise are refused
+
+Every verb **rejects an unknown flag** with a non-zero exit (`2`), names it, and
+suggests the nearest real one:
+
+```bash
+$ npx vigiles audit --no-htlm
+✗ vigiles audit: unknown flag "--no-htlm".
+  Did you mean `--no-html`?
+```
+
+This matters most on `audit`, whose flags decide what **leaves the machine**
+(`--no-html`, `--no-json`, `--out=<dir>`, `--serve`). A swallowed typo produced
+the opposite of what was asked for, silently. Value flags take their value with
+`=` only (`--out=dir`, never `--out dir`) — the space-separated form is rejected
+rather than being read as a positional.
+
+`vigiles <verb> --help` prints that verb's help and its complete flag list
+instead of running the verb.
+
+### Exit codes
+
+| Code | Meaning                                                                           |
+| ---- | --------------------------------------------------------------------------------- |
+| `0`  | ran, nothing blocking                                                             |
+| `1`  | ran, and what you asked about is bad — lint findings, a failing harness script    |
+| `2`  | **could not do what you asked** — unknown flag, unknown harness, nothing to audit |
+
+`audit` in particular exits `2` when the target has **no instruction file and no
+surface at all**: there was nothing to measure, so no grade is reported. That is
+deliberately distinct from a harness that was audited and scored badly (exit
+`0`) — a script must be able to tell "this repo is unhealthy" from "I was
+pointed at the wrong directory".
+
 `vigiles test` / `vigiles eval` run scripts in JS **or** TS and report each as
 **pass / skip / fail** — a tier that can't run (e.g. deterministic with no
 `claude`) reports a loud `⊘ SKIPPED`, tallied separately, never a fake green.
@@ -295,7 +329,7 @@ type one yourself; `compile` wires them for you.
 
 **Lighthouse for your harness.** Point vigiles at any plugin or repo (defaults to
 `.`) and get a one-command report — **no model, no API key, safe to run
-anywhere**: five deterministic **category rings**, each finding's **fix** inline,
+anywhere**: six **category rings**, each finding's **fix** inline,
 and a self-contained **HTML report**. It's a local report, not a CI step (CI uses
 [`lint`](#lint-files)).
 
@@ -306,22 +340,47 @@ Harness audit
   ◑ Triggering      92  ████████████████████░░
   ● Structure      100  ██████████████████████
   ● Safety         100  ██████████████████████
-  ◑ Tested          88  ███████████████████░░░
+  ◑ Tested          88  ███████████████████░░░  · advisory (not graded)
+  ? Evaluated  not measured                      · advisory (not graded)
+       └ 6 surfaces whose firing was never measured; not measured — run `npx vigiles audit` interactively to measure, or add a `*.eval.mjs` (`measureTriggerRate`, vigiles/testing)
 
 Harness health: B (95/100)
 ```
 
-The five categories — **Truthfulness** (refs resolve) · **Triggering** (skills
+The six categories — **Truthfulness** (refs resolve) · **Triggering** (skills
 fire / don't collide) · **Structure** (tool contracts, MCP, frontmatter) ·
 **Safety** (no unit holds all three lethal-trifecta legs — a prompt-injection
-exfil path) · **Tested** (coverage) — are each 0–100, weighted into the overall
-grade; an n/a category is excluded, never a false 0. All five are
+exfil path) · **Tested** (deterministic harness coverage) · **Evaluated**
+(real-model eval coverage) — are each 0–100, weighted into the overall
+grade; an n/a category is excluded, never a false 0. The first five are
 **deterministic** (no execution): **Safety** is the **static** lethal-trifecta
 capability check over a unit's declared tool-set. (The **executing** "do your
 hooks actually block?" disaster-battery is NOT a ring: running arbitrary hooks
 safely needs cross-platform confinement that isn't shipped yet — so it lives in
 the [`vigiles/testing` API](harness-testing.md) via `guardrail-check` /
 `assertBlocksDisasters`, where you opt in explicitly.)
+
+**Tested and Evaluated are two rings, not one number.** A harness
+(`*.harness.mjs`, `*.test.*`) is free, runs in milliseconds on every push, and
+asks _does this gate still catch what it claims?_ An eval (`*.eval.mjs`) spends
+real model calls, runs on a schedule, and asks the one question a deterministic
+read cannot: _does this skill fire at all?_ Folded together, a repo with complete
+deterministic coverage and no evals scored identically to a repo with neither —
+and the prescription ("add a test/eval") spanned three orders of magnitude in cost
+without saying which. Both rings are **advisory**: neither moves your grade.
+
+**Evaluated has three states, and the third one matters.**
+
+| state          | meaning                                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------- |
+| a number       | measured — evals exist here; this is their coverage                                                           |
+| `0`            | the firing tier ran this session and nothing covers these surfaces                                            |
+| `not measured` | nobody asked. No eval on disk **and** the executing checks were skipped (headless, `--json`, a remembered no) |
+
+`not measured` is deliberately not a `0`: reporting the absence of a check as the
+result of a check is the exact failure mode vigiles flags in other people's
+harnesses. In that state the ring names the command that would answer the
+question, instead of leaving it to a line of prose at the end of the report.
 
 Under the rings, the detailed report lists per-skill description + user-invoked
 flag, per-agent tool contract (and the "no `tools:` line → inherits every tool"
@@ -601,7 +660,7 @@ different contracts** — the classic gate-vs-report split (think `eslint .` /
   severities → stable CI codes (0/1/2)**. It blocks bad commits.
 - **`audit` is the report** (Lighthouse-style, local — not a CI step). Zero config,
   harness-aware, works on **any** plugin (including third-party ones with no spec).
-  It scores the five deterministic category rings, ranks a whole marketplace
+  It scores the six category rings, ranks a whole marketplace
   (leaderboard), and writes the HTML report — all a safe read. Two **executing**
   checks (live MCP resolution + "do skills fire?") run only on the interactive
   consent (`audit-side-effect-free`); for automation, run those — and the safety

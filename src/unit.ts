@@ -29,6 +29,10 @@ export type {
   RunHookOptions,
   HookPropertyResult,
 } from "./run-hook.js";
+// The PRIMITIVE beneath runHook: run any program, get what it did. A hook has a
+// DECISION, a script has EFFECTS — two questions, so two result types.
+export { runScript } from "./run-script.js";
+export type { RunScriptOptions, ScriptRunResult } from "./run-script.js";
 // The check vocabulary is part of the base surface (pure, no capability). Its
 // `hookFired` check supersedes the legacy boolean predicate of the same name.
 export * from "./check.js";

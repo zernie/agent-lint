@@ -34,9 +34,12 @@ only). Inline shell one-liners have nowhere to colocate a test and are not scann
 
 ## What counts as "tested"
 
-Two detectors, OR'd: **colocation** (`hooks/pre-edit.harness.mjs` next to
-`hooks/pre-edit.sh`) OR **content-reference** (any test naming the hook by path,
-e.g. `hooks/pre-edit.sh`).
+Three detectors, OR'd: **declaration** (`// vigiles:covers hooks/pre-edit.sh` in
+the test file) OR **colocation** (`hooks/pre-edit.harness.mjs` next to
+`hooks/pre-edit.sh`) OR **content-reference** (any test whose _code_ names the
+hook by path, e.g. `hooks/pre-edit.sh` — comments don't count). See
+[`untested-skill`](untested-skill.md#what-counts-as-tested) for the shared
+mechanics and why the three are reported separately.
 
 ## Exemptions
 

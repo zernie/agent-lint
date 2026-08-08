@@ -7,19 +7,40 @@
  * with no test is a probabilistic-compliance gap hiding in the deterministic
  * layer: nothing measures whether it still does what it claims.
  *
- * Two detectors decide "tested", OR'd, so a test placed ANYWHERE counts:
- *   1. colocation — a `*.{harness,eval}.mjs` next to the surface (the zero-config
+ * THREE detectors decide "tested", OR'd, so a test placed ANYWHERE counts — and
+ * every decision now carries WHICH one decided it (see `coverage-evidence.ts`
+ * for why that provenance is load-bearing, not decoration):
+ *   1. declaration — a `vigiles:covers <surface>` marker in the test file. The
+ *      only detector a RUNTIME-PATH harness can reach, and the only one that
+ *      cannot happen by accident.
+ *   2. colocation — a `*.{harness,eval}.mjs` next to the surface (the zero-config
  *      convention the warning suggests): `skills/foo/*.eval.mjs`,
  *      `agents/bar.harness.mjs`, `hooks/pre-edit.harness.mjs`.
- *   2. content-reference — any discovered test (incl. `*.test.ts`) that names the
- *      surface by PATH (`skills/foo`, `hooks/pre-edit.sh`) or NAMESPACE
- *      (`vigiles:foo`). Not bare-name — too fuzzy.
+ *   3. content-reference — any discovered test (incl. `*.test.ts`) whose CODE
+ *      names the surface by PATH (`skills/foo`, `hooks/pre-edit.sh`) or NAMESPACE
+ *      (`vigiles:foo`). Not bare-name — too fuzzy. And no longer COMMENTS: a name
+ *      in a comment is prose about a test, not a test. Counting it made the
+ *      metric gameable by one line (measured: untested 33 → 32, from a comment).
  *
  * Warning-by-default (a nudge, not a gate). EVERY skill, agent, and hook is held
  * to the requirement — invocation mode does NOT exempt anything (a command-only
  * skill still DOES something when invoked, and that behaviour is worth a test).
  * The only opt-out is explicit: a `vigiles:ignore-test` marker in the surface
  * file, which is reported as `exempt` so the skip is visible, never silent.
+ *
+ * TWO TIERS, discovered SEPARATELY — a harness and an eval are not the same thing
+ * and collapsing them at discovery makes the difference unrecoverable downstream:
+ *
+ *   | | harness (`*.harness.mjs`, `*.test.*`) | eval (`*.eval.mjs`) |
+ *   |---|---|---|
+ *   | cost    | free                          | paid model calls    |
+ *   | cadence | every push                    | scheduled           |
+ *   | answers | "does this gate still catch what it claims?" | "does this skill FIRE at all?" |
+ *
+ * So a repo with complete deterministic coverage and no evals is a DIFFERENT
+ * position from a repo with neither, and "add a test/eval" spans three orders of
+ * magnitude in cost without saying which. {@link UntestedReport} therefore carries
+ * a per-tier {@link CoverageTier} alongside the (unchanged) union fields.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -27,6 +48,17 @@ import { basename, dirname, join } from "node:path";
 import { globSync } from "glob";
 import type { PluginLayout } from "./core/layout.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
+import {
+  COVERS_MARKER,
+  countEvidence,
+  evidenceFor,
+  formatEvidence,
+  isStronger,
+  prepareTest,
+  type CoverageEvidence,
+  type EvidenceCounts,
+  type PreparedTest,
+} from "./coverage-evidence.js";
 
 /**
  * The two on-disk locations a surface dir can occupy: the plugin-root form
@@ -63,13 +95,51 @@ export interface Surface {
   readonly ignored: boolean;
 }
 
+/**
+ * WHY one surface counts as covered — the provenance of a single decision.
+ * Reported so a repo can see what its coverage number actually rests on; a count
+ * whose derivation is invisible is exactly the failure this detector had.
+ */
+export interface CoverageDecision {
+  readonly surface: Surface;
+  readonly evidence: CoverageEvidence;
+  /** The test file the (strongest) evidence came from. */
+  readonly by: string;
+}
+
+/** One tier's split of the considered surfaces — covered by THAT tier, or not. */
+export interface CoverageTier {
+  readonly covered: readonly Surface[];
+  readonly untested: readonly Surface[];
+  /** One entry per `covered` surface, in the same order — how it was decided. */
+  readonly decisions: readonly CoverageDecision[];
+}
+
 export interface UntestedReport {
   /** Total surfaces considered (after exemptions). */
   readonly total: number;
+  /** Covered by EITHER tier — the union, unchanged (a test anywhere counts). */
   readonly covered: readonly Surface[];
+  /** Covered by NEITHER tier — the union, unchanged. */
   readonly untested: readonly Surface[];
   /** Surfaces explicitly opted out via `vigiles:ignore-test`. */
   readonly exempt: number;
+  /**
+   * How each covered surface was decided — the union tier's provenance, one
+   * entry per `covered` element. A coverage count whose derivation is invisible
+   * is what let a COMMENT confer coverage unnoticed; this is the visibility.
+   */
+  readonly decisions: readonly CoverageDecision[];
+  /**
+   * DETERMINISTIC coverage only — `*.harness.mjs` and `*.test.*`. Free,
+   * millisecond, every-push. Answers "does this gate still catch what it claims?"
+   */
+  readonly harness: CoverageTier;
+  /**
+   * REAL-MODEL coverage only — `*.eval.mjs`. Paid, minutes, scheduled. Answers
+   * the one question the deterministic tier cannot: "does this skill FIRE at all?"
+   */
+  readonly evals: CoverageTier;
 }
 
 export interface TestCoverageOptions {
@@ -97,9 +167,12 @@ export interface TestCoverageOptions {
 // Internals
 // ---------------------------------------------------------------------------
 
+/** The REAL-MODEL tier's suffix — the one file kind that costs money to run. */
+const EVAL_SUFFIX = ".eval.mjs";
+
 const DEFAULT_TEST_GLOBS = [
   "**/*.harness.mjs",
-  "**/*.eval.mjs",
+  `**/*${EVAL_SUFFIX}`,
   "**/*.test.ts",
   "**/*.test.mts",
   "**/*.test.cts",
@@ -245,16 +318,11 @@ function discoverHooks(basePath: string, layout: PluginLayout): Surface[] {
   }));
 }
 
-interface TestFile {
-  readonly path: string;
-  readonly content: string;
-}
-
 function discoverTests(
   basePath: string,
   globs: readonly string[],
   ignore: string[],
-): TestFile[] {
+): PreparedTest[] {
   // `dot: true` so a colocated test under a DOT directory is found — most
   // loose skills live in `.claude/skills/<name>/`, so the eval the warning
   // suggests (`.claude/skills/<name>/<name>.eval.mjs`) is itself dot-pathed.
@@ -263,7 +331,9 @@ function discoverTests(
   // still discovered — so the surface looks untested even after the user adds
   // exactly the suggested file. DEFAULT_IGNORE still drops .git/node_modules/etc.
   const found = globSync([...globs], { cwd: basePath, ignore, dot: true });
-  return found.map((path) => ({ path, content: read(join(basePath, path)) }));
+  // Prepared ONCE per file (comment-strip + declaration parse), not once per
+  // (surface × file) pair — the matching below is quadratic by nature.
+  return found.map((path) => prepareTest(path, read(join(basePath, path))));
 }
 
 /** Colocated: a test inside a skill dir, or a name-prefixed sibling of an agent/hook. */
@@ -283,13 +353,63 @@ function isColocated(surface: Surface, testPath: string): boolean {
   );
 }
 
-function isCovered(surface: Surface, tests: readonly TestFile[]): boolean {
+/**
+ * The STRONGEST evidence any discovered test provides for this surface, or null.
+ * Strongest — not first-found — so a surface that is both name-mentioned and
+ * explicitly declared is reported as declared; otherwise the provenance summary
+ * would depend on glob order.
+ */
+function coverageOf(
+  surface: Surface,
+  tests: readonly PreparedTest[],
+): CoverageDecision | null {
+  let best: CoverageDecision | null = null;
   for (const t of tests) {
     if (t.path === surface.path) continue;
-    if (isColocated(surface, t.path)) return true;
-    if (surface.tokens.some((tok) => t.content.includes(tok))) return true;
+    const ev = evidenceFor(surface, t, isColocated(surface, t.path));
+    if (!ev) continue;
+    if (!best || isStronger(ev, best.evidence))
+      best = { surface, evidence: ev, by: t.path };
   }
-  return false;
+  return best;
+}
+
+/**
+ * Split the discovered tests into the two tiers by SUFFIX — `*.eval.mjs` is the
+ * paid real-model tier, everything else (`*.harness.mjs`, `*.test.*`, and any
+ * user-supplied `testGlobs`) is the free deterministic tier. Suffix, not glob set,
+ * so a custom `testGlobs` (a promptfoo suite, a home-grown loop) still lands in a
+ * tier instead of silently disappearing from the split.
+ */
+function partitionTests(tests: readonly PreparedTest[]): {
+  harness: PreparedTest[];
+  evals: PreparedTest[];
+} {
+  const harness: PreparedTest[] = [];
+  const evals: PreparedTest[] = [];
+  for (const t of tests)
+    (t.path.endsWith(EVAL_SUFFIX) ? evals : harness).push(t);
+  return { harness, evals };
+}
+
+/** Split the considered surfaces by whether ONE tier's tests cover them. */
+function tierOf(
+  considered: readonly Surface[],
+  tests: readonly PreparedTest[],
+): CoverageTier {
+  const covered: Surface[] = [];
+  const untested: Surface[] = [];
+  const decisions: CoverageDecision[] = [];
+  for (const s of considered) {
+    const decision = coverageOf(s, tests);
+    if (decision) {
+      covered.push(s);
+      decisions.push(decision);
+    } else {
+      untested.push(s);
+    }
+  }
+  return { covered, untested, decisions };
 }
 
 // ---------------------------------------------------------------------------
@@ -302,6 +422,11 @@ function isCovered(surface: Surface, tests: readonly TestFile[]): boolean {
  * test that references its path/namespace. EVERY skill, agent, and hook is held
  * to this — the only exemption is an explicit `vigiles:ignore-test` marker in the
  * surface file (counted as `exempt`).
+ *
+ * The `covered`/`untested` union fields are UNCHANGED (a test anywhere counts).
+ * `harness` and `evals` carry the per-tier split so a caller can tell "has
+ * deterministic coverage, no evals" from "has neither" — two positions the single
+ * count made indistinguishable.
  */
 export function findUntestedSurfaces(
   options: TestCoverageOptions = {},
@@ -325,13 +450,18 @@ export function findUntestedSurfaces(
   const exempt = surfaces.length - considered.length;
 
   const tests = discoverTests(basePath, globs, ignore);
-  const covered: Surface[] = [];
-  const untested: Surface[] = [];
-  for (const s of considered) {
-    (isCovered(s, tests) ? covered : untested).push(s);
-  }
+  const split = partitionTests(tests);
+  const union = tierOf(considered, tests);
 
-  return { total: considered.length, covered, untested, exempt };
+  return {
+    total: considered.length,
+    covered: union.covered,
+    untested: union.untested,
+    exempt,
+    decisions: union.decisions,
+    harness: tierOf(considered, split.harness),
+    evals: tierOf(considered, split.evals),
+  };
 }
 
 /** Suggested colocated test path for an untested surface (shown in the warning). */
@@ -346,11 +476,31 @@ export function suggestedTestPath(surface: Surface): string {
   return `${prefix}${surface.name}.harness.mjs`;
 }
 
+/** Tally the union tier's coverage decisions by how each was established. */
+export function coverageEvidenceCounts(report: UntestedReport): EvidenceCounts {
+  return countEvidence(report.decisions);
+}
+
 /** Format an untested-surface report as human-readable text. */
 export function formatUntestedReport(report: UntestedReport): string {
+  // Every coverage number is printed WITH its provenance. "28 covered" and
+  // "28 covered, all of it a name appearing in a file" are different facts, and
+  // the detector used to be able to say only the first.
+  const provenance = formatEvidence(coverageEvidenceCounts(report));
   if (report.untested.length === 0) {
     const tail = report.exempt > 0 ? ` (${String(report.exempt)} exempt)` : "";
-    return `✓ all ${String(report.total)} surface(s) have a test or eval${tail}`;
+    const ok =
+      `✓ all ${String(report.total)} surface(s) have a test or eval${tail}` +
+      (provenance ? `\n  ${provenance}` : "");
+    // A clean UNION can still hide a whole unanswered question: every surface may
+    // have a deterministic harness and NOTHING may ever have measured that a
+    // skill fires. The gate is unchanged (still the union), but the ✓ must not
+    // read as "firing verified" when nothing asked.
+    const unevaluated = report.evals.untested.length;
+    return unevaluated === 0
+      ? ok
+      : `${ok}\n  …but ${String(unevaluated)} of them have no \`*.eval.mjs\`, so ` +
+          `nothing has measured whether they actually fire (a harness can't tell you that).`;
   }
   const lines = [
     `⚠ ${String(report.untested.length)} surface(s) with no test or eval:`,
@@ -358,12 +508,25 @@ export function formatUntestedReport(report: UntestedReport): string {
   for (const s of report.untested) {
     lines.push(`    ${s.kind} ${s.path} — add e.g. ${suggestedTestPath(s)}`);
   }
+  // Name the two gaps SEPARATELY — they lead to different work at wildly
+  // different cost. "add a test/eval" is one sentence for two prescriptions three
+  // orders of magnitude apart; a reader can't tell whether it's ten minutes or a
+  // model budget.
+  lines.push(
+    `  Two gaps, two costs: ${String(report.harness.untested.length)} with no ` +
+      `deterministic harness (free, every push) · ` +
+      `${String(report.evals.untested.length)} whose firing was never measured ` +
+      `(needs a real model, run on a schedule).`,
+  );
+  // What the surfaces that DID pass are resting on. A repo whose coverage is
+  // entirely name-mentions should be able to see that about itself.
+  if (provenance) lines.push(`  ${provenance}`);
   // Already testing these another way (a promptfoo suite, a home-grown evals
   // file)? Point `testGlobs` at it so it counts toward coverage (issue #113).
   lines.push(
     `  Testing these another way (promptfoo / a home-grown eval loop)? Add its ` +
-      `files to \`testGlobs\` in .vigilesrc.json — a discovered test that names a ` +
-      `surface's path counts. See docs/rules/untested-skill.md.`,
+      `files to \`testGlobs\` in .vigilesrc.json, and mark what it covers with ` +
+      `\`${COVERS_MARKER} <surface>\`. See docs/rules/untested-skill.md.`,
   );
   return lines.join("\n");
 }

@@ -12,6 +12,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  coverageEvidenceCounts,
   findUntestedSurfaces,
   formatUntestedReport,
   suggestedTestPath,
@@ -285,5 +286,232 @@ test("a root SKILL.md is COVERED by a colocated eval (single-skill-dir target)",
     0,
     "the colocated solo.eval.mjs covers the root SKILL.md",
   );
+  cleanupTmpDir(dir);
+});
+
+// ── Two tiers, split at DISCOVERY ────────────────────────────────────────────
+// A harness (`*.harness.mjs`, `*.test.*`) is free and runs on every push; an eval
+// (`*.eval.mjs`) spends real model calls on a schedule and is the ONLY thing that
+// answers "does this skill fire?". Erasing that at discovery makes it
+// unrecoverable downstream — hence a per-tier split, not a display tweak.
+
+test("tiers split at discovery: a harness-only skill is NOT evaluated, and vice versa", () => {
+  const dir = makeTmpDir("cov-tiers");
+  write(dir, "skills/harnessed/SKILL.md", skill("harnessed"));
+  write(dir, "skills/harnessed/harnessed.harness.mjs", "// deterministic\n");
+  write(dir, "skills/evaled/SKILL.md", skill("evaled"));
+  write(dir, "skills/evaled/evaled.eval.mjs", "// real model\n");
+  write(dir, "skills/bare/SKILL.md", skill("bare"));
+
+  const r = findUntestedSurfaces({ basePath: dir });
+  const names = (ss: readonly { name: string }[]) =>
+    ss.map((s) => s.name).sort();
+
+  // The UNION is unchanged: a test anywhere counts.
+  assert.deepEqual(names(r.untested), ["bare"]);
+  assert.deepEqual(names(r.covered), ["evaled", "harnessed"]);
+
+  // The tiers disagree, which is the whole point — "has deterministic coverage,
+  // no evals" is a different position from "has neither".
+  assert.deepEqual(names(r.harness.covered), ["harnessed"]);
+  assert.deepEqual(names(r.harness.untested), ["bare", "evaled"]);
+  assert.deepEqual(names(r.evals.covered), ["evaled"]);
+  assert.deepEqual(names(r.evals.untested), ["bare", "harnessed"]);
+  cleanupTmpDir(dir);
+});
+
+test("a `*.test.ts` is a HARNESS, never an eval (it spends no model calls)", () => {
+  const dir = makeTmpDir("cov-tier-ts");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  write(dir, "suite/foo.test.ts", 'import "../skills/foo/SKILL.md";\n');
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.equal(r.untested.length, 0, "content-reference covers the union");
+  assert.equal(r.harness.untested.length, 0, "…and the deterministic tier");
+  assert.deepEqual(
+    r.evals.untested.map((s) => s.name),
+    ["foo"],
+    "but firing is still unmeasured — a .test.ts cannot answer that",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("a clean UNION still says when nothing has measured firing", () => {
+  // Every surface has a deterministic harness, so the gate passes — but no
+  // `*.eval.mjs` exists, so nothing has measured that the skill fires. A bare ✓
+  // there would read as "firing verified" when the question was never asked.
+  const dir = makeTmpDir("cov-clean-noeval");
+  write(dir, "skills/a/SKILL.md", skill("a"));
+  write(dir, "skills/a/a.harness.mjs", "// deterministic only\n");
+  const harnessOnly = formatUntestedReport(
+    findUntestedSurfaces({ basePath: dir }),
+  );
+  assert.ok(harnessOnly.startsWith("✓"), harnessOnly);
+  assert.ok(harnessOnly.includes("no `*.eval.mjs`"), harnessOnly);
+  assert.ok(harnessOnly.includes("actually fire"), harnessOnly);
+
+  // Add the eval and the caveat disappears — a plain ✓, nothing left unasked.
+  write(dir, "skills/a/a.eval.mjs", "// real model\n");
+  const both = formatUntestedReport(findUntestedSurfaces({ basePath: dir }));
+  assert.ok(both.startsWith("✓"), both);
+  assert.ok(!both.includes("eval.mjs`"), both);
+  cleanupTmpDir(dir);
+});
+
+test("formatUntestedReport names the two gaps SEPARATELY (no test/eval slash)", () => {
+  const dir = makeTmpDir("cov-tier-fmt");
+  write(dir, "skills/a/SKILL.md", skill("a"));
+  write(dir, "skills/a/a.harness.mjs", "// deterministic only\n");
+  write(dir, "skills/b/SKILL.md", skill("b"));
+  const text = formatUntestedReport(findUntestedSurfaces({ basePath: dir }));
+  // Only `b` is in the union list…
+  assert.ok(text.includes("1 surface(s) with no test"));
+  // …but the breakdown says 1 needs a harness and 2 need firing measured, with
+  // the cost of each named. One number could not have said that.
+  assert.ok(
+    text.includes(
+      "Two gaps, two costs: 1 with no deterministic harness (free, every push) · 2 whose firing was never measured",
+    ),
+    text,
+  );
+  cleanupTmpDir(dir);
+});
+
+// ── Evidence: a STRING is not a test ─────────────────────────────────────────
+// The detector used to count any occurrence of a surface's path/namespace ANYWHERE
+// in a discovered test file. Measured on a real repo (37 skills, 14 hooks),
+// appending one COMMENT line — `// probe: skills/argument-arc` — moved the
+// untested count 33 → 32. Meanwhile a harness that genuinely asserts over 21
+// skills but builds its paths at runtime contained no literal `skills/<name>` and
+// covered nothing: generality was penalised, gaming was free.
+
+test("a surface named ONLY in a comment is NOT covered (the one-line probe)", () => {
+  const dir = makeTmpDir("cov-comment-probe");
+  write(dir, "skills/argument-arc/SKILL.md", skill("argument-arc"));
+  // Verbatim shape of the reproduction: a real harness file, plus a comment that
+  // happens to spell the surface's path. Nothing asserts anything about it.
+  write(
+    dir,
+    "test/pipeline.harness.mjs",
+    [
+      "import { readFileSync } from 'node:fs';",
+      "// probe: skills/argument-arc",
+      "export default () => readFileSync('unrelated.txt');",
+      "",
+    ].join("\n"),
+  );
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(
+    r.untested.map((s) => s.name),
+    ["argument-arc"],
+    "a comment is prose about a test, not a test",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("a mention in CODE still counts — the zero-config path is kept, and labelled", () => {
+  // The bare substring detector is deliberately RETAINED for code: it is what
+  // makes an ordinary `foo.test.ts` naming `skills/foo` count without anyone
+  // learning a marker. What it no longer reads is comments.
+  const dir = makeTmpDir("cov-code-mention");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  write(dir, "test/foo.test.ts", 'loadSkill("skills/foo/SKILL.md");\n');
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.equal(r.untested.length, 0);
+  assert.deepEqual(coverageEvidenceCounts(r), {
+    declared: 0,
+    colocated: 0,
+    mention: 1,
+  });
+  cleanupTmpDir(dir);
+});
+
+test("a URL in a string literal survives comment-stripping", () => {
+  // The stripper must not treat `//` inside a string as a comment opener, or a
+  // fixture URL would swallow the rest of the line and drop real coverage.
+  const dir = makeTmpDir("cov-url");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  write(
+    dir,
+    "test/foo.test.ts",
+    'const u = "https://example.com"; loadSkill("skills/foo");\n',
+  );
+  assert.equal(findUntestedSurfaces({ basePath: dir }).untested.length, 0);
+  cleanupTmpDir(dir);
+});
+
+test("a runtime-path harness that DECLARES its surfaces is counted", () => {
+  // The false NEGATIVE half: this harness really does assert over both skills,
+  // but assembles the paths at runtime, so it contains ZERO literal `skills/<name>`
+  // strings. Substring matching can never see it; a declaration can.
+  const dir = makeTmpDir("cov-declared");
+  write(dir, "skills/alpha/SKILL.md", skill("alpha"));
+  write(dir, "skills/beta/SKILL.md", skill("beta"));
+  const runtimeHarness = [
+    "import { join } from 'node:path';",
+    "// vigiles:covers skills/alpha, skills/beta",
+    "for (const name of ['alpha', 'beta']) {",
+    "  assertFrontmatter(join(root, 'skills', name, 'SKILL.md'));",
+    "}",
+    "",
+  ].join("\n");
+  write(dir, "test/pipeline.harness.mjs", runtimeHarness);
+  // The literal path exists ONLY on the declaration line: strike that line and
+  // no substring detector could ever have found either skill.
+  const codeOnly = runtimeHarness
+    .split("\n")
+    .filter((l) => !l.includes("vigiles:covers"))
+    .join("\n");
+  assert.ok(!codeOnly.includes("skills/alpha"), codeOnly);
+  assert.ok(!codeOnly.includes("skills/beta"), codeOnly);
+
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.equal(r.untested.length, 0, "both surfaces are covered");
+  assert.deepEqual(coverageEvidenceCounts(r), {
+    declared: 2,
+    colocated: 0,
+    mention: 0,
+  });
+  cleanupTmpDir(dir);
+});
+
+test("evidence provenance is REPORTED, and names the weakest case explicitly", () => {
+  const dir = makeTmpDir("cov-provenance");
+  write(dir, "skills/mentioned/SKILL.md", skill("mentioned"));
+  write(dir, "test/a.test.ts", 'loadSkill("skills/mentioned");\n');
+  const mentionOnly = formatUntestedReport(
+    findUntestedSurfaces({ basePath: dir }),
+  );
+  assert.ok(mentionOnly.includes("How coverage was decided"), mentionOnly);
+  assert.ok(
+    mentionOnly.includes("ALL of it is a name appearing in a test file"),
+    mentionOnly,
+  );
+
+  // Add a colocated test and the "all of it" escalation must drop away.
+  write(dir, "skills/colo/SKILL.md", skill("colo"));
+  write(dir, "skills/colo/colo.harness.mjs", "export default () => {};\n");
+  const mixed = formatUntestedReport(findUntestedSurfaces({ basePath: dir }));
+  assert.ok(mixed.includes("1 colocated"), mixed);
+  assert.ok(!mixed.includes("ALL of it"), mixed);
+  cleanupTmpDir(dir);
+});
+
+test("a declaration OUTRANKS a mention for the same surface", () => {
+  // Provenance must not depend on glob order: the strongest evidence wins.
+  const dir = makeTmpDir("cov-rank");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  write(dir, "test/a-mention.test.ts", 'loadSkill("skills/foo");\n');
+  write(
+    dir,
+    "test/z-declared.harness.mjs",
+    "// vigiles:covers skills/foo\nexport default () => {};\n",
+  );
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(coverageEvidenceCounts(r), {
+    declared: 1,
+    colocated: 0,
+    mention: 0,
+  });
+  assert.equal(r.decisions[0].by, "test/z-declared.harness.mjs");
   cleanupTmpDir(dir);
 });

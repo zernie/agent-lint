@@ -50,6 +50,12 @@ import {
   DEFAULT_LOCK_DIR,
 } from "./eval-lock.js";
 import { applyConfigFlags } from "./cli-flags.js";
+import { VERBS, type Verb } from "./cli-commands.js";
+import {
+  formatUnknownFlag,
+  knownFlagsFor,
+  unknownFlags,
+} from "./cli-flag-check.js";
 import {
   parseSetupArgs,
   shouldPrompt,
@@ -87,8 +93,14 @@ import {
   isMeteredAccess,
   decideExecute,
   formatExecuteSkip,
+  type ExecuteDecision,
 } from "./scan-trigger-suggest.js";
 import { checkDialectDrift, formatDialectDrift } from "./dialect-drift.js";
+import {
+  checkSkillReachability,
+  formatSkillReachability,
+} from "./skill-reachability.js";
+import { addVigilesDeclaration } from "./plugin-declaration.js";
 import {
   probePluginTriggers,
   formatBehavioralReport,
@@ -3290,6 +3302,74 @@ function installPlugins(harnesses: string[]): void {
   // global store, so wire vigiles's proactive nudge hooks into the repo's
   // .codex/config.toml directly (the idiomatic, repo-committed place).
   if (harnesses.includes("codex")) wireCodexHooks();
+  // Claude Code additionally gets a committed DECLARATION, so a collaborator who
+  // clones and never runs `init` is told the project wants this plugin instead
+  // of hitting the silence that costs a day. It does not install anything.
+  if (harnesses.includes("claude")) declareVigilesPlugin();
+}
+
+/**
+ * Write the project-level plugin declaration into `.claude/settings.json`.
+ *
+ * 🔴 **The honest claim.** This does NOT make the plugin available to a
+ * collaborator: an external-source plugin declared project-level does not load
+ * until each person installs it on their own machine (the boundary is
+ * deliberate — plugins run arbitrary code with the user's privileges). What it
+ * buys is that Claude Code then PROMPTS them with the install command, instead
+ * of the silence a fresh clone gets today. Silent absence → a prompt.
+ *
+ * MERGES, never clobbers: this file holds the user's hooks, permissions and
+ * other plugins. The merge rules are the pure, unit-tested
+ * `addVigilesDeclaration`; this is only the IO around it. Invalid JSON is a loud
+ * skip, never a rewrite — mirrors `wireCodexHooks`.
+ */
+function declareVigilesPlugin(): void {
+  const path = resolve(process.cwd(), ".claude", "settings.json");
+  // The vigiles repo IS the plugin — it must not declare itself as a consumer.
+  const pkgPath = resolve(process.cwd(), "package.json");
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as {
+        name?: string;
+      };
+      if (pkg.name === "vigiles") return;
+    } catch {
+      /* unreadable package.json — fall through, the declaration is harmless */
+    }
+  }
+
+  let settings: Record<string, unknown> = {};
+  if (existsSync(path)) {
+    try {
+      settings = JSON.parse(readFileSync(path, "utf-8")) as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      console.log(
+        "⚠ .claude/settings.json is not valid JSON — skipping the project plugin declaration (fix it, then re-run `vigiles init`).",
+      );
+      return;
+    }
+  }
+
+  const edit = addVigilesDeclaration(settings);
+  if (!edit.changed) {
+    console.log(
+      "  .claude/settings.json already declares the vigiles plugin — left as-is.",
+    );
+    return;
+  }
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(edit.settings, null, 2) + "\n");
+  console.log(
+    "✓ Declared the vigiles plugin in .claude/settings.json (commit it)\n" +
+      "  This does NOT install it for anyone else — Claude Code will PROMPT a\n" +
+      "  collaborator to run `claude plugin install vigiles@vigiles`, instead of\n" +
+      "  the silence a fresh clone gets today.\n" +
+      "  Nothing is vendored: the entry is a reference; the plugin still lives in\n" +
+      "  the global cache, one copy shared across your repos.",
+  );
 }
 
 /**
@@ -5303,44 +5383,113 @@ function capabilitiesOfReport(
   return computeHarnessCapabilities(agents, dialect);
 }
 
+/**
+ * The help text, ONE entry per verb, so `vigiles --help` (all of them) and
+ * `vigiles <verb> --help` (one of them) cannot drift apart. `vigiles audit
+ * --help` used to RUN AN AUDIT — help lived only on the bare invocation — which
+ * is the least helpful possible response to someone asking what a flag is
+ * called, and part of the same defect as silently swallowing an unknown flag.
+ */
+interface CommandHelp {
+  /** The signature line, aligned with its description in the banner. */
+  readonly usage: string;
+  /** Continuation lines (flags, caveats), indented under the signature. */
+  readonly detail?: readonly string[];
+}
+
+const COMMAND_HELP: Record<Verb, CommandHelp> = {
+  init: {
+    usage:
+      "  vigiles init [flags]           Setup project (--ci-only for the CI gate only; --lint, --test, --harness=, --strict, --report-only, --no-gha, --force)",
+  },
+  compile: { usage: "  vigiles compile [files...]     Compile .spec.ts → .md" },
+  eject: {
+    usage:
+      "  vigiles eject [file]           Un-manage a compiled file → plain hand-owned markdown (--keep-spec)",
+  },
+  lint: {
+    usage:
+      "  vigiles lint [files...]        Verify references, find gaps in instruction files",
+  },
+  audit: {
+    usage:
+      "  vigiles audit [dir...]          Lighthouse for your harness — a LOCAL report: rings + what's broken + fixes (a deterministic read; 2+ dirs → leaderboard)",
+    detail: [
+      "                                 writes vigiles-report.html + .json (auto-gitignored; --out=<dir> · --no-html/--no-json · --no-open · --json for machine output). NOT a CI step — use `vigiles lint` in CI.",
+      "                                 the executing checks (run your hooks · live MCP · do skills fire?) run only interactively — `audit` asks once (remembered); automation uses the vigiles/testing API",
+      "                                 --serve opens a LIVE local report whose buttons create specs in one click (own repo only; loopback + token-guarded) · --no-serve to skip the prompt",
+    ],
+  },
+  test: {
+    usage:
+      "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
+  },
+  eval: {
+    usage:
+      "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N, --min=N, --no-skip)",
+    detail: [
+      "                                 --update records each named eval's result to a committed lock (run locally on your subscription)",
+      "                                 --check verifies committed eval results against current inputs WITHOUT a model — the CI staleness gate",
+    ],
+  },
+  generate: {
+    usage:
+      "  vigiles generate <kind>       Emit a dev-toolchain artifact: types (.d.ts) · schema (JSON Schema) · harness (harness.gen.ts)",
+    detail: [
+      "  vigiles generate <kind> --check  Verify the generated file is up to date",
+    ],
+  },
+  "hook-runtime": {
+    usage:
+      "  vigiles hook-runtime <kind>   (emitted into hooks configs — never typed by hand)",
+  },
+};
+
+/** Display order of the human-facing verbs in the banner's "Commands:" block. */
+const HELP_ORDER: readonly Verb[] = [
+  "init",
+  "compile",
+  "eject",
+  "lint",
+  "audit",
+  "test",
+  "eval",
+];
+
+function printHelpEntry(v: Verb): void {
+  console.log(COMMAND_HELP[v].usage);
+  for (const line of COMMAND_HELP[v].detail ?? []) console.log(line);
+}
+
+/**
+ * The loud "there is nothing here to audit" block. Deliberately says WHAT was
+ * looked at and WHY it found nothing, because the commonest cause is that the
+ * target isn't the directory the operator thinks it is.
+ */
+function formatNothingToAudit(root: string, harness: string): string {
+  return [
+    `✗ vigiles audit: nothing to audit in ${root}`,
+    `  No instruction file and no ${harness} surface (skills / subagents / hooks / commands / MCP) was found there.`,
+    "  This is NOT a grade — there was nothing to measure, so no score is reported.",
+    "  Check that the path is the repo you meant, and that a flag didn't swallow it",
+    "  (flags take values with `=`: `--out=dir`, never `--out dir`).",
+  ].join("\n");
+}
+
+/** `vigiles <verb> --help` — that verb's entry plus its complete flag list. */
+function printCommandHelp(command: Verb): void {
+  printHelpEntry(command);
+  const flags = knownFlagsFor(command);
+  console.log("");
+  console.log(`Flags: ${[...flags].sort().join(" ")}`);
+  console.log("(`vigiles --help` lists every command.)");
+}
+
 function printUsage(command: string | undefined): void {
   console.log("vigiles — compile typed specs to instruction files");
   console.log("");
   console.log("Commands:");
-  console.log(
-    "  vigiles init [flags]           Setup project (--ci-only for the CI gate only; --lint, --test, --harness=, --strict, --report-only, --no-gha, --force)",
-  );
-  console.log("  vigiles compile [files...]     Compile .spec.ts → .md");
-  console.log(
-    "  vigiles eject [file]           Un-manage a compiled file → plain hand-owned markdown (--keep-spec)",
-  );
-  console.log(
-    "  vigiles lint [files...]        Verify references, find gaps in instruction files",
-  );
-  console.log(
-    "  vigiles audit [dir...]          Lighthouse for your harness — a LOCAL report: rings + what's broken + fixes (a deterministic read; 2+ dirs → leaderboard)",
-  );
-  console.log(
-    "                                 writes vigiles-report.html + .json (auto-gitignored; --out=<dir> · --no-html/--no-json · --no-open · --json for machine output). NOT a CI step — use `vigiles lint` in CI.",
-  );
-  console.log(
-    "                                 the executing checks (run your hooks · live MCP · do skills fire?) run only interactively — `audit` asks once (remembered); automation uses the vigiles/testing API",
-  );
-  console.log(
-    "                                 --serve opens a LIVE local report whose buttons create specs in one click (own repo only; loopback + token-guarded) · --no-serve to skip the prompt",
-  );
-  console.log(
-    "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
-  );
-  console.log(
-    "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N, --min=N, --no-skip)",
-  );
-  console.log(
-    "                                 --update records each named eval's result to a committed lock (run locally on your subscription)",
-  );
-  console.log(
-    "                                 --check verifies committed eval results against current inputs WITHOUT a model — the CI staleness gate",
-  );
+  for (const v of HELP_ORDER) printHelpEntry(v);
   console.log("");
   console.log("Examples:");
   console.log(
@@ -5352,12 +5501,7 @@ function printUsage(command: string | undefined): void {
   );
   console.log("");
   console.log("Plumbing:");
-  console.log(
-    "  vigiles generate <kind>       Emit a dev-toolchain artifact: types (.d.ts) · schema (JSON Schema) · harness (harness.gen.ts)",
-  );
-  console.log(
-    "  vigiles generate <kind> --check  Verify the generated file is up to date",
-  );
+  printHelpEntry("generate");
   console.log("  vigiles --version             Print the version number");
   if (command && command !== "--help") {
     console.log(`\nUnknown command: "${command}"`);
@@ -6730,20 +6874,10 @@ interface ExecutableSurfaces {
  */
 async function resolveExecution(
   s: ExecutableSurfaces,
+  decision: ExecuteDecision,
   json: boolean,
-  args: string[],
   harness: string,
 ): Promise<{ execute: boolean; note: string | null }> {
-  const decision = decideExecute({
-    hasExecutable: s.hasMcp || s.triggerableSkills > 0 || s.adoptableRefs,
-    // A human is "interactive" only when BOTH streams are a terminal — `askOnce`
-    // reads stdin, so a TTY stdout with piped/redirected stdin (agents, shell
-    // pipelines) must NOT block on a read that never gets input.
-    isTTY: process.stdout.isTTY && process.stdin.isTTY,
-    json,
-    noInteractive: args.includes("--no-interactive") || args.includes("--yes"),
-    remembered: loadConfig().audit?.measure,
-  });
   if (decision.kind === "run") return { execute: true, note: null };
   if (decision.kind === "skip")
     return {
@@ -6882,6 +7016,31 @@ async function main(): Promise<void> {
   if (command === "--version" || command === "-v" || command === "version") {
     console.log(getVersion());
     return;
+  }
+
+  // Refuse an argument we did not understand, BEFORE anything runs. Every verb
+  // parses its own flags by asking `args.includes("--x")` and ignoring the rest,
+  // so `audit --this-flag-does-not-exist` used to run a complete audit and exit
+  // 0. audit's flags govern what LEAVES the machine (`--no-html`, `--no-json`,
+  // `--out=`, `--serve`), so a typo silently produced the opposite of what was
+  // asked for. `<verb> --help` is handled here too: it used to fall through and
+  // RUN the verb, the least useful answer to "what is this flag called?".
+  // `hook-runtime` is exempt — its argv comes from the harness, not a human.
+  if (VERBS.includes(command as Verb) && command !== "hook-runtime") {
+    const flagArgs = args.slice(1);
+    if (flagArgs.includes("--help")) {
+      printCommandHelp(command as Verb);
+      return;
+    }
+    const bad = unknownFlags(command, flagArgs);
+    if (bad.length > 0) {
+      for (const flag of bad) console.error(formatUnknownFlag(command, flag));
+      // 2, not 1. Across this CLI, 1 means "I ran, and the thing you asked about
+      // is bad" (lint findings, a failing harness script); 2 means "I could not
+      // do what you asked" (the top-level error handler, `eval`'s refusal,
+      // `generate` with an unknown kind). A misspelled flag is the second.
+      process.exit(2);
+    }
   }
 
   const restArgs = args.slice(1).filter((a) => !a.startsWith("--"));
@@ -7057,6 +7216,13 @@ async function main(): Promise<void> {
           if (adapter.name === "claude-code") {
             const drift = formatDialectDrift(checkDialectDrift());
             if (drift) console.log(drift);
+            // Adoption: this repo depends on vigiles, but can the agent SEE the
+            // skills it ships? `npm install` drops them in node_modules, which
+            // Claude Code never scans — the plugin install is what wires them,
+            // and until it runs the whole teaching surface is silently absent.
+            // Advisory only (machine state, not repo state) — never scored.
+            const reach = formatSkillReachability(checkSkillReachability(root));
+            if (reach) console.log(reach);
           }
           console.log("");
         }
@@ -7075,6 +7241,43 @@ async function main(): Promise<void> {
         // Read the local flight recorder ONCE — feeds both the JSON report
         // (structured summary, the product boundary) and the terminal render.
         const ledgerRecords = readObservations(root);
+        // What the EXECUTING checks would have to work with. Computed BEFORE the
+        // report is built (it's a pure read off the scan) because the report's
+        // `Evaluated` ring needs to know whether this run will ever ask the
+        // skill-firing question — see `firingMeasured` below.
+        const isForeign = root !== process.cwd();
+        const surfaces: ExecutableSurfaces = {
+          hasMcp: report.mcp && !isForeign,
+          triggerableSkills: report.skills.filter(
+            (s) => s.hasDescription && !s.userInvoked,
+          ).length,
+          gateSkills: detectGateSkills(report.skills).length,
+          adoptableRefs:
+            adapter.name === "claude-code" &&
+            existsSync(resolve(root, adapter.layout.instructionFile)),
+        };
+        // `decideExecute` is PURE and prompt-free, so the read-vs-run outcome can
+        // be known before anything prints. Only a settled `run` (a remembered yes)
+        // means the firing question actually gets asked on this run; a `skip`
+        // (headless / `--json` / a remembered no) means it never does, and an
+        // `ask` isn't resolved until after the read has printed. Anything but a
+        // certain `run` → the `Evaluated` ring reports "not measured" rather than
+        // scoring a 0 it never earned.
+        const execDecision = decideExecute({
+          hasExecutable:
+            surfaces.hasMcp ||
+            surfaces.triggerableSkills > 0 ||
+            surfaces.adoptableRefs,
+          isTTY: process.stdout.isTTY && process.stdin.isTTY,
+          json,
+          noInteractive:
+            args.includes("--no-interactive") || args.includes("--yes"),
+          remembered: config.audit?.measure,
+        });
+        const firingMeasured =
+          execDecision.kind === "run" &&
+          surfaces.triggerableSkills > 0 &&
+          (adapter.name === "codex" || hasModelAccess(process.env));
         // The report scaffold WITHOUT the rule map — the map's catalog
         // enrichment (enabled-state / "documented but OFF") enumerates the repo's
         // linter, which is gated on the SAME audit.measure consent as the
@@ -7090,8 +7293,34 @@ async function main(): Promise<void> {
             root,
             adapter.layout.instructionFile,
           ),
+          firingMeasured,
         });
         const sc = auditReportBase.score;
+        // NOTHING TO AUDIT is not a bad grade — and it used to be reported as
+        // one. `score.empty` means the target has no instruction file AND no
+        // surface: there was never anything to measure. That printed as rings of
+        // `F (0)` at exit 0, which is BYTE-INDISTINGUISHABLE from a genuine audit
+        // of a harness that scores badly. The way it actually bit: `vigiles audit
+        // --json /some/path` — `--json` takes no value, so the path fell through
+        // to the positional scan dir, the audit ran over a directory with no
+        // harness in it, and reported `skills: 0`, grade F, exit 0. A confident
+        // measurement of the wrong object, silently. The flag check added
+        // alongside this does NOT catch that one — `--json` is a real flag and
+        // `audit --json ./dir` is legitimate — so THIS branch is what makes it
+        // visible, and it covers every other way of pointing at the wrong place
+        // too (a moved repo, a bad `$PWD`, a path that doesn't exist).
+        //
+        // Exit 2, matching the unknown-flag decision above: 1 is "I measured, and
+        // it's bad"; 2 is "I could not do what you asked". A script that greps for
+        // a grade needs those to differ, and a grade is exactly what this run does
+        // NOT have. `--json` still emits the report (it self-describes with
+        // `score.empty: true`), so a machine consumer keeps its contract; the
+        // human-readable explanation goes to stderr either way.
+        if (sc.empty) {
+          if (json) console.log(JSON.stringify(auditReportBase, null, 2));
+          console.error(formatNothingToAudit(root, adapter.name));
+          process.exit(2);
+        }
         const plan = optimize(report);
         // The deterministic READ leads: rings + report + fixes + nudges print
         // BEFORE the consent prompt, so a plain `audit` shows its findings first.
@@ -7133,21 +7362,12 @@ async function main(): Promise<void> {
         // BEFORE the rule map is routed, so a first-time "yes" enriches THIS run.
         // (The safety battery is NOT here — it needs cross-platform confinement
         // that isn't shipped, so it lives in the vigiles/testing API.)
-        const isForeign = root !== process.cwd();
-        const surfaces: ExecutableSurfaces = {
-          hasMcp: report.mcp && !isForeign,
-          triggerableSkills: report.skills.filter(
-            (s) => s.hasDescription && !s.userInvoked,
-          ).length,
-          gateSkills: detectGateSkills(report.skills).length,
-          adoptableRefs:
-            adapter.name === "claude-code" &&
-            existsSync(resolve(root, adapter.layout.instructionFile)),
-        };
+        // `surfaces` + `execDecision` were resolved above (the ring needed them);
+        // this only turns an `ask` into a prompt and remembers the answer.
         const { execute, note: execNote } = await resolveExecution(
           surfaces,
+          execDecision,
           json,
-          args,
           adapter.name,
         );
         // Consent is now settled (and remembered via .vigilesrc.json, which

@@ -10,7 +10,10 @@ export type CategoryKey =
   | "Triggering"
   | "Structure"
   | "Safety"
-  | "Tested";
+  /** DETERMINISTIC harness coverage — free, milliseconds, every push. */
+  | "Tested"
+  /** REAL-MODEL eval coverage — paid, minutes, scheduled. Does a skill FIRE? */
+  | "Evaluated";
 
 export interface CategoryScore {
   key: CategoryKey;
@@ -23,7 +26,23 @@ export interface CategoryScore {
    * failing/red ring that appears to drag the grade.
    */
   advisory?: boolean;
+  /**
+   * `score: null` because this run never ASKED the question — distinct from `null`
+   * meaning "nothing to assess" (plain n/a) and from a measured `0`. Rendering an
+   * unasked question as a zero reports the absence of a check as the result of
+   * one. Carries a finding naming the command that would measure it.
+   */
+  notMeasured?: boolean;
   findings: string[];
+}
+
+/**
+ * The ring's number as the reader sees it — THREE labels, never two. Mirror of
+ * the CLI's `categoryScoreLabel` (src/audit-score.ts); keep them in step.
+ */
+export function categoryScoreLabel(c: CategoryScore): string {
+  if (c.score !== null) return String(c.score);
+  return c.notMeasured ? "not measured" : "n/a";
 }
 
 export interface AuditScore {
@@ -78,6 +97,18 @@ export interface AuditInventory {
   commands: number;
   mcp: boolean;
   untested: number;
+  /**
+   * The per-tier split behind `untested`, emitted since the Evaluated ring landed: surfaces with no
+   * deterministic harness, and surfaces whose firing was never measured. Optional because a report
+   * produced before the split carries neither, and the view must still render an older artifact.
+   *
+   * 🔴 These reached the ENGINE's inventory and not this mirror, so `sample.ts` set two fields the
+   * type did not have. It went unnoticed because CI typechecks the root project and `test/types` and
+   * never `-p site/tsconfig.json` — the same shape as every other defect in this PR: a check that
+   * exists, passes, and does not cover the thing that broke.
+   */
+  untestedHarness?: number;
+  unevaluated?: number;
 }
 
 export interface BrokenRef {

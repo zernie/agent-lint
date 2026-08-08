@@ -68,7 +68,7 @@ describe("buildAuditReport", () => {
       makeReport({ untested: 3, commands: 2, mcp: true }),
       { harness: "codex", vigilesVersion: "1.0.0" },
     );
-    expect(r.score.categories.length).toBe(5); // five deterministic rings
+    expect(r.score.categories.length).toBe(6); // + the Evaluated ring
     expect(typeof r.score.overall).toBe("number");
     expect(r.inventory).toEqual({
       skills: 0,
@@ -78,6 +78,48 @@ describe("buildAuditReport", () => {
       mcp: true,
       untested: 3,
     });
+  });
+
+  it("the inventory carries BOTH tiers when the scan split them", () => {
+    // Same repo, two different gaps at two different costs — a consumer must be
+    // able to tell "has harnesses, no evals" from "has neither".
+    const r = buildAuditReport(
+      makeReport({ untested: 1, untestedHarness: 1, unevaluated: 4 }),
+      { harness: "claude-code", vigilesVersion: "1.0.0" },
+    );
+    expect(r.inventory.untestedHarness).toBe(1);
+    expect(r.inventory.unevaluated).toBe(4);
+    // A producer predating the split omits them entirely (additive/optional).
+    const legacy = buildAuditReport(makeReport({ untested: 1 }), {
+      harness: "claude-code",
+      vigilesVersion: "1.0.0",
+    });
+    expect(legacy.inventory.untestedHarness).toBeUndefined();
+    expect(legacy.inventory.unevaluated).toBeUndefined();
+  });
+
+  it("🔴 the JSON distinguishes `not measured` from a measured 0 on Evaluated", () => {
+    const report = makeReport({ evaluable: 4, unevaluated: 4 });
+    const opts = { harness: "claude-code", vigilesVersion: "1.0.0" };
+    const evalRing = (firingMeasured: boolean) =>
+      buildAuditReport(report, {
+        ...opts,
+        firingMeasured,
+      }).score.categories.find((c) => c.key === "Evaluated");
+
+    // Headless read: the firing question was never asked. The wire shape has to
+    // SAY that — a 0 here would report the absence of a check as its result.
+    expect(evalRing(false)?.score).toBeNull();
+    expect(evalRing(false)?.notMeasured).toBe(true);
+
+    // The firing tier ran and found nothing covered: an earned, literal 0.
+    expect(evalRing(true)?.score).toBe(0);
+    expect(evalRing(true)?.notMeasured).toBeUndefined();
+
+    // And the two serialize differently — the distinction survives the wire.
+    expect(JSON.stringify(evalRing(false))).not.toBe(
+      JSON.stringify(evalRing(true)),
+    );
   });
 
   it("includes the deterministic recommendations (a typo'd tool → a fix)", () => {
@@ -210,6 +252,35 @@ describe("buildAuditReport", () => {
       "mcp",
       "skills",
       "untested",
+    ]);
+    // The two-tier fields are ADDITIVE: present only when the scan split them,
+    // and pinned here so the mirror is updated with them (never silently).
+    const split = buildAuditReport(
+      makeReport({ untestedHarness: 2, unevaluated: 5 }),
+      { harness: "claude-code", vigilesVersion: "1.0.0" },
+    );
+    expect(Object.keys(split.inventory).sort()).toEqual([
+      "agents",
+      "commands",
+      "hooks",
+      "mcp",
+      "skills",
+      "unevaluated",
+      "untested",
+      "untestedHarness",
+    ]);
+    // …and the ring's third state adds exactly one key to a CategoryScore.
+    const notMeasured = buildAuditReport(
+      makeReport({ evaluable: 1, unevaluated: 1 }),
+      { harness: "claude-code", vigilesVersion: "1.0.0" },
+    ).score.categories.find((c) => c.key === "Evaluated");
+    expect(Object.keys(notMeasured ?? {}).sort()).toEqual([
+      "advisory",
+      "findings",
+      "key",
+      "notMeasured",
+      "score",
+      "weight",
     ]);
   });
 

@@ -54,6 +54,7 @@ import { pluginDirLayoutIssues } from "./core/plugin-dir-layout.js";
 import { hookBlockIssues } from "./core/hook-block-ineffective.js";
 import { hookMatcherIssues } from "./core/hook-matcher.js";
 import { findUntestedSurfacesInFiles } from "./test-coverage-files.js";
+import { countEvidence } from "./coverage-evidence.js";
 import {
   makeClassifier,
   scanAgents,
@@ -673,6 +674,9 @@ export function scanFiles(
   >(
     findings: readonly T[],
   ): T[] => remapFindingPaths(findings, loaded.sources, BROWSER_ROOT);
+  // ONE discovery pass, read three ways — the union, the free deterministic tier
+  // (`Tested`), and the paid real-model tier (`Evaluated`). Mirrors scanPlugin.
+  const coverage = findUntestedSurfacesInFiles(files, lay);
   return {
     dir: BROWSER_ROOT,
     instructions,
@@ -735,7 +739,11 @@ export function scanFiles(
     ),
     malformedFrontmatter: remap(malformedFrontmatterFor(loaded.files, cls)),
     warnings: loaded.warnings,
-    untested: findUntestedSurfacesInFiles(files, lay).untested.length,
+    untested: coverage.untested.length,
+    untestedHarness: coverage.harness.untested.length,
+    unevaluated: coverage.evals.untested.length,
+    evaluable: coverage.evals.covered.length + coverage.evals.untested.length,
+    coverageEvidence: countEvidence(coverage.decisions),
     puritySummary,
   };
 }

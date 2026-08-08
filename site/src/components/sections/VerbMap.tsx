@@ -25,7 +25,7 @@ const VERBS: {
     answers: "Everything, graded A–F",
     model: "no model · read-only · anytime",
     detail:
-      "The zero-config front door. One command reads your whole harness and grades it across five categories — truthful references, skills that trigger, sound structure, safety, test coverage. Nothing executes; it's a local report, like Lighthouse.",
+      "The zero-config front door. One command reads your whole harness and grades it across six categories — truthful references, skills that trigger, sound structure, safety, deterministic test coverage, and whether anything has measured that your skills actually fire. Nothing executes; it's a local report, like Lighthouse.",
     before: 'hook on event "Setup" — no such event, never fires',
     after: 'hook on event "SessionStart" — fires every session',
   },

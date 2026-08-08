@@ -47,7 +47,18 @@
         "score": 91,
         "weight": 1,
         "advisory": true,
-        "findings": ["3 surfaces with no vigiles test/eval"]
+        "findings": ["3 surfaces with no vigiles harness (deterministic, free)"]
+      },
+      {
+        "key": "Evaluated",
+        "score": null,
+        "weight": 1,
+        "advisory": true,
+        "notMeasured": true,
+        "findings": [
+          "3 surfaces whose firing was never measured",
+          "not measured — run `npx vigiles audit` interactively to measure, or add a `*.eval.mjs` (`measureTriggerRate`, vigiles/testing)"
+        ]
       }
     ],
     "empty": false
@@ -104,7 +115,14 @@
     "hooks": 1,
     "commands": 0,
     "mcp": false,
-    "untested": 3
+    "untested": 3,
+    "untestedHarness": 3,
+    "unevaluated": 3,
+    "coverageEvidence": {
+      "declared": 0,
+      "colocated": 0,
+      "mention": 0
+    }
   },
   "brokenReferences": ["hooks/guard.sh"]
 }

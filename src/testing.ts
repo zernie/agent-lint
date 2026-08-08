@@ -15,7 +15,13 @@
 // helpers — stay out of the public surface, the api reports, and the docs site.
 // (vigiles's own tests import those from the source modules directly.)
 
-// --- unit tier: runHook ---
+// --- unit tier: runScript (the primitive) + runHook (it, plus a decision) ---
+// `runScript` runs any program and reports what it DID (exit, both streams,
+// writes, egress). `runHook` is that plus the hook protocol: event to stdin,
+// exit code to allow/deny. Testing a plain helper script? Reach for runScript —
+// its result carries no `decision`, because a script does not have one.
+export { runScript } from "./run-script.js";
+export type { RunScriptOptions, ScriptRunResult } from "./run-script.js";
 export { runHook, propertyHook } from "./run-hook.js";
 export type {
   HookRunResult,

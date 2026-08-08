@@ -65,6 +65,70 @@ has to remember to compile:
 
 ⚠️ **Without the plugin**, run `vigiles compile` manually after editing specs. CI still catches stale files.
 
+⚠️ **`npm install vigiles` does NOT wire the skills.** The npm tarball ships them
+(it doubles as the plugin payload), so they land in `node_modules/vigiles/skills/`
+— a directory Claude Code never scans. Until the plugin install above has run, all
+six shipped skills, `test-harness` included, are present on disk and unselectable.
+`vigiles audit` says so out loud when it sees a repo in that state.
+
+Checking by hand? Look in **`~/.claude/plugins/installed_plugins.json`** for a
+`vigiles@vigiles` entry — that is what `claude plugin install` writes for a
+user-scope install. A repo's `.claude/settings.json` carries _project_-level
+`enabledPlugins`, and a correctly-installed user-scope plugin **does not appear
+there**; judging it from `settings.json` alone reports a working install as broken.
+
+### What `init` commits to your repo — and what it can't
+
+`init` writes a **declaration** into your `.claude/settings.json`:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "vigiles": { "source": { "source": "github", "repo": "zernie/vigiles" } }
+  },
+  "enabledPlugins": { "vigiles@vigiles": true }
+}
+```
+
+It is **merged**, never overwritten — your hooks, permissions and other plugins
+are preserved, an existing `vigiles` entry is left alone (it may point at a
+fork), and an explicit `"vigiles@vigiles": false` is respected as a deliberate
+disable. Re-running `init` changes nothing.
+
+**What this does NOT do: install the plugin for anyone.** Per the Claude Code
+[team-marketplaces docs](https://code.claude.com/docs/en/discover-plugins#configure-team-marketplaces),
+as of CC v2.1.195:
+
+> A plugin that only the project's `.claude/settings.json` enables, and that
+> comes from an external source such as a GitHub repository or npm package,
+> doesn't load until the team member installs it. Until then, Claude Code reports
+> the plugin as not installed and shows the `claude plugin install` command to run.
+
+vigiles ships from a GitHub marketplace, so that is exactly our case, and the
+boundary is deliberate — plugins execute arbitrary code with your privileges, so
+a repo is not permitted to install one on your behalf.
+
+So the declaration buys **one** thing, and it is worth having: a collaborator who
+clones and never runs `init` currently gets **silence** — the npm package is
+there, its six skills are unreachable, and nothing says so. With the declaration,
+Claude Code tells them the project wants this plugin and prints the install
+command. **Silent absence becomes a prompt.** A fresh clone and a CI job still
+have no plugin until someone installs it.
+
+Nothing is vendored: two small JSON keys are a _reference_; the plugin content
+stays in the global cache, one copy shared across your repos.
+
+That is also why the reachability warning above is **advisory and never scored**:
+it reports machine state that no repo-committed file can determine.
+
+**Removing it** is a two-key edit — delete `extraKnownMarketplaces.vigiles` and
+`enabledPlugins["vigiles@vigiles"]`. `eject` does **not** do this: `eject` is the
+per-file inverse of `compile` ("hand this compiled file back to me"), and
+repo-scoped plugin wiring isn't a property of any one file. Uninstalling the
+global plugin is deliberately separate too — that install is shared by every repo
+on your machine, so one project can't speak for the others (`claude plugin
+uninstall vigiles@vigiles` if you do want it gone everywhere).
+
 ### Codex / GitHub Copilot
 
 Instruction file: `AGENTS.md`, read directly — there is no plugin or hook system.

@@ -271,17 +271,44 @@ export function assertEgressOnly(
 // (`r.filesWritten`, relative paths). These assert a hook touched only the files
 // it should — e.g. "wrote nothing but its own state cache".
 
-/** Anything carrying recorded file writes (a confined runHook result). */
+/**
+ * Anything carrying recorded file writes (a confined `runHook`/`runScript`
+ * result). `filesWritten` is OPTIONAL on purpose: `undefined` means the run
+ * never recorded writes at all, which is a different fact from `[]` ("recorded,
+ * and it wrote nothing"). See {@link requireWrites}.
+ */
 interface HasWrites {
-  readonly filesWritten: readonly string[];
+  readonly filesWritten?: readonly string[];
 }
 
 const matches = (f: string, p: string | RegExp): boolean =>
   typeof p === "string" ? f.includes(p) : p.test(f);
 
+/**
+ * The recorded write list, or a THROW when the run never recorded one.
+ *
+ * Writes are captured by diffing the work dir, which only happens on a confined
+ * run. An unconfined run therefore knows nothing about what the program wrote —
+ * and an assertion that silently treats "nobody looked" as "nothing happened"
+ * reports success while inspecting no evidence. That is the failure mode this
+ * whole library exists to catch in other people's harnesses, so it must not be
+ * this library's own default. Refuse instead, and name the fix.
+ */
+function requireWrites(r: HasWrites, assertion: string): readonly string[] {
+  if (r.filesWritten !== undefined) return r.filesWritten;
+  return fail(
+    `${assertion} cannot run: this result never recorded file writes, so ` +
+      `passing it would assert nothing. Writes are captured by diffing the work ` +
+      `dir, which only a CONFINED run does — pass \`{ sandbox: "auto" }\` (or ` +
+      `\`"strict"\`) to record them. Note confinement needs Linux + bubblewrap.`,
+  );
+}
+
 /** Assert the run wrote NO file matching `pattern` (substring or regex). */
 export function assertNoWrite(r: HasWrites, pattern: string | RegExp): void {
-  const bad = r.filesWritten.filter((f) => matches(f, pattern));
+  const bad = requireWrites(r, "assertNoWrite").filter((f) =>
+    matches(f, pattern),
+  );
   if (bad.length > 0) {
     fail(
       `expected no write matching ${String(pattern)}, but wrote: ${bad.join(", ")}`,
@@ -294,7 +321,9 @@ export function assertWroteOnly(
   r: HasWrites,
   allowed: ReadonlyArray<string | RegExp>,
 ): void {
-  const bad = r.filesWritten.filter((f) => !allowed.some((a) => matches(f, a)));
+  const bad = requireWrites(r, "assertWroteOnly").filter(
+    (f) => !allowed.some((a) => matches(f, a)),
+  );
   if (bad.length > 0) {
     fail(`run wrote file(s) outside the allowlist: ${bad.join(", ")}`);
   }

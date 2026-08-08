@@ -70,6 +70,39 @@ describe("injectReportData", () => {
     expect(html).toMatch(/^<!doctype html>/);
   });
 
+  it("🔴 carries `not measured` into the HTML, distinguishably from a measured 0", () => {
+    // The rendered artifact — the thing a human actually opens — must not flatten
+    // "nobody asked whether your skills fire" into "we asked and the answer is 0".
+    const withRing = (c: AuditReport["score"]["categories"][number]) =>
+      injectReportData(TEMPLATE, {
+        ...report,
+        score: { ...report.score, categories: [...report.score.categories, c] },
+      });
+    const unasked = withRing({
+      key: "Evaluated",
+      score: null,
+      weight: 1,
+      advisory: true,
+      notMeasured: true,
+      findings: [
+        "3 surfaces whose firing was never measured",
+        "not measured —",
+      ],
+    });
+    const measuredZero = withRing({
+      key: "Evaluated",
+      score: 0,
+      weight: 1,
+      advisory: true,
+      findings: ["3 surfaces whose firing was never measured"],
+    });
+    expect(unasked).toContain('"notMeasured":true');
+    expect(unasked).toContain('"key":"Evaluated","score":null');
+    expect(measuredZero).toContain('"key":"Evaluated","score":0');
+    expect(measuredZero).not.toContain("notMeasured");
+    expect(unasked).not.toBe(measuredZero);
+  });
+
   it("escapes <, >, & so report text can't break out of the <script>", () => {
     const evil: AuditReport = {
       ...report,
