@@ -11,16 +11,31 @@
  * also run standalone — the CLI just discovers, runs, and aggregates exit codes.
  */
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
-import { existsSync } from "node:fs";
+import { resolve, join } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { globSync } from "glob";
+import { CHECK_COUNT_ENV } from "../../check-count.js";
 
-export type ScriptStatus = "pass" | "skip" | "fail";
+/**
+ * The outcome of running one script.
+ *
+ * `"vacuous"` — the script exited 0 and reported that it made ZERO checks. It
+ * neither passed nor failed: nothing was verified. See {@link statusFor}.
+ */
+export type ScriptStatus = "pass" | "skip" | "fail" | "vacuous";
 
 export interface ScriptRunResult {
   readonly file: string;
   readonly code: number;
   readonly status: ScriptStatus;
+  /**
+   * How many checks the script reported making, or `undefined` when it reported
+   * nothing at all — a script that never imports `vigiles/testing` has no way to
+   * report, and that silence is NOT a claim about it. `0` is a claim: the script
+   * loaded the library and used none of it.
+   */
+  readonly checks?: number;
 }
 
 /**
@@ -31,10 +46,38 @@ export interface ScriptRunResult {
  */
 export const SKIP_EXIT_CODE = 77;
 
-function statusForCode(code: number): ScriptStatus {
-  if (code === 0) return "pass";
+/**
+ * Classify one script's run from its exit code and its reported check count.
+ *
+ * 🔴 THE FOURTH STATE, AND WHY. Exit codes answer "did it fail?", never "did it
+ * do anything?". Measured 2026-08-08: a file whose whole body is
+ * `export default { "never runs": () => assert.equal(1, 2) }` imports fine,
+ * exits 0, and printed `✓ … 1 passed` — a false assertion, never called,
+ * reported as a pass. A consumer repo hit exactly that and now hand-copies a
+ * warning into every new harness header, because the runner could not enforce
+ * it: eight harnesses resting on a comment.
+ *
+ * So a run that ends clean having recorded ZERO checks is `"vacuous"` — its own
+ * visible state, not folded into `passed`, the same way a skip is not.
+ *
+ * NOT A FAILURE, deliberately. Harnesses in the wild predate the counter, and a
+ * tool that turned CI red on the release that taught it a new word would be
+ * punishing people for upgrading. It is loud and it is not fatal.
+ *
+ * AND SILENCE IS NOT ZERO. `checks === undefined` means the script never
+ * reported — it may not import `vigiles/testing` at all — so it stays a plain
+ * `pass`, exactly as before. Only a script that loaded the library and used
+ * none of it says zero. This is the `undefined`-vs-`[]` distinction
+ * `assertNoWrite` already draws: "nobody looked" must not read as "nothing
+ * happened".
+ */
+export function statusFor(
+  code: number,
+  checks: number | undefined,
+): ScriptStatus {
   if (code === SKIP_EXIT_CODE) return "skip";
-  return "fail";
+  if (code !== 0) return "fail";
+  return checks === 0 ? "vacuous" : "pass";
 }
 
 /** Filename extensions accepted for harness/eval scripts (JS and TS). */
@@ -123,9 +166,33 @@ export function discoverScripts(
 }
 
 /**
+ * The count a script left behind, or `undefined` if it left none (it never
+ * imported `vigiles/testing`, or died before its exit handler). Anything that
+ * isn't a non-negative integer is treated as no report — a corrupt scratch file
+ * must not invent a verdict.
+ */
+function readCheckCount(path: string): number | undefined {
+  if (!existsSync(path)) return undefined;
+  let raw: string;
+  try {
+    raw = readFileSync(path, "utf8").trim();
+  } catch {
+    return undefined;
+  }
+  if (!/^\d+$/.test(raw)) return undefined;
+  return Number(raw);
+}
+
+/**
  * Run each script as `node <file>`, inheriting stdio so the script's own report
  * streams to the console. `env` is merged over `process.env` for every child
- * (e.g. `VIGILES_TRIALS`). Returns the per-file exit codes.
+ * (e.g. `VIGILES_TRIALS`). Returns the per-file exit codes + check counts.
+ *
+ * Each child is handed its OWN scratch path in `VIGILES_CHECK_COUNT_ENV`, which
+ * `vigiles/testing` writes its check count to on exit — the channel that makes
+ * "ran nothing" distinguishable from "ran and passed" (see check-count.ts). It
+ * has to be a file: stdio is inherited so the script's report streams live,
+ * which leaves no stream to parse.
  */
 export function runScripts(
   files: readonly string[],
@@ -134,27 +201,38 @@ export function runScripts(
 ): ScriptRunResult[] {
   const caps = detectNodeCaps(cwd);
   const results: ScriptRunResult[] = [];
-  for (const file of files) {
-    let argv: string[];
-    try {
-      argv = interpreterArgs(file, caps);
-    } catch (e) {
-      console.error(`✗ ${file}: ${(e as Error).message}`);
-      results.push({ file, code: 1, status: "fail" });
-      continue;
-    }
-    const res = spawnSync("node", argv, {
-      cwd,
-      stdio: "inherit",
-      env: { ...process.env, ...env },
+  const countDir = mkdtempSync(join(tmpdir(), "vigiles-checks-"));
+  try {
+    files.forEach((file, i) => {
+      let argv: string[];
+      try {
+        argv = interpreterArgs(file, caps);
+      } catch (e) {
+        console.error(`✗ ${file}: ${(e as Error).message}`);
+        results.push({ file, code: 1, status: "fail" });
+        return;
+      }
+      const countFile = join(countDir, `${String(i)}.count`);
+      const res = spawnSync("node", argv, {
+        cwd,
+        stdio: "inherit",
+        env: { ...process.env, ...env, [CHECK_COUNT_ENV]: countFile },
+      });
+      const code = res.status ?? 1;
+      const checks = readCheckCount(countFile);
+      results.push({ file, code, status: statusFor(code, checks), checks });
     });
-    const code = res.status ?? 1;
-    results.push({ file, code, status: statusForCode(code) });
+  } finally {
+    rmSync(countDir, { recursive: true, force: true });
   }
   return results;
 }
 
-/** Whether any script FAILED (a skip is not a failure). */
+/**
+ * Whether any script FAILED. Neither a skip nor a vacuous run counts: the first
+ * declined to run, the second ran and verified nothing, and neither is evidence
+ * that anything is broken. Both are visible in the summary instead.
+ */
 export function anyFailed(results: readonly ScriptRunResult[]): boolean {
   return results.some((r) => r.status === "fail");
 }
@@ -211,23 +289,39 @@ const MARK: Record<ScriptStatus, string> = {
   pass: "✓",
   skip: "⊘",
   fail: "✗",
+  vacuous: "∅",
 };
 
-/** One line per file + an explicit pass/skip/fail tally. Skips are SHOWN, never
- * folded into "passed" — a `⊘ SKIPPED` is loud, not a silent green. */
+/** One line per file + an explicit pass/skip/vacuous/fail tally. Skips and
+ * vacuous runs are SHOWN, never folded into "passed" — a `⊘ SKIPPED` is loud,
+ * not a silent green, and so is a file that verified nothing. */
 export function formatScriptSummary(
   results: readonly ScriptRunResult[],
 ): string {
   const lines = results.map((r) => {
     if (r.status === "skip") return `  ⊘ ${r.file} — SKIPPED`;
     if (r.status === "fail") return `  ✗ ${r.file} (exit ${String(r.code)})`;
+    if (r.status === "vacuous") {
+      return `  ${MARK.vacuous} ${r.file} — 0 CHECKS (it ran clean and verified nothing)`;
+    }
     return `  ${MARK.pass} ${r.file}`;
   });
   const n = (s: ScriptStatus): number =>
     results.filter((r) => r.status === s).length;
   const parts = [`${String(n("pass"))} passed`];
   if (n("skip") > 0) parts.push(`${String(n("skip"))} skipped`);
+  if (n("vacuous") > 0) parts.push(`${String(n("vacuous"))} with 0 checks`);
   if (n("fail") > 0) parts.push(`${String(n("fail"))} failed`);
   lines.push(`\n${parts.join(", ")}.`);
+  // Name the remedy where it's read, once — the usual cause is a file that
+  // DEFINES tests and never calls them, and the usual second cause is a harness
+  // asserting some other way, which the runner cannot see.
+  if (n("vacuous") > 0) {
+    lines.push(
+      `  ∅ = the file loaded vigiles/testing and used none of it. Either nothing ran ` +
+        `(an exported test object nobody calls), or it asserts another way — in which ` +
+        `case call recordCheck() from vigiles/testing so those count.`,
+    );
+  }
   return lines.join("\n");
 }

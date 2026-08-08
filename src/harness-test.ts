@@ -52,6 +52,7 @@ import type {
   ModelRequest,
 } from "./core/harness-driver.js";
 import { assertHarnessTestable } from "./adapter-conformance.js";
+import { recordCheck } from "./check-count.js";
 
 import { claudeCodeRuntime } from "./adapters/claude-code/runtime.js";
 
@@ -630,6 +631,9 @@ export async function runHarnessTest(
   spec: HarnessTestSpec,
   opts: RunHarnessTestOptions = {},
 ): Promise<HarnessTestResult> {
+  // Tell the CLI runner this script exercised the harness, so a file that runs
+  // NOTHING can be told apart from one that ran and passed. See check-count.ts.
+  recordCheck();
   const adapter = opts.adapter;
   // Default (no adapter): the unchanged Claude Code driver — keeps the
   // sandbox/confined path and behaviour byte-for-byte identical.

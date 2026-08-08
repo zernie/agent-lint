@@ -78,6 +78,7 @@ import {
 } from "./eval-lock.js";
 import type { Check, CheckJSON } from "./check.js";
 import { welchTTest, type Comparison } from "./stats.js";
+import { recordCheck } from "./check-count.js";
 import {
   type ToolIntercept,
   buildInterceptSettings,
@@ -1792,6 +1793,9 @@ export async function runEvalWith<M extends Metrics>(
   spec: EvalSpec<M>,
   runner: AgentRunner,
 ): Promise<EvalReport> {
+  // Tell the CLI runner this script exercised the harness, so a file that runs
+  // NOTHING can be told apart from one that ran and passed. See check-count.ts.
+  recordCheck();
   const trials = spec.trials ?? 5;
   const spacing = (spec.spacingSec ?? 4) * 1000;
   const concurrency = spec.concurrency ?? 1;
@@ -2611,6 +2615,8 @@ export async function measureTriggerRateWith(
   runError?: (out: RunOut) => string | null,
   harness = "claude-code",
 ): Promise<TriggerRateReport> {
+  // Tell the CLI runner this script exercised the harness (see check-count.ts).
+  recordCheck();
   // Deterministic gate FIRST — before spending a token (or packaging a skillsDir).
   assertTriggerDiversity(spec);
 

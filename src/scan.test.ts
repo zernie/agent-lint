@@ -1460,6 +1460,118 @@ test("trifecta detector is dialect-injected — works under a non-CC layout", ()
 });
 
 // ---------------------------------------------------------------------------
+// A contract that does not parse is not a contract (dogfood 2026-08-08)
+//
+// 🔴 The defect these exist for. The shared frontmatter reader is deliberately
+// lenient — on a block js-yaml rejects it regex-salvages the fields, so the live
+// PreToolUse rail still has something to enforce. The SCORING path was reading
+// that salvage. Measured: `readFrontmatter(bad).malformed` is `true` while
+// `frontmatterList(bad, "allowed-tools")` returns the narrow list the author
+// MEANT, so a unit whose contract a strict loader rejects was graded as though it
+// had declared exactly that list — the Safety ring reading BETTER than the truth,
+// in the tool whose thesis is that a declaration present is not a rule enforced.
+// ---------------------------------------------------------------------------
+
+// `allowed-tools: [Read, Bash` — an unclosed flow array, the unambiguous
+// malformed case the frontmatter-valid docs cite. The salvage yields exactly
+// ["Read","Bash"]: private + exfil, no untrusted leg, so it scores CLEAN. A
+// strict loader yields nothing at all, which is inherits-all: all three legs.
+const UNCLOSED_TOOLS = "[Read, Bash";
+
+test("a skill whose allowed-tools is MALFORMED scores as inherits-all, not as the salvage", () => {
+  const dir = makeTmpDir("scan-malformed-contract-skill");
+  write(
+    dir,
+    "skills/broken/SKILL.md",
+    `---\nname: broken\ndescription: A model-invocable skill whose frontmatter does not parse\nallowed-tools: ${UNCLOSED_TOOLS}\n---\n# broken\n`,
+  );
+  const r = scanPlugin(dir);
+  const skill = r.skills.find((s) => s.name === "broken");
+  assert.equal(
+    skill?.trifecta?.severity,
+    "advisory",
+    "an unreadable contract is scored as inherits-all, which holds every leg",
+  );
+  // …and the finding SAYS why the grade moved, so the author doesn't read
+  // "no explicit tools" on a file that plainly declares them.
+  assert.match(skill.trifecta?.message ?? "", /not valid YAML/);
+  assert.match(skill.trifecta?.message ?? "", /INHERITS-ALL/);
+  // The two paths now agree: the same file is reported by frontmatter-valid.
+  assert.ok(
+    r.malformedFrontmatter.some((i) => i.path.includes("skills/broken")),
+    "frontmatter-valid reports the same block the scorer refused to trust",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("a subagent whose tools list is MALFORMED gets the same treatment", () => {
+  const dir = makeTmpDir("scan-malformed-contract-agent");
+  write(
+    dir,
+    "agents/broken.md",
+    `---\nname: broken\ndescription: A subagent whose frontmatter does not parse\ntools: ${UNCLOSED_TOOLS}\n---\nbody\n`,
+  );
+  const r = scanPlugin(dir);
+  const agent = r.agents.find((a) => a.name === "broken");
+  assert.equal(agent?.trifecta?.severity, "advisory");
+  assert.match(agent?.trifecta?.message ?? "", /not valid YAML/);
+  cleanupTmpDir(dir);
+});
+
+test("a SALVAGED all-three contract still convicts — the refusal is one-directional", () => {
+  // 🔴 The over-reach this pins, caught by the vendored corpus: madappgang's real
+  // `tester.md` carries BOTH a malformed description and an explicit
+  // all-three-legs tools list. Refusing the salvage outright demoted a genuine
+  // hard exfil path to an advisory and deleted its never-available finding. A
+  // salvage is too weak to earn a clean bill of health and plenty strong enough
+  // to convict, so it may only ever make the verdict worse.
+  const dir = makeTmpDir("scan-malformed-contract-hard");
+  write(
+    dir,
+    "agents/leaky.md",
+    "---\nname: leaky\ndescription: Broken YAML, and every leg declared: a colon\n  bad: indent\n" +
+      "tools: Read, WebSearch, WebFetch, NotARealTool\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  const agent = r.agents.find((a) => a.name === "leaky");
+  assert.ok(r.malformedFrontmatter.some((i) => i.path.includes("leaky.md")));
+  assert.equal(agent?.trifecta?.severity, "hard", "not demoted to advisory");
+  assert.match(agent?.trifecta?.message ?? "", /SALVAGED/);
+  // …and the diagnostics built on the same salvage are NOT suppressed: dropping
+  // them would delete findings, moving the grade the optimistic way.
+  assert.ok(
+    agent?.tools?.includes("Read"),
+    "the salvaged list is still reported",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("a VALID narrow contract is unaffected — the refusal is scoped to unparseable blocks", () => {
+  // Control. The same two tools, in a block that parses, must still score clean:
+  // Read + Bash is private + exfil with no untrusted leg (Rule of Two).
+  const dir = makeTmpDir("scan-valid-contract-control");
+  write(
+    dir,
+    "skills/fine/SKILL.md",
+    "---\nname: fine\ndescription: A model-invocable skill whose frontmatter parses cleanly\nallowed-tools: [Read, Bash]\n---\n# fine\n",
+  );
+  write(
+    dir,
+    "agents/fine.md",
+    "---\nname: fine\ndescription: A subagent whose frontmatter parses cleanly\ntools: [Read, Bash]\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  assert.equal(r.skills.find((s) => s.name === "fine")?.trifecta, null);
+  assert.equal(r.agents.find((a) => a.name === "fine")?.trifecta, null);
+  assert.deepEqual(r.agents.find((a) => a.name === "fine")?.tools, [
+    "Read",
+    "Bash",
+  ]);
+  assert.equal(r.malformedFrontmatter.length, 0);
+  cleanupTmpDir(dir);
+});
+
+// ---------------------------------------------------------------------------
 // skill-resource-resolves — surfaced through scanPlugin
 // ---------------------------------------------------------------------------
 

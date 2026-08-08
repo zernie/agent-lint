@@ -6,7 +6,8 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 import { writeFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import {
   discoverScripts,
@@ -18,6 +19,8 @@ import {
   scriptGlob,
   SCRIPT_EXTS,
   decideRunScripts,
+  statusFor,
+  SKIP_EXIT_CODE,
 } from "./run-scripts.js";
 import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 
@@ -168,6 +171,110 @@ test("runScripts surfaces an error code for an unrunnable TS script", () => {
   } finally {
     cleanupTmpDir(dir);
   }
+});
+
+// --- the fourth state: ran, verified nothing (dogfood 2026-08-08) -------------
+//
+// 🔴 The defect. `statusForCode` knew exit codes and nothing else, so a file that
+// ran NOTHING printed the same `✓ 1 passed` as one that ran and passed. Measured
+// on `export default { "never runs": () => assert.equal(1, 2) }` — a false
+// assertion, never called, reported green. A consumer repo hit it and now
+// hand-copies a warning into every new harness header, eight of them, because the
+// runner could not enforce it.
+
+test("statusFor: 0 reported checks is its own state, and silence is NOT zero", () => {
+  assert.equal(statusFor(0, 3), "pass");
+  assert.equal(statusFor(0, 0), "vacuous", "ran clean, verified nothing");
+  assert.equal(
+    statusFor(0, undefined),
+    "pass",
+    "no report at all is the legacy branch — 'nobody counted' is not 'counted zero'",
+  );
+  // The other two states are unchanged, count or no count.
+  assert.equal(statusFor(SKIP_EXIT_CODE, undefined), "skip");
+  assert.equal(statusFor(SKIP_EXIT_CODE, 0), "skip");
+  assert.equal(statusFor(1, 5), "fail");
+  assert.equal(statusFor(1, 0), "fail");
+});
+
+/** The built `check-count.js`, as a URL a spawned fixture script can import. */
+function countModuleUrl(): string {
+  return pathToFileURL(resolve(process.cwd(), "dist/check-count.js")).href;
+}
+
+test("runScripts reports 0 checks for a script that loads the API and runs nothing", () => {
+  const dir = makeTmpDir("run-scripts-vacuous");
+  try {
+    const mod = JSON.stringify(countModuleUrl());
+    // The incident, reproduced: tests DEFINED, nothing called. Exits 0.
+    writeFileSync(
+      join(dir, "vacuous.harness.mjs"),
+      `import { recordCheck } from ${mod};\n` +
+        `export default { "never runs": () => { recordCheck(); } };\n`,
+    );
+    // The control: same import, actually calls it.
+    writeFileSync(
+      join(dir, "real.harness.mjs"),
+      `import { recordCheck } from ${mod};\nrecordCheck();\nrecordCheck();\n`,
+    );
+    // The legacy shape: never touches vigiles, so it cannot report. Unchanged.
+    writeFileSync(join(dir, "legacy.harness.mjs"), "process.exit(0);\n");
+
+    const r = runScripts(
+      ["vacuous.harness.mjs", "real.harness.mjs", "legacy.harness.mjs"],
+      dir,
+    );
+    assert.deepEqual(
+      r.map((x) => [x.status, x.checks]),
+      [
+        ["vacuous", 0],
+        ["pass", 2],
+        ["pass", undefined],
+      ],
+    );
+    // …and it must not turn CI red: harnesses in the wild predate the counter.
+    assert.equal(anyFailed(r), false);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("a script's spawned CHILD does not inherit the report path", () => {
+  // A harness spawns processes for a living. A child that inherited the count
+  // path would write ITS count — usually zero — over the parent's, reporting a
+  // sub-process's activity as the file's. The variable is read once and dropped,
+  // so the child cannot see it at all. Asserted from INSIDE the child, because
+  // spawnSync makes the parent write last, which would mask the bug end-to-end.
+  const dir = makeTmpDir("run-scripts-nested");
+  try {
+    const mod = JSON.stringify(countModuleUrl());
+    writeFileSync(
+      join(dir, "parent.harness.mjs"),
+      `import { recordCheck } from ${mod};\n` +
+        `import { spawnSync } from "node:child_process";\n` +
+        `recordCheck(4);\n` +
+        `const probe = "process.exit(process.env.VIGILES_CHECK_COUNT_FILE ? 3 : 0)";\n` +
+        `const r = spawnSync(process.execPath, ["-e", probe]);\n` +
+        `if (r.status !== 0) process.exit(9); // the child could see the path\n`,
+    );
+    const [r] = runScripts(["parent.harness.mjs"], dir);
+    assert.equal(r?.code, 0, "the spawned child must not see the report path");
+    assert.equal(r?.checks, 4, "the parent's own count is what gets reported");
+    assert.equal(r?.status, "pass");
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("formatScriptSummary shows a 0-check run as its own state, with the remedy", () => {
+  const out = formatScriptSummary([
+    { file: "a.mjs", code: 0, status: "pass", checks: 2 },
+    { file: "b.mjs", code: 0, status: "vacuous", checks: 0 },
+  ]);
+  assert.match(out, /∅ b\.mjs — 0 CHECKS/);
+  assert.doesNotMatch(out, /2 passed/); // NOT folded into the pass tally
+  assert.match(out, /1 passed, 1 with 0 checks\./);
+  assert.match(out, /recordCheck\(\)/); // the fix is named where it is read
 });
 
 test("formatScriptSummary tallies pass/skip/fail; skips are loud, not a pass", () => {

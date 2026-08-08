@@ -48,6 +48,28 @@ The two severities describe **how the unit got there**, not how much it costs: a
 inherits-all unit is graded exactly like an explicit one (see below), because it
 is strictly the worse of the two.
 
+### A contract that doesn't parse is not a contract
+
+If a unit's frontmatter **exists but isn't valid YAML**
+([frontmatter-valid](frontmatter-valid.md)), its declared tool list is read as
+**inherits-all** — the advisory case — and the finding says so:
+
+```
+⚠ skill broken: Frontmatter is not valid YAML, so the declared tool list could not
+  be read — a strict loader rejects the block, and a regex salvage of it is a guess,
+  not a contract. Scored as INHERITS-ALL (every capability) …
+```
+
+vigiles's shared frontmatter reader is deliberately lenient: on a block js-yaml
+rejects it falls back to a regex salvage, so the live PreToolUse rail still has
+something to enforce and the file's other fields keep working. That is right for a
+rail and wrong for a **score** — a unit whose contract a strict loader rejects was
+being graded as though it had declared exactly the narrow list its author meant, so
+the Safety ring read **better than the truth**. Same conservative direction as
+grading inherits-all like an explicit all-three: presence of a declaration is not
+enforcement of it. **Fix the YAML and the declared list counts again** — the finding
+disappears the moment the block parses.
+
 ## In `vigiles audit`: graded, but a **ding — not a fail**
 
 A trifecta finding is a **capability PATTERN with no exploit code**, not a

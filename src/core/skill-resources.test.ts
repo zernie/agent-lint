@@ -197,6 +197,51 @@ describe("skillResourceIssues", () => {
     expect(run(body, existsOnly())).toHaveLength(1);
   });
 
+  // --- headings name the script the section is about (dogfood 2026-08-08) ----
+
+  it("flags a bundled script named in a SECTION HEADING (no use verb)", () => {
+    // 🔴 The regression this exists for. A skill's own `structure.mjs` sits at the
+    // skill ROOT; the SKILL.md pointed at `scripts/structure.mjs` from the heading
+    // of the section about running it. The verb gate reads prose, a heading has no
+    // prose, and the broken ref went unreported for three days. Measured: this line
+    // yielded [], while "Run the mechanical leg — `scripts/structure.mjs`" — same
+    // file, same missing target — correctly yielded the finding.
+    const body =
+      "## 🏗 START WITH THE MECHANICAL LEG — `scripts/structure.mjs` (added 2026-08-05)";
+    const found = run(body, existsOnly());
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({
+      ref: "scripts/structure.mjs",
+      resolved: "scripts/structure.mjs",
+      kind: "path",
+      line: 1,
+    });
+  });
+
+  it("does not flag a heading naming a bundled script that EXISTS", () => {
+    const body = "### `scripts/structure.mjs`";
+    expect(run(body, existsOnly("scripts/structure.mjs"))).toEqual([]);
+  });
+
+  it("still skips an ILLUSTRATIVE heading (the cue vetoes a heading too)", () => {
+    // A skill that teaches skill-authoring headlines its examples. Widening to
+    // headings must not reopen that false positive.
+    const body = [
+      "## Examples of bundled scripts: `scripts/rotate_pdf.py`",
+      "## A template layout — `references/patterns.md`",
+    ].join("\n");
+    expect(run(body, existsOnly())).toEqual([]);
+  });
+
+  it("keeps the verb gate on ORDINARY prose (the wide net was NOT taken)", () => {
+    // The narrow fix promotes HEADINGS only. A mid-paragraph mention with no
+    // directive stays unchecked — flagging every backticked bundle path was
+    // measured FP-heavy on teaching skills, which is why the gate exists at all.
+    const body =
+      "A skill ships `scripts/rotate.py` alongside its SKILL.md, one dir deep.";
+    expect(run(body, existsOnly())).toEqual([]);
+  });
+
   it("skips a bare word inline mention (no extension, no bundle prefix)", () => {
     const body = "Use the `runHook` helper and the `scripts` directory.";
     expect(run(body, existsOnly())).toEqual([]);

@@ -715,6 +715,9 @@ export function readBaseline(path: string): BaselineFile | null;
 export function received(matcher: string | RegExp): Check<Trace>;
 
 // @public
+export function recordCheck(n?: number): void;
+
+// @public
 export function reliable(report: EvalReport, arm: string, metric: string): boolean;
 
 // @public

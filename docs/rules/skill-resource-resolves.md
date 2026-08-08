@@ -51,6 +51,23 @@ shape than a bare backtick span, but an example link — "For example, see
 `[a report](assets/example.pdf)`" — is still a prose illustration, not a real dead
 ref, so the same prose gate applies to both.
 
+**A heading counts as a directive.** The verb gate reads prose, and a heading is
+not prose — it is the section's label — so the most common way a skill points at
+its own script went unchecked:
+
+```md
+## 🏗 START WITH THE MECHANICAL LEG — `scripts/structure.mjs`
+```
+
+Measured on a real skill whose `structure.mjs` sits at the skill **root**, not
+under `scripts/`: that line yielded nothing, while rewriting it to "Run the
+mechanical leg" — same file, same missing target — reported it correctly. The
+tool's answer depended on the author's choice of verb. An ATX heading naming a
+bundle path is now treated like an explicit "run …". The illustrative-cue veto
+still applies (`## Examples: …` stays skipped), and the wider net stops there: a
+mid-paragraph mention with no directive is still not checked, because flagging
+every backticked bundle path is what cries wolf on teaching skills.
+
 The detector prefers **missing a real ref over a false positive** — a noisy
 resource check would teach users to ignore it. A skill whose body is inherently
 full of illustrative bundle-path examples (a skill-authoring tutorial) can opt out

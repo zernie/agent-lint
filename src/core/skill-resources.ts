@@ -30,8 +30,9 @@
  * `references/finance.md`", or a markdown-link example demonstrating how to
  * write a path — e.g. one with a space in the filename). A reference (link OR
  * inline path) is treated as real ONLY when the line DIRECTS the agent to use
- * the file (read/run/see/…) and carries no illustrative cue (example / e.g. /
- * such as / would be / template / →). See `inlinePathIsUsed`.
+ * the file (read/run/see/…, or the line is a HEADING naming it — see
+ * `MD_HEADING`) and carries no illustrative cue (example / e.g. / such as /
+ * would be / template / →). See `inlinePathIsUsed`.
  *
  * ESCAPE HATCH: a SKILL.md carrying `<!-- vigiles-disable skill-resource-resolves -->`
  * anywhere in its body opts OUT of this check entirely (mirrors `orphans.ts`'s
@@ -225,17 +226,48 @@ const ILLUSTRATIVE_CUE =
   /\b(example|examples|e\.g\.?|i\.e\.?|such as|for instance|would be|helpful|useful|template|boilerplate)\b|→|->/i;
 
 /**
+ * An ATX markdown heading (`## …`, up to three leading spaces per CommonMark).
+ *
+ * 🔴 WHY A HEADING COUNTS AS A USE-DIRECTIVE. The verb gate below reads PROSE,
+ * and a heading is not prose — it is the section's label. So the single most
+ * common way a skill points at its own bundled script, naming it in the heading
+ * of the section about running it, carried no verb and went unchecked:
+ *
+ *     ## 🏗 START WITH THE MECHANICAL LEG — `scripts/structure.mjs`
+ *
+ * Measured 2026-08-08 on a real skill whose `structure.mjs` sits at the skill
+ * ROOT, not under `scripts/`: that line yielded NOTHING. Rewriting the same
+ * heading to "Run the mechanical leg" — same file, same ref, same missing
+ * target — correctly yielded the finding. The tool's answer depended on the
+ * author's choice of verb, and it stayed silent for three days.
+ *
+ * The narrow fix, and deliberately not the wide one. The alternative — treat
+ * ANY bundle-dir path with an extension as a reference, verb or not — reopens
+ * exactly the false positives the gate exists for (a skill TEACHING how to
+ * build skills mentions `scripts/rotate.py` constantly as prose). A heading
+ * naming a bundle path is a structural claim about what this section is about,
+ * not a sentence illustrating what a skill *could* ship, so it earns the same
+ * standing as an explicit "run …". The illustrative-cue veto still applies —
+ * `## Examples: \`references/finance.md\`` stays skipped — and the check is
+ * `warn` severity with a `vigiles-disable` escape hatch, so a slightly wider
+ * net is affordable where a blanket one is not.
+ */
+const MD_HEADING = /^\s{0,3}#{1,6}\s/;
+
+/**
  * Whether a bundle-path reference on this line reads as a REAL reference (the
  * agent is told to use the file) rather than an illustrative mention. Requires
- * a positive use-directive and the absence of an illustrative cue — both
- * evaluated over the whole line for simplicity (a tight, precise rule over a
- * clever one). BOTH candidate shapes consult this (issue #110) — a markdown
- * link's `[text](target)` syntax is a stronger signal than a bare inline span,
- * but "For example, see [the schema](...)" is still an illustrative mention,
- * not a real dead ref.
+ * a positive directive — a use verb, or the line being a heading (see
+ * {@link MD_HEADING}) — and the absence of an illustrative cue, both evaluated
+ * over the whole line for simplicity (a tight, precise rule over a clever one).
+ * BOTH candidate shapes consult this (issue #110) — a markdown link's
+ * `[text](target)` syntax is a stronger signal than a bare inline span, but
+ * "For example, see [the schema](...)" is still an illustrative mention, not a
+ * real dead ref.
  */
 function inlinePathIsUsed(line: string): boolean {
-  return USE_DIRECTIVE.test(line) && !ILLUSTRATIVE_CUE.test(line);
+  if (ILLUSTRATIVE_CUE.test(line)) return false;
+  return USE_DIRECTIVE.test(line) || MD_HEADING.test(line);
 }
 
 // ---------------------------------------------------------------------------

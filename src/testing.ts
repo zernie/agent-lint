@@ -15,6 +15,14 @@
 // helpers — stay out of the public surface, the api reports, and the docs site.
 // (vigiles's own tests import those from the source modules directly.)
 
+// --- reporting: how much did this script actually do? ---
+// `vigiles test` can otherwise see only an exit code, so a file that runs NOTHING
+// prints the same `✓` as one that ran and passed (measured 2026-08-08 on a file
+// exporting an object of tests nobody calls). The tiers below count themselves;
+// call `recordCheck()` yourself when you assert some OTHER way — `node:assert`,
+// vitest's `expect` — so those are visible to the runner too. See check-count.ts.
+export { recordCheck } from "./check-count.js";
+
 // --- unit tier: runScript (the primitive) + runHook (it, plus a decision) ---
 // `runScript` runs any program and reports what it DID (exit, both streams,
 // writes, egress). `runHook` is that plus the hook protocol: event to stdin,

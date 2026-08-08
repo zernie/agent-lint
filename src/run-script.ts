@@ -57,6 +57,7 @@ import {
   type SandboxMode,
   type EgressAttempt,
 } from "./sandbox.js";
+import { recordCheck } from "./check-count.js";
 
 export type { EgressAttempt };
 
@@ -210,6 +211,11 @@ export function runScriptWith(
   opts: RunScriptOptions,
   deps: RunScriptDeps,
 ): ScriptRunResult {
+  // Tell the CLI runner this script exercised the harness, so a `*.harness.*`
+  // file that runs NOTHING can be told apart from one that ran and passed. Here,
+  // at the primitive, so `runHook` and a bare `runScript` both count. See
+  // check-count.ts.
+  recordCheck();
   // Allowlisted egress is its own confined path (bwrap netns + slirp4netns +
   // nft); it can't run unconfined, so it refuses outright when the tooling is
   // absent rather than falling back to a direct run that ignores the allowlist.

@@ -394,6 +394,21 @@ vigiles eval --trials=6 # *.eval.mjs — real model, on a keyed job only
 A skip is **loud** (`⊘ SKIPPED`, tallied separately), never a silent green; pass
 `--no-skip` in a job that asserts the capability is present.
 
+So is a file that **verified nothing**: a script that exits clean having recorded
+**zero** checks reports `∅ … 0 CHECKS`, tallied separately from `passed`. The
+shape this catches is a harness that _defines_ tests and never calls them —
+
+```js
+export default { "never runs": () => assert.equal(1, 2) }; // exits 0, asserts nothing
+```
+
+— which an exit code alone cannot tell from a real pass. The tiers (`runHook`,
+`runHarnessTest`, `runEval`, the in-process compiled-hook assertions) count
+themselves, so an ordinary harness needs no extra call; if yours asserts some
+other way, `recordCheck()` from `vigiles/testing` reports those. It is **not** a
+failure — it never turns a build red — and a script that doesn't import
+`vigiles/testing` cannot report at all, so it stays a plain pass.
+
 **The composite action** encapsulates the per-tier setup (bubblewrap, the egress
 connector) so you don't re-derive it:
 

@@ -68,6 +68,49 @@ test("inherits-all (wildcard '*') → an advisory finding", () => {
   const finding = lethalTrifectaIssues(["*"], claudeCodeDialect);
   assert.notEqual(finding, null);
   assert.equal(finding?.severity, "advisory");
+  assert.match(finding?.message ?? "", /no explicit tools/);
+});
+
+test("an unreadable contract whose SALVAGE names all three legs still convicts", () => {
+  // One-directional: a salvage may make the verdict worse, never better. A real
+  // vendored plugin (madappgang's tester.md) is exactly this shape — malformed
+  // block, explicit all-three tool list — and demoting it to advisory would lose
+  // a genuine exfil path.
+  const finding = lethalTrifectaIssues(
+    ["Read", "WebSearch", "WebFetch"],
+    claudeCodeDialect,
+    { contractUnreadable: true },
+  );
+  assert.equal(finding?.severity, "hard");
+  assert.match(finding?.message ?? "", /Lethal trifecta/);
+  assert.match(finding?.message ?? "", /SALVAGED/);
+});
+
+test("an unreadable contract that reads NARROW falls back to inherits-all", () => {
+  // The defect itself: Read + Bash is private + exfil with no untrusted leg, so
+  // the salvage scored CLEAN. What a strict loader yields from that block is no
+  // contract at all — every leg.
+  const finding = lethalTrifectaIssues(["Read", "Bash"], claudeCodeDialect, {
+    contractUnreadable: true,
+  });
+  assert.equal(finding?.severity, "advisory");
+  assert.match(finding?.message ?? "", /not valid YAML/);
+  // …and the same list in a block that PARSES is still clean (Rule of Two).
+  assert.equal(lethalTrifectaIssues(["Read", "Bash"], claudeCodeDialect), null);
+});
+
+test("an UNREADABLE contract says so, instead of 'no explicit tools'", () => {
+  // The caller (scan-core) passes the wildcard when the frontmatter block exists
+  // but js-yaml rejects it. Same severity, different sentence: telling an author
+  // who plainly declared `allowed-tools:` that they declared no tools sends them
+  // hunting the wrong bug. Name the YAML, and name what it was scored as instead.
+  const finding = lethalTrifectaIssues(["*"], claudeCodeDialect, {
+    contractUnreadable: true,
+  });
+  assert.equal(finding?.severity, "advisory");
+  assert.match(finding?.message ?? "", /not valid YAML/);
+  assert.match(finding?.message ?? "", /INHERITS-ALL/);
+  assert.doesNotMatch(finding?.message ?? "", /no explicit tools/);
 });
 
 test("mcp__* servers classify per leg (github get_file=A, fetch=B, github PR=C)", () => {
