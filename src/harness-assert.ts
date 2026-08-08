@@ -29,6 +29,7 @@ import type {
   HookProgramOutcome,
 } from "./core/hook-program.js";
 import { evalChecks, type Check } from "./check.js";
+import { recordCheck } from "./check-count.js";
 import type { OutputContract } from "./core/spec.js";
 import {
   parseAgentResult,
@@ -138,6 +139,19 @@ export function assertHookAllowed(r: HookRunResult): void {
   }
 }
 
+/**
+ * `runHookProgram`, counted. An in-process hook decision is an observation the
+ * CLI runner can see — without it, a `*.harness.*` file that only tests compiled
+ * hooks would look like it did nothing at all. See check-count.ts.
+ */
+function runCountedHookProgram(
+  hook: AnyHook,
+  event: RawHookEvent,
+): HookProgramOutcome {
+  recordCheck();
+  return runHookProgram(hook, event);
+}
+
 /** Render a {@link HookProgramOutcome} for an assertion message. */
 function describeOutcome(o: HookProgramOutcome): string {
   if (o.kind === "decision") return `${o.decision.kind} (a gate decision)`;
@@ -152,7 +166,7 @@ function describeOutcome(o: HookProgramOutcome): string {
  * check, use {@link assertHookBlocked} over `runHook`.)
  */
 export function assertHookDenies(hook: AnyHook, event: RawHookEvent): void {
-  const o = runHookProgram(hook, event);
+  const o = runCountedHookProgram(hook, event);
   if (o.kind !== "decision" || o.decision.kind !== "deny") {
     fail(`expected the hook to deny, got ${describeOutcome(o)}`);
   }
@@ -160,7 +174,7 @@ export function assertHookDenies(hook: AnyHook, event: RawHookEvent): void {
 
 /** Assert a COMPILED hook allows an event (in-process). The twin of {@link assertHookDenies}. */
 export function assertHookAllows(hook: AnyHook, event: RawHookEvent): void {
-  const o = runHookProgram(hook, event);
+  const o = runCountedHookProgram(hook, event);
   if (o.kind !== "decision" || o.decision.kind !== "allow") {
     fail(`expected the hook to allow, got ${describeOutcome(o)}`);
   }
@@ -182,7 +196,7 @@ export function assertHookNotices(
   event: RawHookEvent,
   matcher?: string | RegExp,
 ): void {
-  const o = runHookProgram(hook, event);
+  const o = runCountedHookProgram(hook, event);
   if (o.kind !== "reaction" || o.reaction.kind !== "notice") {
     fail(`expected the hook to notice, got ${describeOutcome(o)}`);
   }
@@ -208,7 +222,7 @@ export function assertHookNotices(
  * A `run(…)` reaction is not silent for this purpose: the hook still reacted.
  */
 export function assertHookSilent(hook: AnyHook, event: RawHookEvent): void {
-  const o = runHookProgram(hook, event);
+  const o = runCountedHookProgram(hook, event);
   if (o.kind !== "reaction") {
     fail(`expected a react hook, got ${describeOutcome(o)}`);
   }

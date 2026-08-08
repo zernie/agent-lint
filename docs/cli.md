@@ -62,11 +62,22 @@ deliberately distinct from a harness that was audited and scored badly (exit
 pointed at the wrong directory".
 
 `vigiles test` / `vigiles eval` run scripts in JS **or** TS and report each as
-**pass / skip / fail** — a tier that can't run (e.g. deterministic with no
-`claude`) reports a loud `⊘ SKIPPED`, tallied separately, never a fake green.
+**pass / skip / 0 checks / fail** — a tier that can't run (e.g. deterministic with
+no `claude`) reports a loud `⊘ SKIPPED`, tallied separately, never a fake green.
 Unit-tier `runHook` tests need no `claude` and always run. A skip passes by
 default; in a CI job that **asserts** the capability is present, add `--no-skip`
 so a skipped tier **fails** (a green-with-skips is untested surface).
+
+**A file that verified nothing says so: `∅ … 0 CHECKS`.** Exit codes answer "did
+it fail?", never "did it do anything?", so a script that ran NOTHING used to print
+the same `✓` as one that ran and passed — the classic shape being a file that
+_defines_ tests (`export default { … }`) and never calls them. Each tier now
+records its own runs, and the runner reports a clean exit with **zero** recorded
+checks as its own state. It is **not** a failure (the exit code is unchanged), and
+a script that never imports `vigiles/testing` cannot report at all, so it stays a
+plain pass — silence is the legacy branch, never a verdict. If your harness
+asserts some other way (`node:assert`, a runner's `expect`), call `recordCheck()`
+from `vigiles/testing` so those count.
 
 **`vigiles eval` asks before fanning out.** A bare `vigiles eval` with no target
 discovers every `*.eval.*` in the tree, and each one runs the **real model on your

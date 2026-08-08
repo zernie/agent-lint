@@ -23,13 +23,18 @@ import { fileURLToPath } from "node:url";
 
 import { runHook } from "../../dist/run-hook.js";
 import { sandboxAvailable } from "../../dist/sandbox.js";
-import { assertNoEgress, assertEgressOnly } from "../../dist/harness-assert.js";
+import {
+  assertNoEgress,
+  assertEgressOnly,
+  skip,
+} from "../../dist/harness-assert.js";
 
+// `skip()`, not `exit(0)`: this file used to report itself SKIPPED in prose and
+// then exit clean, which the runner could only read as a pass — the same
+// "verified nothing, looked green" shape the ∅ state exists to surface. It was
+// caught by that state on the repo's own examples the day it landed.
 if (!sandboxAvailable()) {
-  console.log(
-    "skip: no working bubblewrap sandbox (can't confine → can't record egress)",
-  );
-  process.exit(0);
+  skip("no working bubblewrap sandbox (can't confine → can't record egress)");
 }
 
 const ROOT = fileURLToPath(

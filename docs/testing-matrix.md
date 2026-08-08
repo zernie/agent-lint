@@ -172,6 +172,13 @@ repo runs the egress tier under `e2e`, not `harness`), but in a CI job that
 skipped tier **fails**: a green-with-skips is itself untested surface. A standalone
 script emits a skip with `skip(reason)` from `vigiles/testing`.
 
+**And so is a file that verified nothing.** A script that exits clean having
+recorded **zero** checks reports `∅ … 0 CHECKS`, tallied apart from `passed` — the
+shape being a harness that _defines_ tests (`export default { … }`) and never calls
+them, which no exit code can distinguish from a pass. Non-fatal by design: it never
+turns a build red, and a script that doesn't import `vigiles/testing` cannot report,
+so it stays a plain pass. `recordCheck()` reports assertions made another way.
+
 ## See also
 
 - [`docs/harness-testing.md`](harness-testing.md) — the full guide (four layers:
