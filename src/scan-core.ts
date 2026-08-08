@@ -98,6 +98,45 @@ function frontmatter(md: string): {
 }
 
 /**
+ * Whether this unit's declared TOOL CONTRACT is unreadable — the frontmatter
+ * block exists but is not valid YAML.
+ *
+ * 🔴 WHY SCORING MUST NOT USE THE SALVAGE. The shared reader is deliberately
+ * lenient: on a block js-yaml rejects it falls back to a regex salvage, so the
+ * live PreToolUse rail still has *something* to enforce and the other fields
+ * keep working. That is right for a rail and wrong for a SCORE. Measured
+ * 2026-08-08: `readFrontmatter(bad)` returns `{data: null, malformed: true}` —
+ * the tool KNOWS the block is broken — while `frontmatterList(…, "allowed-tools")`
+ * on the same block returns `["Read","Bash"]`, the narrow contract the author
+ * MEANT. Strict js-yaml on it throws `bad indentation of a mapping entry`. So a
+ * unit whose contract a strict loader rejects was graded as though it had
+ * declared exactly that narrow contract: the Safety ring read BETTER than the
+ * truth, on the optimistic branch, in the tool whose own thesis is that the
+ * presence of a declaration is not the enforcement of it.
+ *
+ * The trifecta detector is therefore told the list is a SALVAGE, and reads it as
+ * one: it can only make the verdict worse (a salvaged all-three still convicts),
+ * and anything short of that falls back to what a strict loader really yields —
+ * no contract, i.e. inherits-all. The finding says which happened, so the author
+ * can tell a dropped grade from a real capability. Strictly one-directional, the
+ * same shape as the inherits-all monotonicity fix (#119). `frontmatter-valid`
+ * reports the broken block itself; this is the half that stops the SCORE
+ * disagreeing with it.
+ *
+ * DELIBERATELY NOT WIDER. The typo / never-available / MCP-server /
+ * disallowed-tools cross-references keep using the salvage: they are diagnostics,
+ * and suppressing them on a malformed file DELETES findings, which moves the
+ * grade the optimistic way — the direction this whole fix exists to close. A real
+ * vendored plugin in `test/dogfood` proves the point: `madappgang-frontend`'s
+ * `tester.md` has both a malformed description and an explicit all-three-legs
+ * tool list, and its `AskUserQuestion` never-available finding is true whether or
+ * not the block parses.
+ */
+function contractIsUnreadable(md: string): boolean {
+  return readFrontmatter(md).malformed;
+}
+
+/**
  * Per-kind surface classifiers, built from the harness `PluginLayout`'s
  * `skillDir`/`agentDir`/`commandDir` — so adding a harness whose subagents live
  * somewhere other than `agents/` (OpenCode's `.opencode/agent`) needs no change
@@ -360,11 +399,17 @@ export function scanSkills(
     // invocable skill can be hijacked by attacker content, so a user-invoked one is
     // excluded. A skill with no `allowed-tools` line inherits all → advisory.
     const skillTools = parseAgentToolList(md, "allowed-tools");
+    // Whether that list came out of a block a strict loader REJECTS — in which
+    // case it is a salvage, and the trifecta detector must read it as one. See
+    // `contractIsUnreadable`.
+    const contractUnreadable = contractIsUnreadable(md);
     // No `allowed-tools:` line (null) → inherits all → wildcard sentinel; an
     // EXPLICIT empty `[]` means zero tools → no trifecta (don't collapse them).
     const trifecta = userInvoked
       ? null
-      : lethalTrifectaIssues(skillTools ?? ["*"], dialect);
+      : lethalTrifectaIssues(skillTools ?? ["*"], dialect, {
+          contractUnreadable,
+        });
     out.push({
       name: fm.name ?? skillName(path),
       // Report the real on-disk path, not the synthetic materialize key (E1).
@@ -440,6 +485,14 @@ export function scanAgents(
   for (const [path, md] of Object.entries(files)) {
     if (!cls.isAgent(path)) continue;
     const tools = parseAgentTools(md);
+    // Whether that list came out of a block a strict loader REJECTS — see
+    // `contractIsUnreadable`. Scoped to the trifecta (the Safety ring) on
+    // purpose: the typo / MCP / disallowed-tools cross-references below are
+    // DIAGNOSTICS, and dropping them on a malformed file would delete real
+    // findings — moving the grade in the optimistic direction this fix exists to
+    // stop. A salvage is too weak to earn a unit a clean bill of health; it is
+    // plenty strong enough to convict.
+    const contractUnreadable = contractIsUnreadable(md);
     // An inherits-all agent (no `tools:` line) grants access to every tool
     // including every side-effecting one — pass the wildcard sentinel so
     // effectSurface correctly classifies it as `"unrestricted"`.
@@ -479,7 +532,9 @@ export function scanAgents(
       // inherits-all agent (no `tools:` line → tools === null) is the advisory
       // case — pass the wildcard sentinel so it's distinguished from an EXPLICIT
       // empty `tools: []` (zero tools → no trifecta). One detector, no drift.
-      trifecta: lethalTrifectaIssues(tools ?? ["*"], dialect),
+      trifecta: lethalTrifectaIssues(tools ?? ["*"], dialect, {
+        contractUnreadable,
+      }),
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));

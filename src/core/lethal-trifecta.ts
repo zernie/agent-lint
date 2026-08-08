@@ -347,20 +347,51 @@ export function classifyTrifectaLegs(
   return { private: [...priv], untrusted: [...untrusted], exfil: [...exfil] };
 }
 
+/** Extra facts about HOW the contract was obtained, which change the verdict. */
+export interface TrifectaContext {
+  /**
+   * The unit's frontmatter block EXISTS but is not valid YAML.
+   *
+   * 🔴 WHY THE DETECTOR NEEDS TO KNOW. vigiles's frontmatter reader is
+   * deliberately lenient: on a block js-yaml rejects it regex-SALVAGES the
+   * fields, so the live PreToolUse rail still has something to enforce. Right
+   * for a rail, wrong for a score. Measured 2026-08-08:
+   * `readFrontmatter(bad).malformed` is `true` — the tool KNOWS the block is
+   * broken — while `frontmatterList(…, "allowed-tools")` on it still returns
+   * `["Read","Bash"]`, the narrow contract its author MEANT. A unit whose
+   * contract a strict loader rejects was therefore graded as though it had
+   * declared exactly that list, and scored CLEAN. Presence of a declaration is
+   * not enforcement of it — the product's own thesis, turned on the product.
+   *
+   * With this set, `tools` is read as a SALVAGE, not a contract: it can only make
+   * the verdict worse, never better. A salvaged list that names all three legs
+   * still fires `"hard"` (both readings of the file agree the unit holds them);
+   * anything less falls back to what a strict loader actually yields — no
+   * contract at all, i.e. inherits-all, which is the `"advisory"` finding.
+   */
+  readonly contractUnreadable?: boolean;
+}
+
 /**
  * Returns a {@link TrifectaFinding} ONLY when a unit holds all three legs, else
  * `null` (≤ 2 legs = safe by the Rule of Two).
  *
- * Two paths:
+ * Three paths:
  * - INHERITS-ALL (a wildcard `""`/`"*"`, or an EMPTY contract): inherits every
  *   tool → trivially all three legs → an `"advisory"` finding (the inherits-all
  *   stance: a footgun worth surfacing, not a declared exfil path).
  * - EXPLICIT: classify the named tools; emit a `"hard"` finding iff each of the
  *   three legs is non-empty.
+ * - UNREADABLE ({@link TrifectaContext.contractUnreadable}): the names came from
+ *   a salvage of a block a strict loader rejects. They can only make the verdict
+ *   WORSE — a salvaged all-three still fires `"hard"` — and anything short of
+ *   that falls back to what a strict loader really yields: no contract, i.e.
+ *   inherits-all, the `"advisory"` finding. Never the other way round.
  */
 export function lethalTrifectaIssues(
   tools: readonly string[],
   dialect: HarnessDialect,
+  ctx: TrifectaContext = {},
 ): TrifectaFinding | null {
   const hasWildcard = tools.some((t) => isWildcard(baseTool(t)));
   // Inherits-all is signalled by a WILDCARD (the caller passes `["*"]` for an
@@ -376,11 +407,17 @@ export function lethalTrifectaIssues(
     return {
       severity: "advisory",
       legs,
-      message:
-        "Inherits-all contract (no explicit tools / wildcard) grants every capability — " +
-        "it holds all three lethal-trifecta legs (read private data, ingest untrusted content, " +
-        "exfiltrate) and is a maximal prompt-injection blast radius. Declare an explicit tools " +
-        "list dropping at least one leg (Meta's Rule of Two).",
+      message: ctx.contractUnreadable
+        ? "Frontmatter is not valid YAML, so the declared tool list could not be read — a " +
+          "strict loader rejects the block, and a regex salvage of it is a guess, not a " +
+          "contract. Scored as INHERITS-ALL (every capability), which is what a strict " +
+          "loader yields: it therefore holds all three lethal-trifecta legs (read private " +
+          "data, ingest untrusted content, exfiltrate). Fix the YAML and the declared list " +
+          "counts again — a declaration that does not parse is not an enforcement."
+        : "Inherits-all contract (no explicit tools / wildcard) grants every capability — " +
+          "it holds all three lethal-trifecta legs (read private data, ingest untrusted content, " +
+          "exfiltrate) and is a maximal prompt-injection blast radius. Declare an explicit tools " +
+          "list dropping at least one leg (Meta's Rule of Two).",
     };
   }
 
@@ -398,8 +435,21 @@ export function lethalTrifectaIssues(
         `(${legs.private.join(", ")}), ingest untrusted content ` +
         `(${legs.untrusted.join(", ")}), AND exfiltrate ` +
         `(${legs.exfil.join(", ")}) — a prompt-injection exfil path with no exploit code. ` +
-        "Drop at least one leg (Meta's Rule of Two: allow at most two).",
+        "Drop at least one leg (Meta's Rule of Two: allow at most two)." +
+        (ctx.contractUnreadable
+          ? " (Those tool names were SALVAGED: the frontmatter is not valid YAML, so a strict" +
+            " loader reads no contract here at all and the real grant may be wider still." +
+            " Fix the YAML — this finding stands either way.)"
+          : ""),
     };
+  }
+  // Fewer than three legs — but the names were salvaged from a block a strict
+  // loader rejects, so "fewer" is a guess. What that loader actually yields is
+  // NOTHING: no contract, which is inherits-all, which holds every leg. This is
+  // the branch the defect lived in — a malformed unit scored clean because the
+  // salvage happened to read narrow.
+  if (ctx.contractUnreadable) {
+    return lethalTrifectaIssues(["*"], dialect, ctx);
   }
   return null;
 }

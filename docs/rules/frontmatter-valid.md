@@ -39,6 +39,15 @@ description: a value with: a colon    # ⚠ invalid plain scalar (may still load
 The file's other fields are still **salvaged** by the reader, so the rest of
 `scan`/`lint` keeps working on a malformed file.
 
+**Except the tool contract, which is not salvaged for SCORING.** A salvaged
+`allowed-tools:` / `tools:` is a regex guess at a block a strict loader rejects, so
+`vigiles audit` treats a malformed unit's contract as **inherits-all** rather than
+grading the guess — see
+[lethal-trifecta](lethal-trifecta.md#a-contract-that-doesnt-parse-is-not-a-contract).
+The live PreToolUse rail still uses the salvage (something to enforce beats
+nothing); only the score refuses it. So a broken block can cost a grade even when
+the fields "look fine", and fixing the YAML restores both.
+
 ## Configuration
 
 ```json
