@@ -311,12 +311,16 @@ export interface RulesConfig {
    */
   "hook-block-ineffective"?: RuleSeverity;
   /**
-   * Flag a hook `matcher` string that silently never fires — a close typo of a
-   * built-in tool (`bash`→`Bash`), or a malformed/undeclared MCP form
-   * (`mcp_memory_*` instead of `mcp__memory__.*`, or a server the plugin doesn't
-   * declare). High-precision (close-typo only; MCP gated on a declared set,
-   * built-ins allowlisted; wildcards/regex skipped). Default "warn"; raise to
-   * "error" to gate CI. Same detector as `scan` (hookMatcherFindings). See
+   * Flag a hook `matcher` string that doesn't fire the way it reads — a close
+   * typo of a built-in tool (`bash`→`Bash`), a matcher that doesn't COMPILE, an
+   * MCP pattern that can match no tool name at all (`mcp_memory_*` instead of
+   * `mcp__memory__.*`), an MCP pattern too narrow for real server naming
+   * (`mcp__[^_]+__[^_]+` can't cross the `_` in `mcp__Google_Calendar__…`), or a
+   * server the plugin doesn't declare. A matcher is a PATTERN, so patterns are
+   * validated by compiling and probing, never by literal shape. High-precision
+   * (close-typo only; MCP gated on a declared set, built-ins allowlisted;
+   * match-all and alternation skipped). Default "warn"; raise to "error" to gate
+   * CI. Same detector as `scan` (hookMatcherFindings). See
    * docs/rules/hook-matcher.md.
    */
   "hook-matcher"?: RuleSeverity;

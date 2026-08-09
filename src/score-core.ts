@@ -272,7 +272,8 @@ export function reportDeductions(r: ScanReport): Deduction[] {
     {
       n: r.hookMatcherFindings.length,
       weight: W_MISSING_HOOK,
-      label: "hook matcher(s) that never fire (typo / wrong MCP form)",
+      label:
+        "hook matcher(s) that don't fire as written (dead, or too narrow for real MCP names)",
     },
     // NB: delegationTrifecta (like the advisory per-unit/inherits-all trifecta) is a
     // ⚠ RISK, surfaced but NOT graded — only the HARD per-unit trifecta above scores.
