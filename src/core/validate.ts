@@ -122,8 +122,9 @@ export const DEFAULT_RULES: Required<RulesConfig> = {
   // A hook that looks like it blocks but silently doesn't (#19009) — WARN by
   // default (FP-safe literal patterns); raise to error to gate CI.
   "hook-block-ineffective": "warn",
-  // A hook matcher that never fires (tool typo / wrong MCP form) — WARN by
-  // default (high-precision); raise to error to gate CI.
+  // A hook matcher that doesn't fire as written (tool typo, an MCP pattern
+  // that matches no tool name, or one too narrow for real server names) — WARN
+  // by default (high-precision); raise to error to gate CI.
   "hook-matcher": "warn",
 };
 

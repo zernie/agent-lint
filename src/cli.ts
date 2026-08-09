@@ -1708,8 +1708,9 @@ async function runLint(
     scanRoot,
   );
 
-  // 7u. Hook-matcher — a hook `matcher` that never fires (tool-name typo, or a
-  // malformed/undeclared MCP form).
+  // 7u. Hook-matcher — a hook `matcher` that doesn't fire as written (tool-name
+  // typo, an uncompilable or unreachable MCP pattern, one too narrow for real
+  // server naming, or an undeclared MCP server).
   const hookMatcher = checkHookMatcher(config, silent, adapter, scanRoot);
 
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
@@ -4503,8 +4504,10 @@ function checkHookBlockIneffective(
 }
 
 /**
- * Apply the `hook-matcher` rule: a hook `matcher` string that silently never
- * fires — a tool-name typo (`bash`→`Bash`) or a malformed/undeclared MCP form.
+ * Apply the `hook-matcher` rule: a hook `matcher` string that doesn't fire as
+ * written — a tool-name typo (`bash`→`Bash`), a matcher that doesn't compile, an
+ * MCP pattern that reaches no tool name or is too narrow for real server naming,
+ * or an undeclared MCP server.
  * Reuses `scanPlugin`'s `hookMatcherFindings` (one detector, no drift). Warning
  * by default; "error" gates CI.
  */

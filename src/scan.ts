@@ -333,9 +333,10 @@ export interface ScanReport {
    */
   readonly hookBlockFindings: readonly HookBlockFinding[];
   /**
-   * Hook `matcher` strings that silently never fire — a tool-name typo or a
-   * malformed/undeclared MCP form. Shared by `scan` and the `hook-matcher` lint
-   * rule (one detector, no drift).
+   * Hook `matcher` strings that don't fire as written — a tool-name typo, a
+   * matcher that doesn't compile, an MCP pattern that matches no tool name or is
+   * too narrow for real server naming, or an undeclared MCP server. Shared by
+   * `scan` and the `hook-matcher` lint rule (one detector, no drift).
    */
   readonly hookMatcherFindings: readonly HookMatcherFinding[];
   /** Skills/agents whose `---` block isn't valid YAML — informational (may still load via salvage). */
@@ -941,7 +942,7 @@ export function formatScanReport(r: ScanReport): string {
 
   out.push(
     ...section(
-      "Hook matchers that never fire",
+      "Hook matchers that don't fire as written",
       r.hookMatcherFindings.map((m) => `  ✗ ${m.message}`),
     ),
   );

@@ -16,6 +16,17 @@ repo root. (The BUILD pipeline — `api-extractor.mjs`, `build-report.mjs` — l
   release or after a detector change, to prove no false-positive regression on
   real plugins (breadth, vs the few SHA-pinned slices asserted in tests).
 
+## Live — harness ground truth
+
+- **`measure-hook-matcher-semantics.mjs`** — measure how the harness ACTUALLY
+  matches a hook `matcher` (literal equality vs unanchored regex; which MCP
+  patterns fire on which server naming), by running the real `claude` CLI against
+  the scripted mock model with one hook per row and a marker file as the oracle.
+  No API key, no cost. **Run when:** a new Claude Code version lands, or before
+  changing `src/core/hook-matcher.ts` — that detector encodes this table, and
+  issue #131 is what happens when it is assumed instead of measured. Usage:
+  `node tools/measure-hook-matcher-semantics.mjs [--suite=builtin|mcp] [--server=<name>]`.
+
 ## Occasional — pre-launch
 
 - **`fp-sweep.sh`** — launch-readiness "don't cry wolf" sweep: clone popular

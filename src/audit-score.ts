@@ -267,7 +267,8 @@ function structure(r: ScanReport): CategoryScore {
     {
       n: r.hookMatcherFindings.length,
       weight: W_MISSING_HOOK,
-      label: "hook matcher(s) that never fire (typo / wrong MCP form)",
+      label:
+        "hook matcher(s) that don't fire as written (dead, or too narrow for real MCP names)",
     },
   ]);
   // inherit-all (no `tools:` line) is ADVISORY, not graded: it's surfaced as a

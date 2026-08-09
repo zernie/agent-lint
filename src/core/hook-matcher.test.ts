@@ -1,10 +1,11 @@
 /**
  * Hook-matcher detector suite (vitest) — the cross-referencing moat applied to
- * the MATCHER string in a hook registration. Asserts all three kinds
- * (tool-typo / mcp-form / mcp-undeclared), the FP-safety guards (wildcards /
- * alternation / no-declared-set / built-in allowlist / far unknowns), and
- * de-duplication. The dialect is injected — same one-detector-no-drift pattern
- * used by every other core detector.
+ * the MATCHER string in a hook registration. Asserts all five kinds (tool-typo /
+ * invalid-regex / mcp-form / mcp-narrow / mcp-undeclared), the FP-safety guards
+ * (wildcards / alternation / no-declared-set / built-in allowlist / far
+ * unknowns), the MEASURED matcher-semantics table from #131, the suggestion
+ * convergence property, and de-duplication. The dialect is injected — same
+ * one-detector-no-drift pattern used by every other core detector.
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
@@ -198,6 +199,187 @@ test("a repeated matcher across entries is reported only once", () => {
   const findings = hookMatcherIssues(entries, [], d);
   assert.equal(findings.length, 1);
   assert.equal(findings[0].matcher, "bash");
+});
+
+// ---------------------------------------------------------------------------
+// #131 — the MEASURED acceptance table.
+//
+// Every row was measured against the real `claude` CLI (2.1.226) driven by the
+// scripted mock model: one hook per run, a marker file as the oracle, a real MCP
+// server connected under two different names (`some_server` — an underscore in
+// the server segment, like Anthropic's `Google_Calendar` connector — and the
+// uuid form the SAME server takes in another session).
+//
+//   | matcher                        | fires on `some_server` | on the uuid |
+//   | ------------------------------ | ---------------------- | ----------- |
+//   | mcp__some_server__list_events  | yes (literal)          | n/a         |
+//   | mcp__.*                        | YES                    | YES         |
+//   | mcp__.*__.*                    | yes                    | yes         |
+//   | mcp__[^_]+__[^_]+              | NO                     | yes         |
+//   | mcp__\w+__\w+                  | yes                    | NO          |
+//
+// Before the fix the detector had the two bold rows INVERTED: it rejected
+// `mcp__.*` (fires on both) and accepted `mcp__[^_]+__[^_]+` (fires on neither
+// of the two fixtures in the issue).
+// ---------------------------------------------------------------------------
+
+const noFindings = (matcher: string) =>
+  hookMatcherIssues([{ event: "PostToolUse", matcher }], [], d);
+
+test("#131 row 1: the literal `mcp__Google_Calendar__list_events` → accepted", () => {
+  assert.deepEqual(noFindings("mcp__Google_Calendar__list_events"), []);
+});
+
+test("#131 row 2: `mcp__.*` → accepted (it fires — measured)", () => {
+  // The headline false positive: the rule told a user this never fires, and the
+  // user replaced a working matcher on its say-so.
+  assert.deepEqual(noFindings("mcp__.*"), []);
+});
+
+test("#131 row 3: `mcp__.*__.*` → accepted", () => {
+  assert.deepEqual(noFindings("mcp__.*__.*"), []);
+});
+
+test("#131 row 4: `mcp__[^_]+__[^_]+` → rejected (misses an underscored server)", () => {
+  // `[^_]+` cannot cross the `_` in `Google_Calendar` — measured: does NOT fire.
+  const findings = noFindings("mcp__[^_]+__[^_]+");
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].kind, "mcp-narrow");
+  assert.match(findings[0].message, /mcp__Google_Calendar__list_events/);
+  // …and it names ONLY what it misses: measured, this matcher DOES fire on the
+  // hyphenated uuid server, so claiming otherwise would be the same overreach
+  // the rule is being fixed for.
+  assert.doesNotMatch(findings[0].message, /4f54037d/);
+  // The honest wording: it fires on SOME tools — it is not a dead matcher.
+  assert.doesNotMatch(findings[0].message, /never fires/);
+});
+
+test("#131 row 5: `mcp__\\w+__\\w+` → rejected (misses the hyphenated uuid server)", () => {
+  // `\w` excludes `-`, so the uuid form of the same server is skipped — measured.
+  const findings = noFindings("mcp__\\w+__\\w+");
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].kind, "mcp-narrow");
+  assert.match(findings[0].message, /4f54037d/);
+  // Measured: it DOES fire on `mcp__some_server__list_events`, so the finding
+  // must not accuse it of missing the underscored-server shape.
+  assert.doesNotMatch(findings[0].message, /Google_Calendar__list_events/);
+});
+
+// ---------------------------------------------------------------------------
+// The suggestion convergence property — the check that would have caught the
+// regress in #131 ("apply the suggestion, get told the suggestion is wrong").
+// ---------------------------------------------------------------------------
+
+test("PROPERTY: every `Did you mean` suggestion satisfies the rule that produced it", () => {
+  const bad = [
+    "bash",
+    "read",
+    "mcp_memory_search",
+    "mcp-memory-search",
+    "mcp_memory_*",
+    "mcp__[^_]+__[^_]+",
+    "mcp__\\w+__\\w+",
+    "mcp__memory_search",
+    "^mcp__srv$",
+  ];
+  let suggestions = 0;
+  for (const matcher of bad) {
+    const findings = noFindings(matcher);
+    assert.equal(findings.length, 1, `${matcher} should produce one finding`);
+    const { suggestion } = findings[0];
+    if (suggestion === undefined) continue;
+    suggestions++;
+    // Feed the advice straight back in: it must be clean, in ONE step.
+    assert.deepEqual(
+      noFindings(suggestion),
+      [],
+      `suggestion "${suggestion}" for "${matcher}" is itself rejected`,
+    );
+  }
+  assert.ok(
+    suggestions >= bad.length - 1,
+    "nearly every finding advises a fix",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// invalid-regex — its own finding, not a silent skip and not "never fires by
+// shape". A matcher the engine can't compile can't match anything.
+// ---------------------------------------------------------------------------
+
+test('invalid-regex: "mcp__[a-" (unterminated class) → its own kind', () => {
+  const findings = noFindings("mcp__[a-");
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].kind, "invalid-regex");
+  assert.match(findings[0].message, /not a valid regular expression/);
+});
+
+test('invalid-regex: a non-MCP matcher "Bash(" is caught too', () => {
+  const findings = noFindings("Bash(");
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].kind, "invalid-regex");
+});
+
+// ---------------------------------------------------------------------------
+// FP-safety for the pattern path: a matcher that is narrow ON PURPOSE.
+// ---------------------------------------------------------------------------
+
+test('a server-scoped "mcp__memory__.*" is not "too narrow" (deliberate scope)', () => {
+  assert.deepEqual(noFindings("mcp__memory__.*"), []);
+});
+
+test('a server+tool-scoped "mcp__memory__search.*" is reachable (derived probe)', () => {
+  // The generic probes can't match it; the probe derived from its own literal
+  // segments can — otherwise a correctly scoped matcher reads as unreachable.
+  assert.deepEqual(noFindings("mcp__memory__search.*"), []);
+});
+
+test('a pattern in the server segment ("mcp__mem.*__list_events") is reachable', () => {
+  assert.deepEqual(noFindings("mcp__mem.*__list_events"), []);
+});
+
+test('"mcp__srv__.*" pins a server, so the narrowness check does not apply', () => {
+  // Guards the probe corpus itself: `srv` is the simple probe's server name, so
+  // a matcher pinning it must not be flagged for missing the other probes.
+  assert.deepEqual(noFindings("mcp__srv__.*"), []);
+});
+
+test('an anchored matcher that cannot reach the tool segment ("^mcp__srv$") is flagged', () => {
+  const findings = noFindings("^mcp__srv$");
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].kind, "mcp-form");
+  assert.match(findings[0].message, /never fires/);
+  assert.equal(findings[0].suggestion, "mcp__srv__.*");
+});
+
+test('an anchored but CORRECT matcher ("^mcp__srv__.*$") is clean', () => {
+  // Anchors are stripped before reading the matcher's literal segments, so an
+  // anchored server-scoped matcher gets the same verdict as its bare twin —
+  // otherwise `^` alone would resurrect the "too narrow" false positive.
+  assert.deepEqual(noFindings("^mcp__srv__.*$"), []);
+  assert.deepEqual(noFindings("^mcp__.*__.*$"), []);
+});
+
+test('"mcp__memory_search" (no tool segment) → unreachable, keeps the server whole', () => {
+  // The written segment is kept AS IS rather than split on its underscore: real
+  // servers are named `Google_Calendar`, so `memory_search` is a plausible
+  // server name and re-splitting it would invent a different server.
+  const findings = noFindings("mcp__memory_search");
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].kind, "mcp-form");
+  assert.equal(findings[0].suggestion, "mcp__memory_search__.*");
+});
+
+test('an MCP-ish alternation ("mcp__a__b|Bash") is skipped (mixed arms are legitimate)', () => {
+  assert.deepEqual(noFindings("mcp__a__b|Bash"), []);
+});
+
+test("an unrecoverable server segment falls back to spelling out the form", () => {
+  const findings = noFindings("mcp_1_2");
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].kind, "mcp-form");
+  assert.equal(findings[0].suggestion, undefined);
+  assert.match(findings[0].message, /mcp__<server>__<tool>/);
 });
 
 test("two different typos each produce their own finding (no cross-dedup)", () => {

@@ -1,34 +1,73 @@
 /**
  * Hook-matcher verification — the cross-referencing moat applied to the MATCHER
- * string inside a hook registration. A PreToolUse hook fires only when its
- * `matcher` equals the tool name the harness emits (or matches via glob/regex); a
- * typo or wrong form silently prevents the hook from ever running — exactly the
- * FALSE CONFIDENCE failure the compiled-hooks design exists to eliminate
- * (research/hook-pain-points.md).
+ * string inside a hook registration. A hook fires only when its `matcher` selects
+ * the tool name the harness emits; a typo or an unmatchable pattern silently
+ * prevents the hook from ever running — exactly the FALSE CONFIDENCE failure the
+ * compiled-hooks design exists to eliminate (research/hook-pain-points.md).
  *
- * THREE kinds of bad matcher, each verified here (one-detector-no-drift):
+ * ## The matching semantics this detector models (MEASURED, not assumed)
  *
- * 1. **tool-typo** — a bare token that is a CLOSE TYPO (edit distance ≤ 2) of a
- *    real built-in tool name but not an exact match (`bash` → `Bash`, `read` →
- *    `Read`). Suggests the correct casing. Reuses `closestTool` from
- *    `tool-contract.ts` — same edit-distance logic, same ≤ 2 confidence bound.
+ * A matcher is NOT a literal tool name — it is a pattern. Measured against the
+ * real `claude` CLI (2.1.226) with the scripted mock model, one hook per run,
+ * marker file as the oracle:
  *
- * 2. **mcp-form** — a token that looks MCP-ish (starts with `mcp`, case-
- *    insensitive) but is NOT the required `mcp__<server>__<tool>` double-underscore
- *    shape (single underscores, a hyphen, a trailing `*`…). Suggests the corrected
- *    form when the server/tool segments can be recovered.
+ * | matcher              | tool called                                     | fired |
+ * | -------------------- | ----------------------------------------------- | ----- |
+ * | `Write`              | `Write`                                         | yes   |
+ * | `Writ` / `rit`       | `Write`                                         | NO    |
+ * | `rit.`               | `Write`                                         | yes   |
+ * | `W(rit)e`            | `Write`                                         | yes   |
+ * | `mcp__.*`            | `mcp__some_server__list_events`                 | yes   |
+ * | `mcp__.*__.*`        | `mcp__some_server__list_events`                 | yes   |
+ * | `mcp__[^_]+__[^_]+`  | `mcp__some_server__list_events`                 | NO    |
+ * | `mcp__[^_]+__[^_]+`  | `mcp__4f54037d-…-6130f3da1ef8__list_events`      | yes   |
+ * | `mcp__\w+__\w+`      | `mcp__some_server__list_events`                 | yes   |
+ * | `mcp__\w+__\w+`      | `mcp__4f54037d-…-6130f3da1ef8__list_events`      | NO    |
  *
- * 3. **mcp-undeclared** — a correctly-formed `mcp__<server>__…` token whose server
- *    is NOT in the plugin's declared MCP servers. Gated EXACTLY like
- *    `mcp-tool-resolves`: (a) no declared set → skip (reaches global/project
- *    servers); (b) built-ins allowlisted via `dialect.knownMcpServers`; (c) the
- *    plugin-namespaced `mcp__plugin_…__…` form is skipped. Reuses `mcpToolServer`
- *    from `mcp-tool.ts` for the extraction — one parser, no drift.
+ * Two facts follow, and the detector encodes exactly these:
  *
- * FP-SAFE: only a SINGLE bare token is inspected. A matcher that is empty, a pure
- * wildcard (`*` / `.*`), or contains alternation (`|`) or other regex meta-
- * characters is skipped — it is a pattern/glob with legitimate broad matching, not
- * a tool name. Same don't-cry-wolf discipline as every other vigiles detector.
+ * 1. A matcher with NO regex metacharacter is matched by STRING EQUALITY
+ *    (`rit` does not fire on `Write`, though it is a substring).
+ * 2. A matcher WITH metacharacters is matched as an UNANCHORED regex
+ *    (`rit.` fires on `Write`; `mcp__[^_]+__[^_]+` fires on the hyphenated
+ *    server because `[^_]+` only has to reach *into* the tool segment).
+ *
+ * ## What is flagged (five kinds)
+ *
+ * 1. **tool-typo** — a LITERAL bare token that is a close typo (edit distance ≤ 2)
+ *    of a real built-in tool (`bash` → `Bash`). Reuses `closestTool`.
+ * 2. **invalid-regex** — the matcher does not COMPILE. A dead hook no other check
+ *    catches, and its own finding rather than a silent skip.
+ * 3. **mcp-form** — an MCP-ish matcher that can match NO MCP tool name at all:
+ *    a literal that isn't the `mcp__<server>__<tool>` shape (`mcp_memory_search`),
+ *    or a pattern that matches none of the synthetic probes (`mcp_memory_*`).
+ * 4. **mcp-narrow** — an MCP-ish pattern that DOES fire, but not on the server
+ *    naming that occurs in the wild. `mcp__[^_]+__[^_]+` cannot cross the `_` in
+ *    `Google_Calendar`; `mcp__\w+__\w+` cannot cross the `-` in the uuid form —
+ *    and the SAME server appears both ways in different sessions. This is a real
+ *    gap but it is NOT "never fires", and the message says so.
+ * 5. **mcp-undeclared** — a matcher pinning a literal `mcp__<server>__…` the
+ *    plugin doesn't declare. Gated exactly like `mcp-tool-resolves`.
+ *
+ * ## Why patterns are validated by PROBING, not by shape
+ *
+ * The server segment is not stable: the same Google Calendar server is
+ * `mcp__Google_Calendar__list_events` in one session and
+ * `mcp__4f54037d-…__list_events` in another, so a hook keyed to one literal id
+ * dies silently when the id changes — patterns are the CORRECT authoring form.
+ * Validating a pattern against the literal shape therefore inverts the verdict:
+ * it rejected `mcp__.*` (fires on everything) and accepted `mcp__[^_]+__[^_]+`
+ * (fires on nothing with an underscored server). So a pattern is instead COMPILED
+ * and run against synthetic probes — including a probe whose server segment holds
+ * an underscore and one whose server segment holds hyphens, because both occur.
+ * Probes are also DERIVED from the matcher's own literal segments, so a correctly
+ * server-scoped `mcp__memory__.*` is never called unreachable (#131).
+ *
+ * FP-SAFE, unchanged in spirit: a match-all (`*`, `.*`, `**`, empty) or an
+ * ALTERNATION (`Edit|Write`) is skipped — each arm of an alternation would have
+ * to be judged separately, and a mixed arm set is legitimate. A non-MCP token
+ * carrying regex/glob syntax is skipped too (it is a pattern over built-in tool
+ * names, not a name).
  *
  * Pure + ONE detector reused by `scan` + the `hook-matcher` lint rule
  * (one-detector-no-drift). The dialect is injected (core ⊄ adapter).
@@ -42,9 +81,14 @@ import { mcpToolServer } from "./mcp-tool.js";
 // ---------------------------------------------------------------------------
 
 /** Which matching failure was detected in the hook matcher string. */
-export type HookMatcherKind = "tool-typo" | "mcp-form" | "mcp-undeclared";
+export type HookMatcherKind =
+  | "tool-typo"
+  | "invalid-regex"
+  | "mcp-form"
+  | "mcp-narrow"
+  | "mcp-undeclared";
 
-/** One finding for a hook matcher that will silently never fire. */
+/** One finding for a hook matcher that doesn't fire the way it reads. */
 export interface HookMatcherFinding {
   /** The matcher string exactly as written. */
   readonly matcher: string;
@@ -54,6 +98,9 @@ export interface HookMatcherFinding {
    * The corrected matcher when the intent is recoverable (e.g. `Bash` for
    * `bash`, `mcp__memory__.*` for `mcp_memory_*`). Absent when the server
    * segment can't be recovered from a malformed MCP form.
+   *
+   * INVARIANT (property-tested): a suggestion, fed back through this detector,
+   * produces no finding — the advice converges in one step.
    */
   readonly suggestion?: string;
   /** A ready-to-show, actionable message. */
@@ -67,89 +114,309 @@ export interface HookMatcherEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Internal helpers
+// The probe corpus
 // ---------------------------------------------------------------------------
 
 /**
- * Whether a matcher token should be skipped for FP-safety. We ONLY inspect
- * a SINGLE bare token that could plausibly be a literal tool name or MCP
- * reference. Anything with regex / glob meta-characters, alternation, a
- * trailing glob wildcard alone, or an empty string is a pattern — skip it.
- *
- * Conservative by design: an unrecognized form → skip, never flag.
+ * Server segments an MCP tool name really carries. `Google_Calendar` is
+ * Anthropic's own connector naming (an underscore INSIDE the server segment);
+ * the uuid is the SAME server as it appears in another session (hyphens). A
+ * matcher meant to catch "MCP tools" has to reach both.
  */
-function isInspectableToken(token: string): boolean {
-  if (token.length === 0) return false;
-  // Pure wildcard forms used as "match-all" matchers.
-  if (token === "*" || token === ".*" || token === "**") return false;
-  // Contains regex alternation — a combined matcher, not a single tool name.
-  if (token.includes("|")) return false;
-  // Contains a parenthesised group `(…)` — regex, not a tool name.
+const PROBE_SERVERS = [
+  "srv",
+  "Google_Calendar",
+  "4f54037d-0499-426a-8573-6130f3da1ef8",
+] as const;
+
+/** Tool segments: plain, underscored, and the second underscored form. */
+const PROBE_TOOLS = ["tool", "list_events", "update_event"] as const;
+
+/** The simplest possible MCP tool name — "does this pattern match MCP at all". */
+const PROBE_SIMPLE = "mcp__srv__tool";
+
+/**
+ * The two REAL-SHAPE probes a generic MCP matcher must also reach. Both are
+ * measured: `mcp__[^_]+__[^_]+` does not fire on the first, `mcp__\w+__\w+`
+ * does not fire on the second.
+ */
+const REAL_SHAPE_PROBES = [
+  "mcp__Google_Calendar__list_events",
+  "mcp__4f54037d-0499-426a-8573-6130f3da1ef8__update_event",
+] as const;
+
+/** The widest correct MCP matcher — what a too-narrow one should become. */
+const WIDE_MCP_MATCHER = "mcp__.*__.*";
+
+/** Match-all matchers the harness special-cases (and `*` isn't even a regex). */
+const MATCH_ALL = new Set(["", "*", "**", ".*"]);
+
+/** Cap on segments harvested from a matcher — bounds the probe corpus. */
+const MAX_DERIVED_SEGMENTS = 4;
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/** Regex metacharacters — their presence is what makes a matcher a PATTERN. */
+const REGEX_META = /[\\^$.*+?()[\]{}|]/;
+
+/** A matcher with no metacharacter is compared by string equality (measured). */
+function isLiteralMatcher(matcher: string): boolean {
+  return !REGEX_META.test(matcher);
+}
+
+/** Compile a matcher, or null when the regex engine rejects it. */
+function compileMatcher(matcher: string): RegExp | null {
+  try {
+    return new RegExp(matcher);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A token starts with `mcp` followed by a separator — it is trying to be an MCP
+ * tool reference, whether or not it succeeds. A leading `^` is tolerated so an
+ * ANCHORED pattern (`^mcp__srv$`, which cannot reach the tool segment) is judged
+ * as MCP rather than skipped as an unknown built-in.
+ */
+function looksMcpIsh(token: string): boolean {
+  return /^\^?mcp[_-]/i.test(token);
+}
+
+/**
+ * Whether a NON-MCP token should be inspected as a possible tool-name typo. We
+ * only inspect a single bare token that could plausibly BE a tool name; regex /
+ * glob syntax means it is a pattern over tool names, not one. Conservative by
+ * design: an unrecognized form → skip, never flag.
+ */
+function isBareToolToken(token: string): boolean {
   if (token.includes("(") || token.includes(")")) return false;
-  // Contains a `[` — character class; skip.
   if (token.includes("[")) return false;
-  // A leading `^` or trailing `$` — anchored regex.
   if (token.startsWith("^") || token.endsWith("$")) return false;
-  // Leading `.*` — regex prefix; always a pattern.
   if (token.startsWith(".*")) return false;
-  // A trailing `.*`/`*` is a glob/regex suffix on a plain TOOL matcher (`Bash.*`,
-  // `Read*`) → skip. But for an MCP-ish token the trailing wildcard is EXACTLY
-  // what we must inspect: `mcp__server__.*` is the legitimate match-all-tools
-  // form, and `mcp_memory_*` is the classic single-underscore typo we want to
-  // catch — so do NOT skip a wildcard suffix on an `mcp`-ish token.
-  if (!looksMcpIsh(token) && (token.endsWith(".*") || token.endsWith("*")))
-    return false;
+  if (token.endsWith(".*") || token.endsWith("*")) return false;
   return true;
 }
 
 /**
- * A token starts with `mcp` (case-insensitive) and contains at least one
- * `_` (making it look like an MCP tool reference, not a harness built-in).
+ * Strip the regex anchors so an anchored matcher (`^mcp__memory__.*$`) is read
+ * structurally the same as its unanchored twin. The anchors stay in the compiled
+ * regex — this is only for reading the matcher's literal segments.
  */
-function looksMcpIsh(token: string): boolean {
-  return /^mcp[_-]/i.test(token);
+function withoutAnchors(matcher: string): string {
+  return matcher.replace(/^\^/, "").replace(/\$$/, "");
+}
+
+/** The literal server segment of `mcp__<server>__…`, or null when it's a pattern. */
+function literalServerSegment(matcher: string): string | null {
+  return /^mcp__([A-Za-z0-9_-]+)__/.exec(withoutAnchors(matcher))?.[1] ?? null;
+}
+
+/** Literal name-shaped runs inside one segment of a matcher (`mem.*` → `mem`). */
+function literalRuns(segment: string): string[] {
+  return (segment.match(/[A-Za-z0-9][A-Za-z0-9_-]*/g) ?? []).slice(
+    0,
+    MAX_DERIVED_SEGMENTS,
+  );
 }
 
 /**
- * Whether `token` matches the canonical `mcp__<server>__<rest>` double-
- * underscore shape (the valid MCP matcher form). We use the dialect's own
- * `mcpToolPattern` extended to allow trailing `.*` for wildcard matchers,
- * since a hook `matcher` may be `mcp__server__.*` (match-all-tools-on-server).
+ * Synthetic MCP tool names to test a matcher against: the generic corpus (the
+ * real-world server/tool shapes) PLUS names built from the matcher's OWN literal
+ * segments, so a legitimately scoped `mcp__memory__search.*` has something to
+ * match. Derivation is POSITIONAL — segments are read from the `mcp__`-split
+ * positions they occupy, never re-used as a different segment — so a malformed
+ * `mcp_memory_search` cannot manufacture a probe that rescues it.
  */
-function isValidMcpForm(token: string, dialect: HarnessDialect): boolean {
-  // The canonical pattern from the dialect: `mcp__server__tool`.
-  if (dialect.mcpToolPattern.test(token)) return true;
-  // Also allow the wildcard suffix form `mcp__server__.*`.
-  if (/^mcp__[a-z0-9_-]+__\.\*$/i.test(token)) return true;
-  return false;
+function mcpProbes(matcher: string): string[] {
+  const parts = withoutAnchors(matcher).split("__");
+  const derivedServers =
+    parts[0] === "mcp" && parts.length > 1 ? literalRuns(parts[1]) : [];
+  const derivedTools =
+    parts[0] === "mcp" && parts.length > 2
+      ? literalRuns(parts.slice(2).join("__"))
+      : [];
+  const servers = [...derivedServers, ...PROBE_SERVERS];
+  const tools = [...derivedTools, ...PROBE_TOOLS];
+  const probes: string[] = [];
+  for (const server of servers)
+    for (const tool of tools) probes.push(`mcp__${server}__${tool}`);
+  return probes;
 }
 
 /**
- * Attempt to recover the server segment from a malformed MCP token so we can
- * suggest the corrected `mcp__<server>__.*` form. Returns null when no
- * segment can be confidently recovered.
+ * Recover the server segment from a malformed MCP token so the corrected
+ * `mcp__<server>__.*` form can be suggested. Returns null when nothing
+ * name-shaped can be recovered (then the message spells the form out instead).
  *
- * Handles:
- *   - Single-underscore: `mcp_memory_search` → server=`memory`, tool=`search`
- *   - Hyphenated:        `mcp-memory-search` → server=`memory`, tool=`search`
- *   - Glob suffix:       `mcp_memory_*`       → server=`memory`
- *   - Mixed:             `mcp__memory_*`      → only one `__` segment found
+ * Handles the `__`-separated form first — the segment the user actually wrote is
+ * kept whole (`mcp__memory_search` → `memory_search`, since a real server IS
+ * named like `Google_Calendar`) — then the single-underscore / hyphen typos
+ * (`mcp_memory_search`, `mcp-memory-search`, `mcp_memory_*` → `memory`).
  */
 function recoverMcpServer(token: string): string | null {
-  // Strip a leading `mcp` and then a separator (`__`, `_`, `-`).
-  const rest = token.replace(/^mcp(?:__|_|-)/i, "");
-  if (!rest || rest === token) return null;
+  const parts = withoutAnchors(token).split("__");
+  const candidate =
+    parts.length > 1 && parts[1].length > 0
+      ? parts[1]
+      : firstSeparatedSegment(token);
+  if (candidate === null) return null;
+  // A recovered segment must be name-shaped, or the "suggestion" would be a
+  // regex fragment — the bug that made the old advice grow `__.*` forever.
+  return /^[A-Za-z][A-Za-z0-9_-]*$/.test(candidate) ? candidate : null;
+}
 
-  // Split on single underscores or hyphens (not `__`) to get the next segment.
-  // We want the first non-empty segment after the `mcp` prefix separator.
-  const segments = rest.split(/(?<!_)_(?!_)|(?<!-)(?:-(?!-))/);
-  const server = segments[0];
-  if (!server || server.length === 0) return null;
+/** The segment after a single `_`/`-` separator following the `mcp` prefix. */
+function firstSeparatedSegment(token: string): string | null {
+  const rest = withoutAnchors(token).replace(/^mcp(?:_|-)/i, "");
+  if (rest === token || rest.length === 0) return null;
+  const segment = rest.split(/(?<!_)_(?!_)|-/)[0];
+  return segment.length > 0 ? segment : null;
+}
 
-  // Reject segments that are clearly numeric-only or single chars (too ambiguous).
-  if (/^\d+$/.test(server)) return null;
+// ---------------------------------------------------------------------------
+// Finding builders
+// ---------------------------------------------------------------------------
 
-  return server;
+/** The matcher can match NO MCP tool name — the hook is dead. */
+function unreachableFinding(matcher: string): HookMatcherFinding {
+  const server = recoverMcpServer(matcher);
+  const suggestion = server === null ? undefined : `mcp__${server}__.*`;
+  const hint =
+    suggestion === undefined
+      ? " Use the form `mcp__<server>__<tool>` (double underscores), or a pattern that produces it."
+      : ` Did you mean "${suggestion}"?`;
+  return {
+    matcher,
+    kind: "mcp-form",
+    ...(suggestion === undefined ? {} : { suggestion }),
+    message: `Hook matcher "${matcher}" matches no MCP tool name — MCP tools are named \`mcp__<server>__<tool>\`, so this hook never fires.${hint}`,
+  };
+}
+
+/**
+ * The matcher fires on some MCP tools but misses real-world server naming. The
+ * message names the probes it actually misses — not the whole corpus — so the
+ * finding is checkable rather than a vague "too narrow".
+ */
+function narrowFinding(
+  matcher: string,
+  missed: readonly string[],
+): HookMatcherFinding {
+  const names = missed.map((m) => `"${m}"`).join(" or ");
+  return {
+    matcher,
+    kind: "mcp-narrow",
+    suggestion: WIDE_MCP_MATCHER,
+    message: `Hook matcher "${matcher}" fires on some MCP tools but not on ${names} — real server segments contain "_" and "-" (the same server appears as \`mcp__Google_Calendar__…\` in one session and \`mcp__<uuid>__…\` in another), so this matcher silently skips them. Did you mean "${WIDE_MCP_MATCHER}"?`,
+  };
+}
+
+/** The matcher isn't a regex the engine accepts — it can never match. */
+function invalidRegexFinding(matcher: string): HookMatcherFinding {
+  return {
+    matcher,
+    kind: "invalid-regex",
+    message: `Hook matcher "${matcher}" is not a valid regular expression — the harness can't compile it, so the hook never fires.`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Per-matcher checks
+// ---------------------------------------------------------------------------
+
+/**
+ * The shape half of the MCP check: can this matcher produce an MCP tool name at
+ * all, and if so does it reach the ones that occur in the wild? `re` is null for
+ * a literal matcher (compared by string equality, so only the shape can be
+ * checked).
+ */
+function mcpShapeFinding(
+  matcher: string,
+  re: RegExp | null,
+  dialect: HarnessDialect,
+): HookMatcherFinding | null {
+  if (re === null)
+    return dialect.mcpToolPattern.test(matcher)
+      ? null
+      : unreachableFinding(matcher);
+  if (!mcpProbes(matcher).some((p) => re.test(p)))
+    return unreachableFinding(matcher);
+  // The narrowness check applies only to a matcher meant to be GENERIC: one that
+  // pins no literal server yet matches the simplest MCP name. A matcher scoped to
+  // one server (or to specific tools) is narrow ON PURPOSE — never flag it.
+  if (literalServerSegment(matcher) !== null || !re.test(PROBE_SIMPLE))
+    return null;
+  const missed = REAL_SHAPE_PROBES.filter((p) => !re.test(p));
+  return missed.length === 0 ? null : narrowFinding(matcher, missed);
+}
+
+/**
+ * The resolution half: a matcher pinning a literal server the plugin doesn't
+ * declare can't fire. Gated EXACTLY like `mcp-tool-resolves` — no declared set →
+ * silent (the server may be user-global), built-ins allowlisted, the
+ * plugin-namespaced form skipped.
+ */
+function mcpUndeclaredFinding(
+  matcher: string,
+  declaredServers: readonly string[],
+  dialect: HarnessDialect,
+): HookMatcherFinding | null {
+  if (declaredServers.length === 0) return null;
+  const server =
+    mcpToolServer(matcher, dialect) ?? literalServerSegment(matcher);
+  if (server === null) return null;
+  if (/^plugin_/i.test(server)) return null;
+  const known = new Set<string>([
+    ...declaredServers,
+    ...(dialect.knownMcpServers ?? []),
+  ]);
+  if (known.has(server)) return null;
+  return {
+    matcher,
+    kind: "mcp-undeclared",
+    message: `Hook matcher "${matcher}" references MCP server "${server}", which the plugin doesn't declare (declared: ${declaredServers.join(", ")}) — the hook can't fire.`,
+  };
+}
+
+/** A literal bare token that is a close typo of a real built-in tool. */
+function toolTypoFinding(
+  matcher: string,
+  dialect: HarnessDialect,
+): HookMatcherFinding | null {
+  if (!isBareToolToken(matcher)) return null;
+  if (new Set(dialect.builtinAgentTools).has(matcher)) return null;
+  const near = closestTool(matcher, dialect);
+  if (near === null) return null; // far/unknown → likely a plugin tool, not a typo
+  return {
+    matcher,
+    kind: "tool-typo",
+    suggestion: near,
+    message: `Hook matcher "${matcher}" doesn't match any built-in tool — the hook silently never fires. Did you mean "${near}"?`,
+  };
+}
+
+/** The whole per-matcher decision. Null when the matcher is fine (or skipped). */
+function matcherFinding(
+  matcher: string,
+  declaredServers: readonly string[],
+  dialect: HarnessDialect,
+): HookMatcherFinding | null {
+  if (MATCH_ALL.has(matcher)) return null;
+  // Alternation: each arm would have to be judged on its own, and a mixed set
+  // (`mcp__x__y|Bash`) is legitimate — skip, same don't-cry-wolf discipline.
+  if (matcher.includes("|")) return null;
+  const literal = isLiteralMatcher(matcher);
+  const re = literal ? null : compileMatcher(matcher);
+  if (!literal && re === null) return invalidRegexFinding(matcher);
+  if (looksMcpIsh(matcher))
+    return (
+      mcpShapeFinding(matcher, re, dialect) ??
+      mcpUndeclaredFinding(matcher, declaredServers, dialect)
+    );
+  return literal ? toolTypoFinding(matcher, dialect) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -157,10 +424,10 @@ function recoverMcpServer(token: string): string | null {
 // ---------------------------------------------------------------------------
 
 /**
- * Verify hook-matcher strings for the three forms that silently never fire.
+ * Verify hook-matcher strings for the ways a matcher fails to fire as written.
  * Returns one {@link HookMatcherFinding} per offending entry. De-duplicates
- * repeated matchers. Returns `[]` when all matchers are FP-safe to skip or
- * are correct.
+ * repeated matchers. Returns `[]` when every matcher is FP-safe to skip or is
+ * correct.
  */
 export function hookMatcherIssues(
   entries: readonly HookMatcherEntry[],
@@ -169,83 +436,11 @@ export function hookMatcherIssues(
 ): HookMatcherFinding[] {
   const findings: HookMatcherFinding[] = [];
   const seen = new Set<string>();
-
   for (const { matcher } of entries) {
-    // De-dupe repeated matchers across entries.
-    if (seen.has(matcher)) continue;
+    if (seen.has(matcher)) continue; // de-dupe repeated matchers across entries
     seen.add(matcher);
-
-    // Skip wildcards, alternation, regex patterns — FP-safety.
-    if (!isInspectableToken(matcher)) continue;
-
-    // ── kind: mcp-form ──────────────────────────────────────────────────────
-    // The token looks MCP-ish but is NOT the valid double-underscore form.
-    if (looksMcpIsh(matcher)) {
-      if (!isValidMcpForm(matcher, dialect)) {
-        const server = recoverMcpServer(matcher);
-        const suggestion = server ? `mcp__${server}__.*` : undefined;
-        const hintPart =
-          suggestion !== undefined
-            ? ` Did you mean "${suggestion}"?`
-            : " Use the form `mcp__<server>__<tool>` (double underscores).";
-        findings.push({
-          matcher,
-          kind: "mcp-form",
-          ...(suggestion !== undefined ? { suggestion } : {}),
-          message: `Hook matcher "${matcher}" is not a valid MCP tool reference (requires double underscores: \`mcp__server__tool\`).${hintPart}`,
-        });
-        continue;
-      }
-
-      // ── kind: mcp-undeclared ──────────────────────────────────────────────
-      // A correctly-formed MCP token whose server isn't in the declared set.
-      // Guard 1: no declared set → skip (reaches global/project servers).
-      if (declaredServers.length === 0) continue;
-
-      // `mcpToolServer` reads the `mcp__server__tool` form; a server-wide WILDCARD
-      // matcher (`mcp__server__.*`) isn't a concrete tool, so fall back to the
-      // wildcard server segment so an undeclared server is still caught.
-      const server =
-        mcpToolServer(matcher, dialect) ??
-        /^mcp__([a-z0-9_-]+)__\.\*$/i.exec(matcher)?.[1] ??
-        null;
-      if (server === null) continue; // plugin-namespaced form → guard 3, skip
-      // The plugin-namespaced `mcp__plugin_<plugin>_<server>__` form is the
-      // plugin's OWN server — never an undeclared reference (mirrors mcpToolServer).
-      if (/^plugin_/i.test(server)) continue;
-
-      const known = new Set<string>([
-        ...declaredServers,
-        ...(dialect.knownMcpServers ?? []),
-      ]);
-
-      // Guard 2: built-in server → skip.
-      if (known.has(server)) continue;
-
-      findings.push({
-        matcher,
-        kind: "mcp-undeclared",
-        message: `Hook matcher "${matcher}" references MCP server "${server}", which the plugin doesn't declare (declared: ${declaredServers.join(", ")}) — the hook can't fire.`,
-      });
-      continue;
-    }
-
-    // ── kind: tool-typo ─────────────────────────────────────────────────────
-    // A bare token that is NOT an exact built-in tool but IS a close typo of one.
-    const knownTools = new Set(dialect.builtinAgentTools);
-    if (knownTools.has(matcher)) continue; // exact match → no issue
-
-    // Reuse the same ≤ 2 edit-distance helper from tool-contract.ts.
-    const near = closestTool(matcher, dialect);
-    if (near === null) continue; // far/unknown → likely a plugin tool, not a typo
-
-    findings.push({
-      matcher,
-      kind: "tool-typo",
-      suggestion: near,
-      message: `Hook matcher "${matcher}" doesn't match any built-in tool — the hook silently never fires. Did you mean "${near}"?`,
-    });
+    const finding = matcherFinding(matcher, declaredServers, dialect);
+    if (finding !== null) findings.push(finding);
   }
-
   return findings;
 }

@@ -228,7 +228,8 @@ export const RULE_META: Record<RuleName, RuleMeta> = {
     bucket: "structural-closed",
     surface: ["hook"],
     defaultSeverity: "warn",
-    summary: "A hook matcher fires (no tool-name typo / malformed MCP form).",
+    summary:
+      "A hook matcher fires as written (no tool-name typo, no MCP pattern that reaches nothing or misses real server names).",
     detector: "hookMatcherIssues",
     upstreamPrevention: "compiled hook tool()/tools() matcher is typed",
   },
