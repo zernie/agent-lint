@@ -109,6 +109,10 @@ export * from "./tool-stub.js";
 // from `vigiles/claude-code` (or your harness's package). See
 // `research/code-adapter-architecture.md`.
 export { runHarnessTest, runHarness } from "./harness-test.js";
+// A skill's own `allowed-tools:` frontmatter, read back as checks — the wiring
+// from a declaration to the existing check vocabulary, not new machinery.
+export { skillContract } from "./skill-contract.js";
+export type { SkillContract, SkillContractOptions } from "./skill-contract.js";
 export type {
   HarnessTestSpec,
   Trace,

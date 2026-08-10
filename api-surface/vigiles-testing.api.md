@@ -648,6 +648,9 @@ export interface ModelTurn {
 export function notTool(name: string, args?: ArgMatcher): Check<Trace>;
 
 // @public
+export function onlyTools(allowed: readonly string[]): Check<Trace>;
+
+// @public
 export function output(matcher: string | RegExp): Check<Trace>;
 
 // @public
@@ -818,6 +821,25 @@ export function significantlyBeats(report: EvalReport, baseline: string, arm: st
 
 // @public
 export function skill(id: string): Check<Trace>;
+
+// @public (undocumented)
+export interface SkillContract {
+    readonly activation: Check<Trace>;
+    readonly declared: readonly string[];
+    readonly id: string;
+    readonly malformed: boolean;
+    readonly name: string;
+    readonly surface: readonly Check<Trace>[];
+    readonly undeclared: boolean;
+}
+
+// @public
+export function skillContract(skillDir: string, options?: SkillContractOptions): SkillContract;
+
+// @public (undocumented)
+export interface SkillContractOptions {
+    readonly plugin?: string;
+}
 
 // @public
 export function skillResolved(trace: Trace, skill: string): boolean;

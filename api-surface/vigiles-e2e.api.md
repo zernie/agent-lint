@@ -442,6 +442,9 @@ export interface ModelTurn {
 export function notTool(name: string, args?: ArgMatcher): Check<Trace>;
 
 // @public
+export function onlyTools(allowed: readonly string[]): Check<Trace>;
+
+// @public
 export function output(matcher: string | RegExp): Check<Trace>;
 
 // @public

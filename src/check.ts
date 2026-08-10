@@ -198,6 +198,60 @@ export function notTool(name: string, args?: ArgMatcher): Check<Trace> {
   };
 }
 
+/**
+ * The agent used **only** tools drawn from `allowed` — the white-list, and the
+ * missing half of a symmetry the file surface already has:
+ *
+ * |       | "not this one"  | "nothing but these"    |
+ * | ----- | --------------- | ---------------------- |
+ * | files | `assertNoWrite` | `assertWroteOnly`      |
+ * | tools | {@link notTool} | **`onlyTools`** (this) |
+ *
+ * Why the asymmetry mattered: `notTool` can only forbid the calls the test
+ * author thought of, and the set of undeclared tools is unbounded — so "this
+ * skill stayed inside the tools it declares" was not expressible, which is
+ * exactly the claim a `SKILL.md` frontmatter makes in prose. See
+ * `skillContract`, which builds this check from that declaration.
+ *
+ * **Fails closed on an empty trace.** A `Trace` records tool calls only when the
+ * run captured the stream (`transcript: true` on the harness tier; always on the
+ * eval tier), so an uncaptured run is indistinguishable from a tool-free one —
+ * and passing it would assert nothing. Same discipline as `assertWroteOnly`
+ * refusing a result that never recorded writes: "we didn't look" is not "it was
+ * clean".
+ */
+export function onlyTools(allowed: readonly string[]): Check<Trace> {
+  const allow = new Set(allowed);
+  const declared = [...allow].join(", ") || "none";
+  return {
+    kind: "onlyTools",
+    eval: (t) => {
+      if (t.toolCalls.length === 0)
+        return no(
+          `onlyTools cannot run: this trace recorded no tool calls, so passing ` +
+            `it would assert nothing. Tool calls are parsed from the stream — ` +
+            `pass \`transcript: true\` on the harness tier (the eval tier always ` +
+            `captures it). If the run genuinely used no tools there is no tool ` +
+            `surface to constrain, and this check does not apply.`,
+        );
+      // Report EVERY distinct offender, not just the first: a skill reaching for
+      // three undeclared tools should not take three runs to discover that.
+      const offenders = [
+        ...new Set(
+          t.toolCalls.map((c) => c.name).filter((name) => !allow.has(name)),
+        ),
+      ];
+      if (offenders.length === 0)
+        return ok(`agent used only declared tool(s): ${declared}`);
+      return no(
+        `agent used tool(s) outside its declared set: ${offenders.join(", ")} ` +
+          `(declared: ${declared})`,
+      );
+    },
+    toJSON: () => ({ kind: "onlyTools", allowed: [...allowed] }),
+  };
+}
+
 /** A skill resolved to this id (`<plugin>:<skill>`) without erroring. */
 export function skill(id: string): Check<Trace> {
   return {

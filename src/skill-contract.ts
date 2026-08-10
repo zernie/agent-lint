@@ -1,0 +1,158 @@
+/**
+ * A skill's own frontmatter, read back as CHECKS.
+ *
+ * A `SKILL.md` already declares its capability surface — `allowed-tools:` — and
+ * nothing ever verified that a run stayed inside it. That is the product's own
+ * thesis pointed at its own file format: the declaration is prose until
+ * something mechanical reads it. This module does the reading; every check it
+ * hands back is an existing one (`skill`, {@link onlyTools}), so there is no new
+ * assertion machinery here — only the wiring from a declaration to the vocabulary.
+ *
+ * Deliberately NOT a third entry point: a `SkillContract` is a bag of ordinary
+ * `Check<Trace>`s, so it composes into the deterministic tier (`runHarnessTest`)
+ * and the eval tier (`measure` / `measureTriggerRate`) unchanged.
+ */
+import { readFileSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
+
+import type { Check } from "./check.js";
+import { onlyTools, skill } from "./check.js";
+import type { Trace } from "./harness-test.js";
+import { readFrontmatter, frontmatterScalar } from "./core/frontmatter-read.js";
+import { parseAgentToolList } from "./adapters/claude-code/agent-tools.js";
+
+export interface SkillContractOptions {
+  /**
+   * The plugin namespace, so activation is asserted on the real `<plugin>:<skill>`
+   * id. Resolved from the enclosing plugin manifest when omitted.
+   */
+  readonly plugin?: string;
+}
+
+export interface SkillContract {
+  /** The skill's `name:` (falls back to its directory name). */
+  readonly name: string;
+  /** What `skill()` matches — `<plugin>:<name>`, or bare `name` if unresolvable. */
+  readonly id: string;
+  /** `allowed-tools:` exactly as declared. Empty when undeclared or malformed. */
+  readonly declared: readonly string[];
+  /** The skill activated at all. */
+  readonly activation: Check<Trace>;
+  /** The run stayed inside the declared surface. */
+  readonly surface: readonly Check<Trace>[];
+  /** No `allowed-tools:` line — the skill inherits EVERY tool. */
+  readonly undeclared: boolean;
+  /** A frontmatter block exists but is not valid YAML, so nothing parsed. */
+  readonly malformed: boolean;
+}
+
+/**
+ * `Skill` is the harness's own activation mechanism, not a capability the skill
+ * exercises: the call that LOADS the skill under test appears in the trace, and
+ * no `allowed-tools:` line ever lists it. Counting it would make every contract
+ * fail on every run — a false positive so uniform it would train people to
+ * ignore the check.
+ */
+const ACTIVATION_TOOL = "Skill";
+
+/** A check that always fails — used when there is no declaration to verify. */
+function unverifiable(kind: string, message: string): Check<Trace> {
+  return {
+    kind,
+    eval: () => ({ pass: false, score: 0, message }),
+    toJSON: () => ({ kind }),
+  };
+}
+
+/**
+ * The one surface check, chosen by how much of the declaration is actually
+ * readable. Both degenerate states FAIL rather than pass vacuously — see
+ * {@link skillContract}.
+ */
+function buildSurface(
+  path: string,
+  malformed: boolean,
+  undeclared: boolean,
+  declared: readonly string[],
+): Check<Trace> {
+  if (malformed)
+    return unverifiable(
+      "surfaceUnverifiable",
+      `${path}: frontmatter is not valid YAML, so its allowed-tools contract ` +
+        `could not be read. A strict loader rejects the block and a regex ` +
+        `salvage would be a guess — the skill therefore declares nothing ` +
+        `enforceable. Fix the YAML and this check becomes real.`,
+    );
+  if (undeclared)
+    return unverifiable(
+      "surfaceUndeclared",
+      `${path}: no \`allowed-tools:\` line, so this skill inherits EVERY tool ` +
+        `and there is no declared surface to stay inside. Declare the tools it ` +
+        `actually needs; until then "no violations" would only mean "nothing ` +
+        `was claimed".`,
+    );
+  return onlyTools([...declared, ACTIVATION_TOOL]);
+}
+
+/** The plugin name from the manifest enclosing `<root>/skills/<name>/`. */
+function resolvePlugin(skillDir: string): string | undefined {
+  const root = resolve(skillDir, "..", "..");
+  for (const rel of [join(".claude-plugin", "plugin.json"), "plugin.json"]) {
+    try {
+      const j = JSON.parse(readFileSync(join(root, rel), "utf-8")) as {
+        name?: unknown;
+      };
+      if (typeof j.name === "string" && j.name) return j.name;
+    } catch {
+      /* not a plugin root, or unreadable — try the next candidate */
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Read `<skillDir>/SKILL.md` and return its declaration as checks.
+ *
+ * Two states are FINDINGS rather than empty contracts, and both return a
+ * `surface` that FAILS instead of passing vacuously:
+ *
+ * - **`undeclared`** — no `allowed-tools:` line, so the skill inherits every
+ *   tool. Silently reporting "no violations" would present the widest possible
+ *   capability surface as the cleanest one.
+ * - **`malformed`** — a frontmatter block that is not valid YAML. A strict
+ *   loader rejects it, so the declared list is unknown, not empty; a regex
+ *   salvage of it would be a guess. A declaration that does not parse is not an
+ *   enforcement. (Observed live: a single unquoted `: ` inside the description
+ *   silently voided a skill's whole tool contract.)
+ */
+export function skillContract(
+  skillDir: string,
+  options: SkillContractOptions = {},
+): SkillContract {
+  const path = join(skillDir, "SKILL.md");
+  const md = readFileSync(path, "utf-8");
+  const fm = readFrontmatter(md);
+
+  const name = frontmatterScalar(fm, "name") ?? basename(resolve(skillDir));
+  const plugin = options.plugin ?? resolvePlugin(skillDir);
+  const id = plugin ? `${plugin}:${name}` : name;
+
+  const malformed = fm.malformed;
+  const parsed = malformed ? null : parseAgentToolList(md, "allowed-tools");
+  const undeclared = parsed === null;
+  const declared = parsed ?? [];
+
+  const surface: Check<Trace>[] = [
+    buildSurface(path, malformed, undeclared, declared),
+  ];
+
+  return {
+    name,
+    id,
+    declared,
+    activation: skill(id),
+    surface,
+    undeclared,
+    malformed,
+  };
+}
