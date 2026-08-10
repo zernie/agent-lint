@@ -1,7 +1,7 @@
 ---
 name: test-harness
 allowed-tools: Read, Edit, Write, Glob, Grep, Bash
-description: Install vigiles and test a Claude Code harness — hooks, skills, settings, CLAUDE.md — by picking the right tier (unit / deterministic / eval) and writing a test that passes. Use when the user wants to check that a hook fires or blocks, that a skill triggers, that injected context lands, or that a harness change moves what the agent does.
+description: Install vigiles and test a Claude Code harness — hooks, skills, agents, settings, CLAUDE.md — by picking the right tier (unit / deterministic / eval) and writing a test that passes. Use to check that a hook fires or blocks, that a skill triggers, that injected context lands; or to observe a run — which tools it called, whether it stayed inside its declared allowed-tools, what files and side effects it produced, how to intercept a call without executing it.
 ---
 
 Test the Claude Code **harness** — the hooks, skills, settings, and CLAUDE.md that
@@ -31,6 +31,37 @@ model. Only "does the model trigger / behave differently" needs the eval tier.
 
 If the unit and deterministic tiers can both answer it, **prefer unit**: it's
 faster and reaches events the deterministic mock can't drive.
+
+## Step 0.4 — Observing a run (what it CALLED, WROTE, and TOUCHED)
+
+The table above is keyed on the harness *surface* under test. Half the real
+questions are keyed on the **observation** instead — "what did this skill
+actually do?" — and they have answers already. Reach for these before building
+anything; every one of them ships today.
+
+| The question you're actually asking                                       | Use                                                                          |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Which tools did it call, and with what arguments?                         | `trace.toolCalls` · `tool` / `toolWith` checks · `parseToolCalls` (`vigiles/e2e`) |
+| Did it call a tool it must not?                                           | `notTool(name)`                                                              |
+| Did it stay inside the `allowed-tools` its own frontmatter declares?       | compare `trace.toolCalls` against the frontmatter — see the caveat below      |
+| What files did the run write?                                             | `filesWritten` · `wrote(path)` / `didNotWrite(path)` · `r.file(path)`         |
+| Did it write **only** where it was supposed to?                           | `assertWroteOnly([...])` / `assertNoWrite()` — needs `{ sandbox: "auto" }`    |
+| Run a tool call but **don't let it execute** — capture the args instead    | the `interceptTools` option on `measure` / `runEval` (a `ToolIntercept[]`)    |
+| Did a subagent do it, and which one?                                      | `subagent(name, [...])` · `SubagentTrace`                                     |
+| Was it an MCP tool?                                                        | `mcp(server, toolName)`                                                       |
+| Assert the whole effect boundary deterministically                        | `assertChecks` + the checks above (see `examples/harness/effect-boundary.harness.mjs`) |
+
+`interceptTools` is the one worth knowing about, because it is not obvious it
+exists: it denies a tool its **real execution** via an auto-wired `PreToolUse`
+hook while still recording the call and its arguments into the trace. That is
+how you test a skill that would otherwise mutate a real external service — a
+calendar, an upload — without mocking anything yourself.
+
+⚠️ **The honest gap.** There is no white-list check for tools, only the
+black-list `notTool`. "It wrote only here" has `assertWroteOnly`; "it called only
+these tools" has no equivalent, so asserting a skill stayed inside its declared
+`allowed-tools` means enumerating the forbidden ones by hand — which is
+incomplete by construction. Say so rather than implying the assertion is total.
 
 ## Step 0.5 — Set honest expectations (what's testable, and at what cost)
 
@@ -122,10 +153,12 @@ mock model, assert the hook fired (or the context landed):
 ```ts
 import {
   runHarnessTest,
-  scriptModel,
   assertHookFired,
   assertRequestContains,
 } from "vigiles/testing";
+// `scriptModel` is the Claude-Code TRANSPORT, deliberately not re-exported from
+// the harness-agnostic `vigiles/testing` — import it from the harness package:
+import { scriptModel } from "vigiles/claude-code";
 
 const r = await runHarnessTest({
   pluginDir: "./", // or { settings: { hooks: {...} } }
