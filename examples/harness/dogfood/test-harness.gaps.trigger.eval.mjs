@@ -79,6 +79,28 @@ for (const [label, prompts] of sets) {
   results.push([label, report]);
 }
 
+// FINDING (2026-08-10). Measured on Sonnet, 2 trials/prompt, whole-harness
+// (5 competing skills), across four descriptions of the same skill:
+//
+//   description                                  RU gaps   EN gaps   authored   FP
+//   original (surfaces only)                        25%       25%       90%      —
+//   + observation vocabulary, 594ch                100%      100%       90%      0%
+//   + observation vocabulary, 460ch (SHIPPED)       75%      100%       90%      0%
+//   + observation vocabulary, 595ch                 88%      100%        —       —
+//
+// Two things this says, and one it does NOT:
+//  - naming the observation vocabulary is what moved the number: 2/8 → 6-8/8.
+//    That difference is large and repeated across two languages.
+//  - RU and EN scored IDENTICALLY (25/25) before the fix, prompt for prompt,
+//    which rules out a language effect: the gap was conceptual.
+//  - it does NOT establish that a longer description beats a shorter one. At
+//    n=8 the 75/88/100 spread is one-to-two runs. The shipped text is the one
+//    that fits the 500-char description budget the linter enforces, because
+//    the evidence cannot distinguish the variants and the budget rule is the
+//    project's own documented heuristic.
+//
+// Isolated-vs-whole-harness caveat still applies UPWARD: 5 competitors is far
+// fewer than a populated user harness, so these rates are an upper bound.
 console.log("\n===== per-prompt verdict =====");
 for (const [label, report] of results) {
   console.log(`\n${label}`);
