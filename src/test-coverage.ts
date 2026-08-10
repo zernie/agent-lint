@@ -481,6 +481,75 @@ export function coverageEvidenceCounts(report: UntestedReport): EvidenceCounts {
   return countEvidence(report.decisions);
 }
 
+/**
+ * The edit-time half of `untested-skill` — the nudge a PostToolUse hook delivers
+ * when the agent has just edited a skill/agent surface.
+ *
+ * WHY it lives next to `findUntestedSurfaces` instead of being its own detector:
+ * the rule was already stated correctly, but it only ran inside `vigiles lint`,
+ * which a human has to remember to type. A rule that fires only when invoked by
+ * hand is prose, not policy — so this reuses the SAME detector at the moment the
+ * surface changes.
+ *
+ * It deliberately does NOT say "write a test". An agent already knows that; what
+ * it did not know is **with what** — so the message's job is to hand off to the
+ * `test-harness` skill, which carries the tier→API table. A nudge that restates
+ * the obligation and withholds the vocabulary is the failure this replaces.
+ *
+ * Two distinguishable gaps, because they cost orders of magnitude apart:
+ *   - no test at all        → start at the cheapest tier
+ *   - a harness but no eval → you just changed the TRIGGER surface, and a
+ *                             deterministic harness structurally cannot tell you
+ *                             whether a description still fires
+ *
+ * Returns `null` when the edited file isn't a skill/agent surface, or when it is
+ * covered on both tiers. Never throws — a nudge must not disrupt an edit.
+ */
+export function skillTestNudge(
+  filePath: string,
+  options: TestCoverageOptions = {},
+): string | null {
+  let report: UntestedReport;
+  try {
+    report = findUntestedSurfaces({ ...options, hooks: false });
+  } catch {
+    return null; // a broken scan must never surface as a broken edit
+  }
+
+  const norm = (p: string): string => p.replaceAll("\\", "/");
+  const target = norm(filePath);
+  const isTarget = (s: Surface): boolean =>
+    norm(s.path) === target || target.endsWith(`/${norm(s.path)}`);
+
+  const untested = report.untested.find(isTarget);
+  if (untested)
+    return (
+      `vigiles: you edited ${untested.path}, and nothing measures whether it ` +
+      `still does what it claims — no test or eval covers it.\n` +
+      `Don't hand-roll a runner: the \`test-harness\` skill carries the ` +
+      `tier→API table (runHook · runHarnessTest+scriptModel · ` +
+      `measureTriggerRate · measure+judged · runEval) and picks the cheapest ` +
+      `tier that can answer your question. Start there, then add e.g. ` +
+      `${suggestedTestPath(untested)}.\n` +
+      `This is a reminder, not a block.`
+    );
+
+  // Covered by SOMETHING, but never evaluated — and an edit to a SKILL.md is
+  // usually an edit to the description, i.e. to the trigger surface itself.
+  const unevaluated = report.evals.untested.find(isTarget);
+  if (unevaluated)
+    return (
+      `vigiles: you edited ${unevaluated.path}. A deterministic test covers ` +
+      `it, but nothing has ever measured whether its description actually ` +
+      `FIRES — and a harness structurally cannot tell you that.\n` +
+      `See the \`test-harness\` skill for which tier answers it ` +
+      `(\`measureTriggerRate\`, plus \`irrelevantPrompts\` for the precision ` +
+      `side). This is a reminder, not a block.`
+    );
+
+  return null;
+}
+
 /** Format an untested-surface report as human-readable text. */
 export function formatUntestedReport(report: UntestedReport): string {
   // Every coverage number is printed WITH its provenance. "28 covered" and

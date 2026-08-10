@@ -15,6 +15,7 @@ import {
   coverageEvidenceCounts,
   findUntestedSurfaces,
   formatUntestedReport,
+  skillTestNudge,
   suggestedTestPath,
 } from "./test-coverage.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
@@ -513,5 +514,80 @@ test("a declaration OUTRANKS a mention for the same surface", () => {
     mention: 0,
   });
   assert.equal(r.decisions[0].by, "test/z-declared.harness.mjs");
+  cleanupTmpDir(dir);
+});
+
+// ---------------------------------------------------------------------------
+// skillTestNudge — the edit-time delivery of `untested-skill`.
+//
+// The rule was already stated correctly; it only ever ran inside `vigiles lint`,
+// which someone has to type. These pin the four behaviours that make the nudge
+// worth wiring: it fires on an untested surface, it distinguishes "never
+// evaluated" from "no test at all", it stays silent when covered, and it always
+// hands off to the `test-harness` skill rather than restating "write a test".
+// ---------------------------------------------------------------------------
+
+test("skillTestNudge: an untested skill gets a nudge that names the test-harness skill", () => {
+  const dir = makeTmpDir("nudge-untested");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  const msg = skillTestNudge("skills/foo/SKILL.md", { basePath: dir });
+  assert.ok(msg, "an untested skill must produce a nudge");
+  // The load-bearing property: it points at the vocabulary, not at the duty.
+  assert.match(msg, /test-harness/);
+  assert.match(msg, /measureTriggerRate/);
+  // …and it tells the agent where to put the result.
+  assert.match(msg, /skills\/foo\/foo\.eval\.mjs/);
+  // A nudge must never read as a gate.
+  assert.match(msg, /not a block/);
+  cleanupTmpDir(dir);
+});
+
+test("skillTestNudge: a harness-covered skill is nudged about FIRING, not about tests", () => {
+  // The case an edit to a SKILL.md usually IS: the description (= the trigger
+  // surface) changed, and a deterministic harness structurally cannot tell you
+  // whether it still fires.
+  const dir = makeTmpDir("nudge-uneval");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  write(dir, "skills/foo/foo.harness.mjs", "// vigiles:covers skills/foo\n");
+  const msg = skillTestNudge("skills/foo/SKILL.md", { basePath: dir });
+  assert.ok(msg, "covered-but-never-evaluated must still nudge");
+  assert.match(msg, /FIRES/);
+  assert.match(msg, /measureTriggerRate/);
+  // It must NOT claim the surface is untested — it isn't.
+  assert.doesNotMatch(msg, /no test or eval covers it/);
+  cleanupTmpDir(dir);
+});
+
+test("skillTestNudge: silent when the surface is covered on both tiers", () => {
+  const dir = makeTmpDir("nudge-covered");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  write(dir, "skills/foo/foo.harness.mjs", "// vigiles:covers skills/foo\n");
+  write(dir, "skills/foo/foo.eval.mjs", "// vigiles:covers skills/foo\n");
+  assert.equal(skillTestNudge("skills/foo/SKILL.md", { basePath: dir }), null);
+  cleanupTmpDir(dir);
+});
+
+test("skillTestNudge: silent for a file that is not a surface, and for another skill's edit", () => {
+  const dir = makeTmpDir("nudge-other");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  write(dir, "README.md", "# not a surface\n");
+  assert.equal(skillTestNudge("README.md", { basePath: dir }), null);
+  // An absolute-ish path ending in the surface path still matches (the hook
+  // passes a repo-relative path, but a caller may not).
+  assert.ok(skillTestNudge("/abs/repo/skills/foo/SKILL.md", { basePath: dir }));
+  cleanupTmpDir(dir);
+});
+
+test("skillTestNudge: an agent surface is covered too, and a broken scan is silent", () => {
+  const dir = makeTmpDir("nudge-agent");
+  write(dir, "agents/bar.md", skill("bar"));
+  const msg = skillTestNudge("agents/bar.md", { basePath: dir });
+  assert.ok(msg);
+  assert.match(msg, /bar\.harness\.mjs/); // agents suggest a harness, not an eval
+  // A nonexistent base must not throw out of a PostToolUse hook.
+  assert.equal(
+    skillTestNudge("skills/foo/SKILL.md", { basePath: join(dir, "nope") }),
+    null,
+  );
   cleanupTmpDir(dir);
 });

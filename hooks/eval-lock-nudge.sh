@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
-# PostToolUse hook — after the agent edits an eval input (a SKILL.md trigger
-# surface or an *.eval.* script) and committed eval locks exist, inject a
-# NON-BLOCKING reminder to re-run `vigiles eval --update`. Self-gating: silent
-# until you've committed a lock, so it never fires in a repo that doesn't use
-# evals. Never blocks the edit. Runs as its OWN PostToolUse entry so its stdout
-# stays clean JSON. See docs/harness-testing.md (the eval lock).
+# PostToolUse hook — the edit-time test reminders. After the agent edits a
+# skill/agent surface or an *.eval.* script, inject a NON-BLOCKING nudge:
+#
+#   1. the surface has no test/eval at all, or has a deterministic harness but
+#      was never EVALUATED (nothing has measured that its description still
+#      fires). Reuses the `untested-skill` detector and points at the
+#      `test-harness` skill for the tier→API table. Before this, `untested-skill`
+#      only ran when a human typed `vigiles lint` — a rule that fires on request
+#      is prose, not policy.
+#   2. committed eval locks may now be stale → re-run `vigiles eval --update`.
+#      Self-gating: silent until you've committed a lock.
+#
+# Never blocks the edit. Runs as its OWN PostToolUse entry so its stdout stays
+# clean JSON. See docs/harness-testing.md and docs/rules/untested-skill.md.
 
 set -uo pipefail
 

@@ -78,7 +78,11 @@ import type {
 } from "./core/types.js";
 import { ruleSeverity, ruleOptions } from "./core/types.js";
 import type { SurfaceKind } from "./test-coverage.js";
-import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
+import {
+  findUntestedSurfaces,
+  formatUntestedReport,
+  skillTestNudge,
+} from "./test-coverage.js";
 import {
   scanPlugin,
   formatScanReport,
@@ -5915,13 +5919,20 @@ function isInstructionFile(file: string): boolean {
 }
 
 /**
- * PostToolUse-hook entrypoint: when the agent edits an eval input (a `SKILL.md`
- * trigger surface or an `*.eval.*` script), and committed eval locks exist, inject
- * a NON-BLOCKING reminder to re-run `vigiles eval --update`. Self-gating (silent
- * until a lock is committed), never blocks, never runs an eval — a reminder, not a
- * gate (the gate is `eval --check` in CI). The harness-neutral nudge lives in
- * `evalLockNudge`; both CC and Codex deliver it as `additionalContext` on
- * `PostToolUse` (confirmed — see docs/harness-testing-codex.md).
+ * PostToolUse-hook entrypoint for the two edit-time test reminders. When the agent
+ * edits a skill/agent surface or an `*.eval.*` script it injects, NON-BLOCKING:
+ *
+ *  1. `skillTestNudge` — the surface has no test/eval at all, or has a harness but
+ *     was never EVALUATED (so nothing has measured that its description fires).
+ *     Reuses the `untested-skill` detector and hands off to the `test-harness`
+ *     skill for the tier→API table — the agent knows it needs a test, not which
+ *     runner. Fires at edit time, closing the gap that `untested-skill` only ran
+ *     when someone typed `vigiles lint`.
+ *  2. `evalLockNudge` — a committed lock may now be stale; re-run `eval --update`.
+ *
+ * Never blocks, never runs an eval — reminders, not gates (the gate is
+ * `eval --check` in CI). Both CC and Codex deliver these as `additionalContext`
+ * on `PostToolUse` (confirmed — see docs/harness-testing-codex.md).
  */
 function evalLockNudgeHookCommand(): void {
   let raw = "";
@@ -5940,7 +5951,14 @@ function evalLockNudgeHookCommand(): void {
   if (!file) return;
   const cwd = process.cwd();
   const target = relative(cwd, resolve(cwd, file)) || file;
-  const msg = evalLockNudge(target, resolve(cwd, DEFAULT_LOCK_DIR));
+  // Two nudges, one entry, most-urgent first. The lock reminder is SELF-GATING:
+  // silent until a lock is committed — so a repo that has never written a test
+  // heard nothing at all, while a repo that already tests got reminded. That is
+  // backwards, and `untested-skill` already stated the missing half correctly;
+  // it just lived in `vigiles lint`, which someone has to run by hand.
+  const msg =
+    skillTestNudge(target, { basePath: cwd }) ??
+    evalLockNudge(target, resolve(cwd, DEFAULT_LOCK_DIR));
   if (!msg) return;
   process.stdout.write(
     JSON.stringify({
