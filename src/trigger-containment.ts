@@ -23,6 +23,16 @@
  *
  * Pure: give it two reports (or anything carrying `perPrompt`) and it classifies
  * every prompt the two have in common.
+ *
+ * 🔴 HARNESS-AGNOSTIC BY CONSTRUCTION, BUT NOT EQUALLY TRUSTWORTHY EVERYWHERE.
+ * This compares whatever two runs report, so it runs on Codex reports unchanged —
+ * and should NOT be trusted there yet. Codex emits no skill-selection event, so
+ * `fired` is INFERRED (from a `SKILL.md` read), and `measureTriggerRate` flags the
+ * whole tier experimental for that reason. The inference error lands exactly where
+ * this function looks: a prompt wrongly marked fired on one model and not the
+ * other manufactures a `weakOnly` entry, i.e. a counterexample made of noise.
+ * Read a containment verdict as strong as its weakest input signal — on Claude
+ * Code, where firing is an observed event, that is a real comparison.
  */
 
 /** The minimum a report must expose to be compared — structural, no import cycle. */

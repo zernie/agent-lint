@@ -284,6 +284,58 @@ selector model (`sonnet`). Every knob — `fixture`, `installSet`, `concurrency`
 > behavioral column of the audit report (interactive); for automation call this directly.
 > Same engine, batch front-end.
 
+### When it reports 0% on everything, suspect the wiring first
+
+A total zero looks exactly like a result — the run executed, the report is
+well-formed, every line reads `0.00` — and it is usually a setup mistake. The
+report now says so and lists the three causes, in the order they bite:
+
+1. **the id in `fired`** — `skillResolved` matches the **namespaced** id
+   (`<plugin>:<skill>`); a bare name silently never matches;
+2. **the install field** — a loose `.claude/skills` directory needs `skillsDir`,
+   not `pluginDir` (which wants a full plugin manifest);
+3. **the `fixture`** — a run starts in an **empty** cwd, so a prompt about a file
+   that does not exist is one the model is right to decline.
+
+All three were hit in one afternoon building a real suite, and two were briefly
+written up as findings about the skills before being caught. A _partial_ rate is
+left alone: it is a real measurement, and a tool that hedges on good data gets
+ignored.
+
+### Is a cheaper model a valid floor? (`compareContainment`)
+
+The obvious economy is to measure on the weakest model — if a description fires
+there it fires on a stronger one, the way you test against the oldest supported
+runtime. That holds only if
+
+```
+fires on the weak model  =>  fires on the strong one
+```
+
+and nobody has measured whether it does. Selection is **routing**, not raw
+capability: a stronger model can legitimately route elsewhere, doing the work
+itself or picking a more specific sibling. So the implication is open, not
+obvious. Run the same set on both and compare:
+
+```ts
+import { compareContainment, formatContainment } from "vigiles/testing";
+
+console.log(formatContainment(compareContainment(weakRuns, strongRuns)));
+```
+
+The verdict keeps the two directions apart, which is the point:
+
+- **weak-only** — fired on the weak model, not the strong one. Each is a
+  **counterexample**: the weak model is not a floor, it is a different router.
+- **strong-only** — fired on the strong model only. **Expected, not a failure** —
+  this is the under-selection the `sonnet` floor exists for.
+
+⚠️ At one trial per prompt each cell is a single observation, so one weak-only
+prompt is noise rather than a counterexample. And where firing is **inferred**
+rather than observed — Codex emits no skill-selection event, which is why its
+trigger-rate is flagged experimental — the comparison inherits that uncertainty
+and can manufacture counterexamples out of it.
+
 ## Test a change moves behaviour (`runEval`)
 
 When the question is the **lift** a change buys — does this hook/skill/rule
