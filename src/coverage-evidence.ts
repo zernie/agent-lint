@@ -128,7 +128,7 @@ export function formatEvidence(counts: EvidenceCounts): string {
   if (counts.colocated === 0) return "";
   return (
     `How coverage was decided: ${String(counts.colocated)} colocated — a test ` +
-    `file inside the surface's own directory. This says the file EXISTS, not ` +
-    `that it ran.`
+    `NAMED after the surface, in the surface's own place. This says the file ` +
+    `EXISTS, not that it ran.`
   );
 }

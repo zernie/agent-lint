@@ -48,16 +48,50 @@ skills — not vendored, fixture, or nested copies).
 
 ## What counts as "tested"
 
-**One detector: colocation.** A `*.{harness,eval}.mjs` inside the skill's own
-directory:
+**One detector: colocation, and the test must be NAMED after the surface.**
+Placement says where a file sits; only the name says what it is about.
 
 ```
 skills/foo/SKILL.md
-skills/foo/foo.eval.mjs      <- covers it
+skills/foo/foo.eval.mjs          <- covers it (free of config, like `foo_test.go`)
+skills/foo/foo.harness.mjs       <- also covers it
+skills/foo/bar-ablation.eval.mjs <- does NOT: it is a test about `bar`
+skills/foo/tests/foo.eval.mjs    <- does NOT: a subdirectory is not beside it
 ```
 
-For an agent or a hook, a **name-prefixed sibling**: `agents/bar.harness.mjs`,
-`hooks/pre-edit.harness.mjs`.
+One rule for all three kinds — an agent or a hook takes the same
+**name-prefixed sibling**: `agents/bar.harness.mjs`, `hooks/pre-edit.harness.mjs`.
+
+Why a subdirectory does not count: colocation is worth having for exactly one
+property — `ls` answers _"is this tested?"_ without running anything. Permit
+`skills/foo/tests/` and it takes `find` instead, and two permitted shapes become
+a choice at write time and a lookup at read time. A bundled script's own unit
+test (`skills/foo/scripts/thing.test.mjs`) is a good test **of that script** and
+not a test of the skill, which is the distinction the rule turns on.
+
+**Which of the two names to use** — they are not synonyms, unlike `.test.` and
+`.spec.` elsewhere in the JS world:
+
+| file | costs | answers |
+|---|---|---|
+| `foo.harness.mjs` | nothing, runs on every push | does this gate still catch what it claims? |
+| `foo.eval.mjs` | real model calls, run on a schedule | does this skill fire at all? |
+
+A surface with only a harness is reported as never having had its firing
+measured, which is a different gap with a different price — not a smaller one.
+
+### Why the name has to match (changed 2026-08-11)
+
+A skill used to be covered by ANY file under its directory, while agents and
+hooks already required the name. Found by dogfooding: a repo's
+`.claude/skills/paper-pipeline/` held six `*.eval.mjs`, exactly one about that
+skill — the rest measured OTHER skills and sat there because the directory had
+been the pipeline's home before tests moved next to their subjects. One was
+literally `grade-paper-writing-ablation.eval.mjs`. The orchestrator scored as
+covered and had no test of its own.
+
+That is the same substitution the removed `mention` tier made — a name near a
+test taken for a test.
 
 ### Why only one (changed 2026-08-11)
 

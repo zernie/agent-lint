@@ -203,18 +203,10 @@ function discoverTests(files: Record<string, string>): PreparedTest[] {
   return out;
 }
 
-/** Mirror of test-coverage.ts `isColocated`. */
+/** Mirror of test-coverage.ts `isColocated` — named after the surface, beside it. */
 function isColocated(surface: Surface, testPath: string): boolean {
-  if (surface.kind === "skill") {
-    const dir = dirname(surface.path);
-    return dir === "."
-      ? dirname(testPath) === "."
-      : testPath.startsWith(`${dir}/`);
-  }
-  return (
-    dirname(testPath) === dirname(surface.path) &&
-    basename(testPath).startsWith(`${surface.name}.`)
-  );
+  if (!basename(testPath).startsWith(`${surface.name}.`)) return false;
+  return dirname(testPath) === dirname(surface.path);
 }
 
 /** Mirror of test-coverage.ts `coverageOf` — strongest evidence across tests. */

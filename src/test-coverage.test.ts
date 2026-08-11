@@ -593,3 +593,105 @@ test("skillTestNudge: an agent surface is covered too, and a broken scan is sile
   );
   cleanupTmpDir(dir);
 });
+
+// ── colocation must be NAMED, not merely nearby (defect found by dogfooding) ──
+// Placement says where a file sits; only the name says what it is about. The rule
+// read "any file under the skill's directory", which is the substitution the
+// removed `mention` tier made, reached by a different route. Observed live: a
+// consumer repo's `paper-pipeline/` held SIX evals, exactly one about that skill,
+// the rest sitting there for a historical reason — and the orchestrator scored as
+// covered with no test of its own.
+
+test("a test named after ANOTHER skill does not cover the one it sits with", () => {
+  const dir = makeTmpDir("cov-foreign");
+  write(dir, ".claude/skills/orchestrator/SKILL.md", skill("orchestrator"));
+  write(dir, ".claude/skills/grader/SKILL.md", skill("grader"));
+  // The historical accident: a test ABOUT `grader`, living in `orchestrator/`.
+  write(dir, ".claude/skills/orchestrator/grader-ablation.eval.mjs", "// about grader\n");
+  const report = findUntestedSurfaces({ basePath: dir });
+  const untested = report.untested.map((s) => s.name).sort();
+  assert.deepEqual(untested, ["grader", "orchestrator"]);
+  cleanupTmpDir(dir);
+});
+
+test("…and its own, correctly named test still covers it", () => {
+  // The quiet half. Without it the assertion above passes on a detector that
+  // credits nothing at all, which is the failure mode this suite exists to catch.
+  const dir = makeTmpDir("cov-own-name");
+  write(dir, ".claude/skills/orchestrator/SKILL.md", skill("orchestrator"));
+  write(dir, ".claude/skills/orchestrator/orchestrator.eval.mjs", "// about orchestrator\n");
+  const report = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(report.untested.map((s) => s.name), []);
+  assert.equal(coverageEvidenceCounts(report).colocated, 1);
+  cleanupTmpDir(dir);
+});
+
+test("a test in a SUBDIRECTORY is not colocated, however well named", () => {
+  // Colocation is worth having for one property: `ls` answers "is this tested?".
+  // Permit a subdirectory and it takes `find` instead — and two permitted shapes
+  // is a choice at write time and a lookup at read time.
+  //
+  // Measured before removing the allowance: across two real repos exactly ONE
+  // nested test exists, `verify-citations/scripts/verify-cites.test.mjs` — a unit
+  // test for a script the skill BUNDLES, not a test of the skill. It credited
+  // nothing anyone wanted.
+  const dir = makeTmpDir("cov-nested");
+  write(dir, ".claude/skills/foo/SKILL.md", skill("foo"));
+  write(dir, ".claude/skills/foo/tests/foo.harness.mjs", "// about foo\n");
+  const report = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(report.untested.map((s) => s.name), ["foo"]);
+  cleanupTmpDir(dir);
+});
+
+test("…and a bundled script's own unit test does not credit the skill either", () => {
+  // The real case above, reproduced: `scripts/<script>.test.mjs` pins a pure
+  // reducer the skill ships. A good test of a script is not a test of a skill.
+  const dir = makeTmpDir("cov-script-test");
+  write(dir, ".claude/skills/verify-citations/SKILL.md", skill("verify-citations"));
+  write(dir, ".claude/skills/verify-citations/scripts/verify-cites.test.mjs", "// pure reducer\n");
+  const report = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(report.untested.map((s) => s.name), ["verify-citations"]);
+  cleanupTmpDir(dir);
+});
+
+test("a single-skill target takes its identity from `name:`, not the checkout dir", () => {
+  // The base of a single-skill target is wherever the thing happens to be checked
+  // out — a temp dir, a CI workspace. Deriving the identity from the path would
+  // ask the author to name their test after their checkout directory.
+  const dir = makeTmpDir("cov-root-identity");
+  write(dir, "SKILL.md", skill("solo"));
+  write(dir, "solo.eval.mjs", "// about solo\n");
+  const report = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(report.untested.map((s) => s.name), []);
+  cleanupTmpDir(dir);
+});
+
+// ── the retired `vigiles:covers` marker explains its own removal ──────────────
+// Up to 15.0.2 the untested finding TOLD people to write this marker. Removing
+// the tier without a word means anyone who complied loses coverage on upgrade
+// with no error — the marker quietly becomes a comment. A migration nobody is
+// told about is indistinguishable from a bug they caused.
+
+test("a test still carrying `vigiles:covers` is named, with what changed", () => {
+  const dir = makeTmpDir("cov-legacy-marker");
+  write(dir, ".claude/skills/foo/SKILL.md", skill("foo"));
+  write(dir, ".claude/skills/foo/foo.harness.mjs", `// vigiles:${"covers"} skills/foo\n`);
+  const report = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(report.legacyCoversFiles, [".claude/skills/foo/foo.harness.mjs"]);
+  const text = formatUntestedReport(report);
+  assert.match(text, /retired/);
+  // Printed even though this repo is at ZERO untested — a repo can lose the tier
+  // and still be clean, and would then never hear about it.
+  assert.equal(report.untested.length, 0);
+  cleanupTmpDir(dir);
+});
+
+test("…and a repo that never used the marker hears nothing about it", () => {
+  const dir = makeTmpDir("cov-no-legacy");
+  write(dir, ".claude/skills/foo/SKILL.md", skill("foo"));
+  write(dir, ".claude/skills/foo/foo.harness.mjs", "// an ordinary test\n");
+  const report = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(report.legacyCoversFiles, []);
+  assert.doesNotMatch(formatUntestedReport(report), /retired/);
+  cleanupTmpDir(dir);
+});

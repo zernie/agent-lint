@@ -46,6 +46,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { load } from "js-yaml";
 import { globSync } from "glob";
 import type { PluginLayout } from "./core/layout.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
@@ -123,6 +124,21 @@ export interface UntestedReport {
   readonly untested: readonly Surface[];
   /** Surfaces explicitly opted out via `vigiles:ignore-test`. */
   readonly exempt: number;
+  /**
+   * Test files still carrying the RETIRED `vigiles:covers` marker.
+   *
+   * 🔴 A MIGRATION THAT WOULD OTHERWISE BE SILENT. Up to 15.0.2 this tool's own
+   * untested finding told the reader to "mark what it covers with
+   * `vigiles:covers <surface>`". That tier is gone: coverage is decided by where
+   * a test sits and what it is named. Someone who followed the instruction gets
+   * no error on upgrade — the marker simply becomes a comment, their coverage
+   * drops and the count of untested surfaces rises with nothing said about why.
+   *
+   * Reading these files does NOT feed coverage (nothing inside a test can change
+   * it any more); it exists purely so the upgrade can explain itself. Optional
+   * so a report produced before this field still parses.
+   */
+  readonly legacyCoversFiles?: readonly string[];
   /**
    * How each covered surface was decided — the union tier's provenance, one
    * entry per `covered` element. A coverage count whose derivation is invisible
@@ -226,8 +242,14 @@ function discoverSkills(
   // vanish for exactly the single-skill target that scoping now supports.
   const rootSkill = join(basePath, "SKILL.md");
   if (existsSync(rootSkill)) {
-    const name = basename(basePath);
+    // 🔴 The DECLARED name wins here, and only here. For a nested skill the
+    // directory IS the identity (`skills/foo/SKILL.md` → `foo`), but the base of
+    // a single-skill target is wherever the thing happens to be checked out —
+    // a temp dir, `~/src/wip-2`, a CI workspace. Since colocation now requires
+    // the test to be NAMED after the surface, taking the identity from the path
+    // would ask the author to name their test after their checkout directory.
     const content = read(rootSkill);
+    const name = declaredName(content) ?? basename(basePath);
     out.push({
       kind: "skill",
       path: "SKILL.md",
@@ -238,6 +260,25 @@ function discoverSkills(
   }
   return out;
 }
+
+/** A skill's declared `name:`, or null. YAML scalar via the real parser. */
+function declaredName(content: string): string | null {
+  const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
+  if (!fm?.[1]) return null;
+  try {
+    const doc = load(fm[1]) as Record<string, unknown> | null;
+    const name = doc?.["name"];
+    return typeof name === "string" && name.trim() ? name.trim() : null;
+  } catch {
+    return null; // malformed frontmatter is another rule's finding, not ours
+  }
+}
+
+/**
+ * The retired declaration marker, kept ONLY to explain its own removal. Written
+ * split so this source file does not match its own search.
+ */
+const LEGACY_COVERS = `vigiles:${"covers"}`;
 
 function discoverAgents(
   basePath: string,
@@ -335,21 +376,43 @@ function discoverTests(
   return found.map((path) => prepareTest(path));
 }
 
-/** Colocated: a test inside a skill dir, or a name-prefixed sibling of an agent/hook. */
+/**
+ * Colocated: a test NAMED after the surface, SITTING BESIDE it. One rule, all
+ * three kinds — a skill used to be exempt from both halves in turn.
+ *
+ * 🔴 THE NAME. Agents and hooks always required a name-prefixed basename; for a
+ * skill the rule was "any file under the skill's directory". Those are different
+ * claims — the second answers "is there a test NEAR this skill?", not "is there
+ * a test FOR it" — and it is the substitution the removed `mention` tier made,
+ * reached by a different route. Observed live: a repo's
+ * `.claude/skills/paper-pipeline/` held six `*.eval.mjs`, exactly one about that
+ * skill; the rest measured OTHER skills and sat there because the directory had
+ * been the pipeline's home before tests moved next to their subjects. One was
+ * literally `grade-paper-writing-ablation.eval.mjs`. The orchestrator scored as
+ * covered and had no test of its own.
+ *
+ * 🔴 THE PLACE. A subdirectory (`skills/foo/tests/foo.harness.mjs`) is NOT
+ * colocated, and dropping that allowance was measured rather than assumed. Across
+ * two real repos exactly ONE nested test file exists, and it is
+ * `verify-citations/scripts/verify-cites.test.mjs` — a unit test for a script the
+ * skill BUNDLES, pinning that script's pure reducer. It is a good test of a
+ * script and not a test of a skill, which is the whole distinction; the skill
+ * carries its own two colocated files besides. So the allowance credited nothing
+ * anyone wanted and cost the property that makes colocation worth having: `ls`
+ * answers "is this tested?". With a subdirectory permitted, it takes `find`.
+ *
+ * That property is the entire argument for colocation over a parallel test tree
+ * (`test/skills/foo_test.mjs`): the filesystem enforces the convention instead of
+ * the reader having to trust it. Two permitted shapes is a choice at write time
+ * and a lookup at read time, which is what convention-over-configuration exists
+ * to remove.
+ */
 function isColocated(surface: Surface, testPath: string): boolean {
-  if (surface.kind === "skill") {
-    const dir = dirname(surface.path);
-    // A root `SKILL.md` (single-skill-dir target) lives at ".", so any TOP-LEVEL
-    // test is colocated — globSync returns those without a "./" prefix, which a
-    // bare `startsWith("./")` would miss (false "untested").
-    return dir === "."
-      ? dirname(testPath) === "."
-      : testPath.startsWith(`${dir}/`);
-  }
-  return (
-    dirname(testPath) === dirname(surface.path) &&
-    basename(testPath).startsWith(`${surface.name}.`)
-  );
+  if (!basename(testPath).startsWith(`${surface.name}.`)) return false;
+  // A root `SKILL.md` (single-skill-dir target) lives at ".", and globSync returns
+  // top-level files without a "./" prefix — so `dirname` is "." on both sides and
+  // the comparison holds without a special case.
+  return dirname(testPath) === dirname(surface.path);
 }
 
 /**
@@ -456,6 +519,9 @@ export function findUntestedSurfaces(
     covered: union.covered,
     untested: union.untested,
     exempt,
+    legacyCoversFiles: tests
+      .map((t) => t.path)
+      .filter((path) => read(join(basePath, path)).includes(LEGACY_COVERS)),
     decisions: union.decisions,
     harness: tierOf(considered, split.harness),
     evals: tierOf(considered, split.evals),
@@ -549,6 +615,28 @@ export function skillTestNudge(
 }
 
 /** Format an untested-surface report as human-readable text. */
+/**
+ * One line for a repo that followed the OLD advice, and nothing for everyone else.
+ *
+ * The upgrade removes a tier this tool told people to use. Without this the only
+ * signal is a coverage count that went down, which reads as "I broke something"
+ * rather than "the rule changed" — and the marker still sits in the file looking
+ * load-bearing. Printed in BOTH branches (clean and dirty): a repo can lose
+ * coverage and still be at zero untested, and it would then never hear about it.
+ */
+function legacyCoversNote(report: UntestedReport): string[] {
+  const files = report.legacyCoversFiles ?? [];
+  if (files.length === 0) return [];
+  const shown = files.slice(0, 3).join(", ");
+  const more = files.length > 3 ? ` (+${String(files.length - 3)} more)` : "";
+  return [
+    `  ${String(files.length)} test file(s) still carry the retired \`vigiles:${"covers"}\` ` +
+      `marker (${shown}${more}). It has granted no coverage since 15.x — a test counts ` +
+      `when it is NAMED after the surface and sits next to it. The marker is now an ` +
+      `ordinary comment; delete it or rename the file.`,
+  ];
+}
+
 export function formatUntestedReport(report: UntestedReport): string {
   // Every coverage number is printed WITH its provenance. "28 covered" and
   // "28 covered, all of it a name appearing in a file" are different facts, and
@@ -556,9 +644,11 @@ export function formatUntestedReport(report: UntestedReport): string {
   const provenance = formatEvidence(coverageEvidenceCounts(report));
   if (report.untested.length === 0) {
     const tail = report.exempt > 0 ? ` (${String(report.exempt)} exempt)` : "";
+    const legacy = legacyCoversNote(report);
     const ok =
       `✓ all ${String(report.total)} surface(s) have a test or eval${tail}` +
-      (provenance ? `\n  ${provenance}` : "");
+      (provenance ? `\n  ${provenance}` : "") +
+      (legacy.length ? `\n${legacy.join("\n")}` : "");
     // A clean UNION can still hide a whole unanswered question: every surface may
     // have a deterministic harness and NOTHING may ever have measured that a
     // skill fires. The gate is unchanged (still the union), but the ✓ must not
@@ -587,15 +677,17 @@ export function formatUntestedReport(report: UntestedReport): string {
   );
   // What the surfaces that DID pass are resting on.
   if (provenance) lines.push(`  ${provenance}`);
+  lines.push(...legacyCoversNote(report));
   // Already testing these another way (a promptfoo suite, a home-grown evals
   // file)? Point `testGlobs` at it so it counts toward coverage (issue #113) —
   // and put the file NEXT TO the surface, which is the only placement that
   // counts now. See docs/rules/untested-skill.md.
   lines.push(
     `  Testing these another way (promptfoo / a home-grown eval loop)? Add its ` +
-      `files to \`testGlobs\` in .vigilesrc.json AND colocate them with the ` +
-      `surface — coverage is decided by placement, not by naming the surface ` +
-      `in a file. See docs/rules/untested-skill.md.`,
+      `files to \`testGlobs\` in .vigilesrc.json AND name each after the surface ` +
+      `it covers, next to it (\`<surface>/<surface>.eval.mjs\`) — placement says ` +
+      `where a file sits, the name says what it is about. ` +
+      `See docs/rules/untested-skill.md.`,
   );
   return lines.join("\n");
 }
