@@ -42,6 +42,34 @@
  * became impossible — was rejected: it would report `0` for a hand-rolled
  * harness that spawns and asserts entirely on its own, which is a real and
  * blameless way to write one.)
+ *
+ * ## 2026-08-11 — the channel also carries WHAT was exercised
+ *
+ * 🔴 THE DEFECT. Coverage answered "is surface X tested?" from a FILE NAME —
+ * colocation. Measured on a real repo, `.claude/skills/paper-pipeline/` held six
+ * `*.eval.mjs`, exactly one of them about that skill, and the orchestrator scored
+ * as covered with no test of its own; an EMPTY `foo.eval.mjs` counts just the
+ * same. Every mature ecosystem (`go test -cover`, coverage.py, nyc, tarpaulin)
+ * answers that question from EXECUTION and uses the name only to find the file.
+ *
+ * So the tiers now also record WHICH SURFACE a run went by — a {@link SurfaceProbe}
+ * — and this channel carries it out alongside the count. Two properties matter:
+ *
+ * - **Derived, never declared.** The probe comes from what the tier already knew
+ *   it was pointed at: the command string `runScript`/`runHook` executed, the
+ *   Skill/hook events in a run's transcript. A field an AUTHOR fills in would be
+ *   the retired `vigiles:covers` marker with extra steps — a claim about a test,
+ *   made by the person who wrote the test.
+ * - **A probe is a REFERENCE, not a verdict.** Resolving `hooks/pre-edit.sh` or
+ *   `plugin:argument-arc` to a repo surface needs discovery, which this module
+ *   has no business doing inside a user's test process. The runner resolves it
+ *   (`coverage-artifact.ts`); anything unresolvable is dropped, never guessed.
+ *
+ * WIRE FORMAT, and why it is two shapes. A run with no probes writes the bare
+ * number it always wrote, byte for byte; only a run with something to say writes
+ * JSON (`{"checks":N,"surfaces":[…]}`). Readers accept both — an older runner
+ * meeting the JSON form reads "no report", i.e. the legacy branch, which is a
+ * plain pass rather than a wrong verdict. Silence stays silence.
  */
 import { writeFileSync } from "node:fs";
 
@@ -59,14 +87,48 @@ export const CHECK_COUNT_ENV = "VIGILES_CHECK_COUNT_FILE";
  */
 const STATE = Symbol.for("vigiles.check-count");
 
+/**
+ * How a tier came to name a surface. Not a strength ranking — a statement of
+ * what the machinery went by, so a reader can tell an inference from a sighting:
+ *
+ * - `command` — the executed command line named a program file (`runScript` /
+ *   `runHook`). The strongest kind: that exact path was handed to a process.
+ * - `fired` — the surface appears in the RUN'S TRANSCRIPT as having activated (a
+ *   `Skill` tool call that resolved, a hook that reported). For a skill this is
+ *   the only honest attribution: what was INSTALLED is a set, what RAN is one.
+ *
+ * There is deliberately NO author-declared origin. A `surface:` field on a spec
+ * would be `vigiles:covers` with extra steps — a claim about a test written by
+ * whoever wrote the test — and that tier was removed after its first real use
+ * declared a conformance lint over 21 skills as coverage of all 21.
+ */
+export type ProbeOrigin = "command" | "fired";
+
+/**
+ * One surface a run went by. `ref` is whatever the tier saw — a script path, a
+ * namespaced skill id (`plugin:skill`), a hook name — NOT a resolved repo path.
+ * Resolution happens in the runner, where discovery lives.
+ */
+export interface SurfaceProbe {
+  readonly how: ProbeOrigin;
+  readonly ref: string;
+}
+
 interface CountState {
   count: number;
   armed: boolean;
+  /** Deduped probes, keyed `how\0ref`, in first-seen order. */
+  surfaces: Map<string, SurfaceProbe>;
 }
 
 function state(): CountState {
   const g = globalThis as unknown as Record<symbol, CountState | undefined>;
-  return (g[STATE] ??= { count: 0, armed: false });
+  const s = (g[STATE] ??= { count: 0, armed: false, surfaces: new Map() });
+  // Two copies of vigiles can share one process (a global CLI plus a local
+  // dependency), and the OLDER copy's state object has no `surfaces` at all.
+  // Without this, the newer copy's first probe throws inside a user's test run.
+  s.surfaces ??= new Map();
+  return s;
 }
 
 /**
@@ -87,14 +149,93 @@ export function checksRecorded(): number {
 }
 
 /**
- * Reset the counter AND the armed flag. For vigiles's own tests, which drive
- * {@link armCheckReport} with fakes several times in one process; a harness
- * script has no use for it.
+ * Record that this run exercised the surface `ref` names. Called by the TIERS
+ * from what they were pointed at — never by a harness author, because a field an
+ * author fills in is a claim, not a measurement (that was `vigiles:covers`, and
+ * it was removed for exactly this reason).
+ *
+ * Deduped: a harness that fires the same hook forty times names it once.
+ * Empty/blank refs are dropped rather than stored as a surface called "".
+ */
+export function recordSurfaceProbe(how: ProbeOrigin, ref: string): void {
+  const trimmed = ref.trim();
+  if (!trimmed) return;
+  const s = state();
+  const key = `${how}\u0000${trimmed}`;
+  if (!s.surfaces.has(key)) s.surfaces.set(key, { how, ref: trimmed });
+}
+
+/** The surfaces this process has been seen to exercise, in first-seen order. */
+export function surfacesRecorded(): readonly SurfaceProbe[] {
+  return [...state().surfaces.values()];
+}
+
+/**
+ * Reset the counter, the probes AND the armed flag. For vigiles's own tests,
+ * which drive {@link armCheckReport} with fakes several times in one process; a
+ * harness script has no use for it.
  */
 export function resetCheckCount(): void {
   const s = state();
   s.count = 0;
   s.armed = false;
+  s.surfaces = new Map();
+}
+
+/** What a run reported: how much it did, and what it did it against. */
+export interface CheckReport {
+  readonly checks: number;
+  readonly surfaces: readonly SurfaceProbe[];
+}
+
+/**
+ * Serialize a report for the scratch file. A run with no probes writes the BARE
+ * NUMBER it has always written — byte for byte, so the legacy reader and the
+ * legacy tests are describing the same thing they always were. Only a run with
+ * an attribution to make spends a JSON object on it.
+ */
+export function formatCheckReport(report: CheckReport): string {
+  if (report.surfaces.length === 0) return String(report.checks);
+  return JSON.stringify({ checks: report.checks, surfaces: report.surfaces });
+}
+
+/**
+ * Parse a scratch file's contents, or `undefined` for anything that is not a
+ * report. Lives beside {@link formatCheckReport} so the two cannot drift.
+ *
+ * Tolerant in exactly one direction: a bare integer is the legacy form and is
+ * read as a report with no attribution. Anything malformed — a torn write, a
+ * negative, a JSON object with the wrong shape — is NOT a report, because
+ * "corrupt" must never be turned into a verdict about someone's tests.
+ */
+export function parseCheckReport(raw: string): CheckReport | undefined {
+  const trimmed = raw.trim();
+  if (/^\d+$/.test(trimmed)) return { checks: Number(trimmed), surfaces: [] };
+  if (!trimmed.startsWith("{")) return undefined;
+  let value: unknown;
+  try {
+    value = JSON.parse(trimmed);
+  } catch {
+    return undefined;
+  }
+  if (!value || typeof value !== "object") return undefined;
+  const obj = value as { checks?: unknown; surfaces?: unknown };
+  const checks = obj.checks;
+  if (typeof checks !== "number" || !Number.isInteger(checks) || checks < 0)
+    return undefined;
+  const surfaces = Array.isArray(obj.surfaces)
+    ? obj.surfaces.map(toProbe).filter((p): p is SurfaceProbe => p !== null)
+    : [];
+  return { checks, surfaces };
+}
+
+/** One serialized probe, or null for anything that isn't one. */
+function toProbe(entry: unknown): SurfaceProbe | null {
+  if (!entry || typeof entry !== "object") return null;
+  const { how, ref } = entry as { how?: unknown; ref?: unknown };
+  if (how !== "command" && how !== "fired") return null;
+  if (typeof ref !== "string" || !ref.trim()) return null;
+  return { how, ref };
 }
 
 /** Injection seam for {@link armCheckReport} — the process bits it needs. */
@@ -125,7 +266,13 @@ export function armCheckReport(deps: CheckReportEnv): boolean {
   s.armed = true;
   deps.onExit(() => {
     try {
-      deps.write(file, String(s.count));
+      deps.write(
+        file,
+        formatCheckReport({
+          checks: s.count,
+          surfaces: [...s.surfaces.values()],
+        }),
+      );
     } catch {
       // An unwritable scratch path must never turn a passing harness into a
       // crash on the way out. No count reported = the legacy branch = a pass.

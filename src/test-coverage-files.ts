@@ -15,6 +15,18 @@
  * The part that DECIDES coverage is not mirrored — it is imported from
  * `coverage-evidence.ts` (pure, browser-safe), so the twins cannot drift on the
  * one thing whose divergence would change a grade.
+ *
+ * 🔴 THE ONE TIER THIS TWIN CANNOT HAVE, stated rather than left to be inferred:
+ * the disk detector answers "tested?" from EXECUTION first — `.vigiles/coverage.json`,
+ * written by `vigiles test` / `vigiles eval` (see `coverage-artifact.ts`). This
+ * engine scans a file map fetched from GitHub. There is no filesystem, no runner,
+ * and nothing here ever ran a test, so a run record is not merely absent — it is
+ * not a thing that can exist in this environment. The honest answer is therefore
+ * "no runs", which is exactly what the disk detector reports for a repo with no
+ * artifact, so the two agree by construction: `countEvidence` returns
+ * `executed: 0` here and the parity gate (src/scan-files.test.ts) holds without
+ * a special case. Faking an artifact — say, from a committed JSON in the map —
+ * would report a measurement nobody in this process made.
  */
 import { basename, dirname } from "./posix-path.js";
 

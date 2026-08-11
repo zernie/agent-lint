@@ -79,6 +79,7 @@ import {
 import type { Check, CheckJSON } from "./check.js";
 import { welchTTest, type Comparison } from "./stats.js";
 import { recordCheck } from "./check-count.js";
+import { probeTrace } from "./coverage-probe.js";
 import {
   type ToolIntercept,
   buildInterceptSettings,
@@ -952,6 +953,12 @@ function makeContext(
   parse: ModelOutputParser = parseClaudeRun,
 ): RunContext {
   const p = parse(out);
+  // The one place every real-model trial's trace is assembled — `runEval`,
+  // `measureTriggerRate` and the selection runs all pass through here — so the
+  // attribution is derived once, from what FIRED. A trigger-rate run installs
+  // competing skills on purpose (`installSet`); crediting the install set would
+  // credit a skill for LOSING selection. See coverage-probe.ts.
+  probeTrace({ toolCalls: p.toolCalls, hooks: p.hooks });
   return {
     cwd,
     exitCode: out.code,

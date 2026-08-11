@@ -299,7 +299,17 @@ import {
   anyFailed,
   scriptGlob,
   decideRunScripts,
+  type ScriptRunResult,
 } from "./adapters/claude-code/run-scripts.js";
+import {
+  COVERAGE_ARTIFACT_VERSION,
+  mergeRuns,
+  readCoverageArtifact,
+  recordsFrom,
+  runsFromResults,
+  writeCoverageArtifact,
+  type CoverageTierName,
+} from "./coverage-artifact.js";
 import {
   checkIntegrity,
   ejectMarkdown,
@@ -5278,6 +5288,71 @@ function resolveEvalLockEnv(args: string[]): Record<string, string> | "skip" {
   return env;
 }
 
+/**
+ * Turn a completed run into `.vigiles/coverage.json` — the composition root for
+ * the execution tier of coverage (`coverage-artifact.ts`).
+ *
+ * It resolves here, and nowhere earlier, because resolution needs DISCOVERY: a
+ * script reports the reference it saw (`hooks/pre-edit.sh`, `plugin:my-skill`)
+ * and only the repo can say whether that is a surface. Doing it inside the test
+ * process would mean scanning a user's repo from inside their test.
+ *
+ * Best-effort throughout: a repo that cannot be scanned or a `.vigiles/` that
+ * cannot be written must never turn a green run red.
+ */
+function recordRunCoverage(
+  cwd: string,
+  results: readonly ScriptRunResult[],
+  tier: CoverageTierName,
+): void {
+  try {
+    const runs = runsFromResults(results);
+    if (runs.length === 0) return;
+    const scan = findUntestedSurfaces({ basePath: cwd });
+    const surfaces = [...scan.covered, ...scan.untested];
+    const records = recordsFrom({
+      runs,
+      surfaces,
+      tier,
+      at: new Date().toISOString(),
+      readSurface: (p) => {
+        try {
+          return readFileSync(resolve(cwd, p), "utf-8");
+        } catch {
+          return null;
+        }
+      },
+    });
+    if (records.length === 0) return;
+    const previous = readCoverageArtifact(cwd);
+    const commit = gitHead(cwd);
+    writeCoverageArtifact(cwd, {
+      v: COVERAGE_ARTIFACT_VERSION,
+      generated: new Date().toISOString(),
+      ...(commit ? { commit } : {}),
+      runs: mergeRuns(previous?.runs ?? [], records),
+    });
+  } catch {
+    /* recording is never allowed to fail a run */
+  }
+}
+
+/** Short HEAD of the checkout, or "" when this is not a git repo. */
+function gitHead(cwd: string): string {
+  try {
+    const { spawnSync } =
+      require("node:child_process") as typeof import("node:child_process");
+    const r = spawnSync("git", ["rev-parse", "--short", "HEAD"], {
+      cwd,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return r.status === 0 ? (r.stdout ?? "").trim() : "";
+  } catch {
+    return "";
+  }
+}
+
 async function handleRunScripts(
   kind: "test" | "eval",
   args: string[],
@@ -5372,6 +5447,11 @@ async function handleRunScripts(
 
   console.log(`Running ${String(files.length)} ${kind} file(s):\n`);
   const results = runScripts(files, cwd, env);
+  // Write down WHAT the run exercised, so `lint`/`audit` can answer "tested?"
+  // from execution instead of from a matching file name. Not a new verb and not
+  // a flag: the run already happened, and this is the runner recording what it
+  // saw — the same shape as the flight-recorder ledger it already appends to.
+  recordRunCoverage(cwd, results, kind === "test" ? "harness" : "eval");
   console.log("\n" + formatScriptSummary(results));
 
   if (anyFailed(results)) process.exit(1);

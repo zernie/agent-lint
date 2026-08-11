@@ -15,7 +15,11 @@ import { resolve, join } from "node:path";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { globSync } from "glob";
-import { CHECK_COUNT_ENV } from "../../check-count.js";
+import {
+  CHECK_COUNT_ENV,
+  parseCheckReport,
+  type SurfaceProbe,
+} from "../../check-count.js";
 
 /**
  * The outcome of running one script.
@@ -36,6 +40,17 @@ export interface ScriptRunResult {
    * loaded the library and used none of it.
    */
   readonly checks?: number;
+  /**
+   * The surfaces this script was seen to exercise — derived by the tiers from the
+   * command they ran and the transcripts they got back, never declared by the
+   * author (see `coverage-probe.ts`). Feeds `.vigiles/coverage.json`, which lets
+   * coverage answer "tested?" by EXECUTION instead of by file name.
+   *
+   * Absent for a script that reported nothing, and empty for one that reported a
+   * count but exercised no identifiable surface — a unit test of a pure helper,
+   * say. Neither is a finding.
+   */
+  readonly surfaces?: readonly SurfaceProbe[];
 }
 
 /**
@@ -166,21 +181,21 @@ export function discoverScripts(
 }
 
 /**
- * The count a script left behind, or `undefined` if it left none (it never
- * imported `vigiles/testing`, or died before its exit handler). Anything that
- * isn't a non-negative integer is treated as no report — a corrupt scratch file
- * must not invent a verdict.
+ * What a script left behind, or `undefined` if it left nothing (it never
+ * imported `vigiles/testing`, or died before its exit handler). The parse itself
+ * lives beside the writer in `check-count.ts` so the two cannot drift; anything
+ * malformed is treated as no report — a corrupt scratch file must not invent a
+ * verdict.
  */
-function readCheckCount(path: string): number | undefined {
+function readCheckReport(
+  path: string,
+): { checks: number; surfaces: readonly SurfaceProbe[] } | undefined {
   if (!existsSync(path)) return undefined;
-  let raw: string;
   try {
-    raw = readFileSync(path, "utf8").trim();
+    return parseCheckReport(readFileSync(path, "utf8"));
   } catch {
     return undefined;
   }
-  if (!/^\d+$/.test(raw)) return undefined;
-  return Number(raw);
 }
 
 /**
@@ -193,6 +208,10 @@ function readCheckCount(path: string): number | undefined {
  * "ran nothing" distinguishable from "ran and passed" (see check-count.ts). It
  * has to be a file: stdio is inherited so the script's report streams live,
  * which leaves no stream to parse.
+ *
+ * The same channel carries WHICH SURFACES the script exercised, so the caller can
+ * record them (`.vigiles/coverage.json`) and coverage can answer "tested?" from
+ * execution rather than from a matching file name.
  */
 export function runScripts(
   files: readonly string[],
@@ -219,8 +238,14 @@ export function runScripts(
         env: { ...process.env, ...env, [CHECK_COUNT_ENV]: countFile },
       });
       const code = res.status ?? 1;
-      const checks = readCheckCount(countFile);
-      results.push({ file, code, status: statusFor(code, checks), checks });
+      const report = readCheckReport(countFile);
+      results.push({
+        file,
+        code,
+        status: statusFor(code, report?.checks),
+        checks: report?.checks,
+        ...(report ? { surfaces: report.surfaces } : {}),
+      });
     });
   } finally {
     rmSync(countDir, { recursive: true, force: true });

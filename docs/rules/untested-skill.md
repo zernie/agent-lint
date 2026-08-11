@@ -48,7 +48,42 @@ skills — not vendored, fixture, or nested copies).
 
 ## What counts as "tested"
 
-**One detector: colocation, and the test must be NAMED after the surface.**
+**Execution first, then the name, then nothing** — and the report says which of
+the two answered.
+
+### 1. A recorded run — `.vigiles/coverage.json`
+
+When `vigiles test` / `vigiles eval` runs a script that exercises a surface, the
+runner writes down which surface, which script, when, and the surface's content
+hash at that moment. Coverage prefers that record over any file name, and prints
+`MEASURED BY A RUN` instead of `colocated`.
+
+The attribution is **derived, never declared**. `runScript` / `runHook` take it
+from the command line they executed; the model tiers take it from the run's
+transcript — the `Skill` call that actually resolved, not the set that happened
+to be installed. There is deliberately no field you can fill in: that was
+`vigiles:covers`, and it was removed for the reasons below.
+
+Two things it will not do:
+
+- **A run against older text grants nothing.** Edit the surface after measuring
+  it and the record is reported as "measured, but not this version"; coverage
+  falls back to the name until you re-run. A tick against a document somebody
+  rewrote afterwards is not evidence.
+- **One tier cannot answer for the other.** A `vigiles test` run satisfies the
+  deterministic tier only — "nothing has measured whether this fires" still
+  stands until an eval runs.
+
+The file records one checkout at one moment, so **do not commit it**. A committed
+one would credit coverage on a machine where nothing ran, which is precisely the
+substitution this tier exists to remove.
+
+**No artifact = the rule below, unchanged.** A fresh clone, CI, and anybody
+else's repo see colocation exactly as they did before this tier existed — not one
+extra finding, and not one fewer.
+
+### 2. Colocation — the fallback, and the test must be NAMED after the surface
+
 Placement says where a file sits; only the name says what it is about.
 
 ```
@@ -72,10 +107,10 @@ not a test of the skill, which is the distinction the rule turns on.
 **Which of the two names to use** — they are not synonyms, unlike `.test.` and
 `.spec.` elsewhere in the JS world:
 
-| file | costs | answers |
-|---|---|---|
-| `foo.harness.mjs` | nothing, runs on every push | does this gate still catch what it claims? |
-| `foo.eval.mjs` | real model calls, run on a schedule | does this skill fire at all? |
+| file              | costs                               | answers                                    |
+| ----------------- | ----------------------------------- | ------------------------------------------ |
+| `foo.harness.mjs` | nothing, runs on every push         | does this gate still catch what it claims? |
+| `foo.eval.mjs`    | real model calls, run on a schedule | does this skill fire at all?               |
 
 A surface with only a harness is reported as never having had its firing
 measured, which is a different gap with a different price — not a smaller one.
@@ -118,9 +153,10 @@ for nothing until you move it next to its surface. That is the intended
 pressure — a per-surface test belongs with its surface.
 
 > ⚠️ **What colocation still does not prove.** It says the file **exists**, not
-> that it **ran**: an empty `foo.eval.mjs` counts. The report says so on every
-> run. Closing that is a condition to add to this rule (a run reporting more than
-> zero checks), not a fourth kind of evidence.
+> that it **ran**: an empty `foo.eval.mjs` counts, and the report says so on every
+> run. That is why the execution tier above sits on top of it rather than beside
+> it — a surface answered by `colocated` is one that nothing has ever been run
+> against.
 
 ## Counting an external test suite (promptfoo, a home-grown eval loop)
 

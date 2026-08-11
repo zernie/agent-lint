@@ -7,9 +7,26 @@
  * with no test is a probabilistic-compliance gap hiding in the deterministic
  * layer: nothing measures whether it still does what it claims.
  *
- * ONE detector decides "tested": COLOCATION — a `*.{harness,eval}.mjs` inside the
- * surface's own directory (`skills/foo/foo.eval.mjs`) or named after it next to
- * it (`agents/bar.harness.mjs`, `hooks/pre-edit.harness.mjs`).
+ * TWO detectors decide "tested", in this order — **execution, then name, then
+ * nothing** — and the report says which one answered:
+ *
+ *   1. EXECUTION — `.vigiles/coverage.json` records that a run exercised this
+ *      surface, at this version of it (`coverage-artifact.ts`).
+ *   2. COLOCATION — a `*.{harness,eval}.mjs` named after the surface, beside it
+ *      (`skills/foo/foo.eval.mjs`, `hooks/pre-edit.harness.mjs`).
+ *
+ * Colocation was the only detector until 2026-08-11, and it answers a weaker
+ * question than it appears to: it says a FILE EXISTS. `touch
+ * .claude/skills/foo/foo.eval.mjs` — empty — drops the untested count by one.
+ * No other coverage tool answers by name (`go test -cover`, coverage.py, nyc,
+ * tarpaulin all answer from execution, using names only to FIND the file); we
+ * kept the name because a skill cannot be run without a model, and a repo with
+ * no runs recorded must behave exactly as it did before.
+ *
+ * A run recorded against an OLDER version of the surface grants nothing — it is
+ * reported as `staleRuns` and the surface falls back to colocation. Silently
+ * counting it is the PIPELINE-STATUS disease: a tick against a document that was
+ * rewritten afterwards.
  *
  * There were three until 2026-08-11 (a `vigiles:covers` declaration, colocation,
  * and a content-reference "mention"). They were three NAMING CONVENTIONS, not
@@ -59,6 +76,13 @@ import {
   type EvidenceCounts,
   type PreparedTest,
 } from "./coverage-evidence.js";
+import {
+  indexRuns,
+  readCoverageArtifact,
+  surfaceSha,
+  type CoverageTierName,
+  type ExecutedRecord,
+} from "./coverage-artifact.js";
 
 /**
  * The two on-disk locations a surface dir can occupy: the plugin-root form
@@ -107,6 +131,16 @@ export interface CoverageDecision {
   readonly by: string;
 }
 
+/** A surface measured by a run that no longer describes it. */
+export interface StaleRun {
+  /** Repo-relative path of the surface. */
+  readonly path: string;
+  /** The script whose run measured the older version. */
+  readonly by: string;
+  /** When that run happened (ISO-8601). */
+  readonly at: string;
+}
+
 /** One tier's split of the considered surfaces — covered by THAT tier, or not. */
 export interface CoverageTier {
   readonly covered: readonly Surface[];
@@ -145,6 +179,18 @@ export interface UntestedReport {
    * is what let a COMMENT confer coverage unnoticed; this is the visibility.
    */
   readonly decisions: readonly CoverageDecision[];
+  /**
+   * Surfaces whose ONLY run record predates their current text — "measured, but
+   * not this version".
+   *
+   * They grant no coverage (they fall back to colocation like anything else),
+   * because a measurement of a file that has since been rewritten is a
+   * measurement of a different file. Reported rather than dropped, since the
+   * silent version of this is the PIPELINE-STATUS failure mode: a green tick
+   * against a document somebody edited afterwards. Optional so a report produced
+   * before this field still parses.
+   */
+  readonly staleRuns?: readonly StaleRun[];
   /**
    * DETERMINISTIC coverage only — `*.harness.mjs` and `*.test.*`. Free,
    * millisecond, every-push. Answers "does this gate still catch what it claims?"
@@ -453,16 +499,43 @@ function partitionTests(tests: readonly PreparedTest[]): {
   return { harness, evals };
 }
 
-/** Split the considered surfaces by whether ONE tier's tests cover them. */
+/**
+ * The FRESH run record for this surface in this tier, as a decision — or null.
+ *
+ * `tier` narrows to one runner (`vigiles test` vs `vigiles eval`) so an executed
+ * harness cannot silence "nothing has ever measured whether this fires"; the
+ * union pass passes `undefined` and takes either. Stale records are not
+ * consulted here at all: they are reported separately, never counted.
+ */
+function executedOf(
+  surface: Surface,
+  index: ReadonlyMap<string, ExecutedRecord[]>,
+  tier: CoverageTierName | undefined,
+): CoverageDecision | null {
+  for (const record of index.get(surface.path) ?? []) {
+    if (!record.fresh) continue;
+    if (tier !== undefined && record.run.tier !== tier) continue;
+    return { surface, evidence: "executed", by: record.run.by };
+  }
+  return null;
+}
+
+/**
+ * Split the considered surfaces by whether ONE tier covers them — a recorded run
+ * first, a colocated test second. Execution outranks the name because the name
+ * was only ever a stand-in for it.
+ */
 function tierOf(
   considered: readonly Surface[],
   tests: readonly PreparedTest[],
+  index: ReadonlyMap<string, ExecutedRecord[]>,
+  tier: CoverageTierName | undefined,
 ): CoverageTier {
   const covered: Surface[] = [];
   const untested: Surface[] = [];
   const decisions: CoverageDecision[] = [];
   for (const s of considered) {
-    const decision = coverageOf(s, tests);
+    const decision = executedOf(s, index, tier) ?? coverageOf(s, tests);
     if (decision) {
       covered.push(s);
       decisions.push(decision);
@@ -512,20 +585,49 @@ export function findUntestedSurfaces(
 
   const tests = discoverTests(basePath, globs, ignore);
   const split = partitionTests(tests);
-  const union = tierOf(considered, tests);
+  // The run record, if there is one. NO artifact ⇒ an empty index ⇒ every
+  // decision below falls through to colocation, byte-for-byte as before: a fresh
+  // clone and someone else's repo must not get one extra nudge from this tier.
+  const runIndex = indexRuns(readCoverageArtifact(basePath), (p) => {
+    const abs = join(basePath, p);
+    return existsSync(abs) ? surfaceSha(read(abs)) : null;
+  });
+  const union = tierOf(considered, tests, runIndex, undefined);
 
   return {
     total: considered.length,
     covered: union.covered,
     untested: union.untested,
     exempt,
+    staleRuns: staleRunsFor(considered, runIndex),
     legacyCoversFiles: tests
       .map((t) => t.path)
       .filter((path) => read(join(basePath, path)).includes(LEGACY_COVERS)),
     decisions: union.decisions,
-    harness: tierOf(considered, split.harness),
-    evals: tierOf(considered, split.evals),
+    harness: tierOf(considered, split.harness, runIndex, "harness"),
+    evals: tierOf(considered, split.evals, runIndex, "eval"),
   };
+}
+
+/**
+ * Surfaces with run records but no FRESH one — measured, then edited.
+ *
+ * Only reported when nothing fresh exists for the surface: a re-run refreshes
+ * one record and leaves the old ones in the artifact, and complaining about
+ * those would make the notice permanent and therefore ignorable.
+ */
+function staleRunsFor(
+  considered: readonly Surface[],
+  index: ReadonlyMap<string, ExecutedRecord[]>,
+): StaleRun[] {
+  const out: StaleRun[] = [];
+  for (const s of considered) {
+    const records = index.get(s.path) ?? [];
+    if (records.length === 0 || records.some((r) => r.fresh)) continue;
+    const newest = records.reduce((a, b) => (a.run.at >= b.run.at ? a : b));
+    out.push({ path: s.path, by: newest.run.by, at: newest.run.at });
+  }
+  return out;
 }
 
 /** Suggested colocated test path for an untested surface (shown in the warning). */
@@ -637,6 +739,27 @@ function legacyCoversNote(report: UntestedReport): string[] {
   ];
 }
 
+/**
+ * The "measured, but not this version" line — printed in BOTH branches, for the
+ * same reason `legacyCoversNote` is: a repo can be at zero untested and still be
+ * resting on a measurement of text that no longer exists, and it would then
+ * never hear about it.
+ */
+function staleRunNote(report: UntestedReport): string[] {
+  const stale = report.staleRuns ?? [];
+  if (stale.length === 0) return [];
+  const shown = stale
+    .slice(0, 3)
+    .map((s) => s.path)
+    .join(", ");
+  const more = stale.length > 3 ? ` (+${String(stale.length - 3)} more)` : "";
+  return [
+    `  ${String(stale.length)} surface(s) have a run record from BEFORE their current ` +
+      `text (${shown}${more}) — measured, but not this version, so it grants no ` +
+      `coverage. Re-run \`vigiles test\` / \`vigiles eval\` to refresh it.`,
+  ];
+}
+
 export function formatUntestedReport(report: UntestedReport): string {
   // Every coverage number is printed WITH its provenance. "28 covered" and
   // "28 covered, all of it a name appearing in a file" are different facts, and
@@ -644,7 +767,7 @@ export function formatUntestedReport(report: UntestedReport): string {
   const provenance = formatEvidence(coverageEvidenceCounts(report));
   if (report.untested.length === 0) {
     const tail = report.exempt > 0 ? ` (${String(report.exempt)} exempt)` : "";
-    const legacy = legacyCoversNote(report);
+    const legacy = [...staleRunNote(report), ...legacyCoversNote(report)];
     const ok =
       `✓ all ${String(report.total)} surface(s) have a test or eval${tail}` +
       (provenance ? `\n  ${provenance}` : "") +
@@ -677,6 +800,7 @@ export function formatUntestedReport(report: UntestedReport): string {
   );
   // What the surfaces that DID pass are resting on.
   if (provenance) lines.push(`  ${provenance}`);
+  lines.push(...staleRunNote(report));
   lines.push(...legacyCoversNote(report));
   // Already testing these another way (a promptfoo suite, a home-grown evals
   // file)? Point `testGlobs` at it so it counts toward coverage (issue #113) —
