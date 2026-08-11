@@ -74,6 +74,8 @@ import {
   detectOwnTestSignal,
   remapFindingPaths,
 } from "./scan-core.js";
+// Zero imports of its own — pure string work, safe in the browser engine.
+import { brokenSkillRefs, formatSkillRefIssue } from "./skill-refs.js";
 // TYPE-ONLY from ./scan.js (the report shapes) — elided at build, so the
 // node-only runtime deps of scan.ts (plugin-loader/mcp/test-coverage/node:fs)
 // never enter this browser-safe engine's graph. The runtime detectors come from
@@ -694,6 +696,18 @@ export function scanFiles(
       loaded.warnings.some((w) => w.includes("MCP server")) ||
       declaredServers.length > 0,
     danglingRefs: danglingRefs(files, lay, repoName ?? basename(BROWSER_ROOT)),
+    // Kept in step with `scanPlugin`: skill→skill references BY NAME, which
+    // `danglingRefs` structurally cannot see. The parity test is the only thing
+    // holding these two report builders together, and it caught this field
+    // landing in one of them and not the other.
+    skillRefIssues: brokenSkillRefs(
+      skills.flatMap((s) => {
+        const content = loaded.files[s.path];
+        return content === undefined
+          ? []
+          : [{ name: s.name, path: s.path, content }];
+      }),
+    ).map(formatSkillRefIssue),
     hookEventIssues,
     frontmatterIssues: remap(frontmatterIssuesFor(loaded.files, cls)),
     frontmatterValueIssues: remap(frontmatterValueIssuesFor(loaded.files, cls)),
