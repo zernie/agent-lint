@@ -46,7 +46,15 @@
 /** Path fragments that identify a runner owning the process. POSIX-normalised. */
 const RUNNERS: readonly (readonly [string, readonly string[]])[] = [
   ["vitest", ["node_modules/vitest/", "node_modules/.bin/vitest"]],
-  ["jest", ["node_modules/jest/", "node_modules/jest-cli/", "node_modules/jest-worker/", "node_modules/.bin/jest"]],
+  [
+    "jest",
+    [
+      "node_modules/jest/",
+      "node_modules/jest-cli/",
+      "node_modules/jest-worker/",
+      "node_modules/.bin/jest",
+    ],
+  ],
   ["mocha", ["node_modules/mocha/", "node_modules/.bin/mocha"]],
   ["ava", ["node_modules/ava/", "node_modules/.bin/ava"]],
   ["node --test", ["node_modules/.bin/node--test"]],

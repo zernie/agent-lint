@@ -17,7 +17,10 @@ test("recognises the path vitest actually starts a worker with", () => {
 
 test("recognises jest and its worker", () => {
   assert.equal(foreignRunner("/repo/node_modules/jest/bin/jest.js"), "jest");
-  assert.equal(foreignRunner("/repo/node_modules/jest-worker/build/index.js"), "jest");
+  assert.equal(
+    foreignRunner("/repo/node_modules/jest-worker/build/index.js"),
+    "jest",
+  );
   assert.equal(foreignRunner("/repo/node_modules/.bin/jest"), "jest");
 });
 
@@ -36,13 +39,16 @@ test("a project that merely HAS vitest as a dependency is not running under it",
 });
 
 test("windows separators resolve the same", () => {
-  assert.equal(foreignRunner("C:\\repo\\node_modules\\vitest\\dist\\workers\\forks.js"), "vitest");
+  assert.equal(
+    foreignRunner("C:\\repo\\node_modules\\vitest\\dist\\workers\\forks.js"),
+    "vitest",
+  );
 });
 
 test("the refusal names the runner, the cost and the way out", () => {
   const m = foreignRunnerRefusal("vitest", "measureTriggerRate");
   assert.match(m, /vitest/);
   assert.match(m, /spends real model calls/);
-  assert.match(m, /vigiles eval/);          // what to run instead
-  assert.match(m, /\.eval\.mjs/);           // and what to call the file
+  assert.match(m, /vigiles eval/); // what to run instead
+  assert.match(m, /\.eval\.mjs/); // and what to call the file
 });

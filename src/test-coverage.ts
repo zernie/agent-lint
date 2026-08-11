@@ -374,10 +374,15 @@ function declaredName(content: string): string | null {
 }
 
 /**
- * The retired declaration marker, kept ONLY to explain its own removal. Written
- * split so this source file does not match its own search.
+ * The retired declaration marker, kept ONLY to explain its own removal.
+ *
+ * Written plainly. An earlier version split it (`` `vigiles:${"covers"}` ``) to keep
+ * this source file from matching its own search — a precaution that was never
+ * checked and is contradicted by the tree it lives in: the literal already appears
+ * in five other files under `src/`, and the detector reads only files matching
+ * `testGlobs` in the SCANNED repo, never vigiles' own sources.
  */
-const LEGACY_COVERS = `vigiles:${"covers"}`;
+const LEGACY_COVERS = "vigiles:covers";
 
 function discoverAgents(
   basePath: string,
@@ -792,7 +797,7 @@ function legacyCoversNote(report: UntestedReport): string[] {
   const shown = files.slice(0, 3).join(", ");
   const more = files.length > 3 ? ` (+${String(files.length - 3)} more)` : "";
   return [
-    `  ${String(files.length)} test file(s) still carry the retired \`vigiles:${"covers"}\` ` +
+    `  ${String(files.length)} test file(s) still carry the retired \`vigiles:covers\` ` +
       `marker (${shown}${more}). It has granted no coverage since 15.x — a test counts ` +
       `when it is NAMED after the surface and sits next to it. The marker is now an ` +
       `ordinary comment; delete it or rename the file.`,
@@ -846,7 +851,9 @@ export function formatUntestedReport(report: UntestedReport): string {
     `⚠ ${String(report.untested.length)} surface(s) with no test or eval:`,
   ];
   for (const s of report.untested) {
-    lines.push(`    ${s.kind} ${s.path} — add e.g. ${suggestedTestPath(s, report.testExt)}`);
+    lines.push(
+      `    ${s.kind} ${s.path} — add e.g. ${suggestedTestPath(s, report.testExt)}`,
+    );
   }
   // Name the two gaps SEPARATELY — they lead to different work at wildly
   // different cost. "add a test/eval" is one sentence for two prescriptions three

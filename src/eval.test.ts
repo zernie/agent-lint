@@ -2844,7 +2844,6 @@ test("formatTriggerRateReport: a PARTIAL rate is left alone", () => {
   assert.doesNotMatch(formatTriggerRateReport(partial), /nothing fired/);
 });
 
-
 test("spawnAgent refuses to spend model calls when a foreign test runner owns the process", () => {
   // 🔴 THIS TEST WORKS BECAUSE OF WHERE IT RUNS. Under vitest, `process.argv[1]`
   // is `…/node_modules/vitest/dist/workers/forks.js` — so the guard fires here by

@@ -357,7 +357,10 @@ test("a `*.test.ts` is NOT a vigiles test — it is the one name a foreign runne
   write(dir, "skills/foo/SKILL.md", skill("foo"));
   write(dir, "skills/foo/foo.test.ts", 'import "./SKILL.md";\n');
   const r = findUntestedSurfaces({ basePath: dir });
-  assert.deepEqual(r.untested.map((s) => s.name), ["foo"]);
+  assert.deepEqual(
+    r.untested.map((s) => s.name),
+    ["foo"],
+  );
   cleanupTmpDir(dir);
 });
 
@@ -369,10 +372,19 @@ test("…and the same file renamed to `.harness.ts` DOES count — TypeScript is
   write(dir, "skills/foo/SKILL.md", skill("foo"));
   write(dir, "skills/foo/foo.harness.ts", "const n: number = 1;\n");
   const r = findUntestedSurfaces({ basePath: dir });
-  assert.deepEqual(r.untested.map((s) => s.name), []);
-  assert.deepEqual(r.harness.untested.map((s) => s.name), []);
+  assert.deepEqual(
+    r.untested.map((s) => s.name),
+    [],
+  );
+  assert.deepEqual(
+    r.harness.untested.map((s) => s.name),
+    [],
+  );
   // …and it is the FREE tier: nothing has measured firing.
-  assert.deepEqual(r.evals.untested.map((s) => s.name), ["foo"]);
+  assert.deepEqual(
+    r.evals.untested.map((s) => s.name),
+    ["foo"],
+  );
   cleanupTmpDir(dir);
 });
 
@@ -386,7 +398,11 @@ test("🔴 `foo.eval.ts` is the PAID tier — the split is by infix, not by `.ev
   write(dir, "skills/foo/SKILL.md", skill("foo"));
   write(dir, "skills/foo/foo.eval.ts", "const n: number = 1;\n");
   const r = findUntestedSurfaces({ basePath: dir });
-  assert.deepEqual(r.evals.untested.map((s) => s.name), [], "counted as the PAID tier");
+  assert.deepEqual(
+    r.evals.untested.map((s) => s.name),
+    [],
+    "counted as the PAID tier",
+  );
   assert.deepEqual(
     r.harness.untested.map((s) => s.name),
     ["foo"],
@@ -747,7 +763,7 @@ test("a test still carrying `vigiles:covers` is named, with what changed", () =>
   write(
     dir,
     ".claude/skills/foo/foo.harness.mjs",
-    `// vigiles:${"covers"} skills/foo\n`,
+    "// vigiles:covers skills/foo\n",
   );
   const report = findUntestedSurfaces({ basePath: dir });
   assert.deepEqual(report.legacyCoversFiles, [

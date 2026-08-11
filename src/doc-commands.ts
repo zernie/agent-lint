@@ -182,8 +182,7 @@ export function mustInclude(
       return {
         pass: false,
         score: 0,
-        message:
-          `${String(offenders.length)} of ${String(commands.length)} command(s) omit "${fragment}" — ${why}\n${shown}${more}`,
+        message: `${String(offenders.length)} of ${String(commands.length)} command(s) omit "${fragment}" — ${why}\n${shown}${more}`,
       };
     },
     toJSON() {
@@ -228,8 +227,7 @@ export function mustNotInclude(
       return {
         pass: false,
         score: 0,
-        message:
-          `${String(offenders.length)} command(s) use "${fragment}" — ${why}\n${shown}`,
+        message: `${String(offenders.length)} command(s) use "${fragment}" — ${why}\n${shown}`,
       };
     },
     toJSON() {

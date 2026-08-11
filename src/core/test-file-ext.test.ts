@@ -17,7 +17,10 @@ test("a tsconfig.json is enough to write TypeScript, with no configuration", () 
 test("…so is a typescript dependency, in any of the three dep maps", () => {
   for (const key of ["dependencies", "devDependencies", "peerDependencies"])
     assert.equal(
-      testFileExt({ hasTsconfig: false, packageJson: pkg({ [key]: { typescript: "^5" } }) }),
+      testFileExt({
+        hasTsconfig: false,
+        packageJson: pkg({ [key]: { typescript: "^5" } }),
+      }),
       "ts",
       key,
     );
@@ -25,7 +28,10 @@ test("…so is a typescript dependency, in any of the three dep maps", () => {
 
 test("a dependency merely NAMED like typescript does not count", () => {
   assert.equal(
-    testFileExt({ hasTsconfig: false, packageJson: pkg({ devDependencies: { "typescript-eslint": "^8" } }) }),
+    testFileExt({
+      hasTsconfig: false,
+      packageJson: pkg({ devDependencies: { "typescript-eslint": "^8" } }),
+    }),
     "mjs",
   );
 });
@@ -46,7 +52,10 @@ test("a nonsense config value is IGNORED, not honoured and not thrown on", () =>
 
 test("a malformed package.json decides nothing rather than throwing", () => {
   // It is another rule's finding. This decision must survive it.
-  assert.equal(testFileExt({ hasTsconfig: false, packageJson: "{ not json" }), "mjs");
+  assert.equal(
+    testFileExt({ hasTsconfig: false, packageJson: "{ not json" }),
+    "mjs",
+  );
 });
 
 test("the finding and the generator must not contradict each other", () => {

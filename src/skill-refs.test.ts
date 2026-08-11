@@ -19,9 +19,11 @@ test("a renamed sibling is caught, and the intended target is named", () => {
     s("verify-citations", "…"),
   ]);
   assert.equal(issues.length, 1);
-  assert.equal(issues[0]?.missing, "verify-citation");
-  assert.equal(issues[0]?.didYouMean, "verify-citations");
-  assert.match(formatSkillRefIssue(issues[0]!), /no such skill exists/);
+  const issue = issues[0];
+  assert.ok(issue, "expected exactly one issue");
+  assert.equal(issue.missing, "verify-citation");
+  assert.equal(issue.didYouMean, "verify-citations");
+  assert.match(formatSkillRefIssue(issue), /no such skill exists/);
 });
 
 test("ordinary hyphenated prose does NOT fire — the whole reason for near-miss", () => {
@@ -29,7 +31,10 @@ test("ordinary hyphenated prose does NOT fire — the whole reason for near-miss
   // flagged every backticked kebab token would fire on both, and a checker that
   // fires on clean input is muted within a day.
   const issues = brokenSkillRefs([
-    s("draft-paper", "Install `node-fetch` and open a `pull-request` in `claude-code`."),
+    s(
+      "draft-paper",
+      "Install `node-fetch` and open a `pull-request` in `claude-code`.",
+    ),
     s("verify-citations", "…"),
   ]);
   assert.deepEqual(issues, []);
@@ -45,7 +50,9 @@ test("a reference to a skill that DOES exist is not an issue", () => {
 
 test("a skill naming ITSELF is normal and never reported", () => {
   // Every skill quotes its own id — in its header, its run command, its examples.
-  const issues = brokenSkillRefs([s("draft-paper", "run `draft-paper` like so")]);
+  const issues = brokenSkillRefs([
+    s("draft-paper", "run `draft-paper` like so"),
+  ]);
   assert.deepEqual(issues, []);
 });
 
@@ -71,8 +78,6 @@ test("the near-miss is measured against OTHER skills, not the referrer itself", 
   // `draft-papers` is one edit from `draft-paper` — but that IS the referrer, and
   // a skill that mistypes its own name should not be told "did you mean yourself".
   // It must match the other skill, or nothing.
-  const issues = brokenSkillRefs([
-    s("draft-paper", "see `draft-papers`"),
-  ]);
+  const issues = brokenSkillRefs([s("draft-paper", "see `draft-papers`")]);
   assert.deepEqual(issues, []);
 });

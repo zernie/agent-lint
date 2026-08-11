@@ -50,10 +50,18 @@ import {
 const EVAL_INFIX = ".eval.";
 
 const DEFAULT_TEST_SUFFIXES = [
-  ".harness.ts", ".harness.mts", ".harness.cts",
-  ".harness.js", ".harness.mjs", ".harness.cjs",
-  ".eval.ts", ".eval.mts", ".eval.cts",
-  ".eval.js", ".eval.mjs", ".eval.cjs",
+  ".harness.ts",
+  ".harness.mts",
+  ".harness.cts",
+  ".harness.js",
+  ".harness.mjs",
+  ".harness.cjs",
+  ".eval.ts",
+  ".eval.mts",
+  ".eval.cts",
+  ".eval.js",
+  ".eval.mjs",
+  ".eval.cjs",
 ] as const;
 
 const IGNORE_MARKER = "vigiles:ignore-test";
