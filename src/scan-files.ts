@@ -76,6 +76,10 @@ import {
 } from "./scan-core.js";
 // Zero imports of its own — pure string work, safe in the browser engine.
 import { brokenSkillRefs, formatSkillRefIssue } from "./skill-refs.js";
+import {
+  conflictedHarnessConfigs,
+  mergeConflictWarning,
+} from "./core/merge-conflict.js";
 // TYPE-ONLY from ./scan.js (the report shapes) — elided at build, so the
 // node-only runtime deps of scan.ts (plugin-loader/mcp/test-coverage/node:fs)
 // never enter this browser-safe engine's graph. The runtime detectors come from
@@ -752,7 +756,13 @@ export function scanFiles(
       dialect,
     ),
     malformedFrontmatter: remap(malformedFrontmatterFor(loaded.files, cls)),
-    warnings: loaded.warnings,
+    // Same detector as `scanPlugin`, over the map instead of disk — the parity
+    // gate is byte-identical reports, so a finding that existed on only one side
+    // would fail it.
+    warnings: [
+      ...loaded.warnings,
+      ...conflictedHarnessConfigs((f) => files[f]).map(mergeConflictWarning),
+    ],
     untested: coverage.untested.length,
     untestedHarness: coverage.harness.untested.length,
     unevaluated: coverage.evals.untested.length,

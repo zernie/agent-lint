@@ -40,6 +40,10 @@ import {
   type McpContractToolError,
 } from "./core/mcp-contract-message.js";
 import { verifyMcpHookTargets, type McpHookIssue } from "./core/mcp-hook.js";
+import {
+  conflictedHarnessConfigs,
+  mergeConflictWarning,
+} from "./core/merge-conflict.js";
 import type { TrifectaFinding } from "./core/lethal-trifecta.js";
 import type { SkillResourceFinding } from "./core/skill-resources.js";
 import type { SkillFenceFinding } from "./core/skill-missing-fence.js";
@@ -635,7 +639,19 @@ export function scanPlugin(
       dialect,
     ),
     malformedFrontmatter: remap(malformedFrontmatterFor(loaded.files, cls)),
-    warnings: loaded.warnings,
+    // A harness config left mid-merge is reported BEFORE the author starts
+    // guessing why every command is refused — the whole cost of the 2026-08-10
+    // wedge was that nothing in the output named `package.json`. A warning, not
+    // a scored finding: it is transient repo state, not a fact about how the
+    // harness was designed, and a grade that swings on an unresolved merge is
+    // noise.
+    warnings: [
+      ...loaded.warnings,
+      ...conflictedHarnessConfigs((f) => {
+        const p = join(dir, f);
+        return existsSync(p) ? nodeReadFile(p) : undefined;
+      }).map(mergeConflictWarning),
+    ],
     untested: coverage.untested.length,
     untestedHarness: coverage.harness.untested.length,
     unevaluated: coverage.evals.untested.length,

