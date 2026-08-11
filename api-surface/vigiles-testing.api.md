@@ -309,6 +309,9 @@ export const claudeEvalDriver: EvalDriver;
 export function compareArms(report: EvalReport, baseline: string, arm: string, metric: string, alpha?: number): Comparison | null;
 
 // @public
+export function compareContainment(weak: readonly ContainmentInput[], strong: readonly ContainmentInput[]): ContainmentVerdict;
+
+// @public
 export interface Comparison {
     readonly delta: number;
     readonly df: number;
@@ -316,6 +319,26 @@ export interface Comparison {
     readonly seDelta: number;
     readonly significant: boolean;
     readonly t: number;
+}
+
+// @public
+export interface ContainmentInput {
+    // (undocumented)
+    readonly perPrompt: readonly {
+        readonly prompt: string;
+        readonly rate: number;
+    }[];
+    readonly subject: string;
+}
+
+// @public (undocumented)
+export interface ContainmentVerdict {
+    readonly both: readonly string[];
+    readonly compared: number;
+    readonly holds: boolean;
+    readonly neither: readonly string[];
+    readonly strongOnly: readonly string[];
+    readonly weakOnly: readonly string[];
 }
 
 // @public
@@ -421,6 +444,9 @@ export function formatBaselineDiff(diff: BaselineDiff): string;
 
 // @public
 export function formatCheckReport(report: CheckReport): string;
+
+// @public
+export function formatContainment(v: ContainmentVerdict): string;
 
 // @public
 export function formatEvalReport(report: EvalReport): string;

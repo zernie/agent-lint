@@ -112,6 +112,16 @@ export { runHarnessTest, runHarness } from "./harness-test.js";
 // A skill's own `allowed-tools:` frontmatter, read back as checks — the wiring
 // from a declaration to the existing check vocabulary, not new machinery.
 export { skillContract } from "./skill-contract.js";
+// Is a WEAKER model a valid lower bound for trigger-rate? Pure comparison of two
+// runs; the open question the model floor makes people ask.
+export {
+  compareContainment,
+  formatContainment,
+} from "./trigger-containment.js";
+export type {
+  ContainmentInput,
+  ContainmentVerdict,
+} from "./trigger-containment.js";
 export type { SkillContract, SkillContractOptions } from "./skill-contract.js";
 export type {
   HarnessTestSpec,

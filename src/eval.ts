@@ -2798,5 +2798,26 @@ export function formatTriggerRateReport(report: TriggerRateReport): string {
       ? `whole-harness: measured against ${String(report.competitors)} competing skill(s)`
       : "isolated: no competing skills — recall is an upper bound, false-positive a lower bound (populate `installSet` for a release-gate measurement)",
   );
+  // A TOTAL zero is far more often a wiring mistake than a finding, and it does
+  // not look like one: the report is well-formed, the runs executed, and every
+  // line reads 0.00 — which parses as "this description never fires". Measured
+  // the hard way while building a consumer's trigger suite (2026-08-11): three
+  // separate setup errors each produced a confident, plausible 0%, and two of
+  // them were briefly written up as findings about the skills before being
+  // caught. So when nothing fired at all, say what usually causes that.
+  //
+  // Deliberately only on the TOTAL zero. A partial rate is a real measurement and
+  // must not be second-guessed; a checker that hedges on good data gets ignored.
+  if (report.n > 0 && report.rate === 0)
+    lines.push(
+      "⚠ nothing fired on ANY prompt. That is usually SETUP, not the description — check, in order:\n" +
+        "  1. the id in `fired` — `skillResolved` matches the NAMESPACED id " +
+        "(`<plugin>:<skill>`); a bare name silently never matches;\n" +
+        "  2. the install field — a loose `.claude/skills` dir needs `skillsDir`, " +
+        "not `pluginDir` (which wants a full plugin manifest);\n" +
+        "  3. the `fixture` — a run starts in an EMPTY cwd, so a prompt about a " +
+        "file that does not exist is one the model is right to decline.\n" +
+        "  Rule out all three before recording this as a fact about the skill.",
+    );
   return lines.join("\n");
 }

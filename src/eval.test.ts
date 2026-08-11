@@ -2803,3 +2803,42 @@ test("unregisteredSkillFiles does NOT flag CLAUDE.md (auto-loaded) or a scratch 
   );
   assert.deepEqual(unregisteredSkillFiles(undefined), []);
 });
+
+test("formatTriggerRateReport: a TOTAL zero names the setup causes, not the description", () => {
+  // Measured 2026-08-11 while building a consumer's trigger suite: three separate
+  // wiring mistakes each produced a confident, well-formed 0%, and two were
+  // briefly written up as findings about the skills before being caught. A zero
+  // that looks exactly like a result is worth a sentence about why it usually
+  // isn't one.
+  const zero = {
+    rate: 0,
+    n: 4,
+    perPrompt: [
+      { prompt: "a", fired: 0, trials: 1, rate: 0 },
+      { prompt: "b", fired: 0, trials: 1, rate: 0 },
+    ],
+    competitors: 37,
+    usage: zeroUsage,
+  };
+  const out = formatTriggerRateReport(zero);
+  assert.match(out, /nothing fired on ANY prompt/);
+  assert.match(out, /NAMESPACED id/); // cause 1
+  assert.match(out, /skillsDir/); // cause 2
+  assert.match(out, /fixture/); // cause 3
+});
+
+test("formatTriggerRateReport: a PARTIAL rate is left alone", () => {
+  // The hedge must not appear on real measurements. A checker that second-guesses
+  // good data gets ignored, and then it is not there for the case it exists for.
+  const partial = {
+    rate: 0.5,
+    n: 4,
+    perPrompt: [
+      { prompt: "a", fired: 1, trials: 1, rate: 1 },
+      { prompt: "b", fired: 0, trials: 1, rate: 0 },
+    ],
+    competitors: 37,
+    usage: zeroUsage,
+  };
+  assert.doesNotMatch(formatTriggerRateReport(partial), /nothing fired/);
+});
