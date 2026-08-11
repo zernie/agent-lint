@@ -36,6 +36,30 @@
  * day. So extraction is limited to fenced code blocks, where a line is a command
  * because of where it sits, not because of what it looks like.
  *
+ * ## Prior art, and the honest split (surveyed 2026-08-11)
+ *
+ * The field divides into four quadrants and this sits in the empty one:
+ *
+ *   extraction              pull blocks out of markdown        codedown, code_extractor
+ *   extraction + linter     pull shell, run shellcheck on it   markdown-shellcheck (awk)
+ *   execution               RUN the blocks (literate/doctest)  mdsh, Rust doctests, mdbook test
+ *   matchers                expect.extend / chai               vitest, jest, jest-dom
+ *
+ * The nearest neighbour is `markdown-shellcheck`, and the difference is the
+ * whole point: it applies a UNIVERSAL correctness checker (quoting, globbing,
+ * `$?`) that knows nothing about this document. This applies the rule THIS
+ * DOCUMENT STATES ABOUT ITSELF — "in this file every curl carries --cacert" —
+ * which no general linter can know and no doctest can express, because the
+ * commands here are never run.
+ *
+ * ⚠️ The EXTRACTION half is not novel and is not claimed to be: `codedown` and
+ * `markdown-shellcheck` both do it. It is reimplemented at ~30 dependency-free
+ * lines because vendoring an awk script or an npm package for that is worse than
+ * owning it. Cheap composition worth stealing from `markdown-shellcheck`: this
+ * returns structured commands, so handing them to a real shellcheck when one is
+ * installed is a few lines and buys a whole class of checks nobody here should
+ * be writing.
+ *
  * Pure: takes text, returns data. No filesystem, no shell, nothing is executed.
  */
 import type { Check, CheckResult } from "./check.js";
