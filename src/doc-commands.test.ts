@@ -34,6 +34,49 @@ test("a commented-out line is not a command", () => {
   assert.ok(!commandsIn(DOC, /fetch/).some((c) => c.text.startsWith("#")));
 });
 
+test("a GLOBAL or STICKY filter matches the same lines a plain one does", () => {
+  // `RegExp.test` advances `lastIndex` on /g and /y, so testing consecutive
+  // matching lines with the same object alternates hit/miss. Measured before the
+  // fix on the four lines below: /curl/ found 4, /curl/g found the 1st and the
+  // 3rd, /curl/y the same — half the document silently left the set that
+  // mustInclude/mustNotInclude then judge, so the rule passed over commands it
+  // never saw. /curl/g is what a caller writes without thinking about it.
+  const doc = [
+    "```sh",
+    "curl -g https://a",
+    "curl -g https://b",
+    "curl -g https://c",
+    "curl -g https://d",
+    "```",
+  ].join("\n");
+  const plain = commandsIn(doc, /curl/).map((c) => c.text);
+  assert.equal(plain.length, 4, "control: a plain filter sees every line");
+  for (const re of [/curl/g, /curl/y, /curl/gi]) {
+    assert.deepEqual(
+      commandsIn(doc, re).map((c) => c.text),
+      plain,
+      String(re),
+    );
+  }
+});
+
+test("…and the caller's own regex comes back untouched", () => {
+  // Resetting `lastIndex` in place would fix the count and mutate an object the
+  // caller may be using elsewhere. Nothing is reset because nothing is stateful.
+  const re = /curl/g;
+  re.lastIndex = 3;
+  commandsIn(DOC, re);
+  assert.equal(re.lastIndex, 3);
+});
+
+test("case-insensitivity and other flags still apply", () => {
+  // Only the two positional flags are dropped; a filter that stopped honouring
+  // `i` would be a different kind of silent under-match.
+  const doc = ["```sh", "CURL -g https://a", "```"].join("\n");
+  assert.equal(commandsIn(doc, /curl/i).length, 1);
+  assert.equal(commandsIn(doc, /curl/).length, 0);
+});
+
 test("holding rule passes and says how many it held over", () => {
   const r = mustInclude("--cacert", "the proxy needs it").eval(
     commandsIn(DOC, /curl/),
@@ -44,9 +87,10 @@ test("holding rule passes and says how many it held over", () => {
 
 test("a violation names the line, the text and the CONSEQUENCE", () => {
   const broken = DOC.replace("curl -g -s --cacert $CA", "curl -s $CA");
-  const r = mustInclude("--cacert", "this env's proxy needs the CA bundle").eval(
-    commandsIn(broken, /curl/),
-  );
+  const r = mustInclude(
+    "--cacert",
+    "this env's proxy needs the CA bundle",
+  ).eval(commandsIn(broken, /curl/));
   assert.equal(r.pass, false);
   assert.match(r.message, /1 of 2/);
   assert.match(r.message, /line 7/); // points at the file, not just "somewhere"

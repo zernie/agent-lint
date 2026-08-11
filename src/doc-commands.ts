@@ -100,14 +100,32 @@ function fencedBlocks(md: string): { body: string; start: number }[] {
  *
  * Comment lines (`#`) are skipped: a commented-out example is not a command the
  * reader is told to run, and flagging it teaches people to delete their examples.
+ *
+ * 🔴 THE FILTER IS RE-BUILT WITHOUT `g`/`y`, BECAUSE `RegExp.test` IS STATEFUL.
+ * On a global or sticky regex `test()` advances `lastIndex`, so testing a run of
+ * matching lines with the SAME object alternates hit/miss. Measured 2026-08-11
+ * on four `curl` lines: `/curl/` finds all four, `/curl/g` finds the 1st and the
+ * 3rd, `/curl/y` the same. Silent, and the wrong way round — half the document
+ * quietly leaves the set that `mustInclude`/`mustNotInclude` then judge, so the
+ * rule passes over commands it never saw. `/curl/g` is what a caller writes
+ * without thinking, and it must not mean something different.
+ *
+ * A fresh regex rather than resetting `lastIndex`: the caller's object is theirs
+ * and may be reused elsewhere, and there is no state left to reset wrongly. `y`
+ * goes too — sticky ANCHORS the match at `lastIndex`, so `/curl/y` against
+ * `sudo curl …` would find nothing, which is not what "matching" means here.
  */
 export function commandsIn(md: string, matching: RegExp): DocCommand[] {
+  const search = new RegExp(
+    matching.source,
+    matching.flags.replaceAll("g", "").replaceAll("y", ""),
+  );
   const out: DocCommand[] = [];
   for (const block of fencedBlocks(md))
     for (const [i, raw] of block.body.split("\n").entries()) {
       const text = (raw ?? "").trim();
       if (text === "" || text.startsWith("#")) continue;
-      if (!matching.test(text)) continue;
+      if (!search.test(text)) continue;
       out.push({ text, line: block.start + i });
     }
   return out;
