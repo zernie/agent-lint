@@ -4261,12 +4261,19 @@ function checkDescriptionBudget(
 
 /**
  * Apply the `lethal-trifecta` rule: a unit (subagent / model-invocable skill)
- * whose declared tools hold all three legs (read-private + ingest-untrusted +
- * exfiltrate) is a prompt-injection exfil path (Meta's Rule of Two). Reuses
- * `scanPlugin`'s `trifectaFindings` (a capability SET-intersection, one detector,
- * no drift). Warning by default; "error" gates CI. Surfaces across BOTH subagents
- * and skills, so it is NOT gated on the `subagents` capability — a skill-only
- * harness still has the surface.
+ * holding all three legs (read-private + ingest-untrusted + exfiltrate) is a
+ * prompt-injection exfil path (Meta's Rule of Two). Reuses `scanPlugin`'s
+ * `trifectaFindings` (one detector, no drift). Warning by default; "error" gates
+ * CI. Surfaces across BOTH subagents and skills, so it is NOT gated on the
+ * `subagents` capability — a skill-only harness still has the surface.
+ *
+ * 🔴 The unfenced-skill group is printed ONCE and gets NO per-file GitHub
+ * annotation. A skill's `allowed-tools:` pre-approves rather than restricts
+ * (measured 2026-08-11), so every skill without a `disallowed-tools:` fence is in
+ * this state — annotating each of them would stamp the same sentence on every
+ * SKILL.md in the repo on every CI run, which is how a rule gets switched off. The
+ * COUNT is unchanged (units, not lines), so exit codes and the CI gate are
+ * unaffected by the collapse.
  */
 function checkLethalTrifecta(
   config: VigilesConfig | undefined,
@@ -4280,7 +4287,7 @@ function checkLethalTrifecta(
     path: string;
     kind: string;
     name: string;
-    finding: { message: string };
+    finding: { message: string; fence?: string };
   }[];
   try {
     found = scanPlugin(
@@ -4292,11 +4299,26 @@ function checkLethalTrifecta(
     return { issues: 0, errors: 0 };
   }
   if (found.length > 0 && !silent) {
+    const mark = sev === "error" ? "✗" : "⚠";
+    const level = sev === "error" ? "error" : "warning";
     console.log("\nLethal-trifecta check:\n");
+    const unfenced = found.filter(
+      (t) => t.kind === "skill" && t.finding.fence === "none",
+    );
     for (const t of found) {
+      if (unfenced.includes(t)) continue;
       const msg = `${t.kind} ${t.name}: ${t.finding.message}`;
-      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${t.path}: ${msg}`);
-      ghAnnotate(sev === "error" ? "error" : "warning", msg, t.path);
+      console.log(`  ${mark} ${t.path}: ${msg}`);
+      ghAnnotate(level, msg, t.path);
+    }
+    if (unfenced.length > 0) {
+      console.log(
+        `  ${mark} ${String(unfenced.length)} skill(s) declare no \`disallowed-tools:\` fence, so each ` +
+          `inherits every tool the session grants and holds all three legs. ` +
+          `\`allowed-tools:\` pre-approves, it does not restrict. ` +
+          `Add one \`disallowed-tools:\` line per skill to drop a leg: ` +
+          unfenced.map((t) => t.name).join(", "),
+      );
     }
   }
   return { issues: found.length, errors: sev === "error" ? found.length : 0 };

@@ -532,6 +532,12 @@ describe("auditScore", () => {
   // self — Safety 70 before (only 3 declared units counted, the 31 inheriting
   // everything counted zero) → 0 after `allowed-tools` was added everywhere and the
   // units holding the full trifecta fell 35/35 → 17/35.
+  //
+  // NB (2026-08-11): the SCENARIO behind these numbers changed; the numbers and the
+  // property did not. What moves a SKILL out of the exposed set is a
+  // `disallowed-tools:` fence that closes a whole leg — NOT an `allowed-tools:`
+  // list, which pre-approves and restricts nothing (measured; see
+  // `src/core/lethal-trifecta.ts`). Read "hardened" below as "fenced".
   // -------------------------------------------------------------------------
   /** N model-invocable skills, the first `exposed` of them holding the trifecta. */
   function harness(
@@ -559,7 +565,7 @@ describe("auditScore", () => {
   it("hardening a 35-unit harness RAISES Safety (the measured 70 → 0 inversion)", () => {
     // Before: every unit inherits all tools → the whole surface is an exfil path.
     const before = auditScore(harness(35, 35, "advisory"));
-    // After: explicit `allowed-tools` everywhere; 17 units still name all three legs.
+    // After: 18 units fenced a leg off with `disallowed-tools`; 17 still hold all three.
     const after = auditScore(harness(35, 17, "hard"));
 
     expect(cat(before, "Safety")?.score).toBe(70); // 35/35 exposed → capped −30
@@ -587,6 +593,43 @@ describe("auditScore", () => {
     expect(cat(auditScore(harness(200, 200, "hard")), "Safety")?.score).toBe(
       70,
     );
+  });
+
+  it("unfenced skills are ONE Safety finding, not one per skill — but still count", () => {
+    // 🔴 A skill's `allowed-tools:` pre-approves rather than restricts, so EVERY
+    // skill without a `disallowed-tools:` fence is exposed — i.e. ~100% of every
+    // real corpus. Naming 35 of them one at a time would bury the subagent
+    // findings under a list as long as the skill directory, and a ring that always
+    // reads like a wall of identical text stops being read. The SCORE is untouched
+    // by the collapse: exposure counts units, presentation counts lines.
+    const skills = Array.from({ length: 35 }, (_, i) => ({
+      name: `skill-${String(i)}`,
+      path: `skills/skill-${String(i)}/SKILL.md`,
+      hasDescription: true,
+      userInvoked: false,
+      resourceIssues: [],
+      trifecta: { severity: "advisory", fence: "none" },
+    })) as unknown as ScanReport["skills"];
+    const s = auditScore(
+      makeReport({
+        skills,
+        trifectaFindings: skills.map((k) => ({
+          path: k.path,
+          kind: "skill",
+          name: k.name,
+          finding: { severity: "advisory", fence: "none" },
+        })) as unknown as ScanReport["trifectaFindings"],
+      }),
+    );
+    const findings = cat(s, "Safety")?.findings ?? [];
+    // One headline ("35 of 35 …") + one aggregate line. Never 35 named lines.
+    expect(findings.length).toBe(2);
+    expect(findings.some((f) => f.includes("35 skill(s) declare no"))).toBe(
+      true,
+    );
+    expect(findings.some((f) => f.includes("skill-7"))).toBe(false);
+    // …and the collapse cost the score nothing: 35/35 exposed → capped −30.
+    expect(cat(s, "Safety")?.score).toBe(70);
   });
 
   it("Safety is n/a when there's no tool-bearing surface (no agents, no model-invocable skills)", () => {

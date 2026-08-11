@@ -8,6 +8,16 @@
  * hands back is an existing one (`skill`, {@link onlyTools}), so there is no new
  * assertion machinery here — only the wiring from a declaration to the vocabulary.
  *
+ * 🔴 WHAT THIS DOES AND DOES NOT PROVE (corrected 2026-08-11). `allowed-tools:` is
+ * a PRE-APPROVAL, not a fence: Claude Code's docs say "It does not restrict which
+ * tools are available: every tool remains callable", and two issues closed as
+ * not-planned (anthropics/claude-code#18837, #37683) say the same from the field.
+ * So a passing contract means the run STAYED INSIDE what the author declared — a
+ * test of AUTHOR DISCIPLINE, and a real one. It is NOT evidence that the skill
+ * COULD NOT have gone outside; nothing in `allowed-tools:` stops it. The field
+ * measured to remove a tool from the pool is `disallowed-tools:`, and the check
+ * that reads it is `lethal-trifecta` (see `src/core/lethal-trifecta.ts`).
+ *
  * Deliberately NOT a third entry point: a `SkillContract` is a bag of ordinary
  * `Check<Trace>`s, so it composes into the deterministic tier (`runHarnessTest`)
  * and the eval tier (`measure` / `measureTriggerRate`) unchanged.
@@ -40,7 +50,11 @@ export interface SkillContract {
   readonly activation: Check<Trace>;
   /** The run stayed inside the declared surface. */
   readonly surface: readonly Check<Trace>[];
-  /** No `allowed-tools:` line — the skill inherits EVERY tool. */
+  /**
+   * No `allowed-tools:` line — nothing was claimed, so there is no declared
+   * surface a run can be held to. (Every skill inherits every tool the session
+   * grants either way; `allowed-tools:` pre-approves, it does not fence.)
+   */
   readonly undeclared: boolean;
   /** A frontmatter block exists but is not valid YAML, so nothing parsed. */
   readonly malformed: boolean;
@@ -86,10 +100,12 @@ function buildSurface(
   if (undeclared)
     return unverifiable(
       "surfaceUndeclared",
-      `${path}: no \`allowed-tools:\` line, so this skill inherits EVERY tool ` +
-        `and there is no declared surface to stay inside. Declare the tools it ` +
-        `actually needs; until then "no violations" would only mean "nothing ` +
-        `was claimed".`,
+      `${path}: no \`allowed-tools:\` line, so there is no declared surface for a ` +
+        `run to stay inside. Declare the tools it actually needs; until then "no ` +
+        `violations" would only mean "nothing was claimed". (Declaring them is a ` +
+        `statement of INTENT that this check then holds the run to — it does not ` +
+        `fence the skill: \`allowed-tools:\` pre-approves, every tool stays ` +
+        `callable. The fence is \`disallowed-tools:\`.)`,
     );
   return onlyTools([...declared, ACTIVATION_TOOL]);
 }
@@ -116,9 +132,9 @@ function resolvePlugin(skillDir: string): string | undefined {
  * Two states are FINDINGS rather than empty contracts, and both return a
  * `surface` that FAILS instead of passing vacuously:
  *
- * - **`undeclared`** — no `allowed-tools:` line, so the skill inherits every
- *   tool. Silently reporting "no violations" would present the widest possible
- *   capability surface as the cleanest one.
+ * - **`undeclared`** — no `allowed-tools:` line, so nothing was claimed and there
+ *   is no surface for a run to stay inside. Silently reporting "no violations"
+ *   would present the widest possible capability surface as the cleanest one.
  * - **`malformed`** — a frontmatter block that is not valid YAML. A strict
  *   loader rejects it, so the declared list is unknown, not empty; a regex
  *   salvage of it would be a guess. A declaration that does not parse is not an

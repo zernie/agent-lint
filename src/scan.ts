@@ -112,10 +112,15 @@ export interface ScanSkill {
    */
   readonly resourceIssues: readonly SkillResourceFinding[];
   /**
-   * Lethal-trifecta finding when a MODEL-INVOCABLE skill's declared `allowed-tools`
-   * hold all three legs (read-private + ingest-untrusted + exfiltrate), else null.
-   * A user-invoked skill is excluded (it can't be selected by attacker content).
-   * Computed by `lethalTrifectaIssues()` (one detector, no drift).
+   * Lethal-trifecta finding when a MODEL-INVOCABLE skill's `disallowed-tools:`
+   * fence leaves all three legs standing (read-private + ingest-untrusted +
+   * exfiltrate), else null. Computed by `skillTrifectaIssue()` — NOT from
+   * `allowed-tools:`, which is a pre-approval and bounds nothing (measured
+   * 2026-08-11; see `src/core/lethal-trifecta.ts`). The `fence` field on the
+   * finding says whether the skill declared no fence at all (`"none"` — the
+   * ecosystem default, aggregated in the report) or a fence that closes no leg
+   * (`"ineffective"` — per-skill). A user-invoked skill is excluded (it can't be
+   * selected by attacker content).
    */
   readonly trifecta: TrifectaFinding | null;
   /**
@@ -790,6 +795,51 @@ function skillLine(s: ScanSkill): string {
   return `  ✓ ${s.name}${notes.length ? ` (${notes.join("; ")})` : ""}`;
 }
 
+/**
+ * The lethal-trifecta section's lines.
+ *
+ * Three shapes, because the three states differ in what a reader can DO:
+ *
+ * - HARD (a subagent whose `tools:` names all three legs) — keep the full message;
+ *   it names the specific tools to drop.
+ * - ADVISORY SUBAGENT (inherits-all) — all carry the same boilerplate paragraph,
+ *   so collapse each to a one-liner (feedback P2-6).
+ * - SKILLS WITH NO FENCE (`fence: "none"`) — ONE AGGREGATE LINE for the whole
+ *   surface plus the names. 🔴 This is the ecosystem default: a skill's
+ *   `allowed-tools:` pre-approves rather than restricts (measured 2026-08-11), so
+ *   every skill without a `disallowed-tools:` line holds all three legs — which is
+ *   ~100% of skills in the wild. Printing that N times would make the section a
+ *   wall of identical text about a single fact, and a section that always fires on
+ *   every repo is muted within a day, taking the hard findings above it along. It
+ *   is one fact about the harness, so it gets one line and one fix.
+ *   The count in the header still counts UNITS, not lines — the aggregate must not
+ *   make the exposure look smaller than it is.
+ *
+ * An INEFFECTIVE fence keeps its own line: rare, per-skill, and a real mistake.
+ */
+function trifectaLines(r: ScanReport): string[] {
+  const unfenced = r.trifectaFindings.filter(
+    (t) => t.kind === "skill" && t.finding.fence === "none",
+  );
+  const rest = r.trifectaFindings.filter((t) => !unfenced.includes(t));
+  const lines = rest.map((t) => {
+    const mark = t.finding.severity === "hard" ? "✗" : "⚠";
+    if (t.finding.severity === "hard")
+      return `  ${mark} ${t.kind} ${t.name} (${t.path}): ${t.finding.message}`;
+    if (t.kind === "skill")
+      return `  ${mark} skill ${t.name} (${t.path}): ${t.finding.message}`;
+    return `  ${mark} ${t.kind} ${t.name} (${t.path}) — inherits-all contract holds all three legs (declare a tools list dropping one)`;
+  });
+  if (unfenced.length > 0) {
+    const assessable = r.skills.filter((s) => !s.userInvoked).length;
+    lines.push(
+      `  ⚠ ${String(unfenced.length)} of ${String(assessable)} model-invocable skill(s) declare no \`disallowed-tools:\` fence — each inherits every tool the session grants, so each holds all three legs. \`allowed-tools:\` does NOT fence a skill (it pre-approves; every tool stays callable), so narrowing it changes nothing here. Fix in one line per skill: \`disallowed-tools:\` naming the built-ins that supply a leg it does not need (private read = Read, Grep, Glob, Bash; untrusted intake / exfiltration = WebFetch, WebSearch, Bash).`,
+      `      ${unfenced.map((t) => t.name).join(", ")}`,
+    );
+  }
+  return lines;
+}
+
 /** One agent's report block: ✗ (broken contract) / ⚠ (inherits all) / ✓ + issues + purity. */
 function agentLines(a: ScanAgent): string[] {
   const tools =
@@ -906,17 +956,10 @@ export function formatScanReport(r: ScanReport): string {
   out.push(
     ...section(
       "Lethal trifecta (prompt-injection exfil risk)",
-      // The section header already carries the count. HARD findings name their
-      // specific legs (keep the message). ADVISORY (inherits-all) findings all
-      // carry the SAME boilerplate paragraph — at bulk that's a wall of identical
-      // text, so collapse each to a one-liner (feedback P2-6). Gate on "no NEW
-      // trifecta" with `vigiles lint` (the lethal-trifecta rule), not by eyeballing.
-      r.trifectaFindings.map((t) => {
-        const mark = t.finding.severity === "hard" ? "✗" : "⚠";
-        return t.finding.severity === "hard"
-          ? `  ${mark} ${t.kind} ${t.name} (${t.path}): ${t.finding.message}`
-          : `  ${mark} ${t.kind} ${t.name} (${t.path}) — inherits-all contract holds all three legs (declare a tools list dropping one)`;
-      }),
+      trifectaLines(r),
+      // Count UNITS, not lines: the unfenced-skill aggregate collapses many units
+      // into one line, and a header that counted lines would understate exposure.
+      r.trifectaFindings.length,
     ),
   );
 

@@ -10,6 +10,8 @@ import assert from "node:assert/strict";
 import {
   classifyTrifectaLegs,
   lethalTrifectaIssues,
+  skillFenceLegs,
+  skillTrifectaIssue,
 } from "./lethal-trifecta.js";
 import { claudeCodeDialect } from "../adapters/claude-code/dialect.js";
 
@@ -219,4 +221,116 @@ test("a Bash that only looks narrowed keeps both legs", () => {
       `${grant} + WebFetch should still be a lethal trifecta`,
     );
   }
+});
+
+// ---------------------------------------------------------------------------
+// SKILLS — `disallowed-tools` is the fence; `allowed-tools` is not
+// ---------------------------------------------------------------------------
+//
+// 🔴 What these pin, and why the suite would otherwise let the defect back in.
+// A skill's `allowed-tools:` PRE-APPROVES the tools it lists; Claude Code's docs
+// say so outright ("It does not restrict which tools are available: every tool
+// remains callable") and two issues closed as not-planned (#18837, #37683 — the
+// second reproduced interactively on a live model) confirm it. `disallowed-tools`
+// was then measured across 9 runs and DOES remove the tool: with the skill active,
+// "Permission to use Read has been denied.", and through a `Task` subagent in the
+// same run, "Read is disabled for this session, in subagents as well as here."
+//
+// `skillTrifectaIssue` therefore takes ONLY the deny list. There is no parameter
+// through which `allowed-tools` could reach it — the strongest form of "a narrow
+// allowed-tools does not reduce the finding" — and the tests below pin the
+// behaviour that would break first if someone re-introduced the old reading.
+
+test("a skill with NO fence holds all three legs, whatever it pre-approved", () => {
+  const f = skillTrifectaIssue(null, claudeCodeDialect);
+  assert.equal(f?.severity, "advisory");
+  assert.equal(f?.fence, "none");
+  assert.match(f?.message ?? "", /No `disallowed-tools:` line/);
+  // The fix travels WITH the finding — a diagnosis with no prescription teaches
+  // the author that narrowing is pointless (the lesson this file learned once).
+  assert.match(f?.message ?? "", /disallowed-tools/);
+  // …and it names the built-ins that supply each leg, so "which one" is answered.
+  assert.deepEqual(f?.legs.private, ["Read", "Grep", "Glob", "Bash"]);
+  assert.deepEqual(f?.legs.untrusted, ["WebFetch", "WebSearch", "Bash"]);
+});
+
+test("🔴 an EMPTY deny list is exactly as exposed as no list — allow-side width is not an input", () => {
+  // `skillTrifectaIssue` has no `allowed-tools` parameter at all, so the only way
+  // to express "declared a lot" vs "declared a little" is the deny list. Both
+  // degenerate deny lists must produce the same exposure; if a future change adds
+  // an allow-side parameter that narrows the legs, this pair diverges.
+  const none = skillTrifectaIssue(null, claudeCodeDialect);
+  const empty = skillTrifectaIssue([], claudeCodeDialect);
+  assert.notEqual(none, null);
+  assert.equal(empty?.severity, none?.severity);
+  assert.equal(empty?.fence, none?.fence);
+  assert.deepEqual(empty?.legs, none?.legs);
+});
+
+test("a fence that closes a WHOLE leg clears the finding (Rule of Two)", () => {
+  // Untrusted-intake and exfiltration share their built-in suppliers, so one line
+  // closes both and leaves only private-data read standing.
+  assert.equal(
+    skillTrifectaIssue(["WebFetch", "WebSearch", "Bash"], claudeCodeDialect),
+    null,
+  );
+  // The other direction: closing private-data read alone is also enough.
+  assert.equal(
+    skillTrifectaIssue(["Read", "Grep", "Glob", "Bash"], claudeCodeDialect),
+    null,
+  );
+});
+
+test("a PARTIAL fence closes nothing and is never graded louder than no fence", () => {
+  const partial = skillTrifectaIssue(["WebFetch"], claudeCodeDialect);
+  assert.equal(partial?.fence, "ineffective");
+  assert.match(partial?.message ?? "", /closes no lethal-trifecta leg/);
+  // WebSearch and Bash still supply both network legs.
+  assert.deepEqual(partial?.legs.untrusted, ["WebSearch", "Bash"]);
+  // 🔴 Severity parity is load-bearing. An ineffective fence has capability ≤ no
+  // fence, so grading it HARDER would repeat the non-monotonicity this detector
+  // was already fixed for once (declaring a contract could only lower the score).
+  const nothing = skillTrifectaIssue(null, claudeCodeDialect);
+  assert.equal(partial?.severity, nothing?.severity);
+});
+
+test("a RESTRICTED deny does not remove the tool: `Bash(curl:*)` leaves the shell", () => {
+  // The mirror of `bashGrantIsUnbounded` on the allow side. Denying one pattern
+  // leaves every other command, so the shell keeps supplying all three legs.
+  const legs = skillFenceLegs(
+    ["WebFetch", "WebSearch", "Bash(curl:*)"],
+    claudeCodeDialect,
+  );
+  assert.ok(legs.exfil.includes("Bash"));
+  assert.notEqual(
+    skillTrifectaIssue(
+      ["WebFetch", "WebSearch", "Bash(curl:*)"],
+      claudeCodeDialect,
+    ),
+    null,
+  );
+});
+
+test("an unreadable block is not a fence, and the message says so", () => {
+  // The salvage would read `WebFetch, WebSearch, Bash` and close two legs. A strict
+  // loader reads no frontmatter at all, so the fence denies nothing — one-directional,
+  // exactly as on the subagent path: a salvage may convict, never acquit.
+  const f = skillTrifectaIssue(
+    ["WebFetch", "WebSearch", "Bash"],
+    claudeCodeDialect,
+    {
+      contractUnreadable: true,
+    },
+  );
+  assert.equal(f?.fence, "none");
+  assert.match(f?.message ?? "", /not valid YAML/);
+});
+
+test("the remedy names only tools THIS harness ships (no Codex `shell` in a CC message)", () => {
+  // `FENCE_SUPPLIERS` carries every dialect's shell name so the check generalizes;
+  // telling a Claude Code author to deny `shell` would be cry-wolf, and would make
+  // the leg unclosable in practice.
+  const f = skillTrifectaIssue(null, claudeCodeDialect);
+  assert.doesNotMatch(f?.message ?? "", /shell/);
+  assert.equal(f?.legs.private.includes("shell"), false);
 });

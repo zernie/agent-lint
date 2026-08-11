@@ -1,13 +1,19 @@
 # lethal-trifecta
 
-Flag a unit — a **subagent** or a **model-invocable skill** — whose declared
-tools simultaneously hold all **three legs** of Simon Willison's _lethal
-trifecta_. A single unit that can do all three is a **prompt-injection
-exfiltration path with no exploit code**: attacker-controllable content flows in,
-reads your private data, and ships it out — all driven by the model, no bug
-required. Same detector `vigiles audit` uses (`lethalTrifectaIssues` in
+Flag a unit — a **subagent** or a **model-invocable skill** — that holds all
+**three legs** of Simon Willison's _lethal trifecta_. A single unit that can do
+all three is a **prompt-injection exfiltration path with no exploit code**:
+attacker-controllable content flows in, reads your private data, and ships it out
+— all driven by the model, no bug required. Same detectors `vigiles audit` uses
+(`lethalTrifectaIssues` / `skillTrifectaIssue` in
 `src/core/lethal-trifecta.ts`); no other plugin linter checks the tool **set** for
 this — competitors lint a single tool's effect, never the dangerous combination.
+
+> ⚠️ **Subagents and skills are read from DIFFERENT fields, because they are
+> different mechanisms.** A subagent's `tools:` really does bound the unit. A
+> skill's `allowed-tools:` does **not** — it is a pre-approval, and the only skill
+> field that removes a tool is `disallowed-tools:`. See
+> [Skills: the fence is `disallowed-tools`](#skills-the-fence-is-disallowed-tools).
 
 ## The three legs
 
@@ -23,11 +29,11 @@ leg C (curl it out) — so `Bash` + any leg-B tool is already all three legs.
 **Meta's Rule of Two**: allow at most two of the three legs in one unit. A unit
 holding all three is the finding.
 
-## What it flags
+## What it flags (subagents)
 
-This is a **capability SET-intersection over the declared contract, not a text
-scan**: it classifies each declared tool into the leg(s) it supplies and fires
-only when all three legs are non-empty.
+For a **subagent** this is a **capability SET-intersection over the declared
+`tools:` contract, not a text scan**: it classifies each declared tool into the
+leg(s) it supplies and fires only when all three legs are non-empty.
 
 ```
 ✗ subagent issue-triager (agents/issue-triager.md): Lethal trifecta: this unit can
@@ -40,9 +46,9 @@ only when all three legs are non-empty.
 
 - **`"hard"`** — an **explicit** contract that names all three legs (a concrete,
   declared exfil path). Reported with `✗`.
-- **`"advisory"`** — an **inherits-all** unit (a subagent with no `tools:` line, or
-  a model-invocable skill with no `allowed-tools:`) that holds every leg only
-  because it inherits everything — a maximal blast radius. Reported with `⚠`.
+- **`"advisory"`** — a unit that holds every leg only because it **inherits**
+  everything: a subagent with no `tools:` line, or a skill with no effective
+  `disallowed-tools:` fence. A maximal blast radius. Reported with `⚠`.
 
 The two severities describe **how the unit got there**, not how much it costs: an
 inherits-all unit is graded exactly like an explicit one (see below), because it
@@ -51,8 +57,9 @@ is strictly the worse of the two.
 ### A contract that doesn't parse is not a contract
 
 If a unit's frontmatter **exists but isn't valid YAML**
-([frontmatter-valid](frontmatter-valid.md)), its declared tool list is read as
-**inherits-all** — the advisory case — and the finding says so:
+([frontmatter-valid](frontmatter-valid.md)), its declared tool list — a subagent's
+`tools:`, a skill's `disallowed-tools:` fence — is read as **inherits-all**, the
+advisory case, and the finding says so:
 
 ```
 ⚠ skill broken: Frontmatter is not valid YAML, so the declared tool list could not
@@ -70,6 +77,138 @@ grading inherits-all like an explicit all-three: presence of a declaration is no
 enforcement of it. **Fix the YAML and the declared list counts again** — the finding
 disappears the moment the block parses.
 
+## Skills: the fence is `disallowed-tools`
+
+A **skill** is not read the way a subagent is, and the difference is not a style
+choice — it is what the platform does.
+
+### `allowed-tools:` pre-approves. It does not restrict.
+
+Claude Code's own documentation, under **"Pre-approve tools for a skill"**:
+
+> The `allowed-tools` field **grants permission** for the listed tools during the
+> turn that invokes the skill … **It does not restrict which tools are available:
+> every tool remains callable**, and your permission settings still govern tools
+> that are not listed. … **To remove tools from Claude's available pool while a
+> skill is active, list them in `disallowed-tools`** in the skill's frontmatter.
+
+Two bug reports say the same thing from the field, both closed by Anthropic as
+_not planned_: [#18837](https://github.com/anthropics/claude-code/issues/18837)
+(Jan 2026) and
+[#37683](https://github.com/anthropics/claude-code/issues/37683) (Mar 2026) — the
+second reproduced **interactively**, on a live model, on a different CLI version,
+with the skill spawning an `Explore` subagent it had told itself never to use.
+Measured here too (`claude -p`, CLI 2.1.227): a skill declaring
+`allowed-tools: WebSearch, WebFetch` read a private file and wrote a new one.
+
+**vigiles used to read `allowed-tools` as a bound, and that was wrong in the
+dangerous direction.** It reported "18 of 38 units hold the trifecta" on a corpus
+where all 38 did, and it credited a narrow `allowed-tools` list with a risk
+reduction that does not exist. That is this tool's own thesis — _a declaration
+present is not a rule enforced_ — violated by this tool. `allowed-tools` is no
+longer an input to this check at all.
+
+### `disallowed-tools:` does restrict — measured
+
+Nine runs, `claude -p`, CLI 2.1.227, scripted mock model, $0. The cleanest control
+is a single run in which the **same tool call succeeds before the skill activates
+and is denied after**:
+
+```
+Permission to use Read has been denied.
+```
+
+and, in that same run, through a `Task` subagent — the route-around that defeats
+`allowed-tools` in #37683:
+
+```
+Error: No such tool available: Read. Read is disabled for this session,
+in subagents as well as here.
+```
+
+Positive controls were established first (without the line, the same `Read`
+succeeds), and the refutations failed: a `bogus-tools:` key blocks nothing, and an
+**unactivated** skill's fence does not apply — the fence is bound to activation,
+not to the file existing.
+
+**Not claimed** (the measurement did not cover it): the interactive app, the Agent
+SDK, tools other than `Read`, narrow `Bash(…)` deny scopes, `mcp__*` names, or the
+docs' "the restriction clears when you send your next message" (a `-p` run is one
+message).
+
+### What the check does
+
+A skill inherits every tool the session grants. So each leg stands **unless every
+built-in that supplies it is denied**:
+
+| Leg                          | Built-ins that must ALL be denied to close it |
+| ---------------------------- | --------------------------------------------- |
+| **A — private-data read**    | `Read`, `Grep`, `Glob`, `Bash`                |
+| **B — untrusted-content in** | `WebFetch`, `WebSearch`, `Bash`               |
+| **C — exfiltration channel** | `WebFetch`, `WebSearch`, `Bash`               |
+
+This list is deliberately **wider** than the per-leg catalogs used for subagents,
+and the asymmetry is the point. On the allow side an unlisted tool maps to no leg
+— that under-states risk, which is the safe direction for a "you are exposed"
+claim. On the deny side the same omission would over-state safety: a leg would
+read as closed because a supplier was forgotten. So `Grep`/`Glob` join `Read`,
+`WebSearch` counts as an exfiltration channel (a query string leaves the machine),
+and the shell is in all three — `curl` fetches attacker content in, `cat` reads
+the secret, `curl --data` ships it out.
+
+A deny entry with a **restriction** does not remove the tool:
+`disallowed-tools: Bash(curl:*)` denies that pattern and leaves the rest of the
+shell — the mirror of how a narrowed `Bash(…)` grant is read on the allow side.
+
+**Stated limit.** This covers the harness's **built-ins**. An MCP server the
+_session_ provides can re-supply a leg the fence closed, and no static read of a
+`SKILL.md` can see the session's MCP config. "Leg closed" therefore means _closed
+among the built-ins_ — the part the author can control from frontmatter — not a
+proof of absence.
+
+### Two states, one grade, two presentations
+
+```
+⚠ 34 of 38 model-invocable skill(s) declare no `disallowed-tools:` fence — each
+  inherits every tool the session grants, so each holds all three legs.
+  `allowed-tools:` does NOT fence a skill (it pre-approves; every tool stays
+  callable), so narrowing it changes nothing here. …
+      food-log-entry, handoff, render-paper, …
+
+⚠ skill half (skills/half/SKILL.md): `disallowed-tools: Read` closes no
+  lethal-trifecta leg — private-data read is still supplied by Grep, Glob, Bash …
+```
+
+- **No fence at all** (`fence: "none"`) is the **ecosystem default** — near enough
+  100% of skills in the wild. Printed once, as **one aggregate line plus the
+  names**. It is one fact about the harness, not N facts about N skills; a section
+  that fires on every repo with a wall of identical text gets muted within a day,
+  and takes the hard findings above it along.
+- **A fence that closes no leg** (`fence: "ineffective"`) keeps its **own line**.
+  It is rare, per-skill, and a real mistake — the author believed they had fenced
+  and had not. Same shape as
+  [disallowed-tools-contract](disallowed-tools-contract.md)'s "this entry blocks
+  nothing".
+
+**Presentation differs; severity and grade do not.** Both are `"advisory"` and
+both count once toward the exposure penalty below. An ineffective fence has
+capability ≤ no fence, so grading it _harder_ would re-create exactly the
+non-monotonicity this rule was already fixed for once.
+
+### The one-line fix
+
+```yaml
+---
+name: food-log-entry
+description: …
+disallowed-tools: WebFetch, WebSearch, Bash # drops legs B and C
+---
+```
+
+Legs B and C share their built-in suppliers, so one line closes both. For a
+research skill that must reach the web, close leg A instead:
+`disallowed-tools: Read, Grep, Glob, Bash`.
+
 ## In `vigiles audit`: graded, but a **ding — not a fail**
 
 A trifecta finding is a **capability PATTERN with no exploit code**, not a
@@ -81,7 +220,10 @@ WebSearch`), so fail-grading such a plugin to **F** would cry wolf. `vigiles aud
 threads that needle with a **capped exposure** penalty:
 
 - **SHOWS** every trifecta unit (hard _and_ inherits-all) in the **Safety** ring
-  and the report — a real, useful heads-up.
+  and the report — a real, useful heads-up. Unfenced skills are shown as **one
+  aggregate line plus their names**, not one line each; the exposure count below
+  still counts **units**, so collapsing the presentation never shrinks the
+  penalty.
 - **DEDUCTS −10 per exposed unit, capped at −30 × the SHARE of the surface
   exposed** — so a trifecta dents the score without a catastrophic F. The
   **Safety** ring scores `100 − min(10 × exposed, 30 × exposed/assessable)`, is
@@ -91,13 +233,19 @@ threads that needle with a **capped exposure** penalty:
 - An **inherits-all (`"advisory"`)** unit is graded **exactly like an explicit
   one**. It holds all three legs implicitly _and every other capability besides_,
   so it cannot cost less than a declared all-three contract. Grading only the
-  explicit case made the score non-monotone in risk: **declaring** an
-  `allowed-tools` contract — a genuine risk reduction — could only ever LOWER the
-  score. Measured on a real 35-skill repo (2026-08-03): Safety read **70** while
-  35/35 units inherited everything (only the 3 declared units counted), and
-  dropped toward **0** after contracts were added everywhere and exposure fell to
-  **17/35**. The tool called the safer configuration strictly worse. Under the
-  capped-exposure model the same two states read **70 → 85**.
+  explicit case made the score non-monotone in risk: **declaring** a tool contract
+  — a genuine risk reduction — could only ever LOWER the score. Measured on a real
+  35-skill repo (2026-08-03): Safety read **70** while 35/35 units inherited
+  everything (only the 3 declared units counted), and dropped toward **0** after
+  contracts were added everywhere and exposure fell to **17/35**. The tool called
+  the safer configuration strictly worse. Under the capped-exposure model the same
+  two states read **70 → 85**.
+- The **only** thing that moves a **skill** out of the exposed set is a
+  `disallowed-tools:` fence that closes a whole leg. Adding or narrowing
+  `allowed-tools:` moves the score by exactly **zero**, because it changes what the
+  skill can do by exactly zero. (Regression-tested: a skill declaring
+  `allowed-tools: Read, Grep` and one declaring every tool in the catalog produce
+  byte-identical findings.)
 
 The deduction lives on the single shared `reportDeductions` → `computeIntegrityScore`
 path, so the audit overall and the plugin-health leaderboard read the SAME number.
@@ -106,9 +254,13 @@ still raise `lethal-trifecta` to `"error"` to gate CI on it independently.
 
 ## High-precision (FP-safe)
 
-Only **well-known, high-signal tools** map to a leg — an unknown tool maps to
-nothing, so a bare unrecognized `mcp__*` never cries wolf. A `Tool(restriction)`
-suffix is stripped to its base name. **User-invoked** skills
+On the **subagent** side, only **well-known, high-signal tools** map to a leg — an
+unknown tool maps to nothing, so a bare unrecognized `mcp__*` never cries wolf. A
+`Tool(restriction)` suffix is stripped to its base name. On the **skill** side the
+FP control is the presentation, not the catalog: the unfenced default is true of
+almost every skill, so it is stated once per harness rather than once per skill
+(see [Two states, one grade, two presentations](#two-states-one-grade-two-presentations)).
+**User-invoked** skills
 (`disable-model-invocation: true`) are excluded — they're picked by an explicit
 command, so they can't be hijacked by attacker content.
 
@@ -132,8 +284,9 @@ exfiltration risk worth blocking.
 
 ## Scope
 
-Subagents (`agents/*.md`, on a harness with subagents) and model-invocable skills
-(`skills/*/SKILL.md`). Skills exist on every harness; the subagent half is gated by
+Subagents (`agents/*.md`, on a harness with subagents) — read from `tools:` — and
+model-invocable skills (`skills/*/SKILL.md`) — read from `disallowed-tools:`, never
+from `allowed-tools:`. Skills exist on every harness; the subagent half is gated by
 the active adapter's `subagents` capability.
 
 ## Why
@@ -147,4 +300,6 @@ risk, and it's decidable from the declared contract — for free, no model.
 
 - [subagent-tool-contract](subagent-tool-contract.md) — verifies the same `tools:`
   rail resolves to real tools.
-- [disallowed-tools-contract](disallowed-tools-contract.md) — the deny-side mirror.
+- [disallowed-tools-contract](disallowed-tools-contract.md) — the SUBAGENT deny-side
+  mirror (`disallowedTools:`); a skill's `disallowed-tools:` fence is read here
+  instead.

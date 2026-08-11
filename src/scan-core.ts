@@ -39,7 +39,10 @@ import {
   type DescriptionBudgetIssue,
 } from "./core/skill-description-budget.js";
 import { verifyMcpToolServers } from "./core/mcp-tool.js";
-import { lethalTrifectaIssues } from "./core/lethal-trifecta.js";
+import {
+  lethalTrifectaIssues,
+  skillTrifectaIssue,
+} from "./core/lethal-trifecta.js";
 import { skillResourceIssues } from "./core/skill-resources.js";
 import { skillMissingFence } from "./core/skill-missing-fence.js";
 import {
@@ -360,7 +363,7 @@ export function scanSkills(
   cls: SurfaceClassifier,
   ctx: SkillScanContext,
 ): ScanSkill[] {
-  const { root, materializeRoot, dialect, sharedDirs } = ctx;
+  const { root, materializeRoot, sharedDirs } = ctx;
   // `sharedDirs` are declared relative to the REPO root (config location), which
   // is `root` for a whole-repo scan but a PARENT when the scan is scoped to a
   // subdir. Resolve them against that, not the scoped subdir.
@@ -394,22 +397,23 @@ export function scanSkills(
       sharedDirs,
       existsSync: ctx.existsSync,
     });
-    // The lethal trifecta is a property of what a unit CAN do, which for a skill is
-    // its declared `allowed-tools` (the CC skill tool contract). Only a model-
-    // invocable skill can be hijacked by attacker content, so a user-invoked one is
-    // excluded. A skill with no `allowed-tools` line inherits all → advisory.
-    const skillTools = parseAgentToolList(md, "allowed-tools");
-    // Whether that list came out of a block a strict loader REJECTS — in which
-    // case it is a salvage, and the trifecta detector must read it as one. See
-    // `contractIsUnreadable`.
+    // The lethal trifecta is a property of what a unit CAN do. For a SKILL that is
+    // NOT its `allowed-tools:` — measured 2026-08-11, and documented by Claude Code
+    // itself: that field PRE-APPROVES the tools it lists ("It does not restrict which
+    // tools are available: every tool remains callable"), so a narrow list bounds
+    // nothing. The one skill field measured to remove a tool from the pool is
+    // `disallowed-tools:` (9 runs; it holds through the subagent boundary too). Read
+    // that, and only that — see `skillTrifectaIssue` for the full measurement and for
+    // why the two fence states are presented differently but graded the same.
+    // Only a model-invocable skill can be hijacked by attacker content, so a
+    // user-invoked one is excluded.
+    const skillFence = parseAgentToolList(md, "disallowed-tools");
+    // Whether that list came out of a block a strict loader REJECTS — a fence inside
+    // frontmatter that does not parse is no fence. See `contractIsUnreadable`.
     const contractUnreadable = contractIsUnreadable(md);
-    // No `allowed-tools:` line (null) → inherits all → wildcard sentinel; an
-    // EXPLICIT empty `[]` means zero tools → no trifecta (don't collapse them).
     const trifecta = userInvoked
       ? null
-      : lethalTrifectaIssues(skillTools ?? ["*"], dialect, {
-          contractUnreadable,
-        });
+      : skillTrifectaIssue(skillFence, ctx.dialect, { contractUnreadable });
     out.push({
       name: fm.name ?? skillName(path),
       // Report the real on-disk path, not the synthetic materialize key (E1).

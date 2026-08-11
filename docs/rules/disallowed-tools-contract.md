@@ -52,6 +52,12 @@ The block-list **inverts** the allow check, so the FP-safe set is different from
 Subagent frontmatter (`agents/*.md` `disallowedTools:`), both the comma-list and
 inline-array forms.
 
+> **Not the same field as a skill's `disallowed-tools:`.** A skill's fence is
+> kebab-case and lives in `SKILL.md`; it is read by
+> [lethal-trifecta](lethal-trifecta.md#skills-the-fence-is-disallowed-tools), which
+> is where a skill's deny list is checked. This rule's typo cross-reference is
+> subagent-only.
+
 ## Why
 
 A deny-list that silently denies nothing is worse than no deny-list — the author
@@ -62,3 +68,6 @@ half of the tool cross-reference, and it's a check no other validator does.
 
 - [subagent-tool-contract](subagent-tool-contract.md) — the allow-list half (the same
   catalog cross-reference, applied to `tools:`).
+- [lethal-trifecta](lethal-trifecta.md#skills-the-fence-is-disallowed-tools) — the
+  SKILL-side deny list (`disallowed-tools:`), the only skill field that removes a
+  tool from the pool.

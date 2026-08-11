@@ -34,6 +34,11 @@
  * footgun note, not a hard defect), an inherits-all trifecta is reported as
  * `"advisory"`; an EXPLICIT all-three contract is the `"hard"` flag.
  *
+ * 🔴 SUBAGENTS ONLY. Everything above is the SUBAGENT reading, where `tools:` is a
+ * documented rail that really does bound the unit. It is NOT how a SKILL works —
+ * a skill's `allowed-tools:` is a PRE-APPROVAL, not a fence. See
+ * {@link skillTrifectaIssue} for the skill path and the measurement behind it.
+ *
  * Pure + ONE detector (one-detector-no-drift) — intended to be reused by `scan`
  * (the read-only audit) and a future `lethal-trifecta` lint rule. The dialect is
  * injected (core ⊄ adapter) so it generalizes across harnesses (Codex's `shell`
@@ -67,6 +72,20 @@ export interface TrifectaLegs {
 export type TrifectaSeverity = "hard" | "advisory";
 
 /**
+ * How much of a fence a SKILL's `disallowed-tools:` actually is — set only on
+ * findings produced by {@link skillTrifectaIssue}, absent on subagent findings.
+ *
+ * - `"none"` — no `disallowed-tools:` line (or an unreadable block, which yields
+ *   the same thing): the skill inherits every tool the session grants. This is
+ *   the DEFAULT state of every skill in the ecosystem, which is why the report
+ *   aggregates it into one line instead of repeating it per skill.
+ * - `"ineffective"` — a `disallowed-tools:` line exists but does not deny every
+ *   built-in supplier of any one leg, so no leg is closed. That one is per-skill:
+ *   an author who believed they had fenced and had not.
+ */
+export type SkillFenceState = "none" | "ineffective";
+
+/**
  * A lethal-trifecta finding — emitted ONLY when all three legs are non-empty (or,
  * for the inherits-all case, when the contract inherits all tools). The `legs`
  * field names the specific tools that supplied each leg, so the report can show
@@ -78,6 +97,12 @@ export interface TrifectaFinding {
   readonly legs: TrifectaLegs;
   /** A ready-to-show, actionable message. */
   readonly message: string;
+  /**
+   * SKILLS ONLY — the fence state behind the finding ({@link SkillFenceState}).
+   * Absent on subagent findings, whose `tools:` rail is a different mechanism.
+   * The report reads it to decide aggregate-vs-per-unit presentation.
+   */
+  readonly fence?: SkillFenceState;
 }
 
 // ---------------------------------------------------------------------------
@@ -452,4 +477,207 @@ export function lethalTrifectaIssues(
     return lethalTrifectaIssues(["*"], dialect, ctx);
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// SKILLS — a different mechanism, and the one this file used to read wrong
+// ---------------------------------------------------------------------------
+//
+// 🔴 THE MEASUREMENT (2026-08-11). A skill's `allowed-tools:` is a PRE-APPROVAL,
+// not a restriction. Claude Code's own docs, §"Pre-approve tools for a skill":
+//
+//   "The `allowed-tools` field grants permission for the listed tools during the
+//    turn that invokes the skill… It does not restrict which tools are available:
+//    every tool remains callable, and your permission settings still govern tools
+//    that are not listed. … To remove tools from Claude's available pool while a
+//    skill is active, list them in `disallowed-tools` in the skill's frontmatter."
+//
+// Confirmed twice from outside this repo: anthropics/claude-code#18837 (Jan 2026)
+// and #37683 (Mar 2026), both closed as not-planned; #37683 reproduces it in
+// INTERACTIVE mode on a live model, so it is not a headless artifact. Reproduced
+// here under `claude -p` (CLI 2.1.227): a skill declaring `WebSearch, WebFetch`
+// read a private file and wrote a new one.
+//
+// `disallowed-tools` WAS then measured, 9 runs, and it DOES restrict. The cleanest
+// control is a single run in which `Read` succeeds BEFORE the skill activates and
+// is denied after it:
+//
+//   "Permission to use Read has been denied."
+//
+// and, through a `Task` subagent in the same run — the route-around that defeats
+// `allowed-tools` in #37683 —
+//
+//   "Error: No such tool available: Read. Read is disabled for this session, in
+//    subagents as well as here."
+//
+// WHAT THAT MEANS FOR THIS CHECK. Reading `allowed-tools` as a bound made the
+// finding UNDERSTATE risk (it reported 18 of 38 units exposed on a corpus where
+// all 38 were) and, worse, CREDITED a narrow `allowed-tools` with a reduction it
+// does not produce — the tool's own "a declaration present is not a rule enforced"
+// thesis, violated by the tool. So the skill path reads `disallowed-tools` and
+// ignores `allowed-tools` entirely.
+//
+// WHY THE SHAPE CHANGED TOO, not just the arithmetic. The naive correction — count
+// every unfenced skill as a per-unit finding — fires on ~100% of every real
+// harness, and a check that fires on the default state of the ecosystem gets muted
+// within a day, taking the true findings with it. So the two states are presented
+// differently, while being GRADED IDENTICALLY (they are the same capability; see
+// `trifectaExposure`):
+//
+//   - `fence: "none"` — the default. One AGGREGATE line for the whole surface
+//     ("N of M skills declare no tool fence") plus the skill names as detail. It
+//     is one fact about the harness, not N facts about N skills, and stating it
+//     once is what a reader can act on.
+//   - `fence: "ineffective"` — a `disallowed-tools:` that closes no leg. Rare,
+//     per-skill, and a genuine mistake (the author believed they had fenced), so
+//     it keeps its own line — the same shape as `disallowed-tools-contract`'s
+//     "this entry blocks nothing".
+//
+// Presentation differs; severity does NOT. Both are `"advisory"` and both count
+// once toward `trifectaExposure`. Making the ineffective-fence case LOUDER would
+// repeat the exact non-monotonicity this file was already fixed for once: an
+// ineffective fence has capability ≤ no fence, so it must never grade worse.
+
+/**
+ * Built-in tools that supply each leg, for the DENY direction — a leg is closed
+ * only when EVERY name here is denied.
+ *
+ * 🔴 This is deliberately a SUPERSET of the allow-direction catalogs above, and the
+ * asymmetry is the point. In the allow direction an unlisted tool maps to no leg,
+ * which UNDERSTATES risk — high precision, don't cry wolf. In the deny direction the
+ * same omission would OVERSTATE safety: a leg would read as closed because we forgot
+ * to require one of its suppliers. So `Grep`/`Glob` join `Read` under private-data
+ * read (a grep of `.env` returns its contents), `WebSearch` joins `WebFetch` under
+ * exfiltration (a query string leaves the machine), and the shell is in all three —
+ * `curl` fetches attacker content in, `cat` reads the secret, `curl --data` ships it.
+ *
+ * STATED LIMIT, also in docs/rules/lethal-trifecta.md: this covers the harness's own
+ * built-ins. An MCP server the SESSION provides can re-supply a leg the fence closed,
+ * and no static read of a SKILL.md can see the session's MCP config. A closed leg
+ * therefore means "closed among the built-ins", which is what the author can actually
+ * control from frontmatter — not a proof of absence.
+ */
+const FENCE_SUPPLIERS: Record<TrifectaLeg, readonly string[]> = {
+  private: ["Read", "Grep", "Glob", ...LEG_BASH_DUAL],
+  untrusted: ["WebFetch", "WebSearch", ...LEG_BASH_DUAL],
+  exfil: ["WebFetch", "WebSearch", ...LEG_BASH_DUAL],
+};
+
+/**
+ * The suppliers of a leg that THIS harness actually ships, so the remedy names
+ * tools the author can really deny. `FENCE_SUPPLIERS` carries every dialect's
+ * shell name (`Bash` and Codex's `shell`); telling a Claude Code author to deny
+ * `shell` would be cry-wolf, and would make the leg unclosable in practice.
+ *
+ * Fallback when the dialect recognizes NONE of them: keep the unfiltered list. An
+ * unrecognized harness must not silently clear the check by having a catalog we
+ * can't match — the safe failure is "still open", not "closed".
+ */
+function fenceSuppliers(
+  leg: TrifectaLeg,
+  dialect: HarnessDialect,
+): readonly string[] {
+  const catalog = new Set(dialect.builtinAgentTools);
+  const known = FENCE_SUPPLIERS[leg].filter((t) => catalog.has(t));
+  return known.length > 0 ? known : FENCE_SUPPLIERS[leg];
+}
+
+/** The legs a `disallowed-tools:` list leaves standing, naming the suppliers. */
+export function skillFenceLegs(
+  disallowed: readonly string[],
+  dialect: HarnessDialect,
+): TrifectaLegs {
+  // Only an UNRESTRICTED deny removes a tool: `disallowed-tools: Bash(curl:*)`
+  // denies that pattern and leaves the rest of the shell. Conservative by design,
+  // and the mirror of `bashGrantIsUnbounded` on the allow side.
+  const denied = new Set(
+    disallowed
+      .filter((raw) => restriction(raw) === null)
+      .map((raw) => baseTool(raw)),
+  );
+  const remaining = (leg: TrifectaLeg): string[] =>
+    fenceSuppliers(leg, dialect).filter((t) => !denied.has(t));
+  return {
+    private: remaining("private"),
+    untrusted: remaining("untrusted"),
+    exfil: remaining("exfil"),
+  };
+}
+
+/** The one-line remedy, quoted in every skill finding so it is never just a diagnosis. */
+function fenceFix(dialect: HarnessDialect): string {
+  const list = (leg: TrifectaLeg): string =>
+    fenceSuppliers(leg, dialect).join(", ");
+  return (
+    "Fix in one line: add a `disallowed-tools:` line naming every built-in that " +
+    `supplies a leg the skill does not need — private-data read = ${list("private")}; ` +
+    `untrusted intake = ${list("untrusted")}; exfiltration = ${list("exfil")}. ` +
+    "Measured: `disallowed-tools` removes the tool from the pool while the skill " +
+    "is active, in subagents too."
+  );
+}
+
+const PREAPPROVAL_NOTE =
+  "`allowed-tools:` does NOT fence a skill — it PRE-APPROVES the tools it lists " +
+  '("It does not restrict which tools are available: every tool remains callable" ' +
+  "— Claude Code docs), so however narrow it is, the skill still holds every leg.";
+
+/**
+ * The lethal-trifecta finding for a MODEL-INVOCABLE SKILL, computed from its
+ * `disallowed-tools:` — the only skill frontmatter field measured to remove a
+ * tool. `allowed-tools:` is not an input here, on purpose: it is a pre-approval,
+ * and treating it as a bound is the defect this function exists to correct (see
+ * the block comment above for the measurement).
+ *
+ * @param disallowed `disallowed-tools:` as declared, or `null` when the line is
+ *   absent — the two are NOT the same: an explicit empty list still denies nothing,
+ *   but the message should not tell an author who wrote the line that they didn't.
+ * @returns `null` once the fence closes at least one leg (Rule of Two satisfied,
+ *   among the built-ins — see {@link FENCE_SUPPLIERS} for the stated limit).
+ */
+export function skillTrifectaIssue(
+  disallowed: readonly string[] | null,
+  dialect: HarnessDialect,
+  ctx: TrifectaContext = {},
+): TrifectaFinding | null {
+  // An unreadable block is not a fence: a strict loader reads no frontmatter at
+  // all, so whatever `disallowed-tools:` it appears to contain denies nothing.
+  const declared = ctx.contractUnreadable ? null : disallowed;
+  const legs = skillFenceLegs(declared ?? [], dialect);
+  const open = (["private", "untrusted", "exfil"] as const).filter(
+    (leg) => legs[leg].length > 0,
+  );
+  if (open.length < 3) return null; // a whole leg is closed — Rule of Two holds
+
+  if (declared === null || declared.length === 0) {
+    return {
+      severity: "advisory",
+      legs,
+      fence: "none",
+      message: ctx.contractUnreadable
+        ? "Frontmatter is not valid YAML, so this skill declares no readable fence — a " +
+          "strict loader rejects the block, and `disallowed-tools:` inside a block that " +
+          "does not parse denies nothing. The skill inherits every tool the session " +
+          "grants and holds all three lethal-trifecta legs (read private data, ingest " +
+          "untrusted content, exfiltrate). Fix the YAML first, then fence. " +
+          PREAPPROVAL_NOTE
+        : "No `disallowed-tools:` line, so this skill inherits every tool the session " +
+          "grants and holds all three lethal-trifecta legs (read private data, ingest " +
+          "untrusted content, exfiltrate). " +
+          PREAPPROVAL_NOTE +
+          " " +
+          fenceFix(dialect),
+    };
+  }
+  return {
+    severity: "advisory",
+    legs,
+    fence: "ineffective",
+    message:
+      `\`disallowed-tools: ${declared.join(", ")}\` closes no lethal-trifecta leg — ` +
+      `private-data read is still supplied by ${legs.private.join(", ")}, untrusted ` +
+      `intake by ${legs.untrusted.join(", ")}, exfiltration by ${legs.exfil.join(", ")}. ` +
+      "A leg is closed only when EVERY built-in that supplies it is denied. " +
+      fenceFix(dialect),
+  };
 }

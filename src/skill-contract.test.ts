@@ -113,11 +113,15 @@ test("skillContract: an UNDECLARED skill is a finding, not an empty contract", (
 
   assert.equal(c.undeclared, true);
   assert.deepEqual([...c.declared], []);
-  // Must NOT pass vacuously: inheriting every tool is the widest surface, and
-  // reporting it as "no violations" would present it as the cleanest.
+  // Must NOT pass vacuously: nothing was claimed, so there is no surface for the
+  // run to stay inside, and "no violations" would present that as the cleanest.
   const r = c.surface[0].eval(trace(["Bash"]));
   assert.equal(r.pass, false);
-  assert.match(r.message, /inherits EVERY tool/);
+  assert.match(r.message, /no declared surface for a run to stay inside/);
+  // …and it must NOT promise enforcement. `allowed-tools:` pre-approves; it does
+  // not fence (measured 2026-08-11 — see src/core/lethal-trifecta.ts). A passing
+  // contract tests author DISCIPLINE, not that the skill COULD NOT have gone wider.
+  assert.match(r.message, /pre-approves, every tool stays callable/);
   cleanupTmpDir(dir);
 });
 

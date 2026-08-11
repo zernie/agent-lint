@@ -301,10 +301,12 @@ function structure(r: ScanReport): CategoryScore {
 
 /**
  * SAFETY — fed by the STATIC lethal-trifecta check (`report.trifectaFindings`), a
- * GRADED ring. EVERY unit holding all three capability legs counts, whether the
- * contract NAMED them (`"hard"`) or INHERITED them (`"advisory"` — no `tools:` /
- * `allowed-tools:` line, so it holds all three legs implicitly AND every other
- * capability besides). Grading only the explicit case made the ring non-monotone:
+ * GRADED ring. EVERY unit holding all three capability legs counts, whether a
+ * subagent's `tools:` NAMED them (`"hard"`) or the unit INHERITED them
+ * (`"advisory"` — a subagent with no `tools:` line, or a skill with no
+ * `disallowed-tools:` fence, which is every skill by default: `allowed-tools:` is
+ * a pre-approval and restricts nothing). Grading only the explicit case made the
+ * ring non-monotone:
  * declaring a tool contract — a genuine risk REDUCTION — could only ever lower the
  * score. The penalty is the shared {@link trifectaExposure} (capped against the
  * share of the surface exposed), the SAME number `reportDeductions` sums into the
@@ -335,10 +337,27 @@ function safety(r: ScanReport): CategoryScore {
   }
   // NAME the inherited ones: they're both the worst (every capability, not just
   // the three legs) and the cheapest to fix — declare a contract that drops a leg.
+  //
+  // EXCEPT the unfenced skills, which collapse into ONE line. A skill's
+  // `allowed-tools:` pre-approves rather than restricts (measured 2026-08-11), so
+  // EVERY skill without a `disallowed-tools:` line is in this state — naming them
+  // one at a time would bury the subagent findings under a list as long as the
+  // skill corpus. Same reasoning as the report section; see `trifectaLines`.
+  const unfenced = r.trifectaFindings.filter(
+    (f) => f.kind === "skill" && f.finding.fence === "none",
+  );
   for (const f of r.trifectaFindings) {
     if (f.finding.severity !== "advisory") continue;
+    if (unfenced.includes(f)) continue;
     findings.push(
-      `${f.name} inherits all tools — the "lethal trifecta" (reads data, reaches the web, runs commands) plus every other capability, so a prompt injection could exfiltrate secrets`,
+      f.kind === "skill"
+        ? `${f.name}: ${f.finding.message}`
+        : `${f.name} inherits all tools — the "lethal trifecta" (reads data, reaches the web, runs commands) plus every other capability, so a prompt injection could exfiltrate secrets`,
+    );
+  }
+  if (unfenced.length > 0) {
+    findings.push(
+      `${String(unfenced.length)} skill(s) declare no \`disallowed-tools:\` fence, so each inherits every tool the session grants — reads data, reaches the web, runs commands. \`allowed-tools:\` pre-approves, it does not restrict, so narrowing it does not reduce this; one \`disallowed-tools:\` line per skill drops a leg.`,
     );
   }
   return {

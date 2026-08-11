@@ -1397,14 +1397,27 @@ test("scanPlugin reports an inherits-all subagent trifecta as ADVISORY", () => {
   cleanupTmpDir(dir);
 });
 
-test("scanPlugin flags a model-invocable skill's allowed-tools trifecta; excludes user-invoked", () => {
+// ---------------------------------------------------------------------------
+// A SKILL's trifecta is read off `disallowed-tools:`, NOT `allowed-tools:`
+//
+// 🔴 The defect these exist for (measured 2026-08-11). `allowed-tools:` is a
+// PRE-APPROVAL — Claude Code's docs: "It does not restrict which tools are
+// available: every tool remains callable" — confirmed by anthropics/claude-code
+// #18837 and #37683 (both closed not-planned; #37683 reproduces it interactively
+// on a live model). Reading it as a bound made the finding UNDERSTATE risk (18 of
+// 38 units reported exposed on a corpus where all 38 were) and CREDIT a narrow
+// list with a reduction it does not produce. `disallowed-tools:` WAS measured — 9
+// runs — and does remove the tool, in subagents as well.
+// ---------------------------------------------------------------------------
+
+test("a skill with NO disallowed-tools fence holds all three legs; user-invoked excluded", () => {
   const dir = makeTmpDir("scan-trifecta-skill");
   write(
     dir,
     "skills/leaky/SKILL.md",
     "---\nname: leaky\ndescription: A model-invocable skill that does many things here\nallowed-tools: Read, WebFetch\n---\n# leaky\n",
   );
-  // Same dangerous contract but user-invoked → cannot be hijacked → excluded.
+  // Same shape but user-invoked → cannot be hijacked by attacker content → excluded.
   write(
     dir,
     "skills/manual/SKILL.md",
@@ -1413,12 +1426,99 @@ test("scanPlugin flags a model-invocable skill's allowed-tools trifecta; exclude
   const r = scanPlugin(dir);
   const leaky = r.skills.find((s) => s.name === "leaky");
   const manual = r.skills.find((s) => s.name === "manual");
-  assert.equal(leaky?.trifecta?.severity, "hard");
+  assert.equal(leaky?.trifecta?.severity, "advisory");
+  assert.equal(leaky?.trifecta?.fence, "none");
+  assert.match(leaky?.trifecta?.message ?? "", /No `disallowed-tools:` line/);
   assert.equal(manual?.trifecta, null, "user-invoked skill is excluded");
   assert.ok(
     r.trifectaFindings.some((t) => t.name === "leaky" && t.kind === "skill"),
   );
   assert.ok(!r.trifectaFindings.some((t) => t.name === "manual"));
+  cleanupTmpDir(dir);
+});
+
+test("🔴 a NARROW allowed-tools does not reduce the finding (pre-approval, not a fence)", () => {
+  // The whole point of the retarget, pinned. `Read, Grep` names no untrusted-intake
+  // and no exfil tool at all — under the old reading that scored CLEAN. It must not,
+  // because the session still grants WebFetch/Bash and the skill can still call them.
+  // If this ever goes back to `null`, the pre-approval misreading has returned.
+  const dir = makeTmpDir("scan-trifecta-narrow-allowed");
+  write(
+    dir,
+    "skills/narrow/SKILL.md",
+    "---\nname: narrow\ndescription: A model-invocable skill declaring a very narrow tool list\nallowed-tools: Read, Grep\n---\n# narrow\n",
+  );
+  // …and the WIDEST possible `allowed-tools` scores identically, because the field
+  // is not an input at all: same severity, same fence state, same legs.
+  write(
+    dir,
+    "skills/wide/SKILL.md",
+    "---\nname: wide\ndescription: A model-invocable skill declaring every tool it could ever want\nallowed-tools: Read, Grep, Glob, Bash, WebFetch, WebSearch\n---\n# wide\n",
+  );
+  const r = scanPlugin(dir);
+  const narrow = r.skills.find((s) => s.name === "narrow")?.trifecta;
+  const wide = r.skills.find((s) => s.name === "wide")?.trifecta;
+  assert.notEqual(narrow, null, "a narrow allowed-tools is NOT a fence");
+  assert.equal(narrow?.severity, wide?.severity);
+  assert.equal(narrow?.fence, wide?.fence);
+  assert.deepEqual(narrow?.legs, wide?.legs);
+  assert.equal(r.trifectaFindings.filter((t) => t.kind === "skill").length, 2);
+  cleanupTmpDir(dir);
+});
+
+test("a disallowed-tools that CLOSES a leg clears the finding", () => {
+  const dir = makeTmpDir("scan-trifecta-fenced");
+  // Denying every built-in supplier of untrusted-intake AND exfiltration leaves only
+  // private-data read standing → Rule of Two holds → no finding.
+  write(
+    dir,
+    "skills/fenced/SKILL.md",
+    "---\nname: fenced\ndescription: A model-invocable skill that fences off the network entirely\ndisallowed-tools: WebFetch, WebSearch, Bash\n---\n# fenced\n",
+  );
+  const r = scanPlugin(dir);
+  assert.equal(r.skills.find((s) => s.name === "fenced")?.trifecta, null);
+  assert.equal(r.trifectaFindings.length, 0);
+  cleanupTmpDir(dir);
+});
+
+test("a PARTIAL disallowed-tools closes no leg and names the suppliers still standing", () => {
+  const dir = makeTmpDir("scan-trifecta-partial-fence");
+  // Denying `Read` alone leaves Grep/Glob/Bash on the private-data leg — an author
+  // who believed they had fenced and had not. Per-skill, keeps its own line.
+  write(
+    dir,
+    "skills/half/SKILL.md",
+    "---\nname: half\ndescription: A model-invocable skill that denies exactly one read tool\ndisallowed-tools: Read\n---\n# half\n",
+  );
+  const r = scanPlugin(dir);
+  const f = r.skills.find((s) => s.name === "half")?.trifecta;
+  assert.equal(f?.fence, "ineffective");
+  assert.equal(f?.severity, "advisory", "never LOUDER than declaring no fence");
+  assert.match(f?.message ?? "", /closes no lethal-trifecta leg/);
+  assert.deepEqual(f?.legs.private, ["Grep", "Glob", "Bash"]);
+  cleanupTmpDir(dir);
+});
+
+test("the report AGGREGATES unfenced skills into one line but still counts every unit", () => {
+  // A per-skill line for the ecosystem DEFAULT would print on ~100% of harnesses,
+  // and a section that always fires gets muted — taking the hard findings with it.
+  const dir = makeTmpDir("scan-trifecta-aggregate");
+  for (const n of ["alpha", "beta", "gamma"]) {
+    write(
+      dir,
+      `skills/${n}/SKILL.md`,
+      `---\nname: ${n}\ndescription: A model-invocable skill with no tool fence declared at all\n---\n# ${n}\n`,
+    );
+  }
+  const r = scanPlugin(dir);
+  const text = formatScanReport(r);
+  assert.equal(r.trifectaFindings.length, 3, "every unit is still a finding");
+  // The header counts UNITS (3), not the lines the aggregate collapsed them into.
+  assert.match(text, /Lethal trifecta \(prompt-injection exfil risk\) \(3\)/);
+  assert.match(text, /3 of 3 model-invocable skill\(s\) declare no/);
+  assert.match(text, /alpha, beta, gamma/);
+  // …and it says WHY narrowing `allowed-tools` is not the fix.
+  assert.match(text, /`allowed-tools:` does NOT fence a skill/);
   cleanupTmpDir(dir);
 });
 
@@ -1478,25 +1578,30 @@ test("trifecta detector is dialect-injected — works under a non-CC layout", ()
 // strict loader yields nothing at all, which is inherits-all: all three legs.
 const UNCLOSED_TOOLS = "[Read, Bash";
 
-test("a skill whose allowed-tools is MALFORMED scores as inherits-all, not as the salvage", () => {
+test("a skill whose FENCE is in a malformed block is not credited with it", () => {
   const dir = makeTmpDir("scan-malformed-contract-skill");
+  // The same defect, retargeted: `disallowed-tools: [WebFetch, WebSearch, Bash` is
+  // an unclosed flow array. The lenient salvage yields exactly those three names,
+  // which would close two whole legs and score CLEAN — but a strict loader reads no
+  // frontmatter at all, so the fence denies nothing. A fence that does not parse is
+  // not a fence.
   write(
     dir,
     "skills/broken/SKILL.md",
-    `---\nname: broken\ndescription: A model-invocable skill whose frontmatter does not parse\nallowed-tools: ${UNCLOSED_TOOLS}\n---\n# broken\n`,
+    `---\nname: broken\ndescription: A model-invocable skill whose frontmatter does not parse\ndisallowed-tools: [WebFetch, WebSearch, Bash\n---\n# broken\n`,
   );
   const r = scanPlugin(dir);
   const skill = r.skills.find((s) => s.name === "broken");
-  assert.equal(
-    skill?.trifecta?.severity,
-    "advisory",
-    "an unreadable contract is scored as inherits-all, which holds every leg",
+  assert.equal(skill?.trifecta?.severity, "advisory");
+  assert.equal(skill?.trifecta?.fence, "none", "a salvaged fence is no fence");
+  // …and the finding SAYS why, so the author doesn't read "no disallowed-tools
+  // line" on a file that plainly has one.
+  assert.match(skill?.trifecta?.message ?? "", /not valid YAML/);
+  assert.doesNotMatch(
+    skill?.trifecta?.message ?? "",
+    /No `disallowed-tools:` line/,
   );
-  // …and the finding SAYS why the grade moved, so the author doesn't read
-  // "no explicit tools" on a file that plainly declares them.
-  assert.match(skill.trifecta?.message ?? "", /not valid YAML/);
-  assert.match(skill.trifecta?.message ?? "", /INHERITS-ALL/);
-  // The two paths now agree: the same file is reported by frontmatter-valid.
+  // The two paths agree: the same file is reported by frontmatter-valid.
   assert.ok(
     r.malformedFrontmatter.some((i) => i.path.includes("skills/broken")),
     "frontmatter-valid reports the same block the scorer refused to trust",
@@ -1547,13 +1652,14 @@ test("a SALVAGED all-three contract still convicts — the refusal is one-direct
 });
 
 test("a VALID narrow contract is unaffected — the refusal is scoped to unparseable blocks", () => {
-  // Control. The same two tools, in a block that parses, must still score clean:
-  // Read + Bash is private + exfil with no untrusted leg (Rule of Two).
+  // Control. The same declarations in a block that PARSES must score clean: for the
+  // subagent, Read + Bash is private + exfil with no untrusted leg (Rule of Two);
+  // for the skill, a fence that really denies the whole network leg.
   const dir = makeTmpDir("scan-valid-contract-control");
   write(
     dir,
     "skills/fine/SKILL.md",
-    "---\nname: fine\ndescription: A model-invocable skill whose frontmatter parses cleanly\nallowed-tools: [Read, Bash]\n---\n# fine\n",
+    "---\nname: fine\ndescription: A model-invocable skill whose frontmatter parses cleanly\ndisallowed-tools: [WebFetch, WebSearch, Bash]\n---\n# fine\n",
   );
   write(
     dir,
