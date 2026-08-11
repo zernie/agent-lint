@@ -45,17 +45,15 @@ import {
 
 // Mirrors src/test-coverage.ts constants. VALUES are re-declared, never imported
 // — test-coverage.ts pulls in node:fs/glob, and this twin must stay browser-safe.
-const EVAL_SUFFIX = ".eval.mjs";
+// The paid tier by INFIX, not by full suffix: `.eval.ts` must not fall into the
+// free branch and get run on every push. See the reasoning in test-coverage.ts.
+const EVAL_INFIX = ".eval.";
 
 const DEFAULT_TEST_SUFFIXES = [
-  ".harness.mjs",
-  EVAL_SUFFIX,
-  ".test.ts",
-  ".test.mts",
-  ".test.cts",
-  ".test.js",
-  ".test.mjs",
-  ".test.cjs",
+  ".harness.ts", ".harness.mts", ".harness.cts",
+  ".harness.js", ".harness.mjs", ".harness.cjs",
+  ".eval.ts", ".eval.mts", ".eval.cts",
+  ".eval.js", ".eval.mjs", ".eval.cjs",
 ] as const;
 
 const IGNORE_MARKER = "vigiles:ignore-test";
@@ -284,11 +282,11 @@ export function findUntestedSurfacesInFiles(
     decisions: union.decisions,
     harness: tierOf(
       considered,
-      tests.filter((t) => !t.path.endsWith(EVAL_SUFFIX)),
+      tests.filter((t) => !basename(t.path).includes(EVAL_INFIX)),
     ),
     evals: tierOf(
       considered,
-      tests.filter((t) => t.path.endsWith(EVAL_SUFFIX)),
+      tests.filter((t) => basename(t.path).includes(EVAL_INFIX)),
     ),
   };
 }

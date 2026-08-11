@@ -228,18 +228,52 @@ export interface TestCoverageOptions {
 // Internals
 // ---------------------------------------------------------------------------
 
-/** The REAL-MODEL tier's suffix — the one file kind that costs money to run. */
-const EVAL_SUFFIX = ".eval.mjs";
+/**
+ * The REAL-MODEL tier, by INFIX — the one file kind that costs money to run.
+ *
+ * 🔴 IT USED TO BE THE FULL SUFFIX `.eval.mjs`, and that was a money hazard the
+ * moment TypeScript was accepted: `foo.eval.ts` would have fallen into the
+ * `harness` branch, so a file that spends real model calls would have been
+ * classified as the free deterministic tier and run on every push, in CI. Not a
+ * naming detail — the tier split is the only thing standing between a scheduled
+ * paid run and a per-push one.
+ */
+const EVAL_INFIX = ".eval.";
 
+/** Every extension Node executes directly. `.mts`/`.cts` are real (TS 4.7+) and
+ * Node 22 strips their types with no toolchain — measured, not assumed. */
+const RUNNABLE_EXTS = "{ts,mts,cts,js,mjs,cjs}";
+
+/**
+ * 🔴 `*.test.*` USED TO BE HERE, AND REMOVING IT IS THE POINT.
+ *
+ * Those six entries matched the default patterns of vitest and jest EXACTLY
+ * (read out of the installed packages, not from memory):
+ *
+ *   vitest  **\/*.{test,spec}.?(c|m)[jt]s?(x)
+ *   jest    **\/?(*.)+(spec|test).?([mc])[jt]s?(x)
+ *           **\/__tests__\/**\/*.?([mc])[jt]s?(x)   ← everything in that dir
+ *
+ * vigiles never RAN those files, but it CREDITED them — so an author writing a
+ * skill test reasonably named it `foo.test.mjs`, and then `npx vitest` ran it.
+ * A skill test calls `runHarnessTest`/`measureTriggerRate`: it spawns a model and
+ * SPENDS MONEY, silently, on every push. Measured: a spike put
+ * `.claude/skills/foo/foo.test.mjs` in a bare project and plain `npx vitest run`
+ * executed it — the "it lives under a dot-directory so nothing else will see it"
+ * assumption is false.
+ *
+ * With those entries gone the guarantee becomes one sentence a reader can hold:
+ * NOTHING VIGILES RECOGNISES IS MATCHED BY A DEFAULT VITEST OR JEST RUN.
+ *
+ * ⚠️ BREAKING: a repo whose hook is covered by an ordinary `pre-edit.test.ts`
+ * loses that credit. The migration is a rename, and the untested finding prints
+ * the exact path. Taken deliberately over the alternative — keeping the entries
+ * for hooks/agents and dropping them for skills — because a rule with a per-kind
+ * exception is what this file just spent a day removing.
+ */
 const DEFAULT_TEST_GLOBS = [
-  "**/*.harness.mjs",
-  `**/*${EVAL_SUFFIX}`,
-  "**/*.test.ts",
-  "**/*.test.mts",
-  "**/*.test.cts",
-  "**/*.test.js",
-  "**/*.test.mjs",
-  "**/*.test.cjs",
+  `**/*.harness.${RUNNABLE_EXTS}`,
+  `**/*.eval.${RUNNABLE_EXTS}`,
 ] as const;
 
 const DEFAULT_IGNORE = [
@@ -495,7 +529,7 @@ function partitionTests(tests: readonly PreparedTest[]): {
   const harness: PreparedTest[] = [];
   const evals: PreparedTest[] = [];
   for (const t of tests)
-    (t.path.endsWith(EVAL_SUFFIX) ? evals : harness).push(t);
+    (basename(t.path).includes(EVAL_INFIX) ? evals : harness).push(t);
   return { harness, evals };
 }
 

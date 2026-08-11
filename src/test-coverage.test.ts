@@ -342,19 +342,55 @@ test("tiers split at discovery: a harness-only skill is NOT evaluated, and vice 
   cleanupTmpDir(dir);
 });
 
-test("a `*.test.ts` is a HARNESS, never an eval (it spends no model calls)", () => {
+test("a `*.test.ts` is NOT a vigiles test — it is the one name a foreign runner claims", () => {
+  // INVERSION, 2026-08-11. This used to assert the opposite: `*.test.*` counted as
+  // the deterministic tier. It was removed, and the reason is money.
+  //
+  // vigiles never RAN those files, but crediting them made the name reasonable —
+  // so an author writes `skills/foo/foo.test.mjs`, and then `npx vitest` runs it,
+  // because that name matches vitest's and jest's DEFAULT patterns exactly (read
+  // out of the installed packages). A skill test calls runHarnessTest /
+  // measureTriggerRate: it spawns a model. The accident is a silent bill, on every
+  // push, in CI. Measured in a spike: a bare project with that file, plain
+  // `npx vitest run`, and it executed — a dot-directory does not hide it.
   const dir = makeTmpDir("cov-tier-ts");
   write(dir, "skills/foo/SKILL.md", skill("foo"));
-  // Colocated, since placement is what counts — a `.test.ts` in a far-off suite
-  // covers nothing regardless of which tier it would land in.
   write(dir, "skills/foo/foo.test.ts", 'import "./SKILL.md";\n');
   const r = findUntestedSurfaces({ basePath: dir });
-  assert.equal(r.untested.length, 0, "colocated test covers the union");
-  assert.equal(r.harness.untested.length, 0, "…and the deterministic tier");
+  assert.deepEqual(r.untested.map((s) => s.name), ["foo"]);
+  cleanupTmpDir(dir);
+});
+
+test("…and the same file renamed to `.harness.ts` DOES count — TypeScript is first-class", () => {
+  // The quiet half, and a feature in its own right: `.harness.ts` matched NOTHING
+  // before, so a TypeScript project got no credit for a test it had written. Node
+  // 22 runs `.ts`/`.mts`/`.cts` directly (type stripping, no toolchain) — measured.
+  const dir = makeTmpDir("cov-tier-ts-ok");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  write(dir, "skills/foo/foo.harness.ts", "const n: number = 1;\n");
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(r.untested.map((s) => s.name), []);
+  assert.deepEqual(r.harness.untested.map((s) => s.name), []);
+  // …and it is the FREE tier: nothing has measured firing.
+  assert.deepEqual(r.evals.untested.map((s) => s.name), ["foo"]);
+  cleanupTmpDir(dir);
+});
+
+test("🔴 `foo.eval.ts` is the PAID tier — the split is by infix, not by `.eval.mjs`", () => {
+  // The hazard that arrives WITH TypeScript support if the split is left alone:
+  // the old test was `path.endsWith(".eval.mjs")`, so `foo.eval.ts` would have
+  // landed in the harness branch — a file that spends real model calls, classified
+  // as the free tier and run on every push. Accepting TS without this is worse than
+  // not accepting it.
+  const dir = makeTmpDir("cov-eval-ts");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  write(dir, "skills/foo/foo.eval.ts", "const n: number = 1;\n");
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(r.evals.untested.map((s) => s.name), [], "counted as the PAID tier");
   assert.deepEqual(
-    r.evals.untested.map((s) => s.name),
+    r.harness.untested.map((s) => s.name),
     ["foo"],
-    "but firing is still unmeasured — a .test.ts cannot answer that",
+    "and NOT as the free one — an eval must never be mistaken for a per-push test",
   );
   cleanupTmpDir(dir);
 });
