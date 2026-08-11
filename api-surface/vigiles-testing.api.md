@@ -306,6 +306,9 @@ export interface CheckResult {
 export const claudeEvalDriver: EvalDriver;
 
 // @public
+export function commandsIn(md: string, matching: RegExp): DocCommand[];
+
+// @public
 export function compareArms(report: EvalReport, baseline: string, arm: string, metric: string, alpha?: number): Comparison | null;
 
 // @public
@@ -363,6 +366,12 @@ export type DiffStatus = "regressed" | "improved" | "unchanged";
 
 // @public
 export function diffToJUnit(diff: BaselineDiff): string;
+
+// @public
+export interface DocCommand {
+    readonly line: number;
+    readonly text: string;
+}
 
 // @public
 export function egressHosts(r: HasEgress): string[];
@@ -669,6 +678,12 @@ export interface ModelTurn {
     readonly text?: string;
     readonly tool?: string;
 }
+
+// @public
+export function mustInclude(fragment: string, why: string): Check<readonly DocCommand[]>;
+
+// @public
+export function mustNotInclude(fragment: string, why: string): Check<readonly DocCommand[]>;
 
 // @public
 export function notTool(name: string, args?: ArgMatcher): Check<Trace>;
