@@ -109,6 +109,12 @@ export * from "./tool-stub.js";
 // from `vigiles/claude-code` (or your harness's package). See
 // `research/code-adapter-architecture.md`.
 export { runHarnessTest, runHarness } from "./harness-test.js";
+// A document's own rule about its own COMMANDS, made checkable. vigiles cannot
+// infer "always pass -g" from prose; what was missing was a cheap way to declare
+// it — measured at ~95 lines of markdown parsing around ~5 lines of rule, which
+// is why nobody wrote the check and the rule stayed prose.
+export { commandsIn, mustInclude, mustNotInclude } from "./doc-commands.js";
+export type { DocCommand } from "./doc-commands.js";
 // A skill's own `allowed-tools:` frontmatter, read back as checks — the wiring
 // from a declaration to the existing check vocabulary, not new machinery.
 export { skillContract } from "./skill-contract.js";
