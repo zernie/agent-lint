@@ -219,11 +219,18 @@ export interface TestCoverageOptions {
   /** Globs of test files that count as coverage. */
   readonly testGlobs?: readonly string[];
   /**
-   * `testExtension` from `.vigilesrc.json` — which extension a GENERATED test
-   * gets. Detection (a tsconfig.json, a typescript dependency) decides by
-   * default; this field exists only to disagree with it. Deliberately NOT written
-   * by `init`: a value recorded at initialisation goes stale in silence when the
-   * project migrates, while detection re-runs every time.
+   * Which extension a GENERATED test gets. Detection (a tsconfig.json, a
+   * typescript dependency) decides by default; this field exists only to
+   * disagree with it. Deliberately NOT written by `init`: a value recorded at
+   * initialisation goes stale in silence when the project migrates, while
+   * detection re-runs every time.
+   *
+   * From `.vigilesrc.json` it arrives as `rules["untested-skill"][1].testExtension`
+   * (or the `-subagent` / `-hook` twin — the three share their options). The
+   * previous wording here said only "from `.vigilesrc.json`", which read as a
+   * promise the CLI did not keep: `TestCoverageConfig` had no such key and
+   * `checkUntestedSurfaces` forwarded only `testGlobs`/`exclude`, so a configured
+   * `mjs` was silently ignored on any TypeScript-shaped repo.
    */
   readonly testExtension?: string;
   /** Extra ignore globs (added to node_modules/dist/.git/.vigiles). */

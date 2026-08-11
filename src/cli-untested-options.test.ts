@@ -1,0 +1,112 @@
+/**
+ * The `untested-*` rules' OPTIONS, as they travel from `.vigilesrc.json` through
+ * the CLI into the finding — driven through the real built CLI, because that
+ * journey is the part a library-level test cannot see.
+ *
+ * `core/test-file-ext.test.ts` already proves the decision itself (config beats
+ * detection, nonsense is ignored). What was missing is the wiring, and that is
+ * where it broke: `TestCoverageConfig` carried no `testExtension` key and
+ * `checkUntestedSurfaces` forwarded only `testGlobs`/`exclude`, so the option
+ * documented as coming from `.vigilesrc.json` was read by nothing and every
+ * TypeScript-shaped repo got `.ts` suggestions whatever its author configured.
+ *
+ * Deterministic, model-free, offline → the free unit tier.
+ */
+import { test, beforeEach, afterEach } from "vitest";
+import assert from "node:assert/strict";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+
+import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
+
+// __dirname is src/ when vitest resolves the .ts source → ".." is the repo root.
+const CLI = resolve(__dirname, "..", "dist", "cli.js");
+
+let dir: string;
+
+function write(rel: string, body: string): void {
+  const abs = join(dir, rel);
+  mkdirSync(resolve(abs, ".."), { recursive: true });
+  writeFileSync(abs, body);
+}
+
+/** `vigiles lint`'s stdout — the command exits non-zero on findings. */
+function lint(): string {
+  try {
+    return execFileSync("node", [CLI, "lint"], {
+      cwd: dir,
+      encoding: "utf-8",
+      stdio: "pipe",
+      timeout: 60000,
+    });
+  } catch (e) {
+    return (e as { stdout?: string }).stdout ?? "";
+  }
+}
+
+/** The suggested test path out of the untested-surfaces finding. */
+function suggestion(out: string): string {
+  const line = out.split("\n").find((l) => l.includes("SKILL.md — add e.g. "));
+  assert.ok(line, `no untested-skill suggestion in:\n${out}`);
+  return line.slice(line.indexOf("add e.g. ") + "add e.g. ".length).trim();
+}
+
+beforeEach(() => {
+  dir = makeTmpDir("cli-untested-opts");
+  // A TypeScript-SHAPED repo: detection will say `.ts` unless told otherwise.
+  write("tsconfig.json", "{}\n");
+  write("package.json", JSON.stringify({ name: "demo-repo" }));
+  write(
+    ".claude/skills/demo/SKILL.md",
+    "---\nname: demo\ndescription: demo skill\n---\n\nBody.\n",
+  );
+});
+
+afterEach(() => {
+  cleanupTmpDir(dir);
+});
+
+test("detection decides the suggested test extension with no config", () => {
+  // The control. A tsconfig.json is enough to write TypeScript, unasked.
+  assert.match(suggestion(lint()), /\.ts$/);
+});
+
+test("…and `testExtension` in .vigilesrc.json overrides it", () => {
+  write(
+    ".vigilesrc.json",
+    JSON.stringify({
+      rules: { "untested-skill": ["warn", { testExtension: "mjs" }] },
+    }),
+  );
+  assert.match(
+    suggestion(lint()),
+    /\.mjs$/,
+    "the configured extension must reach the finding",
+  );
+});
+
+test("…from any of the three untested-* rules, since they share their options", () => {
+  // `checkUntestedSurfaces` merges the options of all three rules, so an author
+  // who configured it on the hook rule must not find it works only on the skill
+  // one — the merge is the documented behaviour, and it must apply to every key.
+  write(
+    ".vigilesrc.json",
+    JSON.stringify({
+      rules: { "untested-hook": ["warn", { testExtension: "mjs" }] },
+    }),
+  );
+  assert.match(suggestion(lint()), /\.mjs$/);
+});
+
+test("a nonsense extension is ignored, not written into an unrunnable path", () => {
+  // Suggesting `demo.harness.rb` would point the author at a path no runner can
+  // execute, so the finding could never be satisfied.
+  write(
+    ".vigilesrc.json",
+    JSON.stringify({
+      rules: { "untested-skill": ["warn", { testExtension: "rb" }] },
+    }),
+  );
+  assert.match(suggestion(lint()), /\.ts$/);
+});
