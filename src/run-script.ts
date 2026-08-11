@@ -58,6 +58,7 @@ import {
   type EgressAttempt,
 } from "./sandbox.js";
 import { recordCheck } from "./check-count.js";
+import { probeCommand } from "./coverage-probe.js";
 
 export type { EgressAttempt };
 
@@ -216,6 +217,12 @@ export function runScriptWith(
   // at the primitive, so `runHook` and a bare `runScript` both count. See
   // check-count.ts.
   recordCheck();
+  // …and WHICH surface it exercised, read off the command line that is about to
+  // be executed (plus `opts.env`, because the documented idiom passes the hook
+  // path through one). Attribution by execution, not by file name — see
+  // coverage-probe.ts. Derived here at the primitive so `runHook` and a bare
+  // `runScript` both attribute without either knowing about coverage.
+  probeCommand(command, opts.env);
   // Allowlisted egress is its own confined path (bwrap netns + slirp4netns +
   // nft); it can't run unconfined, so it refuses outright when the tooling is
   // absent rather than falling back to a direct run that ignores the allowlist.

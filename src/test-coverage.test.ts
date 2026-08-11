@@ -23,6 +23,7 @@ import {
   skillTestNudge,
   suggestedTestPath,
 } from "./test-coverage.js";
+import { surfaceSha } from "./coverage-artifact.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
 
@@ -341,19 +342,55 @@ test("tiers split at discovery: a harness-only skill is NOT evaluated, and vice 
   cleanupTmpDir(dir);
 });
 
-test("a `*.test.ts` is a HARNESS, never an eval (it spends no model calls)", () => {
+test("a `*.test.ts` is NOT a vigiles test — it is the one name a foreign runner claims", () => {
+  // INVERSION, 2026-08-11. This used to assert the opposite: `*.test.*` counted as
+  // the deterministic tier. It was removed, and the reason is money.
+  //
+  // vigiles never RAN those files, but crediting them made the name reasonable —
+  // so an author writes `skills/foo/foo.test.mjs`, and then `npx vitest` runs it,
+  // because that name matches vitest's and jest's DEFAULT patterns exactly (read
+  // out of the installed packages). A skill test calls runHarnessTest /
+  // measureTriggerRate: it spawns a model. The accident is a silent bill, on every
+  // push, in CI. Measured in a spike: a bare project with that file, plain
+  // `npx vitest run`, and it executed — a dot-directory does not hide it.
   const dir = makeTmpDir("cov-tier-ts");
   write(dir, "skills/foo/SKILL.md", skill("foo"));
-  // Colocated, since placement is what counts — a `.test.ts` in a far-off suite
-  // covers nothing regardless of which tier it would land in.
   write(dir, "skills/foo/foo.test.ts", 'import "./SKILL.md";\n');
   const r = findUntestedSurfaces({ basePath: dir });
-  assert.equal(r.untested.length, 0, "colocated test covers the union");
-  assert.equal(r.harness.untested.length, 0, "…and the deterministic tier");
+  assert.deepEqual(r.untested.map((s) => s.name), ["foo"]);
+  cleanupTmpDir(dir);
+});
+
+test("…and the same file renamed to `.harness.ts` DOES count — TypeScript is first-class", () => {
+  // The quiet half, and a feature in its own right: `.harness.ts` matched NOTHING
+  // before, so a TypeScript project got no credit for a test it had written. Node
+  // 22 runs `.ts`/`.mts`/`.cts` directly (type stripping, no toolchain) — measured.
+  const dir = makeTmpDir("cov-tier-ts-ok");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  write(dir, "skills/foo/foo.harness.ts", "const n: number = 1;\n");
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(r.untested.map((s) => s.name), []);
+  assert.deepEqual(r.harness.untested.map((s) => s.name), []);
+  // …and it is the FREE tier: nothing has measured firing.
+  assert.deepEqual(r.evals.untested.map((s) => s.name), ["foo"]);
+  cleanupTmpDir(dir);
+});
+
+test("🔴 `foo.eval.ts` is the PAID tier — the split is by infix, not by `.eval.mjs`", () => {
+  // The hazard that arrives WITH TypeScript support if the split is left alone:
+  // the old test was `path.endsWith(".eval.mjs")`, so `foo.eval.ts` would have
+  // landed in the harness branch — a file that spends real model calls, classified
+  // as the free tier and run on every push. Accepting TS without this is worse than
+  // not accepting it.
+  const dir = makeTmpDir("cov-eval-ts");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  write(dir, "skills/foo/foo.eval.ts", "const n: number = 1;\n");
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(r.evals.untested.map((s) => s.name), [], "counted as the PAID tier");
   assert.deepEqual(
-    r.evals.untested.map((s) => s.name),
+    r.harness.untested.map((s) => s.name),
     ["foo"],
-    "but firing is still unmeasured — a .test.ts cannot answer that",
+    "and NOT as the free one — an eval must never be mistaken for a per-push test",
   );
   cleanupTmpDir(dir);
 });
@@ -489,7 +526,10 @@ test("a runtime-path harness covers nothing until its tests are colocated", () =
     after.untested.map((x) => x.name),
     ["beta"],
   );
-  assert.deepEqual(coverageEvidenceCounts(after), { colocated: 1 });
+  assert.deepEqual(coverageEvidenceCounts(after), {
+    executed: 0,
+    colocated: 1,
+  });
   cleanupTmpDir(dir);
 });
 
@@ -506,16 +546,17 @@ test("provenance is reported, and says placement is not proof of a run", () => {
 });
 
 test("an EMPTY colocated file still counts — the known, reported hole", () => {
-  // Pinned deliberately. Colocation proves placement, not execution; closing
-  // this needs the CHECK_COUNT channel (a run reporting >0 checks), which is a
-  // condition on this rule rather than another kind of evidence. The report
-  // says so out loud, so the number is not read as more than it is.
+  // Pinned deliberately, and still true of the FALLBACK tier: colocation proves
+  // placement, not execution. What changed on 2026-08-11 is that a recorded run
+  // OUTRANKS it (the `executed` block at the end of this file), so a surface
+  // answered by colocation is one that nothing has ever been run against. The
+  // report says so out loud, so the number is not read as more than it is.
   const dir = makeTmpDir("cov-empty");
   write(dir, "skills/foo/SKILL.md", skill("foo"));
   write(dir, "skills/foo/foo.eval.mjs", "");
   const r = findUntestedSurfaces({ basePath: dir });
   assert.equal(r.untested.length, 0);
-  assert.deepEqual(coverageEvidenceCounts(r), { colocated: 1 });
+  assert.deepEqual(coverageEvidenceCounts(r), { executed: 0, colocated: 1 });
   cleanupTmpDir(dir);
 });
 
@@ -591,5 +632,341 @@ test("skillTestNudge: an agent surface is covered too, and a broken scan is sile
     skillTestNudge("skills/foo/SKILL.md", { basePath: join(dir, "nope") }),
     null,
   );
+  cleanupTmpDir(dir);
+});
+
+// ── colocation must be NAMED, not merely nearby (defect found by dogfooding) ──
+// Placement says where a file sits; only the name says what it is about. The rule
+// read "any file under the skill's directory", which is the substitution the
+// removed `mention` tier made, reached by a different route. Observed live: a
+// consumer repo's `paper-pipeline/` held SIX evals, exactly one about that skill,
+// the rest sitting there for a historical reason — and the orchestrator scored as
+// covered with no test of its own.
+
+test("a test named after ANOTHER skill does not cover the one it sits with", () => {
+  const dir = makeTmpDir("cov-foreign");
+  write(dir, ".claude/skills/orchestrator/SKILL.md", skill("orchestrator"));
+  write(dir, ".claude/skills/grader/SKILL.md", skill("grader"));
+  // The historical accident: a test ABOUT `grader`, living in `orchestrator/`.
+  write(
+    dir,
+    ".claude/skills/orchestrator/grader-ablation.eval.mjs",
+    "// about grader\n",
+  );
+  const report = findUntestedSurfaces({ basePath: dir });
+  const untested = report.untested.map((s) => s.name).sort();
+  assert.deepEqual(untested, ["grader", "orchestrator"]);
+  cleanupTmpDir(dir);
+});
+
+test("…and its own, correctly named test still covers it", () => {
+  // The quiet half. Without it the assertion above passes on a detector that
+  // credits nothing at all, which is the failure mode this suite exists to catch.
+  const dir = makeTmpDir("cov-own-name");
+  write(dir, ".claude/skills/orchestrator/SKILL.md", skill("orchestrator"));
+  write(
+    dir,
+    ".claude/skills/orchestrator/orchestrator.eval.mjs",
+    "// about orchestrator\n",
+  );
+  const report = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(
+    report.untested.map((s) => s.name),
+    [],
+  );
+  assert.equal(coverageEvidenceCounts(report).colocated, 1);
+  cleanupTmpDir(dir);
+});
+
+test("a test in a SUBDIRECTORY is not colocated, however well named", () => {
+  // Colocation is worth having for one property: `ls` answers "is this tested?".
+  // Permit a subdirectory and it takes `find` instead — and two permitted shapes
+  // is a choice at write time and a lookup at read time.
+  //
+  // Measured before removing the allowance: across two real repos exactly ONE
+  // nested test exists, `verify-citations/scripts/verify-cites.test.mjs` — a unit
+  // test for a script the skill BUNDLES, not a test of the skill. It credited
+  // nothing anyone wanted.
+  const dir = makeTmpDir("cov-nested");
+  write(dir, ".claude/skills/foo/SKILL.md", skill("foo"));
+  write(dir, ".claude/skills/foo/tests/foo.harness.mjs", "// about foo\n");
+  const report = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(
+    report.untested.map((s) => s.name),
+    ["foo"],
+  );
+  cleanupTmpDir(dir);
+});
+
+test("…and a bundled script's own unit test does not credit the skill either", () => {
+  // The real case above, reproduced: `scripts/<script>.test.mjs` pins a pure
+  // reducer the skill ships. A good test of a script is not a test of a skill.
+  const dir = makeTmpDir("cov-script-test");
+  write(
+    dir,
+    ".claude/skills/verify-citations/SKILL.md",
+    skill("verify-citations"),
+  );
+  write(
+    dir,
+    ".claude/skills/verify-citations/scripts/verify-cites.test.mjs",
+    "// pure reducer\n",
+  );
+  const report = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(
+    report.untested.map((s) => s.name),
+    ["verify-citations"],
+  );
+  cleanupTmpDir(dir);
+});
+
+test("a single-skill target takes its identity from `name:`, not the checkout dir", () => {
+  // The base of a single-skill target is wherever the thing happens to be checked
+  // out — a temp dir, a CI workspace. Deriving the identity from the path would
+  // ask the author to name their test after their checkout directory.
+  const dir = makeTmpDir("cov-root-identity");
+  write(dir, "SKILL.md", skill("solo"));
+  write(dir, "solo.eval.mjs", "// about solo\n");
+  const report = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(
+    report.untested.map((s) => s.name),
+    [],
+  );
+  cleanupTmpDir(dir);
+});
+
+// ── the retired `vigiles:covers` marker explains its own removal ──────────────
+// Up to 15.0.2 the untested finding TOLD people to write this marker. Removing
+// the tier without a word means anyone who complied loses coverage on upgrade
+// with no error — the marker quietly becomes a comment. A migration nobody is
+// told about is indistinguishable from a bug they caused.
+
+test("a test still carrying `vigiles:covers` is named, with what changed", () => {
+  const dir = makeTmpDir("cov-legacy-marker");
+  write(dir, ".claude/skills/foo/SKILL.md", skill("foo"));
+  write(
+    dir,
+    ".claude/skills/foo/foo.harness.mjs",
+    `// vigiles:${"covers"} skills/foo\n`,
+  );
+  const report = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(report.legacyCoversFiles, [
+    ".claude/skills/foo/foo.harness.mjs",
+  ]);
+  const text = formatUntestedReport(report);
+  assert.match(text, /retired/);
+  // Printed even though this repo is at ZERO untested — a repo can lose the tier
+  // and still be clean, and would then never hear about it.
+  assert.equal(report.untested.length, 0);
+  cleanupTmpDir(dir);
+});
+
+test("…and a repo that never used the marker hears nothing about it", () => {
+  const dir = makeTmpDir("cov-no-legacy");
+  write(dir, ".claude/skills/foo/SKILL.md", skill("foo"));
+  write(dir, ".claude/skills/foo/foo.harness.mjs", "// an ordinary test\n");
+  const report = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(report.legacyCoversFiles, []);
+  assert.doesNotMatch(formatUntestedReport(report), /retired/);
+  cleanupTmpDir(dir);
+});
+
+// ── the EXECUTION tier: `.vigiles/coverage.json` ─────────────────────────────
+//
+// The order of answers is execution → name → nothing, and the report must say
+// which one it used. Each behaviour below has both halves: it fires with an
+// artifact present, and the corpus is untouched when there is none — a fresh
+// clone and somebody else's repo must not get one extra nudge from this tier.
+
+/** Write a run artifact naming `surfacePath` as exercised by `by`. */
+function artifact(
+  dir: string,
+  entries: readonly {
+    path: string;
+    name: string;
+    sha: string;
+    tier?: "harness" | "eval";
+    by?: string;
+    at?: string;
+    kind?: "skill" | "agent" | "hook";
+  }[],
+): void {
+  write(
+    dir,
+    ".vigiles/coverage.json",
+    JSON.stringify({
+      v: 1,
+      generated: "2026-08-11T10:00:00.000Z",
+      runs: entries.map((e) => ({
+        kind: e.kind ?? "skill",
+        path: e.path,
+        name: e.name,
+        tier: e.tier ?? "harness",
+        how: "fired",
+        by: e.by ?? "runner.harness.mjs",
+        at: e.at ?? "2026-08-11T10:00:00.000Z",
+        sha: e.sha,
+      })),
+    }),
+  );
+}
+
+test("a recorded run covers a surface that has NO file named after it", () => {
+  // The whole point: `skills.harness.mjs` builds its paths at runtime and
+  // contains no literal `skills/<name>`, so colocation credits it with nothing.
+  // A run says otherwise, and the run is the thing that happened.
+  const dir = makeTmpDir("cov-exec");
+  const body = skill("alpha");
+  write(dir, "skills/alpha/SKILL.md", body);
+  write(dir, "test/pipeline.harness.mjs", "// builds paths at runtime\n");
+  assert.equal(findUntestedSurfaces({ basePath: dir }).untested.length, 1);
+
+  artifact(dir, [
+    { path: "skills/alpha/SKILL.md", name: "alpha", sha: surfaceSha(body) },
+  ]);
+  const after = findUntestedSurfaces({ basePath: dir });
+  assert.equal(after.untested.length, 0);
+  assert.deepEqual(coverageEvidenceCounts(after), {
+    executed: 1,
+    colocated: 0,
+  });
+  cleanupTmpDir(dir);
+});
+
+test("execution OUTRANKS colocation, and the report words them differently", () => {
+  const dir = makeTmpDir("cov-exec-rank");
+  const alpha = skill("alpha");
+  const beta = skill("beta");
+  write(dir, "skills/alpha/SKILL.md", alpha);
+  write(dir, "skills/alpha/alpha.harness.mjs", "assert.ok(true);\n");
+  write(dir, "skills/beta/SKILL.md", beta);
+  write(dir, "skills/beta/beta.harness.mjs", ""); // an EMPTY file still colocates
+  artifact(dir, [
+    { path: "skills/alpha/SKILL.md", name: "alpha", sha: surfaceSha(alpha) },
+  ]);
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(coverageEvidenceCounts(r), { executed: 1, colocated: 1 });
+  const text = formatUntestedReport(r);
+  // "measured by a run" and "there is a file with a matching name" are two
+  // different facts. A reader who cannot tell them apart has the old number.
+  assert.match(text, /1 MEASURED BY A RUN/);
+  assert.match(text, /1 colocated/);
+  assert.match(text, /EXISTS, not that it ran/);
+  cleanupTmpDir(dir);
+});
+
+test("a run against OLDER text grants nothing, and says so out loud", () => {
+  const dir = makeTmpDir("cov-stale");
+  write(dir, "skills/alpha/SKILL.md", skill("alpha"));
+  artifact(dir, [
+    {
+      path: "skills/alpha/SKILL.md",
+      name: "alpha",
+      sha: surfaceSha("the text it had LAST week"),
+    },
+  ]);
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.equal(r.untested.length, 1, "a stale run is not coverage");
+  assert.deepEqual(
+    (r.staleRuns ?? []).map((s) => s.path),
+    ["skills/alpha/SKILL.md"],
+  );
+  // Silently counting it is the PIPELINE-STATUS disease — a tick against a
+  // document somebody rewrote afterwards.
+  assert.match(formatUntestedReport(r), /BEFORE their current/);
+  cleanupTmpDir(dir);
+});
+
+test("a stale run is reported even when the repo is at ZERO untested", () => {
+  // Same reason `legacyCoversNote` prints in both branches: a repo can be clean
+  // and still be resting on a measurement of text that no longer exists.
+  const dir = makeTmpDir("cov-stale-clean");
+  write(dir, "skills/alpha/SKILL.md", skill("alpha"));
+  write(dir, "skills/alpha/alpha.harness.mjs", "assert.ok(true);\n");
+  artifact(dir, [
+    { path: "skills/alpha/SKILL.md", name: "alpha", sha: surfaceSha("older") },
+  ]);
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.equal(r.untested.length, 0);
+  assert.match(formatUntestedReport(r), /BEFORE their current/);
+  cleanupTmpDir(dir);
+});
+
+test("a re-run refreshes the surface and the stale notice goes away", () => {
+  const dir = makeTmpDir("cov-stale-refresh");
+  const body = skill("alpha");
+  write(dir, "skills/alpha/SKILL.md", body);
+  // The artifact keeps the old record AND a fresh one, as merging leaves it.
+  artifact(dir, [
+    {
+      path: "skills/alpha/SKILL.md",
+      name: "alpha",
+      sha: surfaceSha("older"),
+      by: "old.harness.mjs",
+      at: "2026-08-01T00:00:00.000Z",
+    },
+    {
+      path: "skills/alpha/SKILL.md",
+      name: "alpha",
+      sha: surfaceSha(body),
+      by: "new.harness.mjs",
+    },
+  ]);
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.equal(r.untested.length, 0);
+  assert.deepEqual(r.staleRuns, [], "a permanent notice is an ignored notice");
+  assert.deepEqual(coverageEvidenceCounts(r), { executed: 1, colocated: 0 });
+  cleanupTmpDir(dir);
+});
+
+test("an executed HARNESS does not silence `firing was never measured`", () => {
+  // The tiers cost three orders of magnitude apart. A free deterministic run
+  // must not answer the question only a real model can.
+  const dir = makeTmpDir("cov-exec-tier");
+  const body = skill("alpha");
+  write(dir, "skills/alpha/SKILL.md", body);
+  artifact(dir, [
+    {
+      path: "skills/alpha/SKILL.md",
+      name: "alpha",
+      sha: surfaceSha(body),
+      tier: "harness",
+    },
+  ]);
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.equal(r.harness.untested.length, 0);
+  assert.equal(r.evals.untested.length, 1);
+  assert.match(formatUntestedReport(r), /no `\*\.eval\.mjs`|never measured/);
+  cleanupTmpDir(dir);
+});
+
+test("NO artifact ⇒ byte-for-byte the old behaviour, including the report text", () => {
+  // The conservative direction, pinned. A fresh clone and anyone else's repo
+  // must not get one extra nudge, or one fewer, from this tier existing.
+  const dir = makeTmpDir("cov-no-artifact");
+  write(dir, "skills/alpha/SKILL.md", skill("alpha"));
+  write(dir, "skills/beta/SKILL.md", skill("beta"));
+  write(dir, "skills/beta/beta.harness.mjs", "assert.ok(true);\n");
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(
+    r.untested.map((s) => s.name),
+    ["alpha"],
+  );
+  assert.deepEqual(coverageEvidenceCounts(r), { executed: 0, colocated: 1 });
+  const text = formatUntestedReport(r);
+  assert.doesNotMatch(text, /MEASURED BY A RUN/);
+  assert.doesNotMatch(text, /BEFORE their current/);
+  cleanupTmpDir(dir);
+});
+
+test("a run record for a surface nobody discovers changes nothing", () => {
+  const dir = makeTmpDir("cov-ghost");
+  write(dir, "skills/alpha/SKILL.md", skill("alpha"));
+  artifact(dir, [
+    { path: "skills/deleted/SKILL.md", name: "deleted", sha: "whatever" },
+  ]);
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.equal(r.untested.length, 1);
+  assert.deepEqual(r.staleRuns, []);
   cleanupTmpDir(dir);
 });

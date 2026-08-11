@@ -21,6 +21,7 @@
  * Real model → real cost + statistical, not deterministic. For fast, free,
  * deterministic checks of hook *logic*, see `harness-test.ts`.
  */
+import { foreignRunner, foreignRunnerRefusal } from "./core/foreign-runner.js";
 import { spawn, execSync } from "node:child_process";
 import {
   mkdtempSync,
@@ -79,6 +80,7 @@ import {
 import type { Check, CheckJSON } from "./check.js";
 import { welchTTest, type Comparison } from "./stats.js";
 import { recordCheck } from "./check-count.js";
+import { probeTrace } from "./coverage-probe.js";
 import {
   type ToolIntercept,
   buildInterceptSettings,
@@ -369,10 +371,27 @@ export function resolveSpawnEnv(
   return a.replaceEnv ? (a.env ?? {}) : { ...base, ...a.env };
 }
 
+/**
+ * 🔴 THE GUARD IS HERE, AT THE COMPOSITION ROOT, ON PURPOSE. Every paid path —
+ * `runEval`, `measureTriggerRate`, `measureArms`, the audit's trigger tier — ends
+ * up in this one function, so guarding it guards all of them, and a path added
+ * later inherits it instead of having to remember. Money is spent on the line
+ * below; nothing between here and there can be forgotten.
+ *
+ * Refusal is a THROW, not a failed run: a run result would be recorded, compared
+ * and averaged, and "0% trigger rate" is exactly the confident zero this project
+ * keeps mistaking for a finding.
+ */
+function refuseUnderForeignRunner(what: string): void {
+  const runner = foreignRunner(process.argv[1]);
+  if (runner !== null) throw new Error(foreignRunnerRefusal(runner, what));
+}
+
 /* v8 ignore start -- real claude subprocess; exercised by bench/, not the unit gate */
 /** The real `claude`-spawning runner (composition root). Exported so other
  *  real-model entries (e.g. the `audit` trigger tier) bind the same runner. */
 export function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
+  refuseUnderForeignRunner("spawning `claude`");
   return new Promise((resolvePromise) => {
     const args = [
       "-p",
@@ -952,6 +971,12 @@ function makeContext(
   parse: ModelOutputParser = parseClaudeRun,
 ): RunContext {
   const p = parse(out);
+  // The one place every real-model trial's trace is assembled — `runEval`,
+  // `measureTriggerRate` and the selection runs all pass through here — so the
+  // attribution is derived once, from what FIRED. A trigger-rate run installs
+  // competing skills on purpose (`installSet`); crediting the install set would
+  // credit a skill for LOSING selection. See coverage-probe.ts.
+  probeTrace({ toolCalls: p.toolCalls, hooks: p.hooks });
   return {
     cwd,
     exitCode: out.code,

@@ -15,6 +15,18 @@
  * The part that DECIDES coverage is not mirrored — it is imported from
  * `coverage-evidence.ts` (pure, browser-safe), so the twins cannot drift on the
  * one thing whose divergence would change a grade.
+ *
+ * 🔴 THE ONE TIER THIS TWIN CANNOT HAVE, stated rather than left to be inferred:
+ * the disk detector answers "tested?" from EXECUTION first — `.vigiles/coverage.json`,
+ * written by `vigiles test` / `vigiles eval` (see `coverage-artifact.ts`). This
+ * engine scans a file map fetched from GitHub. There is no filesystem, no runner,
+ * and nothing here ever ran a test, so a run record is not merely absent — it is
+ * not a thing that can exist in this environment. The honest answer is therefore
+ * "no runs", which is exactly what the disk detector reports for a repo with no
+ * artifact, so the two agree by construction: `countEvidence` returns
+ * `executed: 0` here and the parity gate (src/scan-files.test.ts) holds without
+ * a special case. Faking an artifact — say, from a committed JSON in the map —
+ * would report a measurement nobody in this process made.
  */
 import { basename, dirname } from "./posix-path.js";
 
@@ -33,17 +45,15 @@ import {
 
 // Mirrors src/test-coverage.ts constants. VALUES are re-declared, never imported
 // — test-coverage.ts pulls in node:fs/glob, and this twin must stay browser-safe.
-const EVAL_SUFFIX = ".eval.mjs";
+// The paid tier by INFIX, not by full suffix: `.eval.ts` must not fall into the
+// free branch and get run on every push. See the reasoning in test-coverage.ts.
+const EVAL_INFIX = ".eval.";
 
 const DEFAULT_TEST_SUFFIXES = [
-  ".harness.mjs",
-  EVAL_SUFFIX,
-  ".test.ts",
-  ".test.mts",
-  ".test.cts",
-  ".test.js",
-  ".test.mjs",
-  ".test.cjs",
+  ".harness.ts", ".harness.mts", ".harness.cts",
+  ".harness.js", ".harness.mjs", ".harness.cjs",
+  ".eval.ts", ".eval.mts", ".eval.cts",
+  ".eval.js", ".eval.mjs", ".eval.cjs",
 ] as const;
 
 const IGNORE_MARKER = "vigiles:ignore-test";
@@ -203,18 +213,10 @@ function discoverTests(files: Record<string, string>): PreparedTest[] {
   return out;
 }
 
-/** Mirror of test-coverage.ts `isColocated`. */
+/** Mirror of test-coverage.ts `isColocated` — named after the surface, beside it. */
 function isColocated(surface: Surface, testPath: string): boolean {
-  if (surface.kind === "skill") {
-    const dir = dirname(surface.path);
-    return dir === "."
-      ? dirname(testPath) === "."
-      : testPath.startsWith(`${dir}/`);
-  }
-  return (
-    dirname(testPath) === dirname(surface.path) &&
-    basename(testPath).startsWith(`${surface.name}.`)
-  );
+  if (!basename(testPath).startsWith(`${surface.name}.`)) return false;
+  return dirname(testPath) === dirname(surface.path);
 }
 
 /** Mirror of test-coverage.ts `coverageOf` — strongest evidence across tests. */
@@ -280,11 +282,11 @@ export function findUntestedSurfacesInFiles(
     decisions: union.decisions,
     harness: tierOf(
       considered,
-      tests.filter((t) => !t.path.endsWith(EVAL_SUFFIX)),
+      tests.filter((t) => !basename(t.path).includes(EVAL_INFIX)),
     ),
     evals: tierOf(
       considered,
-      tests.filter((t) => t.path.endsWith(EVAL_SUFFIX)),
+      tests.filter((t) => basename(t.path).includes(EVAL_INFIX)),
     ),
   };
 }

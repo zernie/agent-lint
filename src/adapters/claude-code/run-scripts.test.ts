@@ -385,3 +385,33 @@ test("decideRunScripts: bare eval over many, at a TTY → CONFIRM", () => {
     },
   );
 });
+
+test("the runner reads back WHICH surfaces a script exercised", () => {
+  // The channel's second job: coverage answers "tested?" from execution, and
+  // this is the wire it travels on. The fixture attributes through the tier
+  // (runHook derives the hook from the command), not by declaring anything.
+  const dir = makeTmpDir("run-scripts-surfaces");
+  try {
+    const hook = pathToFileURL(resolve(process.cwd(), "dist/run-hook.js")).href;
+    const mod = JSON.stringify(countModuleUrl());
+    writeFileSync(
+      join(dir, "attributes.harness.mjs"),
+      `import { runHook } from ${JSON.stringify(hook)};\n` +
+        `runHook("bash hooks/guard.sh", { hook_event_name: "PreToolUse" });\n`,
+    );
+    // The control: same channel, no surface — a unit test of a pure helper.
+    writeFileSync(
+      join(dir, "plain.harness.mjs"),
+      `import { recordCheck } from ${mod};\nrecordCheck();\n`,
+    );
+    const r = runScripts(["attributes.harness.mjs", "plain.harness.mjs"], dir);
+    assert.deepEqual(r[0].surfaces, [
+      { how: "command", ref: "hooks/guard.sh" },
+    ]);
+    assert.equal(r[0].status, "pass");
+    // Reported a count, exercised no identifiable surface. Not a finding.
+    assert.deepEqual(r[1].surfaces, []);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});

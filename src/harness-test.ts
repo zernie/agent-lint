@@ -53,6 +53,7 @@ import type {
 } from "./core/harness-driver.js";
 import { assertHarnessTestable } from "./adapter-conformance.js";
 import { recordCheck } from "./check-count.js";
+import { probeTrace } from "./coverage-probe.js";
 
 import { claudeCodeRuntime } from "./adapters/claude-code/runtime.js";
 
@@ -594,6 +595,10 @@ function makeResult(
   turns: number,
   modelRequests: readonly ModelRequest[],
 ): HarnessTestResult {
+  // WHAT this run exercised, read off the transcript rather than the fixture: a
+  // harness test installs a whole plugin, and what was INSTALLED is a set while
+  // what RAN is one thing. See coverage-probe.ts.
+  probeTrace({ toolCalls: parsed.toolCalls, hooks: parsed.hooks });
   return {
     exitCode: out.code,
     stdout: out.stdout,

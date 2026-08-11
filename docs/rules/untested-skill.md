@@ -48,16 +48,85 @@ skills — not vendored, fixture, or nested copies).
 
 ## What counts as "tested"
 
-**One detector: colocation.** A `*.{harness,eval}.mjs` inside the skill's own
-directory:
+**Execution first, then the name, then nothing** — and the report says which of
+the two answered.
+
+### 1. A recorded run — `.vigiles/coverage.json`
+
+When `vigiles test` / `vigiles eval` runs a script that exercises a surface, the
+runner writes down which surface, which script, when, and the surface's content
+hash at that moment. Coverage prefers that record over any file name, and prints
+`MEASURED BY A RUN` instead of `colocated`.
+
+The attribution is **derived, never declared**. `runScript` / `runHook` take it
+from the command line they executed; the model tiers take it from the run's
+transcript — the `Skill` call that actually resolved, not the set that happened
+to be installed. There is deliberately no field you can fill in: that was
+`vigiles:covers`, and it was removed for the reasons below.
+
+Two things it will not do:
+
+- **A run against older text grants nothing.** Edit the surface after measuring
+  it and the record is reported as "measured, but not this version"; coverage
+  falls back to the name until you re-run. A tick against a document somebody
+  rewrote afterwards is not evidence.
+- **One tier cannot answer for the other.** A `vigiles test` run satisfies the
+  deterministic tier only — "nothing has measured whether this fires" still
+  stands until an eval runs.
+
+The file records one checkout at one moment, so **do not commit it**. A committed
+one would credit coverage on a machine where nothing ran, which is precisely the
+substitution this tier exists to remove.
+
+**No artifact = the rule below, unchanged.** A fresh clone, CI, and anybody
+else's repo see colocation exactly as they did before this tier existed — not one
+extra finding, and not one fewer.
+
+### 2. Colocation — the fallback, and the test must be NAMED after the surface
+
+Placement says where a file sits; only the name says what it is about.
 
 ```
 skills/foo/SKILL.md
-skills/foo/foo.eval.mjs      <- covers it
+skills/foo/foo.eval.mjs          <- covers it (free of config, like `foo_test.go`)
+skills/foo/foo.harness.mjs       <- also covers it
+skills/foo/bar-ablation.eval.mjs <- does NOT: it is a test about `bar`
+skills/foo/tests/foo.eval.mjs    <- does NOT: a subdirectory is not beside it
 ```
 
-For an agent or a hook, a **name-prefixed sibling**: `agents/bar.harness.mjs`,
-`hooks/pre-edit.harness.mjs`.
+One rule for all three kinds — an agent or a hook takes the same
+**name-prefixed sibling**: `agents/bar.harness.mjs`, `hooks/pre-edit.harness.mjs`.
+
+Why a subdirectory does not count: colocation is worth having for exactly one
+property — `ls` answers _"is this tested?"_ without running anything. Permit
+`skills/foo/tests/` and it takes `find` instead, and two permitted shapes become
+a choice at write time and a lookup at read time. A bundled script's own unit
+test (`skills/foo/scripts/thing.test.mjs`) is a good test **of that script** and
+not a test of the skill, which is the distinction the rule turns on.
+
+**Which of the two names to use** — they are not synonyms, unlike `.test.` and
+`.spec.` elsewhere in the JS world:
+
+| file              | costs                               | answers                                    |
+| ----------------- | ----------------------------------- | ------------------------------------------ |
+| `foo.harness.mjs` | nothing, runs on every push         | does this gate still catch what it claims? |
+| `foo.eval.mjs`    | real model calls, run on a schedule | does this skill fire at all?               |
+
+A surface with only a harness is reported as never having had its firing
+measured, which is a different gap with a different price — not a smaller one.
+
+### Why the name has to match (changed 2026-08-11)
+
+A skill used to be covered by ANY file under its directory, while agents and
+hooks already required the name. Found by dogfooding: a repo's
+`.claude/skills/paper-pipeline/` held six `*.eval.mjs`, exactly one about that
+skill — the rest measured OTHER skills and sat there because the directory had
+been the pipeline's home before tests moved next to their subjects. One was
+literally `grade-paper-writing-ablation.eval.mjs`. The orchestrator scored as
+covered and had no test of its own.
+
+That is the same substitution the removed `mention` tier made — a name near a
+test taken for a test.
 
 ### Why only one (changed 2026-08-11)
 
@@ -84,9 +153,10 @@ for nothing until you move it next to its surface. That is the intended
 pressure — a per-surface test belongs with its surface.
 
 > ⚠️ **What colocation still does not prove.** It says the file **exists**, not
-> that it **ran**: an empty `foo.eval.mjs` counts. The report says so on every
-> run. Closing that is a condition to add to this rule (a run reporting more than
-> zero checks), not a fourth kind of evidence.
+> that it **ran**: an empty `foo.eval.mjs` counts, and the report says so on every
+> run. That is why the execution tier above sits on top of it rather than beside
+> it — a surface answered by `colocated` is one that nothing has ever been run
+> against.
 
 ## Counting an external test suite (promptfoo, a home-grown eval loop)
 

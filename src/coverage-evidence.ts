@@ -53,21 +53,46 @@
  * somewhere else now counts for nothing until it is moved next to its surface.
  * That is the intended pressure — a per-surface test belongs with its surface.
  *
- * ⚠️ HONEST REMAINING HOLE: colocation says a FILE EXISTS, not that it RAN. An
- * empty `foo.eval.mjs` still counts. Closing that is the `CHECK_COUNT` channel
- * (`check-count.ts`), which already knows how many checks a script really made —
- * a CONDITION to add to this one rule, not a fourth kind of evidence.
+ * ## The hole above it — closed 2026-08-11 by a tier ABOVE, not beside
+ *
+ * The paragraph that used to stand here read: *"colocation says a FILE EXISTS,
+ * not that it RAN. An empty `foo.eval.mjs` still counts."* That is now the
+ * FALLBACK, not the answer.
+ *
+ * `executed` is evidence of a different kind from all four naming conventions:
+ * it comes from a run that happened, recorded in `.vigiles/coverage.json` by the
+ * runner and attributed by the tiers themselves (`coverage-probe.ts`). This is
+ * how every mature coverage tool answers the question — `go test -cover`,
+ * coverage.py, nyc, tarpaulin — with the name used only to FIND the file to run.
+ * A skill cannot be run without a model, so the name survives underneath it.
+ *
+ * So the order of answers is **execution → name → nothing**, and the report is
+ * required to say which one it used: "measured by a run" and "there is a file
+ * with a matching name" are different facts, and printing one number for both is
+ * the substitution this module exists to stop.
+ *
+ * ⚠️ The hole colocation still has is unchanged, and is now visible instead of
+ * hidden: a surface answered by `colocated` may have an empty test file. What
+ * changed is that a surface answered by `executed` demonstrably does not.
  *
  * Browser-safe and pure (no `node:*`): the disk detector (`test-coverage.ts`) and
  * its in-browser twin (`test-coverage-files.ts`) both route through here, so the
- * two cannot drift on the part that decides coverage.
+ * two cannot drift on the part that decides coverage. A browser has no
+ * filesystem and therefore no run records, so `executed` is structurally
+ * impossible there and its count is 0 — see `test-coverage-files.ts`.
  */
 
 /**
- * How a covered surface was decided to be covered. One kind — see the module
- * header for the two that were removed and the measurements behind it.
+ * How a covered surface was decided to be covered.
+ *
+ * - `executed` — a recorded run exercised it, against THIS version of it.
+ * - `colocated` — a test named after it sits beside it. Says the file exists.
+ *
+ * Two kinds, and unlike the three that were removed these are not two naming
+ * conventions: one is about a process that ran, the other about a directory
+ * listing. See the module header.
  */
-export type CoverageEvidence = "colocated";
+export type CoverageEvidence = "executed" | "colocated";
 
 /** The minimum a surface must expose to be matched — structural, no import cycle. */
 export interface CoverableSurface {
@@ -109,6 +134,8 @@ export function evidenceFor(
 
 /** Per-evidence tallies — the provenance summary the report prints. */
 export interface EvidenceCounts {
+  /** Decided by a recorded run against this version of the surface. */
+  readonly executed: number;
   readonly colocated: number;
 }
 
@@ -116,19 +143,39 @@ export interface EvidenceCounts {
 export function countEvidence(
   decisions: readonly { readonly evidence: CoverageEvidence }[],
 ): EvidenceCounts {
-  return { colocated: decisions.length };
+  let executed = 0;
+  let colocated = 0;
+  for (const d of decisions) {
+    if (d.evidence === "executed") executed += 1;
+    else colocated += 1;
+  }
+  return { executed, colocated };
 }
 
 /**
  * One line naming how the coverage was established. Printed wherever a coverage
  * count is printed: a number with no provenance is the thing this module exists
  * to stop shipping.
+ *
+ * 🔴 THE TWO CLAUSES ARE WORDED DIFFERENTLY ON PURPOSE. "Measured by a run" and
+ * "there is a file with a matching name" are not two strengths of the same
+ * statement, and a reader who cannot tell them apart in the output has the same
+ * number they had before this tier existed.
  */
 export function formatEvidence(counts: EvidenceCounts): string {
-  if (counts.colocated === 0) return "";
-  return (
-    `How coverage was decided: ${String(counts.colocated)} colocated — a test ` +
-    `file inside the surface's own directory. This says the file EXISTS, not ` +
-    `that it ran.`
-  );
+  const parts: string[] = [];
+  if (counts.executed > 0) {
+    parts.push(
+      `${String(counts.executed)} MEASURED BY A RUN — a recorded run exercised ` +
+        `the surface and reported checks (.vigiles/coverage.json)`,
+    );
+  }
+  if (counts.colocated > 0) {
+    parts.push(
+      `${String(counts.colocated)} colocated — a test NAMED after the surface, ` +
+        `in the surface's own place. This says the file EXISTS, not that it ran`,
+    );
+  }
+  if (parts.length === 0) return "";
+  return `How coverage was decided: ${parts.join("; ")}.`;
 }

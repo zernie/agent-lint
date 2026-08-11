@@ -1,0 +1,324 @@
+/**
+ * `.vigiles/coverage.json` — the record of which surfaces a RUN actually
+ * exercised, and the only tier of coverage evidence that is about execution
+ * rather than about a file name.
+ *
+ * ## What was broken, and how to reproduce it
+ *
+ * Coverage answered "is this surface tested?" from colocation: a file named
+ * after the surface, sitting beside it. `touch .claude/skills/foo/foo.eval.mjs`
+ * — an EMPTY file — drops the untested count by one. Measured on a real repo,
+ * `.claude/skills/paper-pipeline/` held six `*.eval.mjs` of which exactly one
+ * was about that skill, and the orchestrator scored as covered with no test of
+ * its own (`vigiles/s54.md`, defects №10 and №17).
+ *
+ * Nobody else answers this question by name. `go test -cover`, coverage.py, nyc
+ * and tarpaulin all answer from EXECUTION and use the name only to find the file
+ * to run. We cannot run a skill without a model, so the name survives as a
+ * fallback — but the order of answers is now execution → name → nothing, and the
+ * report says which one it used.
+ *
+ * ## Three properties this file is responsible for
+ *
+ * 1. **Resolution, not guessing.** A run reports a `SurfaceProbe` — a script path
+ *    or a namespaced skill id — which is a REFERENCE, not a verdict. Here it is
+ *    matched against surfaces actually discovered in the repo. An unresolvable
+ *    probe is DROPPED. Nothing is invented, so a probe can never create coverage
+ *    for a surface that does not exist.
+ *
+ * 2. **Staleness is stated, never silent.** Each run stamps the surface's content
+ *    hash AT RUN TIME. A surface edited since is "measured, but not this text" —
+ *    the same disease as a PIPELINE-STATUS tick against a document that was
+ *    rewritten afterwards. A stale record grants NO coverage; it falls back to
+ *    colocation like any other surface, and gets a line in the report saying so.
+ *
+ * 3. **Absent artifact = today's behaviour, exactly.** A fresh clone, a repo that
+ *    never ran `vigiles test`, and anyone else's project have no file here, and
+ *    must not get one extra nudge because of this feature.
+ *
+ * Node-only (it reads and writes a file). The browser twin has no filesystem and
+ * therefore structurally no run records — see `test-coverage-files.ts`.
+ */
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, resolve } from "node:path";
+
+import type { ProbeOrigin, SurfaceProbe } from "./check-count.js";
+import type { Surface, SurfaceKind } from "./test-coverage.js";
+
+/** Bumped when the record shape changes in a non-additive way. */
+export const COVERAGE_ARTIFACT_VERSION = 1;
+
+/** The artifact filename under `.vigiles/`. */
+export const COVERAGE_ARTIFACT_FILE = "coverage.json";
+
+/**
+ * Which runner produced a record. Mirrors the discovery split in
+ * `test-coverage.ts`: `vigiles test` runs `*.harness.*` (free, every push),
+ * `vigiles eval` runs `*.eval.*` (paid, scheduled). Kept per record so a run
+ * cannot credit the tier it did not belong to — an executed harness must not
+ * silence "nothing ever measured whether this fires".
+ */
+export type CoverageTierName = "harness" | "eval";
+
+/** One surface, exercised by one script, at one moment, against one version. */
+export interface CoverageRun {
+  readonly kind: SurfaceKind;
+  /** Repo-relative path of the surface file. */
+  readonly path: string;
+  readonly name: string;
+  readonly tier: CoverageTierName;
+  /** How the run named it — see {@link ProbeOrigin}. */
+  readonly how: ProbeOrigin;
+  /** The script file that did the exercising. */
+  readonly by: string;
+  /** ISO-8601 timestamp of the run. */
+  readonly at: string;
+  /** Content hash of the surface file AS IT WAS when the run happened. */
+  readonly sha: string;
+}
+
+export interface CoverageArtifact {
+  readonly v: number;
+  readonly generated: string;
+  /** Short commit the run was made at, when the repo is a git checkout. */
+  readonly commit?: string;
+  readonly runs: readonly CoverageRun[];
+}
+
+/** Content hash of a surface file — the staleness key. */
+export function surfaceSha(content: string): string {
+  return createHash("sha256").update(content).digest("hex").slice(0, 16);
+}
+
+/** POSIX-ify a path so a Windows-recorded ref matches a repo-relative surface. */
+function norm(p: string): string {
+  return p.replaceAll("\\", "/");
+}
+
+/**
+ * The surfaces a probe refers to, or `[]`.
+ *
+ * 🔴 CONSERVATIVE BY KIND. A `command` probe is matched only against HOOKS: a
+ * command runs a program, and the only surface kind that IS a program is a hook.
+ * A skill's bundled helper script being executed is a test of that script, not
+ * of the skill — the exact substitution ("a test NEAR it" for "a test OF it")
+ * that colocation-by-directory was making. Today the check is belt-and-braces
+ * (skills and agents are `.md`, and a command ref always ends in a script
+ * extension, so the paths cannot collide); it is asserted anyway, because a
+ * guard nothing tests is one that quietly stops holding when discovery changes.
+ *
+ * A `fired` probe matches by NAME, after dropping a `plugin:` namespace, because
+ * that is the only identity the transcript carries. When two surfaces share a
+ * name (the same skill vendored under `skills/` and `.claude/skills/`) both are
+ * returned: one of them is the file that ran and picking by glob order would be
+ * a coin flip presented as a fact.
+ */
+export function resolveProbe(
+  probe: SurfaceProbe,
+  surfaces: readonly Surface[],
+): Surface[] {
+  if (probe.how === "command") {
+    const ref = norm(probe.ref);
+    const leaf = basename(ref);
+    return surfaces.filter((s) => {
+      if (s.kind !== "hook") return false;
+      const path = norm(s.path);
+      // Exact, suffix (an absolute path into the repo), or basename — a harness
+      // legitimately points at `${CLAUDE_PROJECT_DIR}/.claude/hooks/x.sh`.
+      return (
+        path === ref || ref.endsWith(`/${path}`) || basename(path) === leaf
+      );
+    });
+  }
+  const name = probe.ref.includes(":")
+    ? probe.ref.slice(probe.ref.lastIndexOf(":") + 1)
+    : probe.ref;
+  return surfaces.filter((s) => s.name === name);
+}
+
+/** Everything one script run contributes, already resolved to real surfaces. */
+export interface ScriptRunRecord {
+  /** The script file that ran. */
+  readonly file: string;
+  readonly probes: readonly SurfaceProbe[];
+}
+
+/**
+ * The runs worth recording, out of a whole `vigiles test` / `vigiles eval`.
+ *
+ * 🔴 A FAILED SCRIPT CONTRIBUTES NOTHING. It exercised the surface — that much
+ * is true — but it did not establish that the surface behaves, and recording it
+ * would let a RED test paint a surface covered: activity taken for the property,
+ * which is the substitution this whole tier exists to remove. A skipped run has
+ * no transcript and a vacuous one asserted nothing, so neither reports surfaces
+ * anyway; the filter lives here so the rule is stated where it can be tested.
+ */
+export function runsFromResults(
+  results: readonly {
+    readonly file: string;
+    readonly status: string;
+    readonly surfaces?: readonly SurfaceProbe[];
+  }[],
+): ScriptRunRecord[] {
+  return results
+    .filter((r) => r.status !== "fail" && (r.surfaces?.length ?? 0) > 0)
+    .map((r) => ({ file: r.file, probes: r.surfaces ?? [] }));
+}
+
+/**
+ * Turn resolved probes into records. `readSurface` supplies the current content
+ * of a surface file (so the hash is stamped from what was on disk during the
+ * run); a surface it cannot read is skipped — an unhashable record could never
+ * be checked for staleness and would therefore be permanent, unfalsifiable
+ * coverage.
+ */
+export function recordsFrom(opts: {
+  readonly runs: readonly ScriptRunRecord[];
+  readonly surfaces: readonly Surface[];
+  readonly tier: CoverageTierName;
+  readonly at: string;
+  readonly readSurface: (path: string) => string | null;
+}): CoverageRun[] {
+  const out: CoverageRun[] = [];
+  const seen = new Set<string>();
+  const pairs = opts.runs.flatMap((run) =>
+    run.probes.flatMap((probe) =>
+      resolveProbe(probe, opts.surfaces).map((surface) => ({
+        run,
+        probe,
+        surface,
+      })),
+    ),
+  );
+  for (const { run, probe, surface } of pairs) {
+    const key = `${surface.path}\u0000${run.file}\u0000${probe.how}`;
+    if (seen.has(key)) continue;
+    const content = opts.readSurface(surface.path);
+    if (content === null) continue;
+    seen.add(key);
+    out.push({
+      kind: surface.kind,
+      path: surface.path,
+      name: surface.name,
+      tier: opts.tier,
+      how: probe.how,
+      by: run.file,
+      at: opts.at,
+      sha: surfaceSha(content),
+    });
+  }
+  return out;
+}
+
+/**
+ * Merge new records over old, keeping the newest per (surface, tier, script).
+ *
+ * Merging rather than replacing is what makes the two cadences composable: the
+ * deterministic tier runs on every push and the paid tier runs on a schedule, so
+ * a `vigiles test` today must not erase what `vigiles eval` measured last week.
+ * Scoping the key by SCRIPT means running one file by name doesn't drop the
+ * records of the files that were not run.
+ */
+export function mergeRuns(
+  previous: readonly CoverageRun[],
+  next: readonly CoverageRun[],
+): CoverageRun[] {
+  const byKey = new Map<string, CoverageRun>();
+  for (const run of [...previous, ...next]) {
+    const key = `${run.path}\u0000${run.tier}\u0000${run.by}`;
+    const held = byKey.get(key);
+    if (!held || held.at <= run.at) byKey.set(key, run);
+  }
+  return [...byKey.values()].sort(
+    (a, b) => a.path.localeCompare(b.path) || a.by.localeCompare(b.by),
+  );
+}
+
+/** Read the artifact, or `undefined` when there is none / it is not one. */
+export function readCoverageArtifact(
+  root: string,
+): CoverageArtifact | undefined {
+  const file = resolve(root, ".vigiles", COVERAGE_ARTIFACT_FILE);
+  if (!existsSync(file)) return undefined;
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(file, "utf-8"));
+  } catch {
+    // A torn or hand-edited artifact is not a verdict about anyone's tests.
+    return undefined;
+  }
+  if (!value || typeof value !== "object") return undefined;
+  const obj = value as Partial<CoverageArtifact>;
+  if (obj.v !== COVERAGE_ARTIFACT_VERSION) return undefined;
+  if (!Array.isArray(obj.runs)) return undefined;
+  const runs = obj.runs.filter(isCoverageRun);
+  return {
+    v: COVERAGE_ARTIFACT_VERSION,
+    generated: typeof obj.generated === "string" ? obj.generated : "",
+    ...(typeof obj.commit === "string" ? { commit: obj.commit } : {}),
+    runs,
+  };
+}
+
+function isCoverageRun(value: unknown): value is CoverageRun {
+  if (!value || typeof value !== "object") return false;
+  const r = value as Record<string, unknown>;
+  return (
+    (r.kind === "skill" || r.kind === "agent" || r.kind === "hook") &&
+    typeof r.path === "string" &&
+    typeof r.name === "string" &&
+    (r.tier === "harness" || r.tier === "eval") &&
+    (r.how === "command" || r.how === "fired") &&
+    typeof r.by === "string" &&
+    typeof r.at === "string" &&
+    typeof r.sha === "string"
+  );
+}
+
+/** Write the artifact. Best-effort: recording must never fail a green run. */
+export function writeCoverageArtifact(
+  root: string,
+  artifact: CoverageArtifact,
+): void {
+  try {
+    const dir = resolve(root, ".vigiles");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      resolve(dir, COVERAGE_ARTIFACT_FILE),
+      JSON.stringify(artifact, null, 2) + "\n",
+    );
+  } catch {
+    /* best-effort — a scratch-dir failure is not a test failure */
+  }
+}
+
+/** A run record judged against the surface's CURRENT text. */
+export interface ExecutedRecord {
+  readonly run: CoverageRun;
+  /** The surface's content is unchanged since the run measured it. */
+  readonly fresh: boolean;
+}
+
+/**
+ * Index the artifact by surface path, judging each record fresh or stale against
+ * the surface as it is NOW. `currentSha` returns `null` for a surface that no
+ * longer exists — whose records are dropped, not counted.
+ */
+export function indexRuns(
+  artifact: CoverageArtifact | undefined,
+  currentSha: (path: string) => string | null,
+): Map<string, ExecutedRecord[]> {
+  const index = new Map<string, ExecutedRecord[]>();
+  if (!artifact) return index;
+  const shaCache = new Map<string, string | null>();
+  for (const run of artifact.runs) {
+    if (!shaCache.has(run.path)) shaCache.set(run.path, currentSha(run.path));
+    const now = shaCache.get(run.path) ?? null;
+    if (now === null) continue;
+    const list = index.get(run.path) ?? [];
+    list.push({ run, fresh: now === run.sha });
+    index.set(run.path, list);
+  }
+  return index;
+}
