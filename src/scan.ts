@@ -19,6 +19,7 @@ import { loadPlugin } from "./adapters/claude-code/plugin-loader.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
 import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
 import { danglingRefs } from "./plugin-loader.js";
+import { brokenSkillRefs, formatSkillRefIssue } from "./skill-refs.js";
 import type { PluginLayout } from "./core/layout.js";
 import type { HarnessDialect } from "./core/dialect.js";
 import type { ToolIssue } from "./core/tool-contract.js";
@@ -275,6 +276,18 @@ export interface ScanReport {
    * and the leaderboard can count it.
    */
   readonly danglingRefs: readonly string[];
+  /**
+   * Skills naming a sibling skill that does not exist (a near-miss of a real one
+   * — a rename or a typo). Separate from `danglingRefs` because that field holds
+   * PATH tokens from executable sources; these are full sentences about prose.
+   * Both are broken intra-plugin references and score in the same category.
+   *
+   * OPTIONAL because absence is not a claim: a producer that predates this field
+   * (or a browser scan that has not been taught it) reports nothing rather than
+   * reporting zero, the same `undefined`-vs-`[]` distinction the check counter
+   * and `assertNoWrite` already draw.
+   */
+  readonly skillRefIssues?: readonly string[];
   /** Hooks registered under an event name the harness doesn't define (typo / dead). */
   readonly hookEventIssues: readonly HookEventIssue[];
   /** Skills/agents missing a required frontmatter field (name; agents also description). */
@@ -558,6 +571,18 @@ export function scanPlugin(
       loaded.warnings.some((w) => w.includes("MCP server")) ||
       declaredServers.length > 0,
     danglingRefs: danglingRefs(resolve(dir), lay),
+    // Skill→skill references BY NAME, which `danglingRefs` structurally cannot
+    // see: it matches PATHS in EXECUTABLE sources and skips prose by design, and
+    // this reference lives in prose. Contents come from the already-loaded file
+    // map, so it costs no extra I/O.
+    skillRefIssues: brokenSkillRefs(
+      skills.flatMap((s) => {
+        const content = loaded.files[s.path];
+        return content === undefined
+          ? []
+          : [{ name: s.name, path: s.path, content }];
+      }),
+    ).map(formatSkillRefIssue),
     hookEventIssues,
     frontmatterIssues: remap(frontmatterIssuesFor(loaded.files, cls)),
     frontmatterValueIssues: remap(frontmatterValueIssuesFor(loaded.files, cls)),

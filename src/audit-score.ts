@@ -169,6 +169,15 @@ function truthfulness(r: ScanReport): CategoryScore {
       label: "broken intra-plugin reference(s)",
     },
     {
+      // Same weight and same category as the path-shaped one above: both are a
+      // reference that resolves to nothing. Counted separately only because the
+      // labels must read differently — "a path that isn't there" and "a skill
+      // that isn't there" send the reader to different fixes.
+      n: r.skillRefIssues?.length ?? 0,
+      weight: W_DANGLING_REF,
+      label: "skill(s) naming a sibling skill that does not exist",
+    },
+    {
       n: missingHooks,
       weight: W_MISSING_HOOK,
       label: "hook script(s) missing (never run)",
