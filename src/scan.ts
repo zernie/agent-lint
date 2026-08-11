@@ -12,7 +12,7 @@
  * stack on top later; this core stays pure so it runs anywhere in CI for free.
  */
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
 import { loadPlugin } from "./adapters/claude-code/plugin-loader.js";
@@ -44,6 +44,11 @@ import {
   conflictedHarnessConfigs,
   mergeConflictWarning,
 } from "./core/merge-conflict.js";
+import {
+  foreignRunnerTests,
+  foreignRunnerTestWarning,
+  harnessSurfaceDirs,
+} from "./core/foreign-runner-tests.js";
 import type { TrifectaFinding } from "./core/lethal-trifecta.js";
 import type { SkillResourceFinding } from "./core/skill-resources.js";
 import type { SkillFenceFinding } from "./core/skill-missing-fence.js";
@@ -492,6 +497,48 @@ function ownTestSignalOnDisk(dir: string): boolean {
   });
 }
 
+/**
+ * Repo-relative POSIX paths of every file under the harness surface dirs — the
+ * disk half of {@link foreignRunnerTests}'s injected enumerator.
+ *
+ * Only those dirs are walked, so the rest of the repo (and any `node_modules`
+ * beside it) is never entered. The browser twin passes its whole map and the
+ * SHARED predicate filters it down to the same dirs, so the two engines reach an
+ * identical list — the parity gate compares the reports byte for byte.
+ *
+ * Missing dirs and unreadable entries are skipped rather than thrown: this feeds
+ * an advisory warning, and a scan must not die because one surface dir is a
+ * dangling symlink.
+ */
+function harnessSurfaceFilesOnDisk(
+  dir: string,
+  layout: PluginLayout,
+): readonly string[] {
+  const out: string[] = [];
+  const walk = (abs: string, rel: string): void => {
+    let entries: readonly string[];
+    try {
+      entries = readdirSync(abs);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const key = `${rel}/${entry}`;
+      try {
+        const st = statSync(join(abs, entry));
+        if (st.isDirectory()) walk(join(abs, entry), key);
+        else if (st.isFile()) out.push(key);
+      } catch {
+        continue;
+      }
+    }
+  };
+  for (const surface of harnessSurfaceDirs(layout)) {
+    walk(join(dir, surface), surface);
+  }
+  return out;
+}
+
 /** Scan a plugin/repo directory and report its surfaces + structural issues. */
 export function scanPlugin(
   dir: string,
@@ -639,18 +686,26 @@ export function scanPlugin(
       dialect,
     ),
     malformedFrontmatter: remap(malformedFrontmatterFor(loaded.files, cls)),
-    // A harness config left mid-merge is reported BEFORE the author starts
-    // guessing why every command is refused — the whole cost of the 2026-08-10
-    // wedge was that nothing in the output named `package.json`. A warning, not
-    // a scored finding: it is transient repo state, not a fact about how the
-    // harness was designed, and a grade that swings on an unresolved merge is
-    // noise.
     warnings: [
       ...loaded.warnings,
+      // A harness config left mid-merge is reported BEFORE the author starts
+      // guessing why every command is refused — the whole cost of the 2026-08-10
+      // wedge was that nothing in the output named `package.json`. A warning, not
+      // a scored finding: it is transient repo state, not a fact about how the
+      // harness was designed, and a grade that swings on an unresolved merge is
+      // noise.
       ...conflictedHarnessConfigs((f) => {
         const p = join(dir, f);
         return existsSync(p) ? nodeReadFile(p) : undefined;
       }).map(mergeConflictWarning),
+      // A harness test named `*.test.*` (or parked in `__tests__/`) is collected
+      // by a DEFAULT vitest/jest run — measured, not assumed. Same call as the
+      // merge conflict: a warning, never scored. The grade must not move because
+      // of what someone named a file next to a hook; this is a hazard in how the
+      // repo meets OTHER tools, not a fact about how the harness was designed.
+      ...foreignRunnerTests(() => harnessSurfaceFilesOnDisk(dir, lay), lay).map(
+        foreignRunnerTestWarning,
+      ),
     ],
     untested: coverage.untested.length,
     untestedHarness: coverage.harness.untested.length,

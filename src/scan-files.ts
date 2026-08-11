@@ -80,6 +80,10 @@ import {
   conflictedHarnessConfigs,
   mergeConflictWarning,
 } from "./core/merge-conflict.js";
+import {
+  foreignRunnerTests,
+  foreignRunnerTestWarning,
+} from "./core/foreign-runner-tests.js";
 // TYPE-ONLY from ./scan.js (the report shapes) — elided at build, so the
 // node-only runtime deps of scan.ts (plugin-loader/mcp/test-coverage/node:fs)
 // never enter this browser-safe engine's graph. The runtime detectors come from
@@ -762,6 +766,12 @@ export function scanFiles(
     warnings: [
       ...loaded.warnings,
       ...conflictedHarnessConfigs((f) => files[f]).map(mergeConflictWarning),
+      // Same detector as `scanPlugin`, over the map instead of a disk walk. The
+      // shared predicate does the surface-dir filtering, so handing it every key
+      // reaches the same list the disk side reaches by walking only those dirs.
+      ...foreignRunnerTests(() => Object.keys(files), lay).map(
+        foreignRunnerTestWarning,
+      ),
     ],
     untested: coverage.untested.length,
     untestedHarness: coverage.harness.untested.length,
