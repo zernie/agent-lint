@@ -305,11 +305,13 @@ import {
 } from "./adapters/claude-code/run-scripts.js";
 import {
   COVERAGE_ARTIFACT_VERSION,
+  executedScripts,
   mergeRuns,
   readCoverageArtifact,
   recordsFrom,
   runsFromResults,
   writeCoverageArtifact,
+  type CoverageRun,
   type CoverageTierName,
 } from "./coverage-artifact.js";
 import {
@@ -5301,38 +5303,60 @@ function resolveEvalLockEnv(args: string[]): Record<string, string> | "skip" {
  *
  * Best-effort throughout: a repo that cannot be scanned or a `.vigiles/` that
  * cannot be written must never turn a green run red.
+ *
+ * 🔴 A RUN RETRACTS AS WELL AS RECORDS. The scripts that executed are handed to
+ * `mergeRuns` so their previous records go before the new ones land — otherwise
+ * a script edited to stop exercising a surface leaves that surface permanently
+ * "measured by a run" (see the retraction note on `mergeRuns`). This is why the
+ * cheap early return on "nothing new to record" is gone: a run that now reports
+ * NOTHING is exactly the case worth writing down.
  */
+/** Resolve this run's probes against the repo's discovered surfaces. */
+function resolveRecords(
+  cwd: string,
+  runs: ReturnType<typeof runsFromResults>,
+  tier: CoverageTierName,
+): CoverageRun[] {
+  const scan = findUntestedSurfaces({ basePath: cwd });
+  return recordsFrom({
+    runs,
+    surfaces: [...scan.covered, ...scan.untested],
+    tier,
+    at: new Date().toISOString(),
+    readSurface: (p) => {
+      try {
+        return readFileSync(resolve(cwd, p), "utf-8");
+      } catch {
+        return null;
+      }
+    },
+  });
+}
+
 function recordRunCoverage(
   cwd: string,
   results: readonly ScriptRunResult[],
   tier: CoverageTierName,
 ): void {
   try {
-    const runs = runsFromResults(results);
-    if (runs.length === 0) return;
-    const scan = findUntestedSurfaces({ basePath: cwd });
-    const surfaces = [...scan.covered, ...scan.untested];
-    const records = recordsFrom({
-      runs,
-      surfaces,
-      tier,
-      at: new Date().toISOString(),
-      readSurface: (p) => {
-        try {
-          return readFileSync(resolve(cwd, p), "utf-8");
-        } catch {
-          return null;
-        }
-      },
-    });
-    if (records.length === 0) return;
     const previous = readCoverageArtifact(cwd);
+    const executed = { scripts: executedScripts(results), tier };
+    const runs = runsFromResults(results);
+    // Discovery is only needed to RESOLVE new probes; a pure retraction needs
+    // nothing but the artifact, so a repo scan is skipped when there are none.
+    const records = runs.length === 0 ? [] : resolveRecords(cwd, runs, tier);
+    const merged = mergeRuns(previous?.runs ?? [], records, executed);
+    // Nothing to add and nothing withdrawn — leave the file exactly as it is, so
+    // a repo with no artifact still gets none (the "absent artifact = today's
+    // behaviour" property) and a green no-op run doesn't churn the timestamp.
+    if (records.length === 0 && merged.length === (previous?.runs.length ?? 0))
+      return;
     const commit = gitHead(cwd);
     writeCoverageArtifact(cwd, {
       v: COVERAGE_ARTIFACT_VERSION,
       generated: new Date().toISOString(),
       ...(commit ? { commit } : {}),
-      runs: mergeRuns(previous?.runs ?? [], records),
+      runs: merged,
     });
   } catch {
     /* recording is never allowed to fail a run */

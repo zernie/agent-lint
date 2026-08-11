@@ -212,6 +212,34 @@ export function recordsFrom(opts: {
 }
 
 /**
+ * The scripts a run actually executed, and the tier it executed them in.
+ * See {@link executedScripts} for what "executed" means, and {@link mergeRuns}
+ * for why the merge needs to be told.
+ */
+export interface ExecutedScripts {
+  /** Script files, exactly as `by` records them (`ScriptRunResult.file`). */
+  readonly scripts: readonly string[];
+  readonly tier: CoverageTierName;
+}
+
+/**
+ * The scripts a run EXECUTED — the retraction set for {@link mergeRuns}.
+ *
+ * A skip is the one status that is not an execution: the deterministic tier
+ * skips when `claude` is absent, and dropping a record because the machine of
+ * the day lacks a CLI would delete a real measurement taken on the machine that
+ * had it. Every other status ran the file. `fail` and `vacuous` are deliberately
+ * in: a script that ran and proved nothing must not keep yesterday's green
+ * record alive, which is the same "activity taken for the property" that
+ * {@link runsFromResults} refuses to write in the first place.
+ */
+export function executedScripts(
+  results: readonly { readonly file: string; readonly status: string }[],
+): string[] {
+  return results.filter((r) => r.status !== "skip").map((r) => r.file);
+}
+
+/**
  * Merge new records over old, keeping the newest per (surface, tier, script).
  *
  * Merging rather than replacing is what makes the two cadences composable: the
@@ -219,13 +247,38 @@ export function recordsFrom(opts: {
  * a `vigiles test` today must not erase what `vigiles eval` measured last week.
  * Scoping the key by SCRIPT means running one file by name doesn't drop the
  * records of the files that were not run.
+ *
+ * 🔴 `executed` RETRACTS, AND WITHOUT IT COVERAGE NEVER EXPIRES. Merging alone
+ * can only overwrite keys that appear in `next`, so a script edited to stop
+ * touching a surface — or to assert nothing at all — leaves its old record in
+ * place, and that record stays FRESH as long as the surface file itself is not
+ * edited (staleness is keyed to the surface's text, not to the test's). Measured
+ * 2026-08-11 on a two-hook fixture: a harness pointed from `hooks/a.sh` to
+ * `hooks/b.sh` and re-run produced records for BOTH, and `lint` reported
+ * "2 MEASURED BY A RUN" — execution-tier coverage for a hook nothing executes,
+ * with no expiry and no way to notice. So the records of the scripts that ran
+ * are dropped BEFORE the new ones are added: what a run says about its own
+ * script replaces everything that run's script said before, including silence.
+ *
+ * The retraction is scoped to (script, tier) — the merge key minus the surface —
+ * so it can only ever retract what that script previously claimed. Omitting
+ * `executed` keeps the old merge-only behaviour, which is what a caller that
+ * does not know which scripts ran must get.
  */
 export function mergeRuns(
   previous: readonly CoverageRun[],
   next: readonly CoverageRun[],
+  executed?: ExecutedScripts,
 ): CoverageRun[] {
+  const retracted = new Set<string>();
+  if (executed)
+    for (const file of executed.scripts)
+      retracted.add(`${executed.tier}\u0000${norm(file)}`);
+  const kept = previous.filter(
+    (r) => !retracted.has(`${r.tier}\u0000${norm(r.by)}`),
+  );
   const byKey = new Map<string, CoverageRun>();
-  for (const run of [...previous, ...next]) {
+  for (const run of [...kept, ...next]) {
     const key = `${run.path}\u0000${run.tier}\u0000${run.by}`;
     const held = byKey.get(key);
     if (!held || held.at <= run.at) byKey.set(key, run);

@@ -14,6 +14,7 @@ import { join } from "node:path";
 
 import {
   COVERAGE_ARTIFACT_VERSION,
+  executedScripts,
   indexRuns,
   mergeRuns,
   readCoverageArtifact,
@@ -197,6 +198,111 @@ test("a re-run of the same script in the same tier replaces its record", () => {
   );
   assert.equal(merged.length, 1);
   assert.equal(merged[0].sha, "new");
+});
+
+// --- retraction --------------------------------------------------------------
+//
+// Merging can only OVERWRITE keys present in `next`, so without a retraction set
+// a script that stops exercising a surface leaves its record behind — and that
+// record stays FRESH for as long as the SURFACE is not edited, which rewriting
+// the test does not do. Reproduced end-to-end 2026-08-11 on a two-hook fixture:
+// a harness repointed from `hooks/a.sh` to `hooks/b.sh` produced records for
+// both, and `lint` printed "2 MEASURED BY A RUN".
+
+test("a script that STOPS exercising a surface retracts its old record", () => {
+  const merged = mergeRuns(
+    [run({ path: "hooks/a.sh", name: "a", kind: "hook" })],
+    [run({ path: "hooks/b.sh", name: "b", kind: "hook" })],
+    { scripts: ["t.harness.mjs"], tier: "harness" },
+  );
+  assert.deepEqual(
+    merged.map((r) => r.path),
+    ["hooks/b.sh"],
+  );
+});
+
+test("…and a script that now reports NOTHING retracts everything it claimed", () => {
+  // The sharper half: with no new records there is no key to overwrite, so this
+  // is the case merging alone can never reach. A test emptied of its assertions
+  // must not leave the surface it used to exercise looking measured.
+  assert.deepEqual(
+    mergeRuns([run({ path: "hooks/a.sh" })], [], {
+      scripts: ["t.harness.mjs"],
+      tier: "harness",
+    }),
+    [],
+  );
+});
+
+test("…but a script that was NOT run keeps its records", () => {
+  // `vigiles test one.harness.mjs` runs one file. Retracting on behalf of files
+  // that never ran would make naming a single test erase the suite.
+  const merged = mergeRuns(
+    [
+      run({ path: "hooks/a.sh", by: "t.harness.mjs" }),
+      run({ path: "hooks/b.sh", by: "u.harness.mjs" }),
+    ],
+    [],
+    { scripts: ["t.harness.mjs"], tier: "harness" },
+  );
+  assert.deepEqual(
+    merged.map((r) => r.by),
+    ["u.harness.mjs"],
+  );
+});
+
+test("…and retraction never crosses the tier boundary", () => {
+  // Same file, other tier: the free per-push run must not withdraw what the paid
+  // scheduled run measured. Same reason the merge key already carries the tier.
+  const merged = mergeRuns(
+    [run({ tier: "eval", by: "a.eval.mjs", sha: "measured-by-model" })],
+    [],
+    { scripts: ["a.eval.mjs"], tier: "harness" },
+  );
+  assert.deepEqual(
+    merged.map((r) => r.sha),
+    ["measured-by-model"],
+  );
+});
+
+test("without a retraction set, merge behaves exactly as it did", () => {
+  // The control for the four above: the parameter is optional, and a caller that
+  // cannot say which scripts ran must not silently start deleting records.
+  assert.equal(
+    mergeRuns([run({ path: "hooks/a.sh" })], [run({ path: "hooks/b.sh" })])
+      .length,
+    2,
+  );
+});
+
+test("a Windows-recorded `by` is retracted by its POSIX equivalent", () => {
+  // The artifact outlives the machine that wrote it; a checkout shared by a
+  // Windows dev and a CI runner would otherwise accumulate two records per
+  // script, one of them permanently unretractable.
+  assert.deepEqual(
+    mergeRuns([run({ by: "test\\t.harness.mjs" })], [], {
+      scripts: ["test/t.harness.mjs"],
+      tier: "harness",
+    }),
+    [],
+  );
+});
+
+test("every status but a skip is an execution", () => {
+  // A skip did not run: the deterministic tier skips when `claude` is missing,
+  // and dropping a record because today's machine lacks a CLI would delete a
+  // measurement taken on the machine that had it. `fail` and `vacuous` DID run
+  // and established nothing, so their old green records must not outlive them —
+  // the same rule `runsFromResults` applies when refusing to WRITE one.
+  assert.deepEqual(
+    executedScripts([
+      { file: "pass.harness.mjs", status: "pass" },
+      { file: "fail.harness.mjs", status: "fail" },
+      { file: "vacuous.harness.mjs", status: "vacuous" },
+      { file: "skip.harness.mjs", status: "skip" },
+    ]),
+    ["pass.harness.mjs", "fail.harness.mjs", "vacuous.harness.mjs"],
+  );
 });
 
 // --- staleness ---------------------------------------------------------------
