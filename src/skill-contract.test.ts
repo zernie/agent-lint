@@ -56,6 +56,24 @@ test("onlyTools passes when every call is declared, and names EVERY offender", (
   assert.equal(bad.message.match(/Bash/g)?.length, 1);
 });
 
+test("onlyTools matches a RESTRICTED declaration by its base tool name", () => {
+  // `Bash(git:*)` is the ordinary way to write a narrow grant, and a trace only
+  // ever carries the base name `Bash` — so before this, set membership missed
+  // and every legitimate Bash call was reported as outside a declared set that
+  // literally lists Bash. A check that fires on its own happy path gets deleted,
+  // not debugged, and this one fired on exactly the authors who narrowed.
+  const allow = onlyTools(["Bash(git:*)", "Read"]);
+  const good = allow.eval(trace(["Bash", "Read"]));
+  assert.equal(good.pass, true);
+  // The declaration is echoed as WRITTEN, not as normalized for matching.
+  assert.match(good.message, /Bash\(git:\*\)/);
+
+  // The other half: normalizing must not turn the white-list into a pass-all.
+  const bad = allow.eval(trace(["Bash", "WebFetch"]));
+  assert.equal(bad.pass, false);
+  assert.match(bad.message, /WebFetch/);
+});
+
 test("onlyTools FAILS on a trace that recorded nothing (we didn't look != it was clean)", () => {
   // The `assertWroteOnly` discipline: an uncaptured run is indistinguishable
   // from a tool-free one, so passing it would assert nothing.
@@ -90,6 +108,30 @@ test("skillContract reads allowed-tools and builds a surface that catches an und
   const bad = surface.eval(trace(["Skill", "Read", "ToolSearch"]));
   assert.equal(bad.pass, false);
   assert.match(bad.message, /ToolSearch/);
+  cleanupTmpDir(dir);
+});
+
+test("skillContract: a skill declaring `Bash(git:*)` is not failed by its own git call", () => {
+  // The whole path, from the frontmatter a real skill ships to the verdict:
+  // `allowed-tools: Bash(git:*)` reaches `onlyTools` as that literal string, and
+  // the trace says `Bash`. Reproduced 2026-08-11 on this fixture before the fix —
+  // "agent used tool(s) outside its declared set: Bash (declared: Bash(git:*),
+  // Read, Skill)". The declaration is kept verbatim in `declared`, since it is
+  // what the author wrote and what `lethal-trifecta` reads the restriction from.
+  const dir = makeTmpDir("sc-restricted");
+  const skillDir = writeSkill(
+    dir,
+    "gitty",
+    "allowed-tools: Bash(git:*), Read\n",
+  );
+  const c = skillContract(skillDir);
+  assert.deepEqual([...c.declared], ["Bash(git:*)", "Read"]);
+  assert.equal(c.surface[0].eval(trace(["Skill", "Bash", "Read"])).pass, true);
+  // …and still catches what it was built to catch.
+  assert.equal(
+    c.surface[0].eval(trace(["Skill", "Bash", "WebFetch"])).pass,
+    false,
+  );
   cleanupTmpDir(dir);
 });
 

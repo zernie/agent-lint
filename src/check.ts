@@ -105,6 +105,16 @@ const no = (message: string): CheckResult => ({
   message,
 });
 
+/**
+ * `Bash(git:*)` → `Bash`. A declaration may carry a restriction; a trace never
+ * does, so the two only meet on the base name. Same one-liner as
+ * `core/tool-contract.ts` / `core/lethal-trifecta.ts`, kept local because the
+ * testing pillar does not otherwise depend on the linting core.
+ */
+function baseTool(raw: string): string {
+  return raw.split("(")[0].trim();
+}
+
 function distinctToolNames(calls: readonly ToolCall[]): string {
   const names = [...new Set(calls.map((c) => c.name))];
   return names.length > 0 ? `[${names.join(", ")}]` : "no tools";
@@ -219,10 +229,32 @@ export function notTool(name: string, args?: ArgMatcher): Check<Trace> {
  * and passing it would assert nothing. Same discipline as `assertWroteOnly`
  * refusing a result that never recorded writes: "we didn't look" is not "it was
  * clean".
+ *
+ * 🔴 A `Tool(restriction)` DECLARATION IS MATCHED BY ITS BASE NAME. `allowed-tools:
+ * Bash(git:*)` is the ordinary way to write a narrow grant, and `skillContract`
+ * hands that literal string here — while a trace only ever carries the base name
+ * `Bash`, because that is the tool the harness reports. Set membership therefore
+ * missed, and every legitimate `Bash` call was reported as outside the declared
+ * surface, against a declaration that literally lists Bash (measured 2026-08-11:
+ * `agent used tool(s) outside its declared set: Bash (declared: Bash(git:*),
+ * Read, Skill)`). A check that fires on its own happy path gets deleted, not
+ * debugged — and it would fire on exactly the authors who narrowed their grant.
+ *
+ * ⚠️ AND THE RESTRICTION ITSELF IS NOT VERIFIED HERE, deliberately. A trace names
+ * the tool, not the grant it was matched against, so `Bash(git:*)` can be held to
+ * "no tool outside the declared set" and no further; whether the command really
+ * was a `git` one is a claim this layer has no evidence for. Narrowing beyond the
+ * base name is `disallowed-tools:` + `lethal-trifecta`'s job (see
+ * `skill-contract.ts`), which reads the grant instead of the run. The same
+ * `split("(")` normalization the rest of the codebase already applies to tool
+ * declarations — `core/tool-contract.ts`, `core/lethal-trifecta.ts`,
+ * `core/delegation-trifecta.ts`.
  */
 export function onlyTools(allowed: readonly string[]): Check<Trace> {
-  const allow = new Set(allowed);
-  const declared = [...allow].join(", ") || "none";
+  const allow = new Set(allowed.map(baseTool));
+  // The declaration is echoed VERBATIM: an author who wrote `Bash(git:*)` must
+  // read back what they wrote, not the normalized form the matching used.
+  const declared = [...new Set(allowed)].join(", ") || "none";
   return {
     kind: "onlyTools",
     eval: (t) => {
