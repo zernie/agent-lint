@@ -2,9 +2,14 @@
  * Untested-surface detector test suite.
  *
  * Pure, filesystem-driven: build a tiny fake plugin in a tmp dir and assert the
- * two coverage detectors (colocation + content-reference), the user-invoked
- * exemption, the ignore-marker opt-out, hook-script discovery, and the report
- * formatting. No model, no network.
+ * ONE coverage detector (colocation), the user-invoked exemption, the
+ * ignore-marker opt-out, hook-script discovery, and the report formatting. No
+ * model, no network.
+ *
+ * Several tests here are INVERSIONS of ones that used to assert the opposite —
+ * a name-mention and a `vigiles:covers` declaration both used to confer
+ * coverage. They are kept as inversions rather than deleted so the removal is
+ * pinned: a future re-introduction of either tier fails these.
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
@@ -116,13 +121,18 @@ test("loose skill under .claude/skills is covered by its colocated eval", () => 
   cleanupTmpDir(dir);
 });
 
-test("skill is covered by a content-reference anywhere (namespace token)", () => {
+test("a test that only NAMES the skill does NOT cover it", () => {
+  // Was "content-reference covers it". Inverted 2026-08-11: naming a surface is
+  // not testing it, and the tier that believed otherwise supplied 9 of vigiles's
+  // own 10 covered surfaces with at least three of them false.
   const dir = makeTmpDir("tc-ref");
   write(dir, "skills/foo/SKILL.md", skill("foo"));
-  // a test elsewhere that names the skill via its namespaced id
   write(dir, "test/foo.eval.mjs", 'skillResolved(t, "myplugin:foo");\n');
   const r = findUntestedSurfaces({ basePath: dir });
-  assert.equal(r.untested.length, 0);
+  assert.deepEqual(
+    r.untested.map((x) => x.name),
+    ["foo"],
+  );
   cleanupTmpDir(dir);
 });
 
@@ -218,10 +228,20 @@ test("hook scripts are discovered from plugin.json and matched by path", () => {
       },
     }),
   );
-  // a unit test that drives only pre-edit by path
+  // A unit test elsewhere that drives pre-edit BY PATH now covers nothing —
+  // naming a hook is not testing it. This is the exact shape by which the
+  // detector's own suite used to grant coverage to these two hooks.
   write(dir, "src/hooks.test.ts", 'runHook("hooks/pre-edit.sh", {});\n');
-  const r = findUntestedSurfaces({ basePath: dir });
+  let r = findUntestedSurfaces({ basePath: dir });
   assert.equal(r.total, 2);
+  assert.deepEqual(r.untested.map((s) => s.name).sort(), [
+    "post-edit",
+    "pre-edit",
+  ]);
+
+  // A hook is covered by a name-prefixed SIBLING — placement, not mention.
+  write(dir, "hooks/pre-edit.harness.mjs", "assert.ok(true);\n");
+  r = findUntestedSurfaces({ basePath: dir });
   assert.deepEqual(
     r.covered.map((s) => s.name),
     ["pre-edit"],
@@ -324,9 +344,11 @@ test("tiers split at discovery: a harness-only skill is NOT evaluated, and vice 
 test("a `*.test.ts` is a HARNESS, never an eval (it spends no model calls)", () => {
   const dir = makeTmpDir("cov-tier-ts");
   write(dir, "skills/foo/SKILL.md", skill("foo"));
-  write(dir, "suite/foo.test.ts", 'import "../skills/foo/SKILL.md";\n');
+  // Colocated, since placement is what counts — a `.test.ts` in a far-off suite
+  // covers nothing regardless of which tier it would land in.
+  write(dir, "skills/foo/foo.test.ts", 'import "./SKILL.md";\n');
   const r = findUntestedSurfaces({ basePath: dir });
-  assert.equal(r.untested.length, 0, "content-reference covers the union");
+  assert.equal(r.untested.length, 0, "colocated test covers the union");
   assert.equal(r.harness.untested.length, 0, "…and the deterministic tier");
   assert.deepEqual(
     r.evals.untested.map((s) => s.name),
@@ -409,111 +431,91 @@ test("a surface named ONLY in a comment is NOT covered (the one-line probe)", ()
   cleanupTmpDir(dir);
 });
 
-test("a mention in CODE still counts — the zero-config path is kept, and labelled", () => {
-  // The bare substring detector is deliberately RETAINED for code: it is what
-  // makes an ordinary `foo.test.ts` naming `skills/foo` count without anyone
-  // learning a marker. What it no longer reads is comments.
-  const dir = makeTmpDir("cov-code-mention");
-  write(dir, "skills/foo/SKILL.md", skill("foo"));
-  write(dir, "test/foo.test.ts", 'loadSkill("skills/foo/SKILL.md");\n');
+test("a declaration cannot confer coverage on a file that asserts nothing", () => {
+  // The lie this removal exists to stop: a file whose entire content is a
+  // `vigiles:covers` comment used to report BOTH surfaces as tested.
+  const dir = makeTmpDir("cov-liar");
+  write(dir, "skills/alpha/SKILL.md", skill("alpha"));
+  write(dir, "skills/beta/SKILL.md", skill("beta"));
+  write(
+    dir,
+    "test/liar.harness.mjs",
+    "// vigiles:covers skills/alpha, skills/beta\n",
+  );
   const r = findUntestedSurfaces({ basePath: dir });
-  assert.equal(r.untested.length, 0);
-  assert.deepEqual(coverageEvidenceCounts(r), {
-    declared: 0,
-    colocated: 0,
-    mention: 1,
-  });
+  assert.deepEqual(r.untested.map((x) => x.name).sort(), ["alpha", "beta"]);
   cleanupTmpDir(dir);
 });
 
-test("a URL in a string literal survives comment-stripping", () => {
-  // The stripper must not treat `//` inside a string as a comment opener, or a
-  // fixture URL would swallow the rest of the line and drop real coverage.
-  const dir = makeTmpDir("cov-url");
+test("coverage cannot be changed by editing text INSIDE a test file", () => {
+  // Placement decides coverage now, so the detector never reads a test's
+  // contents — which is what made the old metric editable by one comment line.
+  const dir = makeTmpDir("cov-content-blind");
   write(dir, "skills/foo/SKILL.md", skill("foo"));
   write(
     dir,
     "test/foo.test.ts",
-    'const u = "https://example.com"; loadSkill("skills/foo");\n',
+    'loadSkill("skills/foo"); // vigiles:covers skills/foo\n',
   );
-  assert.equal(findUntestedSurfaces({ basePath: dir }).untested.length, 0);
+  assert.equal(findUntestedSurfaces({ basePath: dir }).untested.length, 1);
   cleanupTmpDir(dir);
 });
 
-test("a runtime-path harness that DECLARES its surfaces is counted", () => {
-  // The false NEGATIVE half: this harness really does assert over both skills,
-  // but assembles the paths at runtime, so it contains ZERO literal `skills/<name>`
-  // strings. Substring matching can never see it; a declaration can.
-  const dir = makeTmpDir("cov-declared");
+test("a runtime-path harness covers nothing until its tests are colocated", () => {
+  // The honest cost of colocation-only, pinned rather than hidden: a harness
+  // that really does assert over both skills but assembles paths at runtime
+  // counts for neither. The fix is a test inside each skill's directory, not a
+  // marker claiming credit from afar.
+  const dir = makeTmpDir("cov-runtime");
   write(dir, "skills/alpha/SKILL.md", skill("alpha"));
   write(dir, "skills/beta/SKILL.md", skill("beta"));
-  const runtimeHarness = [
-    "import { join } from 'node:path';",
-    "// vigiles:covers skills/alpha, skills/beta",
-    "for (const name of ['alpha', 'beta']) {",
-    "  assertFrontmatter(join(root, 'skills', name, 'SKILL.md'));",
-    "}",
-    "",
-  ].join("\n");
-  write(dir, "test/pipeline.harness.mjs", runtimeHarness);
-  // The literal path exists ONLY on the declaration line: strike that line and
-  // no substring detector could ever have found either skill.
-  const codeOnly = runtimeHarness
-    .split("\n")
-    .filter((l) => !l.includes("vigiles:covers"))
-    .join("\n");
-  assert.ok(!codeOnly.includes("skills/alpha"), codeOnly);
-  assert.ok(!codeOnly.includes("skills/beta"), codeOnly);
-
-  const r = findUntestedSurfaces({ basePath: dir });
-  assert.equal(r.untested.length, 0, "both surfaces are covered");
-  assert.deepEqual(coverageEvidenceCounts(r), {
-    declared: 2,
-    colocated: 0,
-    mention: 0,
-  });
-  cleanupTmpDir(dir);
-});
-
-test("evidence provenance is REPORTED, and names the weakest case explicitly", () => {
-  const dir = makeTmpDir("cov-provenance");
-  write(dir, "skills/mentioned/SKILL.md", skill("mentioned"));
-  write(dir, "test/a.test.ts", 'loadSkill("skills/mentioned");\n');
-  const mentionOnly = formatUntestedReport(
-    findUntestedSurfaces({ basePath: dir }),
-  );
-  assert.ok(mentionOnly.includes("How coverage was decided"), mentionOnly);
-  assert.ok(
-    mentionOnly.includes("ALL of it is a name appearing in a test file"),
-    mentionOnly,
-  );
-
-  // Add a colocated test and the "all of it" escalation must drop away.
-  write(dir, "skills/colo/SKILL.md", skill("colo"));
-  write(dir, "skills/colo/colo.harness.mjs", "export default () => {};\n");
-  const mixed = formatUntestedReport(findUntestedSurfaces({ basePath: dir }));
-  assert.ok(mixed.includes("1 colocated"), mixed);
-  assert.ok(!mixed.includes("ALL of it"), mixed);
-  cleanupTmpDir(dir);
-});
-
-test("a declaration OUTRANKS a mention for the same surface", () => {
-  // Provenance must not depend on glob order: the strongest evidence wins.
-  const dir = makeTmpDir("cov-rank");
-  write(dir, "skills/foo/SKILL.md", skill("foo"));
-  write(dir, "test/a-mention.test.ts", 'loadSkill("skills/foo");\n');
   write(
     dir,
-    "test/z-declared.harness.mjs",
-    "// vigiles:covers skills/foo\nexport default () => {};\n",
+    "test/pipeline.harness.mjs",
+    [
+      "// vigiles:covers skills/alpha, skills/beta",
+      "for (const name of ['alpha', 'beta']) {",
+      "  assertFrontmatter(join(root, 'skills', name, 'SKILL.md'));",
+      "}",
+      "",
+    ].join("\n"),
   );
+  assert.equal(findUntestedSurfaces({ basePath: dir }).untested.length, 2);
+
+  // Colocate one, and exactly one flips.
+  write(dir, "skills/alpha/alpha.harness.mjs", "assert.ok(true);\n");
+  const after = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(
+    after.untested.map((x) => x.name),
+    ["beta"],
+  );
+  assert.deepEqual(coverageEvidenceCounts(after), { colocated: 1 });
+  cleanupTmpDir(dir);
+});
+
+test("provenance is reported, and says placement is not proof of a run", () => {
+  const dir = makeTmpDir("cov-provenance");
+  write(dir, "skills/covered/SKILL.md", skill("covered"));
+  write(dir, "skills/covered/covered.eval.mjs", "assert.ok(true);\n");
+  const report = formatUntestedReport(findUntestedSurfaces({ basePath: dir }));
+  assert.match(report, /1 colocated/);
+  // The remaining hole is NAMED in the output rather than left for the reader
+  // to discover: an empty colocated file still counts.
+  assert.match(report, /EXISTS, not/);
+  cleanupTmpDir(dir);
+});
+
+test("an EMPTY colocated file still counts — the known, reported hole", () => {
+  // Pinned deliberately. Colocation proves placement, not execution; closing
+  // this needs the CHECK_COUNT channel (a run reporting >0 checks), which is a
+  // condition on this rule rather than another kind of evidence. The report
+  // says so out loud, so the number is not read as more than it is.
+  const dir = makeTmpDir("cov-empty");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  write(dir, "skills/foo/foo.eval.mjs", "");
   const r = findUntestedSurfaces({ basePath: dir });
-  assert.deepEqual(coverageEvidenceCounts(r), {
-    declared: 1,
-    colocated: 0,
-    mention: 0,
-  });
-  assert.equal(r.decisions[0].by, "test/z-declared.harness.mjs");
+  assert.equal(r.untested.length, 0);
+  assert.deepEqual(coverageEvidenceCounts(r), { colocated: 1 });
   cleanupTmpDir(dir);
 });
 

@@ -7,20 +7,21 @@
  * with no test is a probabilistic-compliance gap hiding in the deterministic
  * layer: nothing measures whether it still does what it claims.
  *
- * THREE detectors decide "tested", OR'd, so a test placed ANYWHERE counts — and
- * every decision now carries WHICH one decided it (see `coverage-evidence.ts`
- * for why that provenance is load-bearing, not decoration):
- *   1. declaration — a `vigiles:covers <surface>` marker in the test file. The
- *      only detector a RUNTIME-PATH harness can reach, and the only one that
- *      cannot happen by accident.
- *   2. colocation — a `*.{harness,eval}.mjs` next to the surface (the zero-config
- *      convention the warning suggests): `skills/foo/*.eval.mjs`,
- *      `agents/bar.harness.mjs`, `hooks/pre-edit.harness.mjs`.
- *   3. content-reference — any discovered test (incl. `*.test.ts`) whose CODE
- *      names the surface by PATH (`skills/foo`, `hooks/pre-edit.sh`) or NAMESPACE
- *      (`vigiles:foo`). Not bare-name — too fuzzy. And no longer COMMENTS: a name
- *      in a comment is prose about a test, not a test. Counting it made the
- *      metric gameable by one line (measured: untested 33 → 32, from a comment).
+ * ONE detector decides "tested": COLOCATION — a `*.{harness,eval}.mjs` inside the
+ * surface's own directory (`skills/foo/foo.eval.mjs`) or named after it next to
+ * it (`agents/bar.harness.mjs`, `hooks/pre-edit.harness.mjs`).
+ *
+ * There were three until 2026-08-11 (a `vigiles:covers` declaration, colocation,
+ * and a content-reference "mention"). They were three NAMING CONVENTIONS, not
+ * three strengths of evidence, and two of them could credit a surface no test
+ * touched — measured on vigiles's own repo, `mention` supplied 9 of 10 covered
+ * surfaces and at least three of those were false, including two hooks credited
+ * by this detector's OWN test suite naming them as fixtures. See
+ * `coverage-evidence.ts` for the full argument and the numbers.
+ *
+ * Colocation is kept because it cannot drift by construction: the test lives with
+ * the surface, so deleting or renaming the surface takes its test along, and `ls`
+ * answers "is this tested?" without running anything.
  *
  * Warning-by-default (a nudge, not a gate). EVERY skill, agent, and hook is held
  * to the requirement — invocation mode does NOT exempt anything (a command-only
@@ -49,11 +50,9 @@ import { globSync } from "glob";
 import type { PluginLayout } from "./core/layout.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
 import {
-  COVERS_MARKER,
   countEvidence,
   evidenceFor,
   formatEvidence,
-  isStronger,
   prepareTest,
   type CoverageEvidence,
   type EvidenceCounts,
@@ -333,7 +332,7 @@ function discoverTests(
   const found = globSync([...globs], { cwd: basePath, ignore, dot: true });
   // Prepared ONCE per file (comment-strip + declaration parse), not once per
   // (surface × file) pair — the matching below is quadratic by nature.
-  return found.map((path) => prepareTest(path, read(join(basePath, path))));
+  return found.map((path) => prepareTest(path));
 }
 
 /** Colocated: a test inside a skill dir, or a name-prefixed sibling of an agent/hook. */
@@ -368,8 +367,7 @@ function coverageOf(
     if (t.path === surface.path) continue;
     const ev = evidenceFor(surface, t, isColocated(surface, t.path));
     if (!ev) continue;
-    if (!best || isStronger(ev, best.evidence))
-      best = { surface, evidence: ev, by: t.path };
+    if (!best) best = { surface, evidence: ev, by: t.path };
   }
   return best;
 }
@@ -587,15 +585,17 @@ export function formatUntestedReport(report: UntestedReport): string {
       `${String(report.evals.untested.length)} whose firing was never measured ` +
       `(needs a real model, run on a schedule).`,
   );
-  // What the surfaces that DID pass are resting on. A repo whose coverage is
-  // entirely name-mentions should be able to see that about itself.
+  // What the surfaces that DID pass are resting on.
   if (provenance) lines.push(`  ${provenance}`);
   // Already testing these another way (a promptfoo suite, a home-grown evals
-  // file)? Point `testGlobs` at it so it counts toward coverage (issue #113).
+  // file)? Point `testGlobs` at it so it counts toward coverage (issue #113) —
+  // and put the file NEXT TO the surface, which is the only placement that
+  // counts now. See docs/rules/untested-skill.md.
   lines.push(
     `  Testing these another way (promptfoo / a home-grown eval loop)? Add its ` +
-      `files to \`testGlobs\` in .vigilesrc.json, and mark what it covers with ` +
-      `\`${COVERS_MARKER} <surface>\`. See docs/rules/untested-skill.md.`,
+      `files to \`testGlobs\` in .vigilesrc.json AND colocate them with the ` +
+      `surface — coverage is decided by placement, not by naming the surface ` +
+      `in a file. See docs/rules/untested-skill.md.`,
   );
   return lines.join("\n");
 }

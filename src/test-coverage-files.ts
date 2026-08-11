@@ -27,7 +27,6 @@ import type {
 } from "./test-coverage.js";
 import {
   evidenceFor,
-  isStronger,
   prepareTest,
   type PreparedTest,
 } from "./coverage-evidence.js";
@@ -195,10 +194,10 @@ function discoverHooks(
 
 function discoverTests(files: Record<string, string>): PreparedTest[] {
   const out: PreparedTest[] = [];
-  for (const [path, content] of Object.entries(files)) {
+  for (const path of Object.keys(files)) {
     if (isIgnored(path)) continue;
     if (DEFAULT_TEST_SUFFIXES.some((s) => path.endsWith(s))) {
-      out.push(prepareTest(path, content));
+      out.push(prepareTest(path));
     }
   }
   return out;
@@ -228,8 +227,7 @@ function coverageOf(
     if (t.path === surface.path) continue;
     const ev = evidenceFor(surface, t, isColocated(surface, t.path));
     if (!ev) continue;
-    if (!best || isStronger(ev, best.evidence))
-      best = { surface, evidence: ev, by: t.path };
+    if (!best) best = { surface, evidence: ev, by: t.path };
   }
   return best;
 }

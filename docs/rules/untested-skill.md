@@ -48,35 +48,51 @@ skills — not vendored, fixture, or nested copies).
 
 ## What counts as "tested"
 
-Three detectors, OR'd — a test placed **anywhere** counts — and the audit report
-prints **which one** decided each surface, because the three are not equally
-strong:
+**One detector: colocation.** A `*.{harness,eval}.mjs` inside the skill's own
+directory:
 
-1. **Declaration** — a `vigiles:covers <surface>` marker in the test file. The
-   strongest evidence: it cannot happen by accident, and it is the only detector a
-   harness that builds its paths at **runtime** can reach.
+```
+skills/foo/SKILL.md
+skills/foo/foo.eval.mjs      <- covers it
+```
 
-   ```js
-   // vigiles:covers skills/foo, skills/bar
-   for (const name of ["foo", "bar"]) assertSkill(join(root, "skills", name));
-   ```
+For an agent or a hook, a **name-prefixed sibling**: `agents/bar.harness.mjs`,
+`hooks/pre-edit.harness.mjs`.
 
-2. **Colocation** — a `*.{harness,eval}.mjs` inside the skill dir (`skills/foo/`).
-3. **Content-reference** — any discovered test (incl. `*.test.ts`) whose **code**
-   names the skill by **path** (`skills/foo`) or **namespace** (`vigiles:foo`).
-   The weakest: it only says the name appears.
+### Why only one (changed 2026-08-11)
 
-> **Comments do not count.** A skill path written in a comment is prose _about_ a
-> test, not a test — and counting it made the coverage number gameable by one
-> line. If a test really does cover a surface its code never names, say so with
-> `vigiles:covers`.
+There used to be three — a `vigiles:covers` **declaration**, **colocation**, and a
+**content-reference** that credited any test whose code named the surface. They
+were never three strengths of evidence; they were three naming conventions, all
+answering _"does this surface's name appear near a test?"_ and none answering
+_"did anything run against it?"_.
+
+Measured on vigiles's own repository before the change, the content-reference
+tier supplied **9 of 10** covered surfaces, and at least three of those were
+false — including two shipped hooks credited by the coverage detector's **own**
+test suite, which names them as fixtures. A declaration fared no better in
+practice: its first real use declared a conformance _lint_ over 21 skills as
+coverage _of_ those 21 skills, moving a repo from 31 untested to 16 while nothing
+new was tested.
+
+Colocation is kept because it cannot drift by construction. The test lives with
+the surface, so deleting the skill deletes its test, renaming moves both, and
+`ls` answers "is this tested?" without running anything.
+
+**The cost, stated plainly:** a good test that lives somewhere else now counts
+for nothing until you move it next to its surface. That is the intended
+pressure — a per-surface test belongs with its surface.
+
+> ⚠️ **What colocation still does not prove.** It says the file **exists**, not
+> that it **ran**: an empty `foo.eval.mjs` counts. The report says so on every
+> run. Closing that is a condition to add to this rule (a run reporting more than
+> zero checks), not a fourth kind of evidence.
 
 ## Counting an external test suite (promptfoo, a home-grown eval loop)
 
 If you already test your skills through a **separate loop** — a
 `promptfooconfig.yaml`, a home-grown `evals.json` benchmark, a Python harness —
-point `testGlobs` at those files so they count toward coverage instead of every
-surface reading as "untested":
+point `testGlobs` at those files **and place them beside the skill they cover**:
 
 ```json
 {
@@ -86,8 +102,7 @@ surface reading as "untested":
       {
         "testGlobs": [
           "**/*.{harness,eval}.mjs",
-          "promptfooconfig.yaml",
-          "evals/**/*.json"
+          "skills/*/promptfooconfig.yaml"
         ]
       }
     ]
@@ -95,21 +110,8 @@ surface reading as "untested":
 }
 ```
 
-A discovered file counts as covering a skill when it **names that skill by its
-path or namespace token** (`skills/foo` or `vigiles:foo`) outside a comment — the
-same content-reference rule above — or when it **declares** the skill with
-`vigiles:covers`.
-
-> **Heads-up:** an external config that references a skill **only** by prose
-> prompt text (never its path/namespace) won't match, even when added to
-> `testGlobs`. Declare it instead:
->
-> ```yaml
-> # vigiles:covers skills/foo
-> ```
->
-> Comment syntax is fine for the marker — the marker is read before comments are
-> stripped. What does _not_ work is hoping a bare mention in a comment is noticed.
+A file in `testGlobs` counts only where it sits. One central config naming every
+skill covers none of them — that is the content-reference rule that was removed.
 
 ## Exemptions
 
