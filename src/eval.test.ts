@@ -57,6 +57,7 @@ import {
   type ParsedModelRun,
   type ModelOutputParser,
   unregisteredSkillFiles,
+  spawnAgent,
 } from "./eval.js";
 import {
   usedTool,
@@ -2841,4 +2842,27 @@ test("formatTriggerRateReport: a PARTIAL rate is left alone", () => {
     usage: zeroUsage,
   };
   assert.doesNotMatch(formatTriggerRateReport(partial), /nothing fired/);
+});
+
+
+test("spawnAgent refuses to spend model calls when a foreign test runner owns the process", () => {
+  // 🔴 THIS TEST WORKS BECAUSE OF WHERE IT RUNS. Under vitest, `process.argv[1]`
+  // is `…/node_modules/vitest/dist/workers/forks.js` — so the guard fires here by
+  // construction, and asserting the throw costs nothing and spawns nothing. The
+  // same property is the whole point of the guard: a skill test that a foreign
+  // runner collects can no longer reach the model.
+  //
+  // Covering it through the real `spawnAgent` rather than the pure helper is
+  // deliberate. `foreignRunner`/`foreignRunnerRefusal` are unit-tested next door;
+  // what is NOT provable there is that the composition root actually calls them.
+  // Wiring is the half that silently rots.
+  assert.throws(
+    () =>
+      spawnAgent({
+        task: "anything",
+        cwd: ".",
+      } as unknown as AgentRunArgs),
+    /running under vitest/,
+    "the paid tier started under a foreign runner — a collected eval would bill on every push",
+  );
 });
