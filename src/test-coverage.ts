@@ -64,6 +64,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { load } from "js-yaml";
+import { testFileExt } from "./core/test-file-ext.js";
 import { globSync } from "glob";
 import type { PluginLayout } from "./core/layout.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
@@ -173,6 +174,9 @@ export interface UntestedReport {
    * so a report produced before this field still parses.
    */
   readonly legacyCoversFiles?: readonly string[];
+  /** Extension a generated test should use — see `core/test-file-ext.ts`.
+   *  Optional so a report produced before this field still parses. */
+  readonly testExt?: string;
   /**
    * How each covered surface was decided — the union tier's provenance, one
    * entry per `covered` element. A coverage count whose derivation is invisible
@@ -214,6 +218,14 @@ export interface TestCoverageOptions {
   readonly hooks?: boolean;
   /** Globs of test files that count as coverage. */
   readonly testGlobs?: readonly string[];
+  /**
+   * `testExtension` from `.vigilesrc.json` — which extension a GENERATED test
+   * gets. Detection (a tsconfig.json, a typescript dependency) decides by
+   * default; this field exists only to disagree with it. Deliberately NOT written
+   * by `init`: a value recorded at initialisation goes stale in silence when the
+   * project migrates, while detection re-runs every time.
+   */
+  readonly testExtension?: string;
   /** Extra ignore globs (added to node_modules/dist/.git/.vigiles). */
   readonly exclude?: readonly string[];
   /**
@@ -634,6 +646,13 @@ export function findUntestedSurfaces(
     untested: union.untested,
     exempt,
     staleRuns: staleRunsFor(considered, runIndex),
+    testExt: testFileExt({
+      configured: options.testExtension,
+      hasTsconfig: existsSync(join(basePath, "tsconfig.json")),
+      packageJson: existsSync(join(basePath, "package.json"))
+        ? read(join(basePath, "package.json"))
+        : undefined,
+    }),
     legacyCoversFiles: tests
       .map((t) => t.path)
       .filter((path) => read(join(basePath, path)).includes(LEGACY_COVERS)),
@@ -665,15 +684,15 @@ function staleRunsFor(
 }
 
 /** Suggested colocated test path for an untested surface (shown in the warning). */
-export function suggestedTestPath(surface: Surface): string {
+export function suggestedTestPath(surface: Surface, ext = "mjs"): string {
   // A root skill lives at ".", so drop the "./" prefix — the suggested path then
   // matches what globSync actually discovers at the top level.
   const dir = dirname(surface.path);
   const prefix = dir === "." ? "" : `${dir}/`;
   if (surface.kind === "skill") {
-    return `${prefix}${surface.name}.eval.mjs`;
+    return `${prefix}${surface.name}.eval.${ext}`;
   }
-  return `${prefix}${surface.name}.harness.mjs`;
+  return `${prefix}${surface.name}.harness.${ext}`;
 }
 
 /** Tally the union tier's coverage decisions by how each was established. */
@@ -730,7 +749,7 @@ export function skillTestNudge(
       `tier→API table (runHook · runHarnessTest+scriptModel · ` +
       `measureTriggerRate · measure+judged · runEval) and picks the cheapest ` +
       `tier that can answer your question. Start there, then add e.g. ` +
-      `${suggestedTestPath(untested)}.\n` +
+      `${suggestedTestPath(untested, report.testExt)}.\n` +
       `This is a reminder, not a block.`
     );
 
@@ -820,7 +839,7 @@ export function formatUntestedReport(report: UntestedReport): string {
     `⚠ ${String(report.untested.length)} surface(s) with no test or eval:`,
   ];
   for (const s of report.untested) {
-    lines.push(`    ${s.kind} ${s.path} — add e.g. ${suggestedTestPath(s)}`);
+    lines.push(`    ${s.kind} ${s.path} — add e.g. ${suggestedTestPath(s, report.testExt)}`);
   }
   // Name the two gaps SEPARATELY — they lead to different work at wildly
   // different cost. "add a test/eval" is one sentence for two prescriptions three
