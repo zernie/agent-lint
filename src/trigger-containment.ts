@@ -16,10 +16,18 @@
  * DIFFERENT router, and a prompt it fires on may be one the strong model
  * declines, so tuning against it optimises a configuration nobody runs.
  *
- * Nobody has measured it, which is why this is a function and not a footnote.
  * Selection is routing, not raw capability: a stronger model can legitimately
  * route ELSEWHERE — doing the work itself, or picking a more specific sibling —
- * so containment is genuinely open rather than obviously true.
+ * which is why containment was genuinely open rather than obviously true.
+ *
+ * MEASURED 2026-08-11, and it DOES NOT HOLD. 21 skills x 4 prompts, one trial
+ * each, whole-harness against 37 competing skills, haiku against sonnet: of 84
+ * shared prompts, 3 fired on haiku and NOT on sonnet — and one skill scored
+ * haiku 1.00 against sonnet 0.75, i.e. the weak model is not seeing less, it is
+ * routing differently. Read that as "containment is NOT established" (which is
+ * all the worst-case argument needs to fail — it requires containment to hold,
+ * not to usually hold) rather than "it breaks often": at one trial per prompt
+ * three breaks in 84 could still be dispersion. The model floor stays.
  *
  * Pure: give it two reports (or anything carrying `perPrompt`) and it classifies
  * every prompt the two have in common.

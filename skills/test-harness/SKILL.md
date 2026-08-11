@@ -42,7 +42,9 @@ before reporting it. (A partial rate is a real number — don't second-guess it.
 `compareContainment(weak, strong)` answers that: it reports prompts that fired on
 the weak model but NOT the strong one, and each one means the weak model is not a
 lower bound but a _different router_. Prompts that fired only on the strong model
-are expected and are not a failure.
+are expected and are not a failure. Measured once (21 skills, 84 prompts, haiku
+vs sonnet): **3 weak-only, and one skill higher on haiku** — so containment is
+not established, which is why the floor stays.
 
 If the unit and deterministic tiers can both answer it, **prefer unit**: it's
 faster and reaches events the deterministic mock can't drive.

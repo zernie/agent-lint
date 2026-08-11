@@ -312,10 +312,16 @@ runtime. That holds only if
 fires on the weak model  =>  fires on the strong one
 ```
 
-and nobody has measured whether it does. Selection is **routing**, not raw
-capability: a stronger model can legitimately route elsewhere, doing the work
-itself or picking a more specific sibling. So the implication is open, not
-obvious. Run the same set on both and compare:
+and that is not obvious, because selection is **routing**, not raw capability: a
+stronger model can legitimately route elsewhere, doing the work itself or picking
+a more specific sibling.
+
+**Measured 2026-08-11 — it does not hold.** 21 skills × 4 prompts, one trial
+each, whole-harness against 37 competing skills: of 84 shared prompts, **3 fired
+on haiku and not on sonnet**, and one skill scored **haiku 1.00 against sonnet
+0.75**. That is enough to reject the argument — it needs containment to hold, not
+to usually hold — and not enough to claim it breaks often. Hence the `sonnet`
+floor. Run the same set on both and compare:
 
 ```ts
 import { compareContainment, formatContainment } from "vigiles/testing";
