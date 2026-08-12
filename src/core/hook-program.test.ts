@@ -1522,3 +1522,27 @@ test("runHookProgram: the dispatcher threads the root to both file roles", () =>
   );
   assert.equal(gate.kind === "decision" && gate.decision.kind, "allow");
 });
+
+// ---------------------------------------------------------------------------
+// Round 29: the SAME carve-out, one layer up. Round 28 kept `/` and `C:/` alive
+// as a project ROOT and left the PREFIX normaliser stripping them — so an
+// allowlist prefix of `C:/` became `C:`, which `isAbsoluteRef` reads as
+// relative, and every path fell outside it. A confinement gate that denies
+// everything and a react hook that never fires both look like decisions.
+// ---------------------------------------------------------------------------
+test("under: a drive-root prefix still matches (the separator IS the path)", () => {
+  assert.equal(pathView("C:/repo/x", "C:/repo").under(["C:/"]), true);
+  assert.equal(pathView("C:/repo/x", "C:/repo").under(["C:\\"]), true);
+  // and the POSIX twin
+  assert.equal(pathView("/repo/x", "/repo").under(["/"]), true);
+});
+
+test("under: a drive root does not swallow a DIFFERENT drive", () => {
+  assert.equal(pathView("D:/repo/x", "D:/repo").under(["C:/"]), false);
+});
+
+test("under: an ordinary trailing slash is still trimmed", () => {
+  assert.equal(pathView("/repo/src/a.ts", "/repo").under(["src/"]), true);
+  assert.equal(pathView("/repo/src/a.ts", "/repo").under(["src"]), true);
+  assert.equal(pathView("/repo/srcx/a.ts", "/repo").under(["src"]), false);
+});

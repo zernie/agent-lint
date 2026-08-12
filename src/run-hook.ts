@@ -39,6 +39,7 @@
 import type { HookProtocol } from "./core/hook-protocol.js";
 import { claudeCodeHookProtocol } from "./adapters/claude-code/hook-protocol.js";
 import { propertyTest } from "./core/proofs.js";
+import { trimTrailingSeparators } from "./core/hook-program.js";
 import {
   runScriptWith,
   REAL_DEPS,
@@ -185,7 +186,7 @@ export function fileToolEvents(
   // second door, since `projectRootOf` skips an empty `cwd` exactly as it skips
   // an empty `$CLAUDE_PROJECT_DIR`. An unset-looking root falls through to the
   // next source rather than becoming an event nothing can decide.
-  const root = normalizeRoot(
+  const root = trimTrailingSeparators(
     [opts.root, process.env.CLAUDE_PROJECT_DIR, process.cwd()].find(
       (r) => typeof r === "string" && r.trim() !== "",
     ) ?? process.cwd(),
@@ -201,7 +202,7 @@ export function fileToolEvents(
     ...base,
     tool_input: { file_path, ...opts.input },
   });
-  // A root that IS a separator keeps it (see `normalizeRoot`), so joining must
+  // A root that IS a separator keeps it (see `trimTrailingSeparators`), so joining must
   // not add a second one — `//x` is a UNC path, not a file at the POSIX root.
   const sep = /[/\\]$/.test(root) ? "" : "/";
   return [build(rel), build(`${root}${sep}${rel}`)];
@@ -224,13 +225,6 @@ export function fileToolEvents(
  * A bare `"C:"` with no separator at all gets one for the same reason: what
  * comes back is always a root the runtime can use.
  */
-function normalizeRoot(root: string): string {
-  const sep = /[/\\]+$/.exec(root)?.[0];
-  const trimmed = sep === undefined ? root : root.slice(0, -sep.length);
-  return trimmed === "" || /^[A-Za-z]:$/.test(trimmed)
-    ? trimmed + (sep?.[0] ?? "/")
-    : trimmed;
-}
 
 /** The JSON a hook may print on stdout (all fields optional). */
 export interface HookOutput {

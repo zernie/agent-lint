@@ -254,6 +254,30 @@ const matchesPrefix = (
   (verdict === "undecidable" && onUndecidable === "match");
 
 /**
+ * Trailing separators removed — EXCEPT the one that is the path itself.
+ *
+ * 🔴 THE CARVE-OUT IS THE RULE, NOT AN EDGE CASE, and skipping it fails
+ * SILENTLY. Strip every trailing separator and the POSIX root `"/"` becomes
+ * `""`, the Windows drive root `"C:/"` becomes `"C:"` — and `isAbsoluteRef`
+ * reads a bare drive letter as RELATIVE. Nothing throws: an allowlist prefix of
+ * `"C:/"` simply stops matching, so a confinement gate denies every path and a
+ * react hook goes quiet, both looking like a correct decision.
+ *
+ * This lives here, in one place, because the same normalisation is applied to
+ * two different things — the PREFIX being matched against, and the project ROOT
+ * a path is resolved against (`run-hook.ts` imports it for the latter). Round 28
+ * fixed the root and left the prefix; round 29 found the prefix. Two copies of a
+ * rule is how the second one survives the fix to the first.
+ */
+export function trimTrailingSeparators(path: string): string {
+  const sep = /[/\\]+$/.exec(path)?.[0];
+  const trimmed = sep === undefined ? path : path.slice(0, -sep.length);
+  return trimmed === "" || /^[A-Za-z]:$/.test(trimmed)
+    ? trimmed + (sep?.[0] ?? "/")
+    : trimmed;
+}
+
+/**
  * A prefix with its glob tail and trailing slash removed — `"src/**"`, `"src/"`
  * and `"src"` all mean the same directory.
  *
@@ -262,14 +286,16 @@ const matchesPrefix = (
  * records having fallen into.
  */
 const normalizePrefix = (prefix: string): string =>
-  prefix
-    .replace(/\\/g, "/")
-    .replace(/\/?\*+$/, "")
-    .replace(/\/+$/, "");
+  trimTrailingSeparators(prefix.replace(/\\/g, "/").replace(/\/?\*+$/, ""));
 
 /** Is `candidate` the prefix itself, or something below it? Boundary-aware. */
 const isAtOrUnder = (candidate: string, base: string): boolean =>
-  candidate === base || candidate.startsWith(base + "/");
+  candidate === base ||
+  // A base that IS a separator (`"/"`, `"C:/"` — see `trimTrailingSeparators`)
+  // already carries the boundary, so appending another looks for `"C://"` and
+  // matches nothing. Keeping the carve-out without this line trades one silent
+  // never-match for another.
+  candidate.startsWith(/[/\\]$/.test(base) ? base : base + "/");
 
 /**
  * Could this path be under this prefix under SOME root or working directory?
