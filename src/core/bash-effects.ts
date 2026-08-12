@@ -923,6 +923,28 @@ function sourceParts(parts: readonly MvdanNode[] | undefined): string | null {
  * Wrappers are still resolved through (`env FOO=1 bash x.sh` → `bash x.sh`)
  * using the same wrapper table as the normalized extractor, not a second copy.
  *
+ * 🔴 ONLY THE LEAVES THAT UNCONDITIONALLY RUN, and this used to be a blanket
+ * `Walk` over every `CallExpr` in the tree. A syntactic leaf is not an executed
+ * command: `false && bash hooks/pre.sh` and `true || bash hooks/pre.sh` never run
+ * the hook, and `if false; then bash hooks/x.sh; fi` and a function BODY do not
+ * run at all where they are written — yet all four were reported as executed
+ * programs. For the one caller (coverage attribution) that is a FALSE GRANT: a
+ * hook credited with a run that never happened. Same class as attributing a data
+ * operand, one level up in the grammar.
+ *
+ * So the tree is DESCENDED, not walked, and only through positions whose children
+ * always execute: a statement list, both sides of a PIPELINE, a subshell, a
+ * block. `&&`/`||` contribute their LEFT side only — the right is conditional.
+ * Every other construct (`if`, `while`, `until`, `for`, `case`, a function
+ * declaration, `time`, …) is not entered at all: whether its body ran is a
+ * runtime fact this parse cannot have, and abstaining costs one warning while
+ * guessing costs a false claim that something was tested.
+ *
+ * ⚠️ THE MEASURED COST, stated rather than assumed: `cd /repo && bash hooks/x.sh`
+ * now yields NOTHING, because the hook sits on the right of `&&`. That idiom has
+ * a first-class replacement — `runHook(cmd, event, { cwd })` — which is how this
+ * repo's own examples already write it.
+ *
  * Parse failure → `[]`.
  */
 export function leafArgvSource(command: string): string[][] {
@@ -933,9 +955,8 @@ export function leafArgvSource(command: string): string[][] {
     return [];
   }
   const out: string[][] = [];
-  sh.syntax.Walk(file, (node) => {
-    if (sh.syntax.NodeType(node) !== "CallExpr" || !node.Args?.length)
-      return true;
+  const emit = (node: MvdanNode): void => {
+    if (!node.Args?.length) return;
     const argv = node.Args.map((w) => sourceParts(w.Parts) ?? "");
     // The wrapper table keys on the BASENAME head (`/usr/bin/env` is `env`), so
     // detection runs on a basenamed copy while the returned words stay verbatim.
@@ -944,10 +965,40 @@ export function leafArgvSource(command: string): string[][] {
     const probe = [normalizeHead(argv[0] ?? ""), ...argv.slice(1)];
     const dropped = probe.length - stripWrappers(probe).argv.length;
     out.push(argv.slice(dropped));
-    return true;
-  });
+  };
+  const stmts = (list: readonly MvdanNode[] | undefined): void => {
+    for (const st of list ?? []) descend(st);
+  };
+  const descend = (node: MvdanNode | undefined): void => {
+    if (!node) return;
+    switch (sh.syntax.NodeType(node)) {
+      case "Stmt":
+        descend(node.Cmd);
+        return;
+      case "CallExpr":
+        emit(node);
+        return;
+      case "BinaryCmd":
+        // `&&` (10) and `||` (11) short-circuit, so only X is certain; a
+        // PIPELINE (`|` 12, `|&` 13) runs both sides.
+        descend(node.X);
+        if (node.Op === PIPE_OP || node.Op === PIPE_ALL_OP) descend(node.Y);
+        return;
+      case "Subshell":
+      case "Block":
+        stmts(node.Stmts);
+        return;
+      default:
+        return; // conditional or deferred body — not known to have executed
+    }
+  };
+  stmts(file.Stmts);
   return out;
 }
+
+/** `BinaryCmd.Op` for `|` and `|&` — the two that run BOTH sides. */
+const PIPE_OP = 12;
+const PIPE_ALL_OP = 13;
 
 /** Normalize a Stmt's redirections into {@link LeafRedirect}s (source order). */
 function normalizeRedirects(redirs: readonly MvdanRedirect[]): LeafRedirect[] {

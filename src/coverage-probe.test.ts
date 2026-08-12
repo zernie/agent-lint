@@ -379,6 +379,44 @@ test("`run-program` is a command SHAPE, not a word that may appear anywhere", ()
   );
 });
 
+test("only leaves that UNCONDITIONALLY run are attributed — a syntactic leaf is not a command", () => {
+  // 🔴 FIRES. `leafArgvSource` walked every CallExpr in the tree, so a branch the
+  // shell never takes was reported as an executed program. The probe is persisted
+  // for a passing script, so the hook got fresh execution coverage without ever
+  // running — a FALSE GRANT, and the same shape as attributing a data operand,
+  // one level up in the grammar.
+  assert.deepEqual(commandRefs("false && bash hooks/pre.sh"), []);
+  assert.deepEqual(commandRefs("true || bash hooks/pre.sh"), []);
+  // The whole conditional/deferred family, not just the two reported: whether a
+  // body ran is a runtime fact this parse cannot have.
+  assert.deepEqual(commandRefs("if false; then bash hooks/x.sh; fi"), []);
+  assert.deepEqual(commandRefs("while true; do bash hooks/x.sh; done"), []);
+  assert.deepEqual(commandRefs("for i in 1; do bash hooks/x.sh; done"), []);
+  assert.deepEqual(commandRefs("case $x in y) bash hooks/x.sh;; esac"), []);
+  // A function BODY does not run where it is written.
+  assert.deepEqual(commandRefs("f() { bash hooks/x.sh; }"), []);
+
+  // QUIET: everything that DOES certainly run is still attributed. A fix that
+  // simply stopped descending would pass every assertion above and silently
+  // empty the execution tier.
+  assert.deepEqual(commandRefs("bash hooks/a.sh"), ["hooks/a.sh"]);
+  assert.deepEqual(commandRefs("bash hooks/a.sh; bash hooks/b.sh"), [
+    "hooks/a.sh",
+    "hooks/b.sh",
+  ]);
+  // The LEFT of a short-circuit always runs.
+  assert.deepEqual(commandRefs("bash hooks/a.sh && bash hooks/b.sh"), [
+    "hooks/a.sh",
+  ]);
+  // A pipeline runs BOTH sides — it does not short-circuit.
+  assert.deepEqual(commandRefs("bash hooks/a.sh | grep x"), ["hooks/a.sh"]);
+  assert.deepEqual(commandRefs("grep x | bash hooks/a.sh"), ["hooks/a.sh"]);
+  // Subshells, blocks and background all execute.
+  assert.deepEqual(commandRefs("( bash hooks/a.sh )"), ["hooks/a.sh"]);
+  assert.deepEqual(commandRefs("{ bash hooks/a.sh; }"), ["hooks/a.sh"]);
+  assert.deepEqual(commandRefs("bash hooks/a.sh &"), ["hooks/a.sh"]);
+});
+
 test("the env is EXPANDED into the command, not scanned alongside it", () => {
   // The documented idiom still works…
   assert.deepEqual(commandRefs('"$GUARD"', { GUARD: "/repo/hooks/guard.sh" }), [
@@ -396,7 +434,12 @@ test("the env is EXPANDED into the command, not scanned alongside it", () => {
 });
 
 test("attribution is AST-backed, so nesting and wrappers do not hide the program", () => {
-  assert.deepEqual(commandRefs("cd /repo && bash hooks/x.sh"), ["hooks/x.sh"]);
+  // ⚠️ `cd /repo && …` used to appear here as an attributed shape. It is now the
+  // measured COST of only crediting leaves that unconditionally run — the hook
+  // sits on the right of `&&`. `runHook(cmd, event, { cwd })` is the replacement,
+  // and it is what this repo's own examples already use. See the short-circuit
+  // test below for why the whole category had to go.
+  assert.deepEqual(commandRefs("cd /repo && bash hooks/x.sh"), []);
   assert.deepEqual(commandRefs("env FOO=1 bash hooks/x.sh"), ["hooks/x.sh"]);
   assert.deepEqual(commandRefs("./hooks/x.sh --flag"), ["./hooks/x.sh"]);
   assert.deepEqual(commandRefs("/abs/hooks/x.mjs"), ["/abs/hooks/x.mjs"]);

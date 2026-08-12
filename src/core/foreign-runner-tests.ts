@@ -106,7 +106,26 @@ const VITEST_NAME = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
 const JEST_NAME = /^(?:.*\.)?(?:spec|test)+\.[cm]?[jt]sx?$/;
 
 /** The paid tier's marker. A foreign runner collecting one of these bills real money. */
-const EVAL_MARKER = ".eval.";
+/**
+ * A filename that vigiles' OWN eval discovery would collect — the only kind that
+ * can be paid-tier evidence by name alone.
+ *
+ * 🔴 THIS WAS AN INFIX (`path.includes(".eval.")`) AND IT OVER-FIRED. An ordinary
+ * surface-local unit test named `parser.eval.test.ts` contains `.eval.` and was
+ * declared to burn model budget on that basis — while NOT matching
+ * `**\/*.eval.{ts,mts,cts,js,mjs,cjs}`, the glob that decides what `vigiles eval`
+ * actually runs. A name vigiles will never collect as an eval cannot be an eval
+ * by name, so the file falls through to the CONTENT gate, which is what should
+ * answer for it.
+ *
+ * The infix was the right shape in the place it came from: `partitionTests`
+ * splits files ALREADY DISCOVERED as tests into free and paid tiers, and there an
+ * infix stops `.eval.ts` slipping into the free per-push tier. That reason is
+ * about discovery's output, not about an arbitrary filename, and copying it here
+ * carried it past its premise. Mirrors `DEFAULT_TEST_GLOBS` / RUNNABLE_EXTS in
+ * `test-coverage.ts` — the same extension set, as a suffix.
+ */
+const EVAL_NAME_RE = /\.eval\.(?:ts|mts|cts|js|mjs|cjs)$/;
 
 /**
  * The vigiles entry points whose CALL spawns an agent — the fact this whole
@@ -437,13 +456,6 @@ const DEFINITION_PREFIXES = new Set([
   "set",
 ]);
 
-/**
- * How far past a `):` the return-type scan looks before giving up. A bound, not a
- * measurement: it stops a pathological file from turning one match into a scan of
- * the whole source, and no real signature runs longer.
- */
-const ANNOTATION_WINDOW = 200;
-
 /** The identifier word ending just before `at`, and the character before IT. */
 function wordBefore(src: string, at: number): { word: string; before: string } {
   let k = at - 1;
@@ -473,32 +485,6 @@ function significantAt(src: string, from: number): number {
 }
 
 /**
- * After a `):`, whether what follows is a RETURN TYPE and then a body `{` — so
- * `runEval(): void {}` and `runEval(): { ok: boolean } {}` are definitions, while
- * the ternary `cond ? runEval(a) : b` (whose `:` sits in exactly the same place)
- * is a call.
- *
- * Lexical and bounded: `(`/`[` nest, and the first depth-0 `{` wins over the
- * first depth-0 `;`/`,`/`)`/`]`. Deliberately misread toward SILENCE (the cheaper
- * direction — see {@link AGENT_DRIVING_APIS}): a ternary whose else-branch is an
- * object literal, `c ? runEval(a) : { y: 1 }`, reads as a definition here.
- */
-function returnTypeThenBody(src: string, from: number): boolean {
-  let depth = 0;
-  const stop = Math.min(src.length, from + ANNOTATION_WINDOW);
-  for (let k = from; k < stop; k++) {
-    const ch = src[k] ?? "";
-    if (ch === "(" || ch === "[") depth++;
-    else if ((ch === ")" || ch === "]") && depth > 0) depth--;
-    else if (depth === 0) {
-      if (ch === "{") return true;
-      if (ch === ";" || ch === "," || ch === ")" || ch === "]") return false;
-    }
-  }
-  return false;
-}
-
-/**
  * Whether the `name(` at `start` (its `(` at `paren`) is a CALL EXPRESSION rather
  * than a function/method DEFINITION — decided over the already-stripped source by
  * three POSITIONAL signals:
@@ -508,8 +494,8 @@ function returnTypeThenBody(src: string, from: number): boolean {
  *   (b) the `)` matching the `(` is followed by `{` — that is a body, so this is
  *       `function runEval() {}` / `class F { runEval() {} }` / `{ runEval() {} }`
  *       / `*runEval() {}`;
- *   (c) …or by `:` and then a return type and a `{` — the TS-annotated form of
- *       the same thing ({@link returnTypeThenBody}).
+ *   (c) …or by `:` at all — a `)` followed by a colon is a TYPE ANNOTATION in
+ *       every shape that matters here (see below).
  *
  * Sound because it reads POSITION, not spelling: a definition's parameter list is
  * followed by its body, and a call's argument list is followed by whatever the
@@ -518,16 +504,64 @@ function returnTypeThenBody(src: string, from: number): boolean {
  * `obj.runEval(x)` and `` `${runEval(x)}` `` therefore stay calls, and the tests
  * pin each one.
  *
- * WHAT IT DELIBERATELY MISSES, all toward silence (a missed warning costs one
- * warning; a false one told the author to delete a working test):
- *   • an interface/type member — `runEval(o: Opts): void;` inside `interface X`
- *     has neither a prefix nor a body, and reads as a call;
- *   • an unbalanced `(` (a file the stripper mis-lexed) is not called a call;
- *   • a call statement followed by a bare block on the next line, which needs ASI
- *     to parse at all.
- * A real parse would decide all three and is not available here: this module is
- * shared with the browser scan engine, whose report is compared byte-for-byte
- * with the disk engine's, so it must stay free of native/runtime imports.
+ * 🔴 A `)` FOLLOWED BY `:` ABSTAINS, AND THAT RULE IS INVERTED FROM WHAT IT WAS.
+ * It used to ask whether a return type and a body followed, and treat "no body"
+ * as proof of a CALL. That is backwards for the commonest TS shape there is —
+ * a bodiless member signature:
+ *
+ *     agentDrivingApi("interface Runner { runEval(o: Opts): void; }")  → "runEval"
+ *     agentDrivingApi("type R = { measureTriggerRate(o: O): Promise<number>; }")
+ *                                                                → "measureTriggerRate"
+ *
+ * Both MEASURED against the built module 2026-08-12. A pure type-level test was
+ * therefore told to rename itself out of its own vitest run — the harmful advice
+ * this whole gate exists to prevent. (I had listed the interface case in a report
+ * as a deliberate miss "toward silence". It was never silent; it fired. The claim
+ * was written and never executed, which is why the shapes above are now pinned by
+ * assertion rather than by prose.)
+ *
+ * So `):` is not a call. The three shapes it can be are a TS return-type
+ * annotation, an object-literal method with a return type, and a ternary's colon;
+ * the first two are definitions, and only the third is a call.
+ *
+ * WHAT THAT DELIBERATELY MISSES — verified by running each input, not asserted:
+ *
+ *     agentDrivingApi("const z = c ? runEval(a) : b;")     → undefined   (ternary)
+ *     agentDrivingApi("runEval((")                          → undefined   (unbalanced)
+ *     agentDrivingApi("runEval(x)\n{ y }")                  → undefined   (ASI block)
+ *
+ * All three cost one warning each. A real parse would decide them and is not
+ * available here: this module is shared with the browser scan engine, whose
+ * report is compared byte-for-byte with the disk engine's, so it must stay free
+ * of native/runtime imports.
+ *
+ * ⚠️ OPEN DEFECT, MEASURED 2026-08-12 AND NOT FIXED — a bodiless member with NO
+ * return type still reads as a call, because it is lexically identical to one:
+ *
+ *     agentDrivingApi("interface R { runEval(o); }")                → "runEval"
+ *     agentDrivingApi("type R = { runEval(o); };")                  → "runEval"
+ *     agentDrivingApi("class C { runEval(o: A); runEval(o: B) {} }") → "runEval"
+ *     agentDrivingApi('declare module "x" { interface I { runEval(o); } }')
+ *                                                                  → "runEval"
+ *     agentDrivingApi("type R = { runEval(o), other: 1 };")         → "runEval"
+ *
+ * `runEval({});` — a genuine call — is `)` followed by `;` too, so no rule over
+ * the token AFTER the parameter list can separate them. The discriminator is
+ * whether the match sits inside a TYPE BODY, which needs context this lexical
+ * layer does not carry. Two structural fixes were considered:
+ *
+ *   1. A TS-aware parse. Correct, and currently forbidden by the byte-parity
+ *      constraint above (no native/runtime imports in this shared module).
+ *   2. Require a RUNTIME import from a vigiles specifier, so a type-only file
+ *      (which imports `import type …`, or nothing) cannot be evidence. MEASURED:
+ *      it separates every false positive above and every true positive tried —
+ *      and then MISSES this repo's own agent-driving examples, which import from
+ *      `"../../dist/harness-assert.js"`, a relative path with no `vigiles` in the
+ *      specifier (4 of 4 checked scored zero). It trades a bounded false-positive
+ *      class for an unbounded false-negative one, so it is not a drop-in.
+ *
+ * Recorded rather than patched again: the shapes above are the same defect as the
+ * one just fixed, and case-by-case rules for each is what produced this series.
  */
 function isCallSite(src: string, start: number, paren: number): boolean {
   const prev = wordBefore(src, start);
@@ -538,7 +572,7 @@ function isCallSite(src: string, start: number, paren: number): boolean {
   const after = significantAt(src, close + 1);
   if (after === -1) return true;
   if (src[after] === "{") return false;
-  if (src[after] === ":") return !returnTypeThenBody(src, after + 1);
+  if (src[after] === ":") return false;
   return true;
 }
 
@@ -664,7 +698,7 @@ export function foreignRunnerTests(
     // An `*.eval.*` name is the paid tier BY OUR OWN CONVENTION — the same class
     // of evidence as the API names, just declared in the filename instead of the
     // body, so it stands on its own and needs no read.
-    const evidence = path.includes(EVAL_MARKER)
+    const evidence = EVAL_NAME_RE.test(path)
       ? "eval-name"
       : agentDrivingApi(read(path) ?? "");
     if (evidence === undefined) continue;

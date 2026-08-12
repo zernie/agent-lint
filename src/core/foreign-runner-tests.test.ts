@@ -276,13 +276,112 @@ test("evidence: `scriptModel` is not a spawn — building a scripted model is no
   );
 });
 
-test("evidence: an `*.eval.*` name stands alone — the paid tier is declared, not read", () => {
+test("evidence: a bodiless TYPE MEMBER is not a call — `):` abstains", () => {
+  // 🔴 MEASURED against the built module before the fix: both of these returned
+  // an API name, so a pure type-level test was told to rename itself out of its
+  // own vitest run. `returnTypeThenBody` stopped at the `;` and "no body" was
+  // read as proof of a CALL, which is backwards for the commonest TS shape there
+  // is. (This exact case had been written into a report as a deliberate miss
+  // "toward silence" — it was never silent. Hence assertions, not prose.)
+  assert.equal(
+    agentDrivingApi("interface Runner { runEval(o: Opts): void; }"),
+    undefined,
+  );
+  assert.equal(
+    agentDrivingApi(
+      "interface Runner { runEval(o: Opts): void; }\nexport type X = Runner;",
+    ),
+    undefined,
+  );
+  assert.equal(
+    agentDrivingApi("type R = { measureTriggerRate(o: O): Promise<number>; };"),
+    undefined,
+  );
+  // A whole type-level test file earns no finding, however it is named.
+  assert.deepEqual(
+    findWith({
+      ".claude/skills/foo/types.test.ts":
+        'import type { Opts } from "vigiles/testing";\n' +
+        "interface Runner { runEval(o: Opts): void; }\n" +
+        "export type X = Runner;\n",
+    }),
+    [],
+  );
+
+  // QUIET half — the definition shapes that already abstained still do, and a
+  // real call still fires. A fix that simply returned false everywhere would
+  // pass the assertions above and silence the entire gate.
+  assert.equal(
+    agentDrivingApi("declare function runEval(o: Opts): void;"),
+    undefined,
+  );
+  assert.equal(agentDrivingApi("function runEval(o: O): void {}"), undefined);
+  assert.equal(agentDrivingApi("await runEval({});"), "runEval");
+  assert.equal(
+    agentDrivingApi("await v.measureTriggerRate({});"),
+    "measureTriggerRate",
+  );
+  assert.equal(
+    agentDrivingApi("if (await runEval({})) {\n  done();\n}\n"),
+    "runEval",
+  );
+
+  // ⚠️ WHAT ABSTAINING COSTS, run rather than asserted — a ternary whose colon is
+  // not a return type. One lost warning, versus telling an author to break a
+  // working test.
+  assert.equal(agentDrivingApi("const r = flag ? runEval({}) : 0;"), undefined);
+  // The other two documented misses, likewise executed and pinned.
+  assert.equal(agentDrivingApi("runEval(("), undefined);
+  assert.equal(agentDrivingApi("runEval(x)\n{ y }"), undefined);
+});
+
+test("evidence: an eval NAME stands alone — but only a name eval discovery collects", () => {
   // Our own convention says what tier this is, so no read is needed and an empty
-  // body does not excuse it.
-  const found = findWith({ ".claude/skills/foo/foo.eval.test.mjs": "" });
+  // body does not excuse it — for a name `vigiles eval` would actually run.
+  // Reachable through jest's `__tests__/` rule, which takes files by LOCATION —
+  // and, once the name check matches eval DISCOVERY, only through it: a name
+  // `vigiles eval` collects (`*.eval.<ext>`) is by construction not a name a
+  // suffix-based runner collects (`*.test.*` / `*.spec.*`). Measured below.
+  const found = findWith({ ".claude/skills/foo/__tests__/bar.eval.mjs": "" });
   assert.equal(found.length, 1);
   assert.equal(found[0].evidence, "eval-name");
+  assert.equal(found[0].reason, "tests-dir");
   assert.match(foreignRunnerTestWarning(found[0]), /burns model budget/);
+  // A bare `*.eval.mjs` outside `__tests__/` is not collected by anyone, so it is
+  // not a finding at all — the name alone was never the trigger.
+  assert.deepEqual(findWith({ ".claude/skills/foo/foo.eval.mjs": "" }), []);
+
+  // 🔴 …and NOT for a name that merely CONTAINS `.eval.`. The check was an infix,
+  // so an ordinary surface-local unit test called `parser.eval.test.ts` was
+  // declared to burn model budget while not matching
+  // `**/*.eval.{ts,mts,cts,js,mjs,cjs}` — the glob that decides what `vigiles
+  // eval` runs. A name vigiles will never collect as an eval cannot be an eval by
+  // name; the CONTENT gate answers for it instead.
+  assert.deepEqual(
+    findWith({
+      ".claude/skills/foo/parser.eval.test.ts": "export const x = 1;",
+    }),
+    [],
+  );
+  assert.deepEqual(
+    findWith({ ".claude/skills/foo/foo.eval.test.mjs": "" }),
+    [],
+  );
+  // The content gate still catches one that really does drive an agent…
+  const driven = findWith({
+    ".claude/skills/foo/parser.eval.test.ts": "await runEval({});",
+  });
+  assert.equal(driven.length, 1);
+  assert.equal(driven[0].evidence, "runEval");
+  // …and every extension eval discovery accepts is still evidence by name.
+  for (const ext of ["ts", "mts", "cts", "js", "mjs", "cjs"]) {
+    assert.equal(
+      findWith({ [`.claude/skills/foo/__tests__/b.eval.${ext}`]: "" })[0]
+        ?.evidence,
+      "eval-name",
+      ext,
+    );
+  }
 });
 
 test("harnessSurfaceDirs is layout-driven, in both the plugin and the user shape", () => {
@@ -412,8 +511,6 @@ test("evidence: a call still fires next to a definition, and through the shapes 
       "runEval({}).then((r) => {\n  console.log(r);\n});\n",
     "a call inside a condition, so its `)` is followed by `)` then `{`":
       "if (await runEval({})) {\n  done();\n}\n",
-    "a call in a ternary, whose `:` is not a return type":
-      "const r = flag ? runEval({}) : 0;\n",
     "a call as the last expression in the file, with nothing after its `)`":
       "runEval({})",
     "a property read named `get`, which ASI puts before a real call":
