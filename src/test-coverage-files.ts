@@ -40,6 +40,7 @@ import type {
 import {
   declaredSurfaceName,
   evidenceFor,
+  hookScriptRefs,
   prepareTest,
   type PreparedTest,
 } from "./coverage-evidence.js";
@@ -66,7 +67,6 @@ const DEFAULT_TEST_SUFFIXES = [
 ] as const;
 
 const IGNORE_MARKER = "vigiles:ignore-test";
-const SCRIPT_RE = /[\w./${}@-]+\.(?:sh|mjs|cjs|js|ts|py|rb)/g;
 
 /** Mirror of the DEFAULT_IGNORE globs (root-anchored), as a key predicate. */
 function isIgnored(key: string): boolean {
@@ -169,33 +169,26 @@ function discoverAgents(
   return out;
 }
 
-/** Hook-script paths referenced from a manifest's `hooks` block (file hooks only). */
+/**
+ * Hook-script paths referenced from a manifest's `hooks` block (file hooks only).
+ *
+ * 🔴 THIS USED TO BE A SECOND IMPLEMENTATION, and it was the one that stayed
+ * broken: it stripped only the PLUGIN token, so a repo whose settings spell a
+ * hook as `$CLAUDE_PROJECT_DIR/.claude/hooks/a.sh` yielded ONE hook surface here
+ * where the disk detector yielded FOUR. The parsing now lives in
+ * `hookScriptRefs` (coverage-evidence.ts) — one implementation, so the next root
+ * token cannot be added to one reader and not the other. This wrapper supplies
+ * only what is genuinely browser-specific: the manifest text and existence both
+ * come from the file map, not a filesystem.
+ */
 function hookScripts(
   files: Record<string, string>,
   manifest: string,
-  pluginRootToken: string,
+  layout: PluginLayout,
 ): string[] {
-  const text = files[manifest];
-  if (text === undefined) return [];
-  let hooks: unknown;
-  try {
-    hooks = (JSON.parse(text) as { hooks?: unknown }).hooks;
-  } catch {
-    return [];
-  }
-  if (hooks === undefined) return [];
-  const raw = JSON.stringify(hooks);
-  const unbraced = pluginRootToken.replace(/^\$\{(.+)\}$/, "$$$1");
-  const scripts = new Set<string>();
-  for (const m of raw.matchAll(SCRIPT_RE)) {
-    const rel = m[0]
-      .replaceAll(pluginRootToken, "")
-      .replaceAll(unbraced, "")
-      .replace(/^\/+/, "")
-      .replace(/^\.\//, "");
-    if (Object.prototype.hasOwnProperty.call(files, rel)) scripts.add(rel);
-  }
-  return [...scripts];
+  return hookScriptRefs(files[manifest], layout, (rel) =>
+    Object.prototype.hasOwnProperty.call(files, rel),
+  );
 }
 
 function discoverHooks(
@@ -208,7 +201,7 @@ function discoverHooks(
     ...new Set([layout.manifestPath, layout.settingsPath, localSettings]),
   ];
   for (const m of manifests) {
-    for (const s of hookScripts(files, m, layout.pluginRootToken)) {
+    for (const s of hookScripts(files, m, layout)) {
       scripts.add(s);
     }
   }

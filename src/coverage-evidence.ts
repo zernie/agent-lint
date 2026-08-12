@@ -120,6 +120,77 @@ export function prepareTest(path: string): PreparedTest {
   return { path };
 }
 
+/** A path that looks like a script, inside a `command` string. Both twins used
+ * to declare this separately; it lives here now so they cannot drift on it. */
+const SCRIPT_RE = /[\w./${}@-]+\.(?:sh|mjs|cjs|js|ts|py|rb)/g;
+
+/**
+ * The root variables a hook command may be written against — the structural
+ * slice of `PluginLayout` this needs, taken by SHAPE so the browser twin does
+ * not have to import the layout module.
+ */
+export interface RootTokens {
+  readonly pluginRootToken: string;
+  readonly projectRootTokens?: readonly string[];
+}
+
+/**
+ * The hook-script paths a manifest's `hooks` block names, repo-relative.
+ *
+ * 🔴 THIS EXISTS BECAUSE ONE BUG HAD TO BE FIXED TWICE, and the second half was
+ * missed. `settings.json` has two readers — the disk detector in
+ * test-coverage.ts and the file-map twin in test-coverage-files.ts. While only
+ * the PLUGIN token was stripped, `"$CLAUDE_PROJECT_DIR/.claude/hooks/a.sh"` —
+ * Claude Code's DOCUMENTED spelling, used because hooks do not run with a stable
+ * cwd — kept its literal prefix, failed the existence check, and was dropped
+ * without a word. The disk reader was taught the project token; the twin was
+ * not, and went on reporting ONE hook surface where disk reported FOUR,
+ * under-reporting the untested count and therefore the score.
+ *
+ * Repairing the twin in place would have left the NEXT token to be added in two
+ * places again. So the parsing, the token set, the prefix stripping and the
+ * dependency rule live here once, and the callers inject only what genuinely
+ * differs: where the manifest text comes from, and what "this file exists" means
+ * (disk `existsSync` vs a key in the file map). Neither caller enumerates
+ * tokens, so neither can forget one.
+ */
+export function hookScriptRefs(
+  manifestText: string | undefined,
+  layout: RootTokens,
+  exists: (rel: string) => boolean,
+): string[] {
+  if (manifestText === undefined) return [];
+  let hooks: unknown;
+  try {
+    hooks = (JSON.parse(manifestText) as { hooks?: unknown }).hooks;
+  } catch {
+    return [];
+  }
+  if (hooks === undefined) return [];
+  // Every token in BOTH spellings: `${CLAUDE_PROJECT_DIR}` and the unbraced
+  // `$CLAUDE_PROJECT_DIR` a settings file is just as likely to use.
+  const tokens = [
+    layout.pluginRootToken,
+    ...(layout.projectRootTokens ?? []),
+  ].flatMap((t) => [t, t.replace(/^\$\{(.+)\}$/, "$$$1")]);
+  const scripts = new Set<string>();
+  for (const m of JSON.stringify(hooks).matchAll(SCRIPT_RE)) {
+    let rel = m[0];
+    for (const t of tokens) rel = rel.replaceAll(t, "");
+    rel = rel.replace(/^\/+/, "").replace(/^\.\//, "");
+    // A DEPENDENCY is not a surface of this repo. The same settings that name a
+    // repo hook also name the runtime that runs the compiled ones
+    // (`node_modules/vigiles/dist/cli.js`); holding that to `untested-hook`
+    // would be asking the author to test their package manager. The compiled
+    // `.hook.ts` it is pointed AT is extracted from the same command and is the
+    // real surface.
+    if (rel.startsWith("node_modules/") || rel.includes("/node_modules/"))
+      continue;
+    if (exists(rel)) scripts.add(rel);
+  }
+  return [...scripts];
+}
+
 /**
  * The evidence one test file provides for one surface, or `null` for none.
  * `colocated` is passed in because placement is a path question the two twins

@@ -24,6 +24,7 @@ import {
   evalTierQuestion,
   suggestedTestPath,
 } from "./test-coverage.js";
+import { findUntestedSurfacesInFiles } from "./test-coverage-files.js";
 import { surfaceSha } from "./coverage-artifact.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
@@ -279,6 +280,80 @@ test("a hook rooted at the PROJECT var is discovered — not just the PLUGIN var
   );
   cleanupTmpDir(dir);
   cleanupTmpDir(dir2);
+});
+
+test("the BROWSER twin reads the PROJECT var too — one settings file, one reader", () => {
+  // 🔴 THE TWIN WAS LEFT BEHIND BY THE FIX ABOVE. The disk detector learned the
+  // project token; `findUntestedSurfacesInFiles` — the engine `scanFiles` runs
+  // against a GitHub file map, with no disk — still stripped only the PLUGIN
+  // token, so the very same settings.json that yields four hook surfaces on disk
+  // yielded ONE in the browser. Same defect, same file, second reader: the audit
+  // under-reported the untested-hook count and therefore the score.
+  //
+  // This is the parity assertion, not a restatement: the two engines are handed
+  // the SAME repo and must name the SAME hooks. It is written as an equality
+  // against the disk result so it cannot pass by agreeing on the wrong answer —
+  // the disk expectation is pinned by the test directly above.
+  const cmd = (c: string) => ({
+    matcher: "Bash",
+    hooks: [{ type: "command", command: c }],
+  });
+  const settings = JSON.stringify({
+    hooks: {
+      PreToolUse: [
+        cmd('"$CLAUDE_PROJECT_DIR/.claude/hooks/a.sh"'),
+        cmd('node "${CLAUDE_PROJECT_DIR}/.claude/hooks/b.mjs" post'),
+        cmd(
+          'node "$CLAUDE_PROJECT_DIR/node_modules/vigiles/dist/cli.js" ' +
+            'hook-runtime run-program "$CLAUDE_PROJECT_DIR/.claude/hooks/c.hook.ts"',
+        ),
+        cmd(".claude/hooks/d.sh"),
+      ],
+    },
+  });
+  const files: Record<string, string> = {
+    ".claude/settings.json": settings,
+    ".claude/hooks/a.sh": "#!/bin/sh\n",
+    ".claude/hooks/b.mjs": "#!/bin/sh\n",
+    ".claude/hooks/c.hook.ts": "#!/bin/sh\n",
+    ".claude/hooks/d.sh": "#!/bin/sh\n",
+    "node_modules/vigiles/dist/cli.js": "// the runtime\n",
+  };
+  const names = findUntestedSurfacesInFiles(files, claudeCodeLayout, "repo")
+    .untested.filter((x) => x.kind === "hook")
+    .map((x) => x.path)
+    .sort();
+  assert.deepEqual(names, [
+    ".claude/hooks/a.sh",
+    ".claude/hooks/b.mjs",
+    ".claude/hooks/c.hook.ts",
+    ".claude/hooks/d.sh",
+  ]);
+  // ⚠️ A DEPENDENCY IS NOT A SURFACE — the disk detector skips `node_modules/`,
+  // and the twin did not even have that branch. A file map fetched from a repo
+  // that vendors its runtime would have handed the author their package manager
+  // to test.
+  assert.ok(
+    !names.some((n) => n.includes("node_modules")),
+    "a node_modules path must never be a surface",
+  );
+
+  // QUIET: stripping a token must not turn a typo into a discovery. The map has
+  // no such file, so nothing is found — same as the disk twin's quiet half.
+  assert.deepEqual(
+    findUntestedSurfacesInFiles(
+      {
+        ".claude/settings.json": JSON.stringify({
+          hooks: {
+            PreToolUse: [cmd('"$CLAUDE_PROJECT_DIR/.claude/hooks/nope.sh"')],
+          },
+        }),
+      },
+      claudeCodeLayout,
+      "repo",
+    ).untested.filter((x) => x.kind === "hook"),
+    [],
+  );
 });
 
 test("hook scripts are discovered from plugin.json and matched by path", () => {
