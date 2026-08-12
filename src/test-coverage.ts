@@ -64,6 +64,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { testFileExt } from "./core/test-file-ext.js";
+import { assertNever } from "./core/assert-never.js";
 import { canRunTypeScript, detectNodeCaps } from "./ts-runner-caps.js";
 import { globSync } from "glob";
 import type { PluginLayout } from "./core/layout.js";
@@ -769,36 +770,117 @@ export function skillTestNudge(
       `This is a reminder, not a block.`
     );
 
-  // Covered by SOMETHING, but never evaluated — and an edit to a SKILL.md is
-  // usually an edit to the description, i.e. to the trigger surface itself.
-  //
-  // 🔴 THE REMEDY NAMES THE DRIVER ARGUMENT, because a bare `measureTriggerRate`
-  // is not this repo's measurement. The nudge became layout-aware, so it now
-  // reaches repos targeting a harness other than the eval tier's default — and
-  // `measureTriggerRate(spec)` falls back to that DEFAULT driver. Following the
-  // old wording there did not fail: it measured a different harness's trigger
-  // rate and reported it as a number, which is worse than an error.
-  //
-  // Deliberately NOT a per-harness branch. The alternative was a capability flag
-  // answered by each adapter, and this round's own regressions came from exactly
-  // that shape — a new table or list that misses an entry. This sentence is true
-  // for every harness including the default (where `{ evalDriver }` is optional),
-  // so there is no case analysis to get wrong and no fourth adapter to remember.
+  // Covered by SOMETHING, but never evaluated. WHAT the eval tier measures is a
+  // property of the surface, not one sentence — see `evalTierQuestion`.
   const unevaluated = report.evals.untested.find(isTarget);
-  if (unevaluated)
+  const question = unevaluated ? evalTierQuestion(unevaluated.kind) : null;
+  if (unevaluated && question)
     return (
-      `vigiles: you edited ${unevaluated.path}. A deterministic test covers ` +
-      `it, but nothing has ever measured whether its description actually ` +
-      `FIRES — and a harness structurally cannot tell you that.\n` +
-      `See the \`test-harness\` skill for which tier answers it ` +
-      `(\`measureTriggerRate\`, plus \`irrelevantPrompts\` for the precision ` +
-      `side). Pass your harness's driver — ` +
-      `\`measureTriggerRate(spec, { evalDriver })\` — because a bare call runs ` +
-      `the eval tier's DEFAULT harness, which may not be the one this repo ` +
-      `targets. This is a reminder, not a block.`
+      `vigiles: you edited ${unevaluated.path}. ${question}\n` +
+      `This is a reminder, not a block.`
     );
 
   return null;
+}
+
+/**
+ * What the PAID eval tier measures for a surface of this kind — or `null` when
+ * it measures nothing for it.
+ *
+ * 🔴 THE REMEDY USED TO BE ONE SENTENCE, AND IT WAS THE SKILL'S. Every
+ * never-evaluated surface was told its "description must FIRE" and pointed at
+ * `measureTriggerRate`. An agent reaches that branch as readily as a skill —
+ * `skillTestNudge` disables only hooks — and for an agent the sentence is false
+ * twice over: firing is not the agent's eval-tier question, and
+ * `measureTriggerRate` cannot address an agent at all.
+ *
+ * MEASURED 2026-08-12, no model spent, against this build:
+ *
+ * ```
+ * packageSkillsDir("<repo>/agents")           → THREW: No <name>/SKILL.md skills
+ *                                                found under <repo>/agents
+ * measureTriggerRateWith({ pluginDir: <an     → rate = 0 | competitors = 0
+ *   agents-only plugin> }, fakeRunner)
+ * ```
+ *
+ * The loose-skills form throws; the plugin form returns a NUMBER for a surface
+ * it never installed. That is the same failure the driver-argument note one
+ * branch up already calls out — worse than an error, because it looks like a
+ * measurement — and following the old wording produced it.
+ *
+ * ## Why this is keyed on `kind`, and what happens to a fourth one
+ *
+ * The real predicate is a CAPABILITY — "can the trigger tier install and observe
+ * this surface?" — and today that is a total function of `kind`, because the
+ * tier's installer is `<name>/SKILL.md`-shaped and its `fired` predicate is skill
+ * SELECTION (`skillResolved`). So the capability is stated once per kind here,
+ * rather than inferred from a name at the call site.
+ *
+ * The switch is exhaustive over {@link SurfaceKind} with `assertNever`: a fourth
+ * kind does not silently inherit the skill's sentence, it fails to COMPILE until
+ * someone writes what the eval tier measures for it. If the trigger tier ever
+ * grows an agent installer, this table is the single place that changes.
+ */
+export function evalTierQuestion(kind: SurfaceKind): string | null {
+  switch (kind) {
+    case "skill":
+      // An edit to a SKILL.md is usually an edit to the description — i.e. to
+      // the trigger surface itself.
+      //
+      // 🔴 THE REMEDY NAMES THE DRIVER ARGUMENT, because a bare
+      // `measureTriggerRate` is not this repo's measurement. The nudge is
+      // layout-aware, so it reaches repos targeting a harness other than the
+      // eval tier's default — and `measureTriggerRate(spec)` falls back to that
+      // DEFAULT driver. Following the old wording there did not fail: it
+      // measured a different harness's trigger rate and reported it as a number.
+      return (
+        `A deterministic test covers it, but nothing has ever measured whether ` +
+        `its description actually FIRES — and a harness structurally cannot ` +
+        `tell you that.\n` +
+        `See the \`test-harness\` skill for which tier answers it ` +
+        `(\`measureTriggerRate\`, plus \`irrelevantPrompts\` for the precision ` +
+        `side). Pass your harness's driver — ` +
+        `\`measureTriggerRate(spec, { evalDriver })\` — because a bare call runs ` +
+        `the eval tier's DEFAULT harness, which may not be the one this repo ` +
+        `targets.`
+      );
+    case "agent":
+      // An agent is dispatched BY NAME through `Task` and carries a tool
+      // contract, so the eval-tier question is not selection — it is whether a
+      // REAL model honours the contract. The deterministic test that already
+      // covers it drove a scripted model, which cannot answer that.
+      //
+      // ⚠️ It does NOT offer `{ evalDriver }` here, and that is checked rather
+      // than assumed: `runEval`/`measure`/`measureArms` all hard-wire
+      // `spawnAgent`, and `runEvalWith` is not exported from `vigiles/testing` —
+      // `measureTriggerRate` is the only public call with that seam. Suggesting
+      // an argument the function does not take is this finding's own defect.
+      return (
+        `A deterministic test covers it, but that test drove a SCRIPTED model. ` +
+        `Nothing has measured whether a REAL model, handed this agent's prompt, ` +
+        `stays inside its tool contract and returns the result it promises.\n` +
+        `NOT \`measureTriggerRate\`: it installs \`<name>/SKILL.md\` skills and ` +
+        `decides "fired" by skill SELECTION, so it cannot address an agent — ` +
+        `pointed at an agents-only plugin it reports rate 0.0 over 0 ` +
+        `competitors instead of failing (measured).\n` +
+        `See the \`test-harness\` skill: run the real-model tier (\`runEval\` / ` +
+        `\`measure\`) and keep the assertions your deterministic test already ` +
+        `makes — \`subagent(name, [...])\` for the nested trace, \`notTool\` for ` +
+        `the tool contract, \`assertAgentOk\` for the typed result. Those two ` +
+        `calls drive Claude Code and take no \`evalDriver\`, so on another ` +
+        `harness this tier has no public dispatch yet.`
+      );
+    case "hook":
+      // Nothing. A hook is deterministic by construction: `runHook` answers
+      // "does it block event X?" at the unit tier, free, for every event type —
+      // there is no probabilistic question left for a paid tier to measure.
+      // `skillTestNudge` never asks (it scans with `hooks: false`); this arm
+      // exists so the switch is total, and so a caller that DOES ask gets
+      // silence rather than the skill's sentence.
+      return null;
+    default:
+      return assertNever(kind);
+  }
 }
 
 /** Format an untested-surface report as human-readable text. */

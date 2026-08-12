@@ -6,10 +6,47 @@ and [`untested-hook`](untested-hook.md).
 
 An agent's contract is different from a skill's: it's dispatched by name (via the
 `Task` tool) and carries a **tool contract** (`tools:` frontmatter). The test that
-matters is "does it honor its contract and produce the right result?" — e.g. a
-`runHarnessTest`/eval that asserts the agent stayed within its allowed tools
-(`notTool`) or a `subagent(...)` nested-trace check. An agent with no test is an
+matters is "does it honor its contract and produce the right result?" — not "does
+its description fire", which is the skill question. An agent with no test is an
 unmeasured surface in the deterministic layer.
+
+## Which tier answers what
+
+The two tiers ask the same question of an agent and differ in **who plays the
+model** — so a passing deterministic test does not make the eval tier redundant,
+and this is the split the coverage nudge now reflects:
+
+| tier                             | model          | what it establishes                                                                  |
+| -------------------------------- | -------------- | ------------------------------------------------------------------------------------ |
+| deterministic (`runHarnessTest`) | scripted mock  | the contract parses and the rail holds — `subagent(...)`, `notTool`, `assertAgentOk` |
+| eval (`runEval` / `measure`)     | **real**, paid | a real model, handed this agent's prompt, stays inside the contract                  |
+
+Keep the same assertions across both; only the model changes. The typed-outcome
+helpers are model-free by design — see
+[railway subagents](../railway-subagents.md#test-the-outcome-deterministically).
+
+### `measureTriggerRate` does not apply to an agent
+
+Measured against this build, no model spent:
+
+```
+packageSkillsDir("<repo>/agents")                  → THREW: No <name>/SKILL.md
+                                                     skills found under <repo>/agents
+measureTriggerRateWith({ pluginDir: <agents-only   → rate = 0 | competitors = 0
+  plugin> }, fakeRunner)
+```
+
+It installs `<name>/SKILL.md` **skills** and decides "fired" by skill
+**selection** (`skillResolved`), so an agent is not a surface it can address. The
+loose-skills form throws; the plugin form returns a _number_ for a surface it
+never installed, which is worse than an error. "Does Claude pick this subagent
+when it should?" is a real question — vigiles has no API for it yet.
+
+⚠️ `runEval` / `measure` / `measureArms` drive Claude Code and take **no**
+`evalDriver` (only `measureTriggerRate` has that seam, and `runEvalWith` is not
+exported from `vigiles/testing`). On a harness other than Claude Code the eval
+tier has no public dispatch for a subagent yet — Codex has no subagent dir at all
+(`agentDir: ""`), so in practice this concerns OpenCode.
 
 ## Configuration
 

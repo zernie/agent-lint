@@ -21,6 +21,7 @@ import {
   findUntestedSurfaces,
   formatUntestedReport,
   skillTestNudge,
+  evalTierQuestion,
   suggestedTestPath,
 } from "./test-coverage.js";
 import { surfaceSha } from "./coverage-artifact.js";
@@ -666,6 +667,79 @@ test("skillTestNudge: silent for a file that is not a surface, and for another s
   // passes a repo-relative path, but a caller may not).
   assert.ok(skillTestNudge("/abs/repo/skills/foo/SKILL.md", { basePath: dir }));
   cleanupTmpDir(dir);
+});
+
+test("skillTestNudge: a harness-covered AGENT is nudged about its CONTRACT, not about firing", () => {
+  // 🔴 The reported defect. `skillTestNudge` disables only hooks, so an agent
+  // reaches the never-evaluated branch exactly as a skill does — and it used to
+  // be handed the SKILL's sentence: that its description must "FIRE", remedied
+  // by `measureTriggerRate`. Both halves of that are wrong for an agent. It is
+  // dispatched BY NAME through `Task`; firing is not its question. And the tool
+  // named cannot address it at all — measured 2026-08-12, no model spent:
+  //
+  //   packageSkillsDir(<agents dir>)                  → THREW "No <name>/SKILL.md
+  //                                                      skills found under …"
+  //   measureTriggerRateWith({ pluginDir: <agents-    → rate = 0 | competitors = 0
+  //     only plugin> }, fakeRunner)
+  //
+  // The plugin form does not fail: it reports a NUMBER for a surface it never
+  // installed, which is the same "worse than an error" the sibling driver note
+  // exists for.
+  const dir = makeTmpDir("nudge-agent-uneval");
+  write(dir, "agents/bar.md", skill("bar"));
+  write(dir, "agents/bar.harness.mjs", "// deterministic only\n");
+  const msg = skillTestNudge("agents/bar.md", { basePath: dir });
+  assert.ok(msg, "covered-but-never-evaluated must still nudge an agent");
+  // What it must NOT say — the skill's question, and the tool that cannot run.
+  assert.doesNotMatch(msg, /actually FIRES/);
+  assert.doesNotMatch(msg, /irrelevantPrompts/);
+  assert.doesNotMatch(msg, /measureTriggerRate\(spec/);
+  // …and what it must say instead: the real-model tier, with the assertions the
+  // repo's own subagent guidance names (docs/rules/untested-subagent.md).
+  assert.match(msg, /runEval/);
+  assert.match(msg, /subagent\(name/);
+  assert.match(msg, /notTool/);
+  assert.match(msg, /assertAgentOk/);
+  // ⚠️ It must not invent an argument the function does not take: `runEval` /
+  // `measure` / `measureArms` hard-wire `spawnAgent`, and `runEvalWith` is not
+  // exported from `vigiles/testing` — only `measureTriggerRate` has that seam.
+  // Suggesting `runEval(spec, { evalDriver })` would be this finding's own class
+  // of defect (a remedy that does not apply), so the honest limit is stated.
+  assert.doesNotMatch(msg, /runEval\(spec, \{ evalDriver/);
+  assert.match(msg, /no public dispatch/);
+  assert.match(msg, /not a block/);
+  cleanupTmpDir(dir);
+});
+
+test("skillTestNudge: the SKILL sentence is untouched — the fix is a branch, not a rewrite", () => {
+  // The quiet half of the branch. A skill in the same position keeps every word
+  // the two sibling tests pin, so the per-kind split cannot be mistaken for a
+  // regression of the skill remedy.
+  const dir = makeTmpDir("nudge-skill-uneval-still");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  write(dir, "skills/foo/foo.harness.mjs", "// deterministic only\n");
+  const msg = skillTestNudge("skills/foo/SKILL.md", { basePath: dir });
+  assert.ok(msg);
+  assert.match(msg, /actually FIRES/);
+  assert.match(msg, /measureTriggerRate\(spec, \{ evalDriver \}\)/);
+  // …and it does NOT acquire the agent's vocabulary.
+  assert.doesNotMatch(msg, /assertAgentOk/);
+  cleanupTmpDir(dir);
+});
+
+test("evalTierQuestion: total over SurfaceKind — a hook has no eval-tier question", () => {
+  // The exhaustiveness guarantee, asserted at the only place it is observable.
+  // `skillTestNudge` scans with `hooks: false`, so this arm is unreachable
+  // through it; without a direct test a hook would inherit whatever the last
+  // branch happened to return, which is how the agent got the skill's sentence.
+  assert.equal(evalTierQuestion("hook"), null);
+  // The two that DO have one are distinct texts, not the same string twice.
+  const forSkill = evalTierQuestion("skill");
+  const forAgent = evalTierQuestion("agent");
+  assert.ok(forSkill && forAgent);
+  assert.notEqual(forSkill, forAgent);
+  assert.match(forSkill, /FIRES/);
+  assert.match(forAgent, /tool contract/);
 });
 
 test("skillTestNudge: an agent surface is covered too, and a broken scan is silent", () => {
