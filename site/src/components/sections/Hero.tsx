@@ -39,16 +39,25 @@ export function Hero() {
 
       {/* Hero content — headline + ONE primary action, then the real product shot. */}
       <div className="mx-auto flex w-full max-w-3xl flex-col items-center px-6 pb-10 pt-14 text-center sm:pt-20">
+        {/* The headline names all three instruments. It used to read "Lighthouse
+            for your agent harness", which promised only the grade — a reader (and
+            every link preview) learned vigiles SCORES a repo and never learned it
+            also RUNS the harness against a scripted stand-in model and MEASURES
+            whether a skill fires. The verb map below keeps the detail, and the
+            Lighthouse analogy still lives there and in the FAQ, where it is true
+            of `audit` specifically. Pain still leads in the paragraph — per the
+            README direction, breadth follows the felt problem, never replaces it. */}
         <h1 className="text-balance text-4xl font-bold leading-[1.05] tracking-tight sm:text-6xl">
-          Lighthouse for your
-          <br className="hidden sm:block" /> agent harness.
+          Audit, test and measure
+          <br className="hidden sm:block" /> your agent harness.
         </h1>
 
         <p className="mt-5 max-w-2xl text-balance text-lg leading-relaxed text-muted-foreground sm:text-xl">
           You review every PR. Nothing reviews your CLAUDE.md. The files, tools,
           and rules your skills and hooks name — nothing checks they exist. One
-          command grades what&apos;s silently broken. Free, open-source — try
-          any public repo right here.
+          command grades what&apos;s silently broken — then you can run the
+          harness against a scripted model and measure whether a skill actually
+          fires. Free, open-source — try any public repo right here.
         </p>
       </div>
 
