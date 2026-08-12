@@ -14,6 +14,7 @@
  */
 import { test, beforeEach, afterEach } from "vitest";
 import assert from "node:assert/strict";
+import { canRunTypeScript, detectNodeCaps } from "./ts-runner-caps.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -102,11 +103,27 @@ test("…from any of the three untested-* rules, since they share their options"
 test("a nonsense extension is ignored, not written into an unrunnable path", () => {
   // Suggesting `demo.harness.rb` would point the author at a path no runner can
   // execute, so the finding could never be satisfied.
+  //
+  // 🔴 ASSERT THE PROPERTY, NOT THE EXTENSION. This used to pin `.ts`, which is
+  // only right on a host that can RUN TypeScript: it passed on a Node 22 dev box
+  // and failed on CI's Node 20, where `.mjs` is the correct answer and the gate
+  // was working. This spawns a real `node`, so the capability cannot be simulated
+  // away — the honest assertion is that the suggested path is one THIS host can
+  // execute, and that the nonsense value never reaches it.
   write(
     ".vigilesrc.json",
     JSON.stringify({
       rules: { "untested-skill": ["warn", { testExtension: "rb" }] },
     }),
   );
-  assert.match(suggestion(lint()), /\.ts$/);
+  const got = suggestion(lint());
+  assert.doesNotMatch(got, /\.rb$/, "the nonsense extension reached the path");
+  const runnable = canRunTypeScript(detectNodeCaps(dir)) ? /\.ts$/ : /\.mjs$/;
+  assert.match(
+    got,
+    runnable,
+    `suggested a path this host cannot run (tsx/strip-types: ${String(
+      canRunTypeScript(detectNodeCaps(dir)),
+    )})`,
+  );
 });

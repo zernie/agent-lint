@@ -1042,6 +1042,37 @@ test("fires: no tsx and no native type stripping ⇒ suggest `.mjs`, and the run
  * answer is `.ts` with or without the fix, and dropping the wiring breaks nothing
  * until CI's Node 20 sees it).
  */
+/**
+ * The MIRROR of {@link asNode20} — pretend the host CAN strip types.
+ *
+ * 🔴 WITHOUT THIS, THE "CAPABILITY RESTORED" HALF IS HOST-DEPENDENT, and that is
+ * exactly how this suite went red: it asserted `.ts` on whatever node happened to
+ * run it, passed on a Node 22 dev box, and failed on CI's Node 20 — where the
+ * capability is genuinely absent and `.mjs` is the CORRECT answer. The assertion
+ * was testing the runner, not the code.
+ *
+ * Simulating BOTH directions makes each half deterministic everywhere, which is
+ * the same lesson the `--experimental-test-isolation=none` probe taught two hours
+ * earlier in `eval-node-test-guard.test.ts`: never assert a behaviour that depends
+ * on which node picked up the job.
+ */
+function asNodeWithStripTypes(fn: () => void): void {
+  const original = Object.getOwnPropertyDescriptor(
+    process,
+    "allowedNodeEnvironmentFlags",
+  );
+  assert.ok(original?.configurable, "cannot simulate strip-types support");
+  Object.defineProperty(process, "allowedNodeEnvironmentFlags", {
+    value: new Set<string>(["--experimental-strip-types"]),
+    configurable: true,
+  });
+  try {
+    fn();
+  } finally {
+    Object.defineProperty(process, "allowedNodeEnvironmentFlags", original);
+  }
+}
+
 function asNode20(fn: () => void): void {
   const original = Object.getOwnPropertyDescriptor(
     process,
@@ -1079,8 +1110,13 @@ test("fires end-to-end: on Node 20 with no tsx, the REPORT itself suggests `.mjs
       ),
     );
   });
-  // Same fixture, capability restored → the TypeScript suggestion comes back.
-  assert.equal(findUntestedSurfaces({ basePath: dir }).testExt, "ts");
+  // Same fixture, capability SIMULATED back on → the TypeScript suggestion returns.
+  // Simulated, not ambient: on CI's Node 20 the real capability is absent and
+  // `.mjs` is correct there, so asserting `.ts` against the host tested the
+  // runner rather than the gate.
+  asNodeWithStripTypes(() => {
+    assert.equal(findUntestedSurfaces({ basePath: dir }).testExt, "ts");
+  });
   cleanupTmpDir(dir);
 });
 
