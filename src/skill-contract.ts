@@ -83,12 +83,14 @@ function unverifiable(kind: string, message: string): Check<Trace> {
  * readable. Both degenerate states FAIL rather than pass vacuously — see
  * {@link skillContract}.
  */
-function buildSurface(
-  path: string,
-  malformed: boolean,
-  undeclared: boolean,
-  declared: readonly string[],
-): Check<Trace> {
+function buildSurface(d: {
+  readonly path: string;
+  readonly malformed: boolean;
+  readonly undeclared: boolean;
+  readonly declared: readonly string[];
+  readonly id: string;
+}): Check<Trace> {
+  const { path, malformed, undeclared, declared, id } = d;
   if (malformed)
     return unverifiable(
       "surfaceUnverifiable",
@@ -107,7 +109,91 @@ function buildSurface(
         `fence the skill: \`allowed-tools:\` pre-approves, every tool stays ` +
         `callable. The fence is \`disallowed-tools:\`.)`,
     );
-  return onlyTools([...declared, ACTIVATION_TOOL]);
+  return duringSkill(id, [...declared, ACTIVATION_TOOL]);
+}
+
+/**
+ * {@link onlyTools}, scoped to the window in which THIS skill was active.
+ *
+ * 🔴 IT USED TO SPAN THE WHOLE TRACE, and a contract violation is an ACCUSATION
+ * about someone's skill. A harness that reads a fixture before activating the
+ * skill, or exercises two skills in one run, had the setup `Read` and the other
+ * skill's `Bash` reported as this skill's violations — the harmful-advice
+ * direction, in our own new API.
+ *
+ * ## The window, and why it is recoverable
+ *
+ * A `Skill` call with this id STARTS it. The next `Skill` call — of any id — ENDS
+ * it: the harness has moved on to something else, and nothing after that point
+ * can be attributed here. Trailing calls after the last activation are inside it,
+ * because nothing says otherwise. A skill activated twice contributes both
+ * windows.
+ *
+ * ⚠️ ONE CONFOUND IS NOT RECOVERABLE FROM `toolCalls` ALONE, so it is subtracted
+ * rather than reasoned about: `parseToolCalls` collects EVERY `tool_use` block,
+ * including the ones nested under a subagent dispatch, and `ToolCall` carries no
+ * id or parent to tell them apart. A skill that dispatches a subagent would
+ * therefore answer for that agent's tools — which the agent's OWN contract is
+ * for. The nested calls are available separately (`trace.subagents[*].toolCalls`)
+ * and are removed by value (name + input), which over-removes an identical call
+ * the skill also made itself. That direction drops an accusation rather than
+ * inventing one.
+ *
+ * ⚠️ NO ACTIVATION IN THE TRACE → FAIL, not a silent pass. The module refuses
+ * vacuous passes everywhere else (a malformed or absent declaration fails), and
+ * "no violations" from a run where the skill never ran would mean nothing.
+ */
+function duringSkill(id: string, allowed: readonly string[]): Check<Trace> {
+  const inner = onlyTools(allowed);
+  return {
+    kind: "onlyTools",
+    eval: (t) => {
+      const calls = t.toolCalls;
+      const isSkill = (c: Trace["toolCalls"][number]) => c.name === "Skill";
+      const starts = calls
+        .map((c, i) => ({ c, i }))
+        .filter(
+          ({ c }) =>
+            isSkill(c) && (c.input as { skill?: string })?.skill === id,
+        )
+        .map(({ i }) => i);
+      if (starts.length === 0)
+        return {
+          pass: false,
+          score: 0,
+          message:
+            `onlyTools cannot run: skill "${id}" never activated in this trace, ` +
+            `so there is no window to hold to its contract — "no violations" ` +
+            `would only mean "the skill never ran". Assert activation first ` +
+            `(the contract's \`activation\` check), or point the run at a task ` +
+            `that triggers it.`,
+        };
+      const nested = new Set(
+        (t.subagents ?? []).flatMap((s) =>
+          s.toolCalls.map((c) => `${c.name}\u0000${JSON.stringify(c.input)}`),
+        ),
+      );
+      const scoped: Trace["toolCalls"][number][] = [];
+      for (const start of starts) {
+        for (let i = start + 1; i < calls.length; i++) {
+          const c = calls[i];
+          if (c === undefined || isSkill(c)) break; // another activation ends it
+          if (nested.has(`${c.name}\u0000${JSON.stringify(c.input)}`)) continue;
+          scoped.push(c);
+        }
+      }
+      // The activation itself is inside the window by definition, and keeping it
+      // makes the "recorded no tool calls" arm of `onlyTools` unreachable here —
+      // a skill that activated and did nothing else PASSES, which is correct: it
+      // stayed inside its declared set.
+      const activation = calls[starts[0]];
+      return inner.eval({
+        ...t,
+        toolCalls: activation ? [activation, ...scoped] : scoped,
+      });
+    },
+    toJSON: () => ({ kind: "onlyTools", allowed: [...allowed], during: id }),
+  };
 }
 
 /** The plugin name from the manifest enclosing `<root>/skills/<name>/`. */
@@ -159,7 +245,7 @@ export function skillContract(
   const declared = parsed ?? [];
 
   const surface: Check<Trace>[] = [
-    buildSurface(path, malformed, undeclared, declared),
+    buildSurface({ path, malformed, undeclared, declared, id }),
   ];
 
   return {

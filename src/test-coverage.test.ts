@@ -212,7 +212,9 @@ test("a hook rooted at the PROJECT var is discovered — not just the PLUGIN var
   //   hooks) · 0 hook SURFACES. After the fix: 14, which is exactly the
   //   registered scripts under `.claude/hooks/`.
   const dir = makeTmpDir("cov-hooks-projvar");
-  const hook = (n: string) => write(dir, `.claude/hooks/${n}`, "#!/bin/sh\n");
+  const hook = (n: string): void => {
+    write(dir, `.claude/hooks/${n}`, "#!/bin/sh\n");
+  };
   for (const n of ["a.sh", "b.mjs", "c.hook.ts", "d.sh"]) hook(n);
   write(dir, "node_modules/vigiles/dist/cli.js", "// the runtime\n");
   const cmd = (c: string) => ({

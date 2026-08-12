@@ -249,6 +249,18 @@ export function notTool(name: string, args?: ArgMatcher): Check<Trace> {
  * `split("(")` normalization the rest of the codebase already applies to tool
  * declarations — `core/tool-contract.ts`, `core/lethal-trifecta.ts`,
  * `core/delegation-trifecta.ts`.
+ *
+ * ⚠️ SPANS THE WHOLE TRACE, deliberately. It answers "did this RUN stay inside
+ * these tools?", which is the right question for a harness that drives one thing.
+ * It is the wrong question when the trace has setup calls before the surface
+ * under test activated, drives several skills, or dispatches a subagent whose
+ * nested calls the parser folds into the same flat list — and reporting those as
+ * a violation is an accusation about the wrong code.
+ *
+ * `skillContract` therefore does NOT use this directly: it wraps it in a window
+ * bounded by its own `Skill` activation (see `duringSkill` in
+ * `src/skill-contract.ts`). If you are checking one skill, prefer the contract;
+ * reach for this when the claim really is about the whole run.
  */
 export function onlyTools(allowed: readonly string[]): Check<Trace> {
   const allow = new Set(allowed.map(baseTool));

@@ -601,6 +601,13 @@ export function commandRefs(
   return [...out];
 }
 
+/**
+ * The tools that DISPATCH a subagent. Both spellings, because the live CLI names
+ * it `Agent` and older docs name it `Task` — the same pair `parseSubagents`
+ * documents from real `claude` output.
+ */
+const DISPATCH_TOOLS = new Set(["Task", "Agent"]);
+
 /** The transcript shape this module reads — structural, so it imports no tier. */
 export interface ProbeableTrace {
   readonly toolCalls: readonly {
@@ -651,11 +658,24 @@ export function traceRefs(trace: ProbeableTrace): SurfaceProbe[] {
     // that reason, confirmed against real `claude` output, and this reuses that
     // established fact rather than inventing a second rule.
     //
+    // 🔴 …AND THE TOOL NAME, which the first version left out. It keyed on the
+    // FIELD ALONE, reasoning that the tool name is unreliable (`Agent` live,
+    // `Task` in older docs) — sound about why the NAME is insufficient, and no
+    // argument that the FIELD is sufficient. "X alone is unreliable, so use Y
+    // alone" is a substitution. Any successful tool with an ordinary string
+    // input happening to be called `subagent_type` — an MCP tool, say — then
+    // granted execution coverage to a local agent of that name, with no dispatch
+    // anywhere in the run. The answer is the CONJUNCTION.
+    //
     // What it does NOT accept: a call merely NAMED `Task`/`Agent` with no
-    // `subagent_type` (nothing was dispatched), and an errored dispatch (the
-    // tool was reached and the agent was not — the same rule the `Skill` arm
-    // above has always had).
-    if (typeof input?.subagent_type === "string")
+    // `subagent_type` (nothing was dispatched), a `subagent_type` on any OTHER
+    // tool (nothing was dispatched either), and an errored dispatch (the tool
+    // was reached and the agent was not — the same rule the `Skill` arm above
+    // has always had).
+    if (
+      DISPATCH_TOOLS.has(call.name) &&
+      typeof input?.subagent_type === "string"
+    )
       push("dispatched", input.subagent_type);
   }
   // 🔴 HOOK FIRES ARE NOT RECORDED, and the comment that used to sit here was

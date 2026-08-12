@@ -52,6 +52,59 @@ test("a transcript attributes the skills that RESOLVED", () => {
   assert.deepEqual(refs, [{ how: "fired", ref: "myplug:alpha" }]);
 });
 
+test("`command -v` INSPECTS — it does not execute", () => {
+  // 🔴 `stripWrappers` removed both `command` and `-v`, so the operand looked
+  // executed and a passing harness credited a hook it had only asked about.
+  // Same family as the interpreter parse-only flags (`bash -n`, `node --check`).
+  //
+  // MEASURED, bash 5.2, with a marker file the script touches:
+  //
+  //   command -v ./pre.sh    ran=no    prints ./pre.sh
+  //   command -V ./pre.sh    ran=no    prints "./pre.sh is ./pre.sh"
+  //   command -pv ./pre.sh   ran=no      command -vp ./pre.sh   ran=no
+  //   command -Vp ./pre.sh   ran=no
+  //   command -p ./pre.sh    ran=YES   ← -p picks a PATH, it is not an inspection
+  //   command ./pre.sh       ran=YES
+  for (const cmd of [
+    "command -v hooks/pre.sh",
+    "command -V hooks/pre.sh",
+    "command -pv hooks/pre.sh",
+    "command -vp hooks/pre.sh",
+    "command -Vp hooks/pre.sh",
+  ]) {
+    assert.deepEqual(commandRefs(cmd), [], cmd);
+  }
+
+  // QUIET: the forms that DO run must keep attributing, or the wrapper stops
+  // working entirely.
+  for (const cmd of [
+    "command hooks/pre.sh",
+    "command -p hooks/pre.sh",
+    "command -- hooks/pre.sh",
+  ]) {
+    assert.deepEqual(commandRefs(cmd), ["hooks/pre.sh"], cmd);
+  }
+
+  // ⚠️ THE REST OF THE WRAPPER TABLE, asked the same question: `command` is the
+  // only member with an inspect-only mode. The neighbours attribute nothing
+  // ALREADY — not by a rule, but because they are not wrappers, so their operand
+  // is never reached. Run, not assumed (all three also `ran=no` in bash):
+  for (const cmd of [
+    "type hooks/pre.sh",
+    "which hooks/pre.sh",
+    "hash hooks/pre.sh",
+  ]) {
+    assert.deepEqual(commandRefs(cmd), [], cmd);
+  }
+
+  // ⚠️ SCOPED TO COVERAGE ON PURPOSE — the SAFETY extractor still sees the whole
+  // leaf. `leafArgvSource` has one caller and it is attribution; truncating what
+  // a gate can see would be the opposite default.
+  assert.deepEqual(leafCommands("command -v hooks/pre.sh"), [
+    ["command", "-v", "hooks/pre.sh"],
+  ]);
+});
+
 test("the vigiles OWNER must sit where a program actually runs", () => {
   // 🔴 FIRES. The free-floating VERB was fixed one round ago; the OWNER had the
   // same hole one token over. `echo vigiles hook-runtime run-program hooks/pre.sh`
@@ -142,6 +195,19 @@ test("a subagent DISPATCH is attributed — and only a dispatch", () => {
   // an ERRORED dispatch (the tool was reached and the agent was not — the same
   // rule the Skill arm has always had),
   assert.deepEqual(traceRefs(dispatch("reviewer", "Task", true)), []);
+  // 🔴 A `subagent_type` on ANY OTHER TOOL. The first version keyed on the FIELD
+  // ALONE, reasoning that the tool name is unreliable — sound about why the name
+  // is insufficient, and no argument that the field is sufficient. "X alone is
+  // unreliable, so use Y alone" is a substitution. An MCP tool with an ordinary
+  // string input called `subagent_type` granted a local agent execution coverage
+  // with no dispatch anywhere in the run.
+  for (const tool of ["mcp__x__run", "Bash", "Read", "Skill"]) {
+    assert.deepEqual(
+      traceRefs({ toolCalls: [{ name: tool, input: { subagent_type: "reviewer" } }] }), // prettier-ignore
+      [],
+      tool,
+    );
+  }
   // a call merely NAMED like a dispatch, carrying no `subagent_type`,
   assert.deepEqual(
     traceRefs({ toolCalls: [{ name: "Task", input: { prompt: "reviewer" } }] }),

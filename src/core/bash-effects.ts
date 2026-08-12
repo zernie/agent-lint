@@ -958,6 +958,9 @@ export function leafArgvSource(command: string): string[][] {
   const emit = (node: MvdanNode): void => {
     if (!node.Args?.length) return;
     const argv = node.Args.map((w) => sourceParts(w.Parts) ?? "");
+    // `command -v x` DESCRIBES x; it does not run it. Without this the wrapper
+    // table unwrapped both words and the operand looked executed.
+    if (inspectsOnly(argv)) return;
     // The wrapper table keys on the BASENAME head (`/usr/bin/env` is `env`), so
     // detection runs on a basenamed copy while the returned words stay verbatim.
     // Wrappers only ever drop words off the FRONT, so a count maps the result
@@ -1073,6 +1076,60 @@ function mayTerminate(node: MvdanNode): boolean {
     return !found;
   });
   return found;
+}
+
+/**
+ * Is this leaf an INSPECTION rather than an execution? Then it contributes no
+ * executed program, however script-shaped its operand.
+ *
+ * Same family as the interpreter's parse-only flags (`bash -n`, `node --check`):
+ * a word that turns "run this" into "tell me about this". Bash 5.2's own
+ * `help command`: *"Execute a simple command or display information about
+ * commands."*
+ *
+ * MEASURED, bash 5.2, with a marker file the script touches — `ran` is whether
+ * the operand actually executed:
+ *
+ * ```
+ *   command -v ./pre.sh     ran=no    prints ./pre.sh
+ *   command -V ./pre.sh     ran=no    prints "./pre.sh is ./pre.sh"
+ *   command -pv ./pre.sh    ran=no
+ *   command -vp ./pre.sh    ran=no
+ *   command -Vp ./pre.sh    ran=no
+ *   command -p ./pre.sh     ran=YES   ← -p is a PATH choice, not an inspection
+ *   command ./pre.sh        ran=YES
+ * ```
+ *
+ * ⚠️ THE REST OF THE WRAPPER TABLE WAS ASKED THE SAME QUESTION, and `command` is
+ * the only member with an inspect-only mode. Run against this build, the
+ * neighbours the finding names attribute NOTHING ALREADY — not by a rule, but
+ * because they are not wrappers at all, so their operand is never reached:
+ *
+ * ```
+ *   commandRefs("type hooks/pre.sh")   → []      (ran=no)
+ *   commandRefs("which hooks/pre.sh")  → []      (ran=no)
+ *   commandRefs("hash hooks/pre.sh")   → []      (ran=no)
+ * ```
+ *
+ * `sudo -v` (validate) and `sudo -l` (list) take no command operand, so there is
+ * nothing to attribute; `xargs -t` PRINTS what it runs and then runs it, so it
+ * is not an inspection. Deliberately left out: `env`, `nice`, `timeout`,
+ * `nohup` — none has an inspect mode (`--help`/`--version` exit without an
+ * operand, so they cannot misattribute one).
+ *
+ * ⚠️ SCOPED TO THE COVERAGE EXTRACTOR ON PURPOSE. `leafArgvSource` has exactly
+ * one caller and it is attribution; the SAFETY extractor (`leafCommands`, a
+ * blanket walk) is untouched, keeping the opposite default established when the
+ * statement-list truncation landed.
+ */
+function inspectsOnly(argv: readonly string[]): boolean {
+  if (normalizeHead(argv[0] ?? "") !== "command") return false;
+  for (const w of argv.slice(1)) {
+    if (!w.startsWith("-") || w === "-") return false; // reached the operand
+    if (w === "--") return false;
+    if (/^-[pvV]+$/.test(w) && /[vV]/.test(w)) return true;
+  }
+  return false;
 }
 
 /** `BinaryCmd.Op` for `|` and `|&` — the two that run BOTH sides. */

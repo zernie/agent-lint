@@ -20,10 +20,20 @@ import { skillContract } from "./skill-contract.js";
 import type { Trace } from "./harness-test.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
-/** A minimal Trace carrying just the tool calls a check reads. */
-function trace(names: string[]): Trace {
+/**
+ * A minimal Trace carrying just the tool calls a check reads.
+ *
+ * A `"Skill"` name carries the ACTIVATION id, because the contract's surface
+ * check is scoped to the window this skill was active in — a bare `Skill` call
+ * with no id activates nothing and the contract has no window to hold.
+ */
+function trace(names: string[], id = "myplug:foo"): Trace {
   return {
-    toolCalls: names.map((name) => ({ name, input: {}, output: "" })),
+    toolCalls: names.map((name) => ({
+      name,
+      input: name === "Skill" ? { skill: id } : {},
+      output: "",
+    })),
     hooks: [],
     output: "",
     modelRequests: [],
@@ -126,10 +136,13 @@ test("skillContract: a skill declaring `Bash(git:*)` is not failed by its own gi
   );
   const c = skillContract(skillDir);
   assert.deepEqual([...c.declared], ["Bash(git:*)", "Read"]);
-  assert.equal(c.surface[0].eval(trace(["Skill", "Bash", "Read"])).pass, true);
+  assert.equal(
+    c.surface[0].eval(trace(["Skill", "Bash", "Read"], c.id)).pass,
+    true,
+  );
   // …and still catches what it was built to catch.
   assert.equal(
-    c.surface[0].eval(trace(["Skill", "Bash", "WebFetch"])).pass,
+    c.surface[0].eval(trace(["Skill", "Bash", "WebFetch"], c.id)).pass,
     false,
   );
   cleanupTmpDir(dir);
@@ -142,7 +155,9 @@ test("skillContract exempts the Skill activation call itself", () => {
   const dir = makeTmpDir("sc-activation");
   const skillDir = writeSkill(dir, "foo", "allowed-tools: Read\n");
   assert.equal(
-    skillContract(skillDir).surface[0].eval(trace(["Skill", "Read"])).pass,
+    skillContract(skillDir).surface[0].eval(
+      trace(["Skill", "Read"], skillContract(skillDir).id),
+    ).pass,
     true,
   );
   cleanupTmpDir(dir);
@@ -164,6 +179,74 @@ test("skillContract: an UNDECLARED skill is a finding, not an empty contract", (
   // not fence (measured 2026-08-11 — see src/core/lethal-trifecta.ts). A passing
   // contract tests author DISCIPLINE, not that the skill COULD NOT have gone wider.
   assert.match(r.message, /pre-approves, every tool stays callable/);
+  cleanupTmpDir(dir);
+});
+
+test("the contract is scoped to THIS skill's activation window", () => {
+  // 🔴 The check spanned the whole trace, and a contract violation is an
+  // ACCUSATION about someone's skill. A harness that reads a fixture before
+  // activating, or drives two skills in one run, had the setup `Read` and the
+  // other skill's `Bash` reported as THIS skill's violations.
+  const dir = makeTmpDir("sc-scope");
+  const skillDir = writeSkill(dir, "foo", "allowed-tools: Read\n");
+  writeFileSync(
+    join(dir, "plugin.json"),
+    JSON.stringify({ name: "myplug", version: "0.0.0" }),
+  );
+  const surface = skillContract(skillDir).surface[0];
+  const call = (name: string, input: unknown = {}) => ({
+    name,
+    input,
+    output: "",
+  });
+  const t = (calls: ReturnType<typeof call>[]) =>
+    ({
+      toolCalls: calls,
+      hooks: [],
+      output: "",
+      modelRequests: [],
+      turns: 1,
+      file: () => null,
+    }) as unknown as Trace;
+  const act = call("Skill", { skill: "myplug:foo" });
+
+  // SETUP BEFORE ACTIVATION: the harness's own fixture read is not the skill's.
+  assert.equal(
+    surface.eval(t([call("Bash"), call("Write"), act, call("Read")])).pass,
+    true,
+    "calls before the activation belong to the harness",
+  );
+  // ANOTHER SKILL'S CALLS: a second activation ends this window.
+  assert.equal(
+    surface.eval(
+      t([act, call("Read"), call("Skill", { skill: "myplug:bar" }), call("Bash")]), // prettier-ignore
+    ).pass,
+    true,
+    "calls after another skill activates are not this skill's",
+  );
+  // A SUBAGENT'S nested calls are folded into `toolCalls` by the parser and
+  // carry no parent id, so they are subtracted by value — the agent's own
+  // contract is what answers for them.
+  const nested = call("Bash", { command: "ls" });
+  const withSub = {
+    ...t([act, call("Read"), nested]),
+    subagents: [{ name: "reviewer", toolCalls: [nested], output: "" }],
+  } as unknown as Trace;
+  assert.equal(
+    surface.eval(withSub).pass,
+    true,
+    "a subagent's tools are its own",
+  );
+
+  // QUIET — the accusation the check EXISTS for still lands, inside the window.
+  const caught = surface.eval(t([act, call("Read"), call("WebFetch")]));
+  assert.equal(caught.pass, false);
+  assert.match(caught.message, /WebFetch/);
+  // …and a run where the skill never activated FAILS rather than passing
+  // vacuously: "no violations" from a run that never ran it means nothing.
+  const never = surface.eval(t([call("Bash"), call("WebFetch")]));
+  assert.equal(never.pass, false);
+  assert.match(never.message, /never activated in this trace/);
   cleanupTmpDir(dir);
 });
 
