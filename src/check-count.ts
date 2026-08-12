@@ -102,7 +102,7 @@ const STATE = Symbol.for("vigiles.check-count");
  * whoever wrote the test — and that tier was removed after its first real use
  * declared a conformance lint over 21 skills as coverage of all 21.
  */
-export type ProbeOrigin = "command" | "fired";
+export type ProbeOrigin = "command" | "fired" | "dispatched";
 
 /**
  * One surface a run went by. `ref` is whatever the tier saw — a script path, a
@@ -233,7 +233,7 @@ export function parseCheckReport(raw: string): CheckReport | undefined {
 function toProbe(entry: unknown): SurfaceProbe | null {
   if (!entry || typeof entry !== "object") return null;
   const { how, ref } = entry as { how?: unknown; ref?: unknown };
-  if (how !== "command" && how !== "fired") return null;
+  if (how !== "command" && how !== "fired" && how !== "dispatched") return null;
   if (typeof ref !== "string" || !ref.trim()) return null;
   return { how, ref };
 }

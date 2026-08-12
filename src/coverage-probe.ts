@@ -461,9 +461,58 @@ function runProgramRef(
   const i = argv.indexOf(RUNTIME_VERB);
   if (i < 1 || argv[i + 1] !== RUN_PROGRAM_VERB) return undefined;
   const owner = argv[i - 1] ?? "";
-  if (!isVigilesProgram(owner) && owner !== entry) return undefined;
+  // The `entry` arm needs no position check: `entry` is by construction the
+  // program this leaf runs (the head when it is a script, else the one the
+  // interpreter's grammar names), so `owner === entry` IS the position.
+  const ours =
+    (isVigilesProgram(owner) && isExecutablePosition(argv, i - 1)) ||
+    (owner === entry && entry !== undefined);
+  if (!ours) return undefined;
   const file = argv[i + 2] ?? "";
   return SCRIPT_RE.test(file) ? file : undefined;
+}
+
+/**
+ * The one launcher spelling that puts a program in the executable position
+ * without being the head itself.
+ *
+ * 🔴 THE OWNER USED TO BE ACCEPTED ANYWHERE, one token over from the verb this
+ * function already fixed: `echo vigiles hook-runtime run-program hooks/pre.sh`
+ * has `vigiles` as `argv[i - 1]`, so the hook `echo` merely PRINTED got an
+ * execution record. A word in the argv is not the program being run — the same
+ * substitution, reached through the owner instead of the verb.
+ *
+ * ⚠️ THIS IS A LAUNCHER TABLE, AND ONE WAS DELETED FROM THIS REPO ON PURPOSE
+ * (`RUNNER_PREFIXES`, when the hook-recovery escape went). It is safe here and
+ * was a liability there because the two tables decide different things. There it
+ * decided whether to EXECUTE an attacker-chosen string, so a wrong or missing
+ * entry granted arbitrary execution. Here it decides whether to CREDIT a coverage
+ * line for a command the harness author wrote about their own hook: a missing
+ * entry costs one coverage line, and there is no adversary picking spellings,
+ * because the only thing to win is over-crediting yourself.
+ *
+ * It is also one token, chosen by MEASUREMENT rather than by imagination. Every
+ * spelling of this invocation across the docs, examples, README, src and two
+ * repos' `.claude/` dirs:
+ *
+ *   13×  npx vigiles hook-runtime …                          → launcher, index 1
+ *   11×  vigiles hook-runtime …                              → head, index 0
+ *   10×  "$CLAUDE_PROJECT_DIR/node_modules/vigiles/dist/cli.js" hook-runtime …
+ *    9×  node /abs/dist/cli.js hook-runtime …                → the `entry` arm
+ *    1×  ./node_modules/.bin/vigiles hook-runtime …          → head, index 0
+ *
+ * DELIBERATELY MISSED, run rather than asserted — no corpus contains them, and
+ * each costs one coverage line:
+ *
+ *   commandRefs("pnpm dlx vigiles hook-runtime run-program hooks/a.sh") → []
+ *   commandRefs("bunx vigiles hook-runtime run-program hooks/a.sh")     → []
+ */
+const LAUNCHERS = new Set(["npx"]);
+
+/** Is `at` a position from which a program actually runs? */
+function isExecutablePosition(argv: readonly string[], at: number): boolean {
+  if (at === 0) return true;
+  return at === 1 && LAUNCHERS.has(headName(argv[0] ?? ""));
 }
 
 /** The basename of a head, so `/bin/bash` and `bash` classify alike. */
@@ -573,16 +622,41 @@ export interface ProbeableTrace {
 export function traceRefs(trace: ProbeableTrace): SurfaceProbe[] {
   const out: SurfaceProbe[] = [];
   const seen = new Set<string>();
-  const push = (ref: string): void => {
+  const push = (how: SurfaceProbe["how"], ref: string): void => {
     const trimmed = ref.trim();
-    if (!trimmed || seen.has(trimmed)) return;
-    seen.add(trimmed);
-    out.push({ how: "fired", ref: trimmed });
+    const key = `${how}\u0000${trimmed}`;
+    if (!trimmed || seen.has(key)) return;
+    seen.add(key);
+    out.push({ how, ref: trimmed });
   };
   for (const call of trace.toolCalls) {
-    if (call.name !== "Skill" || call.isError === true) continue;
-    const id = (call.input as { skill?: unknown } | undefined)?.skill;
-    if (typeof id === "string") push(id);
+    if (call.isError === true) continue;
+    const input = call.input as
+      | { skill?: unknown; subagent_type?: unknown }
+      | undefined;
+    if (call.name === "Skill" && typeof input?.skill === "string") {
+      push("fired", input.skill);
+      continue;
+    }
+    // 🔴 AN AGENT COULD NEVER EARN AN EXECUTION RECORD, and this was predicted
+    // in the round that made `fired` skills-only: nothing probed agents, so
+    // `untested-subagent` reported a genuinely exercised agent as untested. A
+    // FALSE NEGATIVE, so this round ADDS attribution — and the bar has to be the
+    // strict one, or it becomes the false grants the other rungs were about.
+    //
+    // The evidence is a DISPATCH: a `tool_use` whose input carries a
+    // `subagent_type`. Keyed on the INPUT FIELD, not the tool name, because the
+    // dispatch tool is named `Agent` on the live CLI and `Task` in older docs —
+    // `parseSubagents` in harness-test.ts already keys on the field for exactly
+    // that reason, confirmed against real `claude` output, and this reuses that
+    // established fact rather than inventing a second rule.
+    //
+    // What it does NOT accept: a call merely NAMED `Task`/`Agent` with no
+    // `subagent_type` (nothing was dispatched), and an errored dispatch (the
+    // tool was reached and the agent was not — the same rule the `Skill` arm
+    // above has always had).
+    if (typeof input?.subagent_type === "string")
+      push("dispatched", input.subagent_type);
   }
   // 🔴 HOOK FIRES ARE NOT RECORDED, and the comment that used to sit here was
   // wrong about why they were: *"Claude Code reports an `Event:Matcher` LABEL

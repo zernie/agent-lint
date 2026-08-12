@@ -163,10 +163,12 @@ test("a fired ref NEVER resolves across surface KINDS", () => {
     skill("startup", "skills/startup/SKILL.md"),
   ];
   const paths = (ref: string) =>
-    resolveProbe({ how: "fired", ref }, surfaces).map((s) => s.kind + " " + s.path); // prettier-ignore
+    resolveProbe({ how: "fired", ref }, surfaces, ["SessionStart", "myplug"]).map((s) => s.kind + " " + s.path); // prettier-ignore
 
-  // A hook label must not reach the skill. (`traceRefs` no longer emits one at
-  // all, so this is the second lock: the resolver would not honour it either.)
+  // A hook label must not reach the skill. `SessionStart` is passed as one of
+  // OUR namespaces here on purpose — the point is that even when the namespace
+  // check cannot help, the KIND check still stops it reaching a hook, and the
+  // skill it does reach is what `traceRefs` no longer emits in the first place.
   assert.deepEqual(paths("SessionStart:startup"), ["skill skills/startup/SKILL.md"]); // prettier-ignore
   // …and that is the point — the SKILL is what a `fired` ref means. The hook of
   // the same name is NOT a candidate, whatever the ref looks like.
@@ -180,19 +182,43 @@ test("a fired ref NEVER resolves across surface KINDS", () => {
     resolveProbe({ how: "fired", ref: "bar" }, [agent("bar", "agents/bar.md")]),
     [],
   );
+  // …and the agent is reached by its OWN origin, never by widening this one.
+  assert.deepEqual(
+    resolveProbe({ how: "dispatched", ref: "bar" }, [agent("bar", "agents/bar.md")]).map((s) => s.path), // prettier-ignore
+    ["agents/bar.md"],
+  );
+  assert.deepEqual(
+    resolveProbe({ how: "dispatched", ref: "startup" }, surfaces),
+    [],
+    "a dispatch names an AGENT — it must not reach the skill or the hook",
+  );
 
   // QUIET: the skill case, including a namespaced id, still resolves.
   assert.deepEqual(paths("myplug:startup"), ["skill skills/startup/SKILL.md"]);
 });
 
-test("a fired ref resolves by name, namespace stripped", () => {
+test("a fired ref resolves by name — but only under OUR namespace", () => {
+  // 🔴 The namespace used to be stripped and discarded: the THIRD axis of "a name
+  // is not an identity", after within-kind (a bare basename) and cross-kind (a
+  // hook label reaching a skill). `other-plugin:foo` firing recorded the audited
+  // repo's own unique `foo` as EXECUTED. The whole-harness tier makes that
+  // ordinary — `installSet` co-installs competitors on purpose, and a competitor
+  // firing is the normal outcome of a low trigger rate.
   const surfaces = [skill("alpha", "skills/alpha/SKILL.md")];
-  assert.deepEqual(
-    resolveProbe({ how: "fired", ref: "myplug:alpha" }, surfaces).map(
-      (s) => s.name,
-    ),
-    ["alpha"],
-  );
+  const names = (ref: string, self: readonly string[] = ["myplug"]) =>
+    resolveProbe({ how: "fired", ref }, surfaces, self).map((s) => s.name);
+
+  assert.deepEqual(names("myplug:alpha"), ["alpha"]);
+  // FIRES: somebody else's `alpha`.
+  assert.deepEqual(names("other-plugin:alpha"), []);
+  assert.deepEqual(names("myplug-fork:alpha"), []);
+  // …and a caller that cannot say which plugin it is drops every QUALIFIED ref
+  // rather than guessing. It costs coverage; it never invents it.
+  assert.deepEqual(names("myplug:alpha", []), []);
+  // QUIET: an unqualified ref carries no namespace to contradict, so it still
+  // resolves — the same reasoning that kept the shallow rung on the command
+  // ladder, and it is what a non-plugin harness reports.
+  assert.deepEqual(names("alpha", []), ["alpha"]);
 });
 
 test("an unresolvable ref resolves to nothing — never guessed into a match", () => {
@@ -219,14 +245,16 @@ test("an AMBIGUOUS fired ref resolves to nothing — the shadowed copy earns no 
   const shipped = skill("foo", "skills/foo/SKILL.md");
   const override = skill("foo", ".claude/skills/foo/SKILL.md");
   assert.deepEqual(
-    resolveProbe({ how: "fired", ref: "plugin:foo" }, [shipped, override]),
+    resolveProbe({ how: "fired", ref: "plugin:foo" }, [shipped, override], ["plugin"]), // prettier-ignore
     [],
   );
   // The control: with one `foo` in the repo the same probe still resolves.
   assert.deepEqual(
-    resolveProbe({ how: "fired", ref: "plugin:foo" }, [shipped]).map(
-      (s) => s.path,
-    ),
+    resolveProbe(
+      { how: "fired", ref: "plugin:foo" },
+      [shipped],
+      ["plugin"],
+    ).map((s) => s.path),
     ["skills/foo/SKILL.md"],
   );
 });
@@ -281,11 +309,64 @@ test("records stamp the surface's content hash AT RUN TIME", () => {
     tier: "harness",
     at: "2026-08-11T10:00:00.000Z",
     readSurface: () => "version one",
+    selfNamespaces: ["p"],
   });
   assert.equal(records.length, 1);
   assert.equal(records[0].sha, surfaceSha("version one"));
   assert.equal(records[0].tier, "harness");
   assert.equal(records[0].by, "a.harness.mjs");
+});
+
+test("a dispatched agent earns an execution RECORD — the whole point of the origin", () => {
+  // 🔴 The false negative, end to end. Before the `dispatched` origin, no probe
+  // could ever resolve to an agent, so `untested-subagent` reported a genuinely
+  // exercised agent as untested however many times a passing `subagent(...)`
+  // check had proven it ran.
+  const surfaces = [
+    agent("reviewer", "agents/reviewer.md"),
+    skill("reviewer", "skills/reviewer/SKILL.md"),
+  ];
+  const records = recordsFrom({
+    runs: [
+      {
+        file: "a.harness.mjs",
+        probes: [{ how: "dispatched", ref: "p:reviewer" }],
+      },
+    ],
+    surfaces,
+    tier: "harness",
+    at: "2026-08-11T10:00:00.000Z",
+    readSurface: () => "body",
+    selfNamespaces: ["p"],
+  });
+  assert.equal(records.length, 1);
+  assert.equal(records[0].kind, "agent");
+  assert.equal(records[0].path, "agents/reviewer.md");
+  assert.equal(records[0].how, "dispatched");
+  // …and the same-named SKILL beside it earns nothing, which is the guard that
+  // makes adding attribution safe: a new origin must not become a new leak.
+  assert.equal(
+    records.filter((r) => r.kind === "skill").length,
+    0,
+    "a dispatch names an agent, never the skill of the same name",
+  );
+  // A dispatch from ANOTHER plugin credits nothing here either.
+  assert.deepEqual(
+    recordsFrom({
+      runs: [
+        {
+          file: "a.harness.mjs",
+          probes: [{ how: "dispatched", ref: "other:reviewer" }],
+        },
+      ],
+      surfaces,
+      tier: "harness",
+      at: "2026-08-11T10:00:00.000Z",
+      readSurface: () => "body",
+      selfNamespaces: ["p"],
+    }),
+    [],
+  );
 });
 
 test("an unreadable surface produces NO record", () => {

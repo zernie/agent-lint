@@ -52,6 +52,128 @@ test("a transcript attributes the skills that RESOLVED", () => {
   assert.deepEqual(refs, [{ how: "fired", ref: "myplug:alpha" }]);
 });
 
+test("the vigiles OWNER must sit where a program actually runs", () => {
+  // 🔴 FIRES. The free-floating VERB was fixed one round ago; the OWNER had the
+  // same hole one token over. `echo vigiles hook-runtime run-program hooks/pre.sh`
+  // has `vigiles` at `argv[i - 1]`, so the hook that `echo` merely PRINTED earned
+  // an execution record.
+  assert.deepEqual(
+    commandRefs("echo vigiles hook-runtime run-program hooks/pre.sh"),
+    [],
+  );
+  for (const cmd of [
+    "printf vigiles hook-runtime run-program hooks/pre.sh",
+    "cat vigiles hook-runtime run-program hooks/pre.sh",
+    // A launcher that is not the head is not a launcher.
+    "echo npx vigiles hook-runtime run-program hooks/pre.sh",
+    // …and the interpreter case cannot be smuggled either: `entry` is the
+    // script the grammar named, and `vigiles` is not it.
+    "node runner.mjs vigiles hook-runtime run-program hooks/pre.sh",
+  ]) {
+    assert.deepEqual(
+      commandRefs(cmd).filter((r) => r === "hooks/pre.sh"),
+      [],
+      cmd,
+    );
+  }
+
+  // QUIET — every spelling MEASURED across the docs, examples, README, src and
+  // two repos' `.claude/` dirs, with its observed count:
+  //
+  //   13×  npx vigiles hook-runtime …
+  //   11×  vigiles hook-runtime …
+  //   10×  "$CLAUDE_PROJECT_DIR/node_modules/vigiles/dist/cli.js" hook-runtime …
+  //    9×  node /abs/dist/cli.js hook-runtime …
+  //    1×  ./node_modules/.bin/vigiles hook-runtime …
+  const runs: Record<string, string> = {
+    "the head itself": "vigiles hook-runtime run-program hooks/pre.sh",
+    "under npx": "npx vigiles hook-runtime run-program hooks/pre.sh",
+    "the installed bin":
+      "./node_modules/.bin/vigiles hook-runtime run-program hooks/pre.sh",
+    "the entry script as head":
+      "node_modules/vigiles/dist/cli.js hook-runtime run-program hooks/pre.sh",
+    "the entry script under node":
+      "node /abs/dist/cli.js hook-runtime run-program hooks/pre.sh",
+  };
+  for (const [why, cmd] of Object.entries(runs)) {
+    assert.ok(commandRefs(cmd).includes("hooks/pre.sh"), why);
+  }
+
+  // ⚠️ DELIBERATELY MISSED — a launcher spelling no corpus contains. One
+  // coverage line each; the direction is silence, and `LAUNCHERS` is one token
+  // chosen by measurement rather than a table of guesses.
+  assert.deepEqual(
+    commandRefs("pnpm dlx vigiles hook-runtime run-program hooks/a.sh"),
+    [],
+  );
+  assert.deepEqual(
+    commandRefs("bunx vigiles hook-runtime run-program hooks/a.sh"),
+    [],
+  );
+});
+
+test("a subagent DISPATCH is attributed — and only a dispatch", () => {
+  // 🔴 A false NEGATIVE, and one this repo predicted when `fired` was made
+  // skills-only: nothing probed agents, so a passing `subagent("reviewer", …)`
+  // left the agent reported as untested by `untested-subagent`. This round ADDS
+  // attribution, so the bar has to be the strict one.
+  //
+  // The evidence is a `tool_use` whose INPUT carries `subagent_type` — keyed on
+  // the field, not the tool name, because the dispatch tool is named `Agent` on
+  // the live CLI and `Task` in older docs. `parseSubagents` already keys on the
+  // field for that reason, confirmed against real `claude` output.
+  const dispatch = (name: string, tool = "Task", isError = false) => ({
+    toolCalls: [{ name: tool, input: { subagent_type: name }, isError }],
+  });
+  assert.deepEqual(traceRefs(dispatch("reviewer")), [
+    { how: "dispatched", ref: "reviewer" },
+  ]);
+  // The live CLI's spelling of the same dispatch.
+  assert.deepEqual(traceRefs(dispatch("reviewer", "Agent")), [
+    { how: "dispatched", ref: "reviewer" },
+  ]);
+  // Namespaced under `--plugin-dir`, preserved WHOLE — the namespace is identity,
+  // and stripping it here would hand it to the resolver already destroyed.
+  assert.deepEqual(traceRefs(dispatch("reviewer-spec:code-reviewer")), [
+    { how: "dispatched", ref: "reviewer-spec:code-reviewer" },
+  ]);
+
+  // QUIET — what must NOT count:
+  // an ERRORED dispatch (the tool was reached and the agent was not — the same
+  // rule the Skill arm has always had),
+  assert.deepEqual(traceRefs(dispatch("reviewer", "Task", true)), []);
+  // a call merely NAMED like a dispatch, carrying no `subagent_type`,
+  assert.deepEqual(
+    traceRefs({ toolCalls: [{ name: "Task", input: { prompt: "reviewer" } }] }),
+    [],
+  );
+  // a non-string `subagent_type`,
+  assert.deepEqual(
+    traceRefs({ toolCalls: [{ name: "Task", input: { subagent_type: 7 } }] }),
+    [],
+  );
+  // and an ordinary tool call.
+  assert.deepEqual(
+    traceRefs({ toolCalls: [{ name: "Read", input: { file_path: "x" } }] }),
+    [],
+  );
+
+  // A skill activation and a dispatch in one transcript stay APART, each on its
+  // own origin — that separation is what stops one kind crediting the other.
+  assert.deepEqual(
+    traceRefs({
+      toolCalls: [
+        { name: "Skill", input: { skill: "p:alpha" }, isError: false },
+        { name: "Task", input: { subagent_type: "p:reviewer" } },
+      ],
+    }),
+    [
+      { how: "fired", ref: "p:alpha" },
+      { how: "dispatched", ref: "p:reviewer" },
+    ],
+  );
+});
+
 test("a HOOK FIRE attributes nothing — an Event:Matcher label names no file", () => {
   // 🔴 FIRES. Claude Code reports `hook_name` as an `Event:Matcher` LABEL, and
   // this was recorded as a `fired` probe on the reasoning that it "resolves to no

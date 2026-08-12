@@ -5411,6 +5411,39 @@ function resolveRecords(
   // surfaces, matched the run's Codex probes against them, resolved none, and
   // recorded no execution coverage: the same silent empty set as before, reached
   // through the one input that exists to override the other two.
+  /**
+   * The plugin namespaces that mean THIS repo, for {@link resolveProbe}.
+   *
+   * A skill activation is reported as `plugin:skill` and a subagent dispatch as
+   * `plugin:agent`, so resolving one needs to know which plugin we ARE — otherwise
+   * `other-plugin:foo` credits a local `foo` (that was the defect). Two sources,
+   * and both are needed:
+   *
+   *   1. `.claude-plugin/plugin.json#name` — the repo's own declared name, used
+   *      when the run installed the repo AS a plugin (`pluginDir`).
+   *   2. `vigiles-loose-skills` — the synthetic name OUR OWN packaging gives a
+   *      loose `.claude/skills` dir (`packageSkillsDir`, and `underTestSource`'s
+   *      fallback when a plugin manifest has no name). A repo that is not a plugin
+   *      still reports namespaced ids under it, so omitting it would drop every
+   *      trigger-rate record for the documented one-liner.
+   *
+   * An unreadable or nameless manifest contributes nothing rather than a guess.
+   */
+  function selfNamespaces(cwd: string): readonly string[] {
+    const names = new Set<string>(["vigiles-loose-skills"]);
+    try {
+      const raw = readFileSync(
+        resolve(cwd, ".claude-plugin", "plugin.json"),
+        "utf-8",
+      );
+      const name = (JSON.parse(raw) as { name?: unknown }).name;
+      if (typeof name === "string" && name.trim()) names.add(name.trim());
+    } catch {
+      /* no manifest, or unreadable → the synthetic name alone */
+    }
+    return [...names];
+  }
+
   const scan = findUntestedSurfaces({
     basePath: cwd,
     layout: harnessLayoutFor(cwd, loadConfig(), harnessFlag),
@@ -5420,6 +5453,7 @@ function resolveRecords(
     surfaces: [...scan.covered, ...scan.untested],
     tier,
     at: new Date().toISOString(),
+    selfNamespaces: selfNamespaces(cwd),
     readSurface: (p) => {
       try {
         return readFileSync(resolve(cwd, p), "utf-8");

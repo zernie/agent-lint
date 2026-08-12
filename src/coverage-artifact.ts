@@ -220,6 +220,7 @@ export function canonicalScript(file: string, root?: string): string {
 export function resolveProbe(
   probe: SurfaceProbe,
   surfaces: readonly Surface[],
+  selfNamespaces: readonly string[] = [],
 ): Surface[] {
   if (probe.how === "command") {
     const ref = norm(probe.ref).replace(/^\.\//, "");
@@ -238,21 +239,53 @@ export function resolveProbe(
     return only(hooks.filter((s) => norm(s.path).endsWith(`/${ref}`)));
   }
   // 🔴 WITHIN THE KIND THE EVIDENCE NAMES. A `fired` probe comes from a `Skill`
-  // tool call, so it identifies a SKILL — and the lookup used to search every
-  // kind, which is the cross-kind form of "a name is not an identity". The
-  // within-kind form was closed one rung up (tail alignment, not bare basename);
-  // this is the same defect across the kind boundary, and the probe knew its
-  // origin all along.
+  // tool call, so it identifies a SKILL; a `dispatched` probe comes from a
+  // `subagent_type`, so it identifies an AGENT. The lookup used to search every
+  // kind, which is the cross-kind form of "a name is not an identity".
   //
-  // An agent is dispatched through `Task`, not `Skill`, and nothing records a
-  // probe for one today (measured: the only producers are `probeCommand`,
-  // `probeTrace` and the in-process loaded-hook tier). If a subagent probe is
-  // ever added it needs its OWN origin rather than a widening here — a widening
-  // is how this leak existed in the first place.
-  const name = probe.ref.includes(":")
-    ? probe.ref.slice(probe.ref.lastIndexOf(":") + 1)
-    : probe.ref;
-  return only(surfaces.filter((s) => s.kind === "skill" && s.name === name));
+  // The agent origin is its OWN, not a widening of `fired` — a widening is how
+  // the cross-kind leak existed in the first place.
+  const kind = probe.how === "dispatched" ? "agent" : "skill";
+  const name = localName(probe.ref, selfNamespaces);
+  if (name === null) return [];
+  return only(surfaces.filter((s) => s.kind === kind && s.name === name));
+}
+
+/**
+ * The surface name a namespaced activation refers to IN THIS REPO, or `null`
+ * when it refers to somebody else's.
+ *
+ * 🔴 THE NAMESPACE USED TO BE STRIPPED AND THROWN AWAY — the third distinct axis
+ * of "a name is not an identity", after within-kind (a bare basename) and
+ * cross-kind (a hook label reaching a skill). A run that fires
+ * `other-plugin:foo` says which plugin's `foo` ran, and we deleted the half that
+ * said it: an audited repo with its own unique `foo` was recorded as having
+ * EXECUTED it because a completely different plugin's skill activated. The
+ * whole-harness tier makes that ordinary rather than exotic — `installSet` exists
+ * to co-install competitors so the skill under test competes for selection, and a
+ * competitor firing is the normal outcome of a low trigger rate.
+ *
+ * A qualified ref carries MORE identity than the lookup used, so the fix is the
+ * same as the other two: stop discarding it. The namespace must be one that means
+ * THIS repo; anything else resolves to nothing.
+ *
+ * ⚠️ AN UNQUALIFIED REF STILL RESOLVES BY NAME. It carries no namespace to
+ * contradict — the same reasoning that kept the shallow rung on the command
+ * ladder — and it is what a non-plugin harness reports.
+ *
+ * ⚠️ AND AN EMPTY `selfNamespaces` DROPS EVERY QUALIFIED REF. That is the honest
+ * default for a caller that cannot say which plugin it is, and it costs coverage
+ * rather than inventing it; `resolveRecords` supplies the real list.
+ */
+function localName(
+  ref: string,
+  selfNamespaces: readonly string[],
+): string | null {
+  const colon = ref.lastIndexOf(":");
+  if (colon < 0) return ref;
+  return selfNamespaces.includes(ref.slice(0, colon))
+    ? ref.slice(colon + 1)
+    : null;
 }
 
 /** The match, when there is exactly one — an ambiguous probe identifies nothing. */
@@ -326,16 +359,23 @@ export function recordsFrom(opts: {
   readonly tier: CoverageTierName;
   readonly at: string;
   readonly readSurface: (path: string) => string | null;
+  /**
+   * Namespaces that mean THIS repo (`plugin:skill` / `plugin:agent`). Absent →
+   * every qualified ref drops; see {@link localName}.
+   */
+  readonly selfNamespaces?: readonly string[];
 }): CoverageRun[] {
   const out: CoverageRun[] = [];
   const seen = new Set<string>();
   const pairs = opts.runs.flatMap((run) =>
     run.probes.flatMap((probe) =>
-      resolveProbe(probe, opts.surfaces).map((surface) => ({
-        run,
-        probe,
-        surface,
-      })),
+      resolveProbe(probe, opts.surfaces, opts.selfNamespaces).map(
+        (surface) => ({
+          run,
+          probe,
+          surface,
+        }),
+      ),
     ),
   );
   for (const { run, probe, surface } of pairs) {
@@ -488,7 +528,7 @@ function isCoverageRun(value: unknown): value is CoverageRun {
     typeof r.path === "string" &&
     typeof r.name === "string" &&
     (r.tier === "harness" || r.tier === "eval") &&
-    (r.how === "command" || r.how === "fired") &&
+    (r.how === "command" || r.how === "fired" || r.how === "dispatched") &&
     typeof r.by === "string" &&
     typeof r.at === "string" &&
     typeof r.sha === "string"

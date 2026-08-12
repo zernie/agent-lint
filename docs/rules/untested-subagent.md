@@ -78,6 +78,19 @@ See
 [`untested-skill`](untested-skill.md#what-counts-as-tested) for the shared
 mechanics.
 
+**What earns an agent a recorded run** (added 2026-08-12): a **dispatch** in the
+transcript — a `tool_use` whose input carries a `subagent_type`, which is what a
+passing `subagent("bar", …)` check is asserting on. It is keyed on the input
+field rather than the tool name, because the dispatch tool is named `Agent` on
+the live CLI and `Task` in older docs. An **errored** dispatch does not count (the
+tool was reached and the agent was not), and neither does a call merely named
+`Task` with no `subagent_type`.
+
+Before that, no probe could resolve to an agent at all, so an agent proven to run
+by a passing `subagent(...)` was still reported here as untested. If the dispatch
+is namespaced (`plugin:bar`, which is what `--plugin-dir` reports) the namespace
+must be this repo's own plugin name — another plugin's `bar` is not yours.
+
 ## Exemptions
 
 Every agent is held to this; the only opt-out is an explicit
