@@ -77,7 +77,7 @@ import type {
   RuleSeverity,
 } from "./core/types.js";
 import { ruleSeverity, ruleOptions } from "./core/types.js";
-import type { SurfaceKind } from "./test-coverage.js";
+import type { SurfaceKind, TestCoverageOptions } from "./test-coverage.js";
 import {
   findUntestedSurfaces,
   formatUntestedReport,
@@ -3792,6 +3792,55 @@ function checkIntegrityForFiles(
 }
 
 /**
+ * The `untested-*` rules AS THE DETECTOR TAKES THEM: which kinds this repo
+ * enabled, and the discovery options merged from whichever of the three rules
+ * carries them (`testGlobs` / `exclude` / `testExtension` are shared).
+ *
+ * 🔴 ONE READER, BECAUSE THE SECOND ONE DRIFTED. `vigiles lint` read the config
+ * here; the PostToolUse nudge (`evalLockNudgeHookCommand`) called the same
+ * detector with nothing but `basePath`. Reproduced 2026-08-12 on a two-file
+ * fixture: with `"untested-skill": false` lint printed nothing and the nudge
+ * still told the agent the skill was untested; with a configured
+ * `testGlobs: ["**\/*.check.mjs"]` lint printed "all 1 surface(s) have a test"
+ * while the nudge said "no test or eval covers it". A nudge contradicting the
+ * linter of the same repo, in the same second, teaches people to ignore both.
+ */
+function untestedRules(config: VigilesConfig | undefined): {
+  /** Per-kind severities — `false` means the kind is not scanned at all. */
+  readonly severity: (kind: SurfaceKind) => RuleSeverity;
+  /** True when at least one of the three rules is on. */
+  readonly anyEnabled: boolean;
+  /** The detector options the config asks for (no basePath/layout — the caller's). */
+  readonly options: TestCoverageOptions;
+} {
+  const rules = config?.rules;
+  const skillSev = ruleSeverity(rules?.["untested-skill"]);
+  const agentSev = ruleSeverity(rules?.["untested-subagent"]);
+  const hookSev = ruleSeverity(rules?.["untested-hook"]);
+  const opts: TestCoverageConfig = {
+    ...ruleOptions<TestCoverageConfig>(rules?.["untested-skill"]),
+    ...ruleOptions<TestCoverageConfig>(rules?.["untested-subagent"]),
+    ...ruleOptions<TestCoverageConfig>(rules?.["untested-hook"]),
+  };
+  return {
+    severity: (kind) =>
+      kind === "skill" ? skillSev : kind === "agent" ? agentSev : hookSev,
+    anyEnabled: skillSev !== false || agentSev !== false || hookSev !== false,
+    options: {
+      skills: skillSev !== false,
+      agents: agentSev !== false,
+      hooks: hookSev !== false,
+      testGlobs: opts.testGlobs,
+      exclude: opts.exclude,
+      // Without this the `testExtension` documented on TestCoverageOptions was a
+      // config key nothing read: a TypeScript-shaped repo got `.ts` suggestions
+      // however the author configured it. Prose isn't policy, in our own CLI.
+      testExtension: opts.testExtension,
+    },
+  };
+}
+
+/**
  * Apply the per-kind `untested-skill` / `untested-subagent` / `untested-hook` rules:
  * find skills/agents/hooks with no test or eval (see src/test-coverage.ts). Each
  * kind is gated by its OWN rule severity — a kind set to `false` is not scanned;
@@ -3804,33 +3853,12 @@ function checkUntestedSurfaces(
   adapter: HarnessAdapter,
   scanRoot: string,
 ): { untested: number; errors: number } {
-  const rules = config?.rules;
-  const skillSev = ruleSeverity(rules?.["untested-skill"]);
-  const agentSev = ruleSeverity(rules?.["untested-subagent"]);
-  const hookSev = ruleSeverity(rules?.["untested-hook"]);
-  if (!skillSev && !agentSev && !hookSev) return { untested: 0, errors: 0 };
-  const sevFor = (kind: SurfaceKind): RuleSeverity =>
-    kind === "skill" ? skillSev : kind === "agent" ? agentSev : hookSev;
-
-  // Test-discovery options (testGlobs/exclude) are shared; merge them from
-  // whichever of the three rules carries them.
-  const opts: TestCoverageConfig = {
-    ...ruleOptions<TestCoverageConfig>(rules?.["untested-skill"]),
-    ...ruleOptions<TestCoverageConfig>(rules?.["untested-subagent"]),
-    ...ruleOptions<TestCoverageConfig>(rules?.["untested-hook"]),
-  };
+  const { severity: sevFor, anyEnabled, options } = untestedRules(config);
+  if (!anyEnabled) return { untested: 0, errors: 0 };
   const report = findUntestedSurfaces({
+    ...options,
     basePath: scanRoot,
     layout: adapter.layout,
-    skills: skillSev !== false,
-    agents: agentSev !== false,
-    hooks: hookSev !== false,
-    testGlobs: opts.testGlobs,
-    exclude: opts.exclude,
-    // Without this the `testExtension` documented on TestCoverageOptions was a
-    // config key nothing read: a TypeScript-shaped repo got `.ts` suggestions
-    // however the author configured it. Prose isn't policy, in our own CLI.
-    testExtension: opts.testExtension,
   });
 
   if (!silent) {
@@ -6087,13 +6115,26 @@ function evalLockNudgeHookCommand(): void {
   if (!file) return;
   const cwd = process.cwd();
   const target = relative(cwd, resolve(cwd, file)) || file;
+  // 🔴 THE SAME CONFIG `vigiles lint` READS. This used to pass `basePath` alone,
+  // so a repo that had switched `untested-skill` off, or pointed `testGlobs` at
+  // its own test names, got a nudge asserting the opposite of what its own
+  // linter said (see `untestedRules`). A rule the author DISABLED must not come
+  // back through a hook; a test the author CONFIGURED must count here too.
+  //
+  // The disable travels inside `options` — a kind whose rule is off arrives as
+  // `skills: false` / `agents: false` and is not scanned, so the detector has
+  // nothing to report. No extra "is anything enabled" guard here on purpose: a
+  // second gate saying the same thing is a branch no test can distinguish from
+  // its absence (measured — the mutation passed), i.e. the dead-fragment class
+  // this same change removed from the runner table.
+  const { options } = untestedRules(loadConfig());
   // Two nudges, one entry, most-urgent first. The lock reminder is SELF-GATING:
   // silent until a lock is committed — so a repo that has never written a test
   // heard nothing at all, while a repo that already tests got reminded. That is
   // backwards, and `untested-skill` already stated the missing half correctly;
   // it just lived in `vigiles lint`, which someone has to run by hand.
   const msg =
-    skillTestNudge(target, { basePath: cwd }) ??
+    skillTestNudge(target, { ...options, basePath: cwd }) ??
     evalLockNudge(target, resolve(cwd, DEFAULT_LOCK_DIR));
   if (!msg) return;
   process.stdout.write(
