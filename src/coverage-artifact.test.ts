@@ -119,6 +119,67 @@ test("an unresolvable ref resolves to nothing — never guessed into a match", (
   );
 });
 
+// --- ambiguity ---------------------------------------------------------------
+
+test("an AMBIGUOUS fired ref resolves to nothing — the shadowed copy earns no coverage", () => {
+  // A skill shipped at `skills/foo/` and overridden at `.claude/skills/foo/`.
+  // The transcript says `plugin:foo` and cannot say which file ran. Returning
+  // both looks conservative and is the opposite: exactly one ran, so the other
+  // is handed execution coverage it never earned, and the record asserts
+  // something false. Dropping loses a real record; recording both invents one.
+  const shipped = skill("foo", "skills/foo/SKILL.md");
+  const override = skill("foo", ".claude/skills/foo/SKILL.md");
+  assert.deepEqual(
+    resolveProbe({ how: "fired", ref: "plugin:foo" }, [shipped, override]),
+    [],
+  );
+  // The control: with one `foo` in the repo the same probe still resolves.
+  assert.deepEqual(
+    resolveProbe({ how: "fired", ref: "plugin:foo" }, [shipped]).map(
+      (s) => s.path,
+    ),
+    ["skills/foo/SKILL.md"],
+  );
+});
+
+test("no record is written for an ambiguous probe", () => {
+  // The end the ambiguity rule exists for: two records off one fire, one of them
+  // for a file that did not run.
+  const records = recordsFrom({
+    runs: [{ file: "t.harness.mjs", probes: [{ how: "fired", ref: "p:foo" }] }],
+    surfaces: [
+      skill("foo", "skills/foo/SKILL.md"),
+      skill("foo", ".claude/skills/foo/SKILL.md"),
+    ],
+    tier: "harness",
+    at: "2026-08-12T00:00:00.000Z",
+    readSurface: () => "body",
+  });
+  assert.deepEqual(records, []);
+});
+
+test("a command ref matches on the most precise rung available, not on all of them", () => {
+  // The rungs OVERLAP: with both hooks discovered, `.claude/hooks/pre.sh` is an
+  // exact match for one and a `/`-suffix match for the other, so flat filtering
+  // made a fully-qualified filename ambiguous.
+  const shipped = hook("pre", "hooks/pre.sh");
+  const override = hook("pre", ".claude/hooks/pre.sh");
+  const both = [shipped, override];
+  const paths = (ref: string) =>
+    resolveProbe({ how: "command", ref }, both).map((s) => s.path);
+  assert.deepEqual(paths(".claude/hooks/pre.sh"), [".claude/hooks/pre.sh"]);
+  assert.deepEqual(paths("hooks/pre.sh"), ["hooks/pre.sh"]);
+  // An absolute ref lands on the suffix rung, where the LONGEST matching surface
+  // path wins — it cannot be the shorter one unless the repo root is the other
+  // surface's parent, which that surface's existence rules out.
+  assert.deepEqual(paths("/repo/.claude/hooks/pre.sh"), [
+    ".claude/hooks/pre.sh",
+  ]);
+  assert.deepEqual(paths("/repo/hooks/pre.sh"), ["hooks/pre.sh"]);
+  // The bare basename names neither, and is dropped rather than guessed.
+  assert.deepEqual(paths("pre.sh"), []);
+});
+
 // --- records -----------------------------------------------------------------
 
 test("records stamp the surface's content hash AT RUN TIME", () => {

@@ -109,10 +109,28 @@ function norm(p: string): string {
  * guard nothing tests is one that quietly stops holding when discovery changes.
  *
  * A `fired` probe matches by NAME, after dropping a `plugin:` namespace, because
- * that is the only identity the transcript carries. When two surfaces share a
- * name (the same skill vendored under `skills/` and `.claude/skills/`) both are
- * returned: one of them is the file that ran and picking by glob order would be
- * a coin flip presented as a fact.
+ * that is the only identity the transcript carries.
+ *
+ * 🔴 AN AMBIGUOUS PROBE RESOLVES TO NOTHING. When two surfaces share a name — a
+ * skill shipped at `skills/foo/` and overridden at `.claude/skills/foo/` — the
+ * transcript says `plugin:foo` and cannot say which file ran. Returning BOTH
+ * used to look conservative and is the opposite: exactly one of them ran, so the
+ * shadowed copy is handed execution coverage it never earned, and the record
+ * asserts a fact that is false. Dropping loses a real record for the copy that
+ * did run; recording both INVENTS one. The same rule the rest of this tier
+ * already follows — an unresolvable ref is never guessed into a match — so the
+ * only consistent answer is to drop.
+ *
+ * A `command` probe accepts the same three shapes as before, but now as a
+ * LADDER, most precise first: an exact path, then a suffix (a harness
+ * legitimately points at `${CLAUDE_PROJECT_DIR}/.claude/hooks/x.sh`), then the
+ * bare basename. A lower rung is consulted only when the one above it is empty,
+ * because the rungs overlap: with both `hooks/pre.sh` and `.claude/hooks/pre.sh`
+ * discovered, the ref `.claude/hooks/pre.sh` is an EXACT match for one and a
+ * suffix match for the other — flat filtering made a named file ambiguous. On
+ * the suffix rung the longest matching surface path wins for the same reason: an
+ * absolute ref cannot be the shorter relative path unless the repo root is the
+ * other surface's parent, which the other surface's existence rules out.
  */
 export function resolveProbe(
   probe: SurfaceProbe,
@@ -121,20 +139,25 @@ export function resolveProbe(
   if (probe.how === "command") {
     const ref = norm(probe.ref);
     const leaf = basename(ref);
-    return surfaces.filter((s) => {
-      if (s.kind !== "hook") return false;
-      const path = norm(s.path);
-      // Exact, suffix (an absolute path into the repo), or basename — a harness
-      // legitimately points at `${CLAUDE_PROJECT_DIR}/.claude/hooks/x.sh`.
-      return (
-        path === ref || ref.endsWith(`/${path}`) || basename(path) === leaf
-      );
-    });
+    const hooks = surfaces.filter((s) => s.kind === "hook");
+    const exact = hooks.filter((s) => norm(s.path) === ref);
+    if (exact.length > 0) return only(exact);
+    const suffix = hooks.filter((s) => ref.endsWith(`/${norm(s.path)}`));
+    if (suffix.length > 0) {
+      const longest = Math.max(...suffix.map((s) => norm(s.path).length));
+      return only(suffix.filter((s) => norm(s.path).length === longest));
+    }
+    return only(hooks.filter((s) => basename(norm(s.path)) === leaf));
   }
   const name = probe.ref.includes(":")
     ? probe.ref.slice(probe.ref.lastIndexOf(":") + 1)
     : probe.ref;
-  return surfaces.filter((s) => s.name === name);
+  return only(surfaces.filter((s) => s.name === name));
+}
+
+/** The match, when there is exactly one — an ambiguous probe identifies nothing. */
+function only(matches: readonly Surface[]): Surface[] {
+  return matches.length === 1 ? [...matches] : [];
 }
 
 /** Everything one script run contributes, already resolved to real surfaces. */
