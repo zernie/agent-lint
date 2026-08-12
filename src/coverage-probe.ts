@@ -584,11 +584,47 @@ export function traceRefs(trace: ProbeableTrace): SurfaceProbe[] {
     const id = (call.input as { skill?: unknown } | undefined)?.skill;
     if (typeof id === "string") push(id);
   }
-  // Hooks are included for the harnesses that report a script there. Claude Code
-  // reports an `Event:Matcher` LABEL (`"PreToolUse:Edit"`), which resolves to no
-  // surface and is dropped by the runner — recording it costs nothing and an
-  // unresolvable ref is never guessed into a match.
-  for (const hook of trace.hooks ?? []) push(hook.name);
+  // 🔴 HOOK FIRES ARE NOT RECORDED, and the comment that used to sit here was
+  // wrong about why they were: *"Claude Code reports an `Event:Matcher` LABEL
+  // (`PreToolUse:Edit`), which resolves to no surface and is dropped by the
+  // runner — recording it costs nothing."* The first half is right and the second
+  // is false. `resolveProbe` stripped the prefix and searched EVERY surface kind,
+  // so the label credited a same-named skill or agent.
+  //
+  // MEASURED 2026-08-12 — every `fired` probe produced by `vigiles test` on this
+  // repo AND on a 43-harness consumer repo, with no model spent. All fourteen are
+  // hook labels; not one is a skill activation:
+  //
+  //   8×  SessionStart:startup     →  strips to `startup`
+  //   2×  PostToolUse:Write        →  strips to `Write`
+  //   2×  PreToolUse:Write         →  strips to `Write`
+  //   2×  UserPromptSubmit         →  no colon, so the WHOLE label is the name
+  //
+  // Neither corpus owns a surface by those names, so nothing was miscredited
+  // today. Add ONE skill named `startup` to this repo — a name nobody would think
+  // twice about — and the counterfactual, run against the real corpus:
+  //
+  //   SessionStart:startup → ["skill skills/startup/SKILL.md"]
+  //
+  // eight times per `vigiles test`.
+  //
+  // A label cannot identify a hook FILE either, so this is not fixed by resolving
+  // within the kind. `hook_name` is `Event:Matcher` — an event and a tool-name
+  // pattern — while a hook surface is a script path. A repo with `hooks/Stop.sh`
+  // plus `hooks/cleanup.sh` both registered for `Stop` would have the `Stop`
+  // label match exactly one of them, and there is no reason it is the one that
+  // ran. The evidence is about an EVENT; the surfaces are FILES.
+  //
+  // The one thing this stream could carry that WOULD be evidence is a script
+  // path, and there is no harness that reports one: the sole producer is
+  // `parseHooks` reading Claude Code's `hook_response`, and Codex/OpenCode return
+  // `hooks: []`. If one ever does, the ref belongs on the `command` origin, which
+  // already resolves paths within hooks.
+  //
+  // `ProbeableTrace.hooks` stays on the shape, unread, ON PURPOSE: it is what
+  // lets the negative be tested (`traceRefs` handed real labels and returning
+  // []). Deleting the field would delete the lock that keeps the loop from
+  // coming back.
   return out;
 }
 

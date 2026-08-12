@@ -42,6 +42,13 @@ const hook = (name: string, path: string): Surface => ({
   tokens: [],
   ignored: false,
 });
+const agent = (name: string, path: string): Surface => ({
+  kind: "agent",
+  path,
+  name,
+  tokens: [],
+  ignored: false,
+});
 
 const run = (over: Partial<CoverageRun> = {}): CoverageRun => ({
   kind: "skill",
@@ -141,6 +148,41 @@ test("a command ref NEVER resolves to a non-hook surface", () => {
   assert.deepEqual(resolveProbe(ref, [bundled]), []);
   // The control: the same path, declared a hook, resolves.
   assert.equal(resolveProbe(ref, [{ ...bundled, kind: "hook" }]).length, 1);
+});
+
+test("a fired ref NEVER resolves across surface KINDS", () => {
+  // 🔴 The reported leak, and the cross-kind form of "a name is not an identity"
+  // — the within-kind form was closed one rung up. A `fired` probe comes from a
+  // `Skill` tool call, so it names a SKILL; the lookup searched every kind.
+  //
+  // The refs below are REAL: they are the entire `fired` population measured
+  // across `vigiles test` on this repo and on a 43-harness consumer repo. The
+  // surface names are the ones each label strips to.
+  const surfaces = [
+    hook("startup", "hooks/startup.sh"),
+    skill("startup", "skills/startup/SKILL.md"),
+  ];
+  const paths = (ref: string) =>
+    resolveProbe({ how: "fired", ref }, surfaces).map((s) => s.kind + " " + s.path); // prettier-ignore
+
+  // A hook label must not reach the skill. (`traceRefs` no longer emits one at
+  // all, so this is the second lock: the resolver would not honour it either.)
+  assert.deepEqual(paths("SessionStart:startup"), ["skill skills/startup/SKILL.md"]); // prettier-ignore
+  // …and that is the point — the SKILL is what a `fired` ref means. The hook of
+  // the same name is NOT a candidate, whatever the ref looks like.
+  assert.deepEqual(
+    resolveProbe({ how: "fired", ref: "startup" }, [hook("startup", "hooks/startup.sh")]), // prettier-ignore
+    [],
+  );
+  // An agent is dispatched through `Task`, not `Skill`, and nothing probes one;
+  // widening to agents is how this leak existed, so it stays closed.
+  assert.deepEqual(
+    resolveProbe({ how: "fired", ref: "bar" }, [agent("bar", "agents/bar.md")]),
+    [],
+  );
+
+  // QUIET: the skill case, including a namespaced id, still resolves.
+  assert.deepEqual(paths("myplug:startup"), ["skill skills/startup/SKILL.md"]);
 });
 
 test("a fired ref resolves by name, namespace stripped", () => {

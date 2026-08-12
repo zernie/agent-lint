@@ -52,6 +52,37 @@ test("a transcript attributes the skills that RESOLVED", () => {
   assert.deepEqual(refs, [{ how: "fired", ref: "myplug:alpha" }]);
 });
 
+test("a HOOK FIRE attributes nothing — an Event:Matcher label names no file", () => {
+  // 🔴 FIRES. Claude Code reports `hook_name` as an `Event:Matcher` LABEL, and
+  // this was recorded as a `fired` probe on the reasoning that it "resolves to no
+  // surface". `resolveProbe` then stripped the prefix and searched EVERY kind, so
+  // the label credited a same-named SKILL.
+  //
+  // These four are the entire `fired` population MEASURED across `vigiles test`
+  // on this repo and on a 43-harness consumer repo — fourteen probes, all hook
+  // labels, not one a skill activation.
+  const refs = traceRefs({
+    toolCalls: [],
+    hooks: [
+      { name: "SessionStart:startup" },
+      { name: "PostToolUse:Write" },
+      { name: "PreToolUse:Write" },
+      { name: "UserPromptSubmit" }, // no colon: the WHOLE label was the name
+    ],
+  });
+  assert.deepEqual(refs, []);
+
+  // QUIET: a skill activation in the SAME transcript is still attributed — the
+  // fix removes one source, not the tier.
+  const mixed = traceRefs({
+    toolCalls: [
+      { name: "Skill", input: { skill: "myplug:alpha" }, isError: false },
+    ],
+    hooks: [{ name: "PreToolUse:Edit" }],
+  });
+  assert.deepEqual(mixed, [{ how: "fired", ref: "myplug:alpha" }]);
+});
+
 test("an ERRORED skill call attributes nothing", () => {
   // The tool was reached and the skill was not. Counting it would make "this
   // skill is broken" indistinguishable from "this skill ran".

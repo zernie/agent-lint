@@ -237,10 +237,22 @@ export function resolveProbe(
     // named a tail of the surface path (`guard.sh`, `hooks/guard.sh`).
     return only(hooks.filter((s) => norm(s.path).endsWith(`/${ref}`)));
   }
+  // 🔴 WITHIN THE KIND THE EVIDENCE NAMES. A `fired` probe comes from a `Skill`
+  // tool call, so it identifies a SKILL — and the lookup used to search every
+  // kind, which is the cross-kind form of "a name is not an identity". The
+  // within-kind form was closed one rung up (tail alignment, not bare basename);
+  // this is the same defect across the kind boundary, and the probe knew its
+  // origin all along.
+  //
+  // An agent is dispatched through `Task`, not `Skill`, and nothing records a
+  // probe for one today (measured: the only producers are `probeCommand`,
+  // `probeTrace` and the in-process loaded-hook tier). If a subagent probe is
+  // ever added it needs its OWN origin rather than a widening here — a widening
+  // is how this leak existed in the first place.
   const name = probe.ref.includes(":")
     ? probe.ref.slice(probe.ref.lastIndexOf(":") + 1)
     : probe.ref;
-  return only(surfaces.filter((s) => s.name === name));
+  return only(surfaces.filter((s) => s.kind === "skill" && s.name === name));
 }
 
 /** The match, when there is exactly one — an ambiguous probe identifies nothing. */
