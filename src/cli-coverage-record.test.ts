@@ -29,6 +29,9 @@ import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 // __dirname is src/ when vitest resolves the .ts source → ".." is the repo root.
 const CLI = resolve(__dirname, "..", "dist", "cli.js");
 const RUN_HOOK = resolve(__dirname, "..", "dist", "run-hook.js");
+const LOAD_HOOK = resolve(__dirname, "..", "dist", "load-hook.js");
+const ASSERT = resolve(__dirname, "..", "dist", "harness-assert.js");
+const HOOK_ENTRY = resolve(__dirname, "..", "dist", "hook.js");
 
 let dir: string;
 
@@ -228,6 +231,87 @@ test("…and putting the harness back restores the credit, without re-running it
   assert.doesNotMatch(vigilesLint(), /MEASURED BY A RUN/);
   writeFileSync(join(dir, "t.harness.mjs"), saved);
   assert.match(vigilesLint(), /1 MEASURED BY A RUN/);
+});
+
+// ─── the IN-PROCESS tier records too ──────────────────────────────────────────
+//
+// 🔴 The documented cheapest path — `loadHook(file)` + `assertHookDenies` —
+// recorded a check and no SURFACE, so the child exited a non-vacuous pass with an
+// empty `surfaces` list, `runsFromResults` discarded it, and a harness that
+// really did execute a compiled hook produced NO execution record. Unlike every
+// other coverage defect here that is a false NEGATIVE, so the fix's own risk runs
+// the other way: recording a LOAD rather than a RUN. Both halves are driven end
+// to end through the real CLI below.
+test("a harness that EVALUATES a compiled hook in-process records it", () => {
+  write(
+    ".vigiles/hooks/guard.hook.mjs",
+    `import { defineHook, tool, deny, allow } from ${JSON.stringify(HOOK_ENTRY)};\n` +
+      `export default defineHook({ on: "PreToolUse", match: tool("Bash"),\n` +
+      `  decide: (e) => e.command.runs("git push", { force: true }) ? deny("no") : allow() });\n`,
+  );
+  // The hook is wired into settings, so discovery sees it as a surface; the
+  // harness never spawns anything — it loads the program and asserts in-process.
+  write(
+    ".claude/settings.json",
+    JSON.stringify({
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [
+              {
+                type: "command",
+                command:
+                  "node x hook-runtime run-program .vigiles/hooks/guard.hook.mjs",
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+  write(
+    "t.harness.mjs",
+    `import { loadHook } from ${JSON.stringify(LOAD_HOOK)};\n` +
+      `import { assertHookDenies } from ${JSON.stringify(ASSERT)};\n` +
+      `const h = await loadHook(".vigiles/hooks/guard.hook.mjs");\n` +
+      `assertHookDenies(h, { hook_event_name: "PreToolUse", tool_name: "Bash",\n` +
+      `  tool_input: { command: "git push --force" } });\n`,
+  );
+  vigilesTest();
+  assert.deepEqual(
+    recorded(),
+    [".vigiles/hooks/guard.hook.mjs"],
+    "an in-process evaluation is an execution and must be recorded",
+  );
+});
+
+test("…but a harness that only LOADS one records nothing", () => {
+  // The half a careless fix breaks. Loading a hook to inspect its shape has not
+  // run it, and recording that would be the empty-file-counts substitution the
+  // execution tier exists to remove. Same fixture, one line shorter.
+  write(
+    ".vigiles/hooks/guard.hook.mjs",
+    `import { defineHook, tool, deny, allow } from ${JSON.stringify(HOOK_ENTRY)};\n` +
+      `export default defineHook({ on: "PreToolUse", match: tool("Bash"),\n` +
+      `  decide: () => allow() });\n`,
+  );
+  write(
+    "t.harness.mjs",
+    `import { loadHook } from ${JSON.stringify(LOAD_HOOK)};\n` +
+      `import { runHook } from ${JSON.stringify(RUN_HOOK)};\n` +
+      `const h = await loadHook(".vigiles/hooks/guard.hook.mjs");\n` +
+      `if (typeof h !== "object") process.exit(1);\n` +
+      // Something else must run, or the script is vacuous and records nothing
+      // for a different reason — this keeps the test about the LOAD.
+      `runHook("sh hooks/a.sh", { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: {} });\n`,
+  );
+  vigilesTest();
+  assert.deepEqual(
+    recorded(),
+    ["hooks/a.sh"],
+    "the loaded-but-never-evaluated hook must not appear",
+  );
 });
 
 test("a repo whose run exercises nothing still gets NO artifact", () => {

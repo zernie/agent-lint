@@ -1028,6 +1028,40 @@ export type HookProgramOutcome =
   | { readonly kind: "reaction"; readonly reaction: Reaction };
 
 /**
+ * The file a hook program was LOADED from — the one coverage attribution in this
+ * codebase that needs no parsing at all.
+ *
+ * 🔴 BY CONSTRUCTION, NOT BEST-EFFORT, and a reader should not treat this source
+ * as equivalent to the parsed one. `commandRefs` (coverage-probe.ts) infers what
+ * executed from an arbitrary command STRING — interpreter grammars, option
+ * bundles, shell short-circuits — and has been wrong in five review rounds
+ * because that grammar is unbounded. Here the path is the argument `loadHook`
+ * was called with and resolved itself. There is nothing to guess.
+ *
+ * A `WeakMap`, not a property on the hook: the object is the USER's, it is
+ * `export default`-ed from their module, and stamping a field on it would show
+ * up in their serialization and their equality checks. The map also lets the
+ * entry die with the hook.
+ *
+ * ⚠️ REMEMBERING IS NOT RECORDING. `loadHook(file)` calls this and nothing else —
+ * loading a hook to inspect its shape is not running it, and attributing a load
+ * would be the "an empty file counts" disease the execution tier exists to cure.
+ * The probe is emitted by `harness-assert.ts` at the moment the hook is
+ * EVALUATED, which is the only place both facts are in hand.
+ */
+const HOOK_SOURCE = new WeakMap<object, string>();
+
+/** Record where a hook program was loaded from. Called by `loadHook` ONLY. */
+export function rememberHookSource(hook: AnyHook, file: string): void {
+  HOOK_SOURCE.set(hook, file);
+}
+
+/** The file a hook was loaded from, or `undefined` for one built in-process. */
+export function hookSource(hook: AnyHook): string | undefined {
+  return HOOK_SOURCE.get(hook);
+}
+
+/**
  * Evaluate a compiled hook against a raw event, in-process, dispatching by role:
  * a gate → its `Decision`, an inject → the injected context text, a react → its
  * (effect-classified) `Reaction`. Pure — no subprocess, no model. The ergonomic

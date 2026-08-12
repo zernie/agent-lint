@@ -14,7 +14,11 @@
  */
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { HookCompileError, type AnyHook } from "./core/hook-program.js";
+import {
+  HookCompileError,
+  rememberHookSource,
+  type AnyHook,
+} from "./core/hook-program.js";
 
 /**
  * Load a compiled-hook program's default export from `file`.
@@ -62,5 +66,10 @@ export async function loadHook(file: string): Promise<AnyHook> {
         `(use \`export default defineHook({…})\`).`,
     );
   }
-  return program as AnyHook;
+  // Remember WHERE it came from, so the assertion that later EVALUATES it can
+  // attribute execution coverage without parsing anything. Remembering is not
+  // recording: a load attributes nothing (see `hookSource` in core/hook-program).
+  const hook = program as AnyHook;
+  rememberHookSource(hook, file);
+  return hook;
 }
