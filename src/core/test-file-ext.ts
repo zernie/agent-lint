@@ -28,6 +28,15 @@
  * uses `import`. `.mjs` is ESM regardless of the package, so the generated file
  * runs in a repo whose package.json nobody has touched.
  *
+ * ## Why "looks like TypeScript" is not enough
+ *
+ * A suggestion is only worth making if `vigiles test` will RUN the file. Detection
+ * used to stop at `tsconfig.json` / a `typescript` dependency and never ask whether
+ * anything here can execute a `.ts` script — so on Node 20 (this repo's own CI) in a
+ * project without `tsx`, the finding said "add `foo.harness.ts`" and the runner then
+ * threw `Cannot run TypeScript test script`. The `canRunTypeScript` signal closes
+ * that: a MEASURED `false` falls back to `.mjs`, which runs everywhere.
+ *
  * Pure: signals in, an extension out. No filesystem — the two engines (disk and
  * browser) each gather the signals their own way and cannot drift on the decision.
  */
@@ -45,6 +54,24 @@ export interface TestExtSignals {
    *  — parsed leniently on purpose: a malformed package.json is another rule's
    *  finding, and this decision must not throw on it. */
   readonly packageJson?: string | undefined;
+  /**
+   * Can `vigiles test` actually EXECUTE a TypeScript script here — is `tsx`
+   * installed, or does Node strip types natively (>= 22.6)? The same disjunction
+   * the runner branches on; see `src/ts-runner-caps.ts#canRunTypeScript`.
+   *
+   * 🔴 A MEASURED `false` OVERRIDES DETECTION. "This project is TypeScript" and
+   * "this project can run a TypeScript test" are different questions, and only the
+   * first was being asked. On Node 20 — which this repo's own CI still runs — a
+   * project with a `tsconfig.json` and no local `tsx` was told to write
+   * `foo.harness.ts`, and `interpreterArgs` then threw on the very file the
+   * finding had asked for. A remedy the tool refuses to run is worse than silence:
+   * the author does the work and is told no.
+   *
+   * `undefined` means NOBODY MEASURED, and absence of measurement is not evidence
+   * of absence — the browser engine has no Node to ask, and a caller who never
+   * looked must not silently downgrade every TypeScript repo to `.mjs`.
+   */
+  readonly canRunTypeScript?: boolean | undefined;
 }
 
 /** Does the project declare a `typescript` dependency in any of the dep maps. */
@@ -80,8 +107,11 @@ function dependsOnTypescript(raw: string | undefined): boolean {
  */
 export function testFileExt(signals: TestExtSignals): string {
   const configured = signals.configured?.replace(/^\./, "");
+  // An EXPLICIT `testExtension: "ts"` is still honoured with no runner: the field
+  // exists precisely to disagree with detection, and an author who typed it may be
+  // adding `tsx` in the same breath. Only the INFERRED `.ts` is withdrawn.
   if (configured && EMITTABLE.has(configured)) return configured;
-  return signals.hasTsconfig || dependsOnTypescript(signals.packageJson)
-    ? "ts"
-    : "mjs";
+  const looksTypeScript =
+    signals.hasTsconfig || dependsOnTypescript(signals.packageJson);
+  return looksTypeScript && signals.canRunTypeScript !== false ? "ts" : "mjs";
 }

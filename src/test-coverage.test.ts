@@ -26,6 +26,9 @@ import {
 import { surfaceSha } from "./coverage-artifact.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
+import { testFileExt } from "./core/test-file-ext.js";
+import { canRunTypeScript, detectNodeCaps } from "./ts-runner-caps.js";
+import { interpreterArgs } from "./adapters/claude-code/run-scripts.js";
 
 function write(dir: string, rel: string, content: string): void {
   const abs = join(dir, rel);
@@ -985,4 +988,121 @@ test("a run record for a surface nobody discovers changes nothing", () => {
   assert.equal(r.untested.length, 1);
   assert.deepEqual(r.staleRuns, []);
   cleanupTmpDir(dir);
+});
+
+// ─── the SUGGESTED path must be one `vigiles test` will actually run ────────────
+//
+// 🔴 Measured defect, not a hypothetical: on Node 20 — which this repo's own CI
+// runs — a project holding a `tsconfig.json` but no local `tsx` was told to add
+// `foo.harness.ts`, and `interpreterArgs` then threw `Cannot run TypeScript test
+// script`. The author does the work and the tool says no.
+
+test("fires: no tsx and no native type stripping ⇒ suggest `.mjs`, and the runner accepts it", () => {
+  const dir = makeTmpDir("tc-ts-caps");
+  write(dir, "tsconfig.json", "{}");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  // The capability the runner branches on, forced to the Node-20-no-tsx state.
+  const caps = { tsx: false, stripTypes: false };
+  assert.equal(canRunTypeScript(caps), false);
+  assert.equal(
+    testFileExt({ hasTsconfig: true, canRunTypeScript: false }),
+    "mjs",
+  );
+  // The property that matters end to end: the runner does not refuse the file the
+  // finding just asked for.
+  assert.doesNotThrow(() =>
+    interpreterArgs(
+      suggestedTestPath(
+        {
+          kind: "skill",
+          name: "foo",
+          path: "skills/foo/SKILL.md",
+          tokens: [],
+          ignored: false,
+        },
+        testFileExt({ hasTsconfig: true, canRunTypeScript: false }),
+      ),
+      caps,
+    ),
+  );
+  // …and the SAME repo with tsx present keeps its `.ts` suggestion — the fix is a
+  // capability check, not a blanket downgrade of TypeScript projects.
+  assert.equal(
+    testFileExt({ hasTsconfig: true, canRunTypeScript: true }),
+    "ts",
+  );
+  cleanupTmpDir(dir);
+});
+
+/**
+ * Run `fn` with the Node-20 capability profile: no `--experimental-strip-types`.
+ * `process.allowedNodeEnvironmentFlags` is a configurable accessor, so this is the
+ * one way to exercise `findUntestedSurfaces`'s REAL wiring on any Node — otherwise
+ * the whole gate is untestable on a dev box (Node 22 strips types natively, so the
+ * answer is `.ts` with or without the fix, and dropping the wiring breaks nothing
+ * until CI's Node 20 sees it).
+ */
+function asNode20(fn: () => void): void {
+  const original = Object.getOwnPropertyDescriptor(
+    process,
+    "allowedNodeEnvironmentFlags",
+  );
+  assert.ok(original?.configurable, "cannot simulate Node 20");
+  Object.defineProperty(process, "allowedNodeEnvironmentFlags", {
+    value: new Set<string>(),
+    configurable: true,
+  });
+  try {
+    fn();
+  } finally {
+    Object.defineProperty(process, "allowedNodeEnvironmentFlags", original);
+  }
+}
+
+test("fires end-to-end: on Node 20 with no tsx, the REPORT itself suggests `.mjs`", () => {
+  // Pins the WIRING, not just the pure decision — without the `canRunTypeScript`
+  // argument in `findUntestedSurfaces`, this repo's own CI (Node 20.20.2) hands
+  // out a path `vigiles test` refuses to run.
+  const dir = makeTmpDir("tc-ts-caps-wired");
+  write(dir, "tsconfig.json", "{}");
+  write(dir, "skills/foo/SKILL.md", skill("foo"));
+  asNode20(() => {
+    assert.equal(canRunTypeScript(detectNodeCaps(dir)), false);
+    const report = findUntestedSurfaces({ basePath: dir });
+    assert.equal(report.testExt, "mjs");
+    const [surface] = report.untested;
+    assert.ok(surface, "the skill must be reported untested");
+    assert.doesNotThrow(() =>
+      interpreterArgs(
+        suggestedTestPath(surface, report.testExt),
+        detectNodeCaps(dir),
+      ),
+    );
+  });
+  // Same fixture, capability restored → the TypeScript suggestion comes back.
+  assert.equal(findUntestedSurfaces({ basePath: dir }).testExt, "ts");
+  cleanupTmpDir(dir);
+});
+
+test("silent: THIS repo — a real TypeScript project that CAN run TS — still gets `.ts`", () => {
+  // Real input, not a fixture: the vigiles checkout has a `tsconfig.json` AND a
+  // local `tsx`, so the capability gate must be invisible here. If this ever flips
+  // to `.mjs`, the gate has started punishing TypeScript repos instead of
+  // protecting the ones with no runner.
+  const repoRoot = join(__dirname, "..");
+  assert.equal(canRunTypeScript(detectNodeCaps(repoRoot)), true);
+  assert.equal(findUntestedSurfaces({ basePath: repoRoot }).testExt, "ts");
+});
+
+test("an EXPLICIT `testExtension: ts` survives with no runner — the field exists to disagree", () => {
+  // Withdrawing a configured value would be the tool overruling a decision the
+  // author typed on purpose (they may be adding tsx in the same commit).
+  assert.equal(
+    testFileExt({
+      hasTsconfig: false,
+      configured: "ts",
+      canRunTypeScript: false,
+    }),
+    "ts",
+  );
 });

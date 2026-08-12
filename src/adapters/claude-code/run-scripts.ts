@@ -105,19 +105,27 @@ export function scriptGlob(kind: "harness" | "eval"): string {
 
 const TS_EXT = /\.(?:m|c)?ts$/;
 
-/** Node runtime capabilities that decide how a TypeScript script is run. */
-export interface NodeCaps {
-  /** `tsx` is installed locally (the preferred, version-agnostic TS loader). */
-  readonly tsx: boolean;
-  /** Node supports `--experimental-strip-types` (>= 22.6). */
-  readonly stripTypes: boolean;
-}
+// The capability probe lives in `src/ts-runner-caps.ts` so the SUGGESTER
+// (`testFileExt`, harness-agnostic) can ask the same question this runner
+// answers. It used to recommend `.ts` from a `tsconfig.json` alone, on a Node 20
+// box with no `tsx` — a file `interpreterArgs` then refused to run. Re-exported
+// here so every existing importer of `run-scripts.js` is unchanged.
+export {
+  detectNodeCaps,
+  canRunTypeScript,
+  type NodeCaps,
+} from "../../ts-runner-caps.js";
+import { detectNodeCaps } from "../../ts-runner-caps.js";
+import type { NodeCaps } from "../../ts-runner-caps.js";
 
 /**
  * The `node` argv (after the binary) to run a single script. Plain JS runs
  * directly; a TypeScript script picks `tsx` when available, else Node's native
  * type stripping. Throws a clear, actionable error when neither is available.
  * Pure — exported for testing.
+ *
+ * 🔴 The disjunction below is `canRunTypeScript` — keep them together. When they
+ * drifted, the tool recommended a `.ts` file and then refused to run it.
  */
 export function interpreterArgs(file: string, caps: NodeCaps): string[] {
   if (!TS_EXT.test(file)) return [file];
@@ -127,17 +135,6 @@ export function interpreterArgs(file: string, caps: NodeCaps): string[] {
     `Cannot run TypeScript test script "${file}": install tsx ` +
       `(npm i -D tsx) or use Node >= 22.6, or author it as a .mjs file.`,
   );
-}
-
-/** Detect TS-running capabilities for a project root. */
-export function detectNodeCaps(cwd: string): NodeCaps {
-  const tsx =
-    existsSync(resolve(cwd, "node_modules/tsx/package.json")) ||
-    existsSync(resolve(cwd, "node_modules/.bin/tsx"));
-  const stripTypes = process.allowedNodeEnvironmentFlags.has(
-    "--experimental-strip-types",
-  );
-  return { tsx, stripTypes };
 }
 
 /**

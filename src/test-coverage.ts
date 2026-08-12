@@ -65,6 +65,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { load } from "js-yaml";
 import { testFileExt } from "./core/test-file-ext.js";
+import { canRunTypeScript, detectNodeCaps } from "./ts-runner-caps.js";
 import { globSync } from "glob";
 import type { PluginLayout } from "./core/layout.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
@@ -664,6 +665,11 @@ export function findUntestedSurfaces(
       packageJson: existsSync(join(basePath, "package.json"))
         ? read(join(basePath, "package.json"))
         : undefined,
+      // Measured, not assumed: a `tsconfig.json` says the project IS TypeScript,
+      // never that anything here can RUN a `.ts` script. Without this, a Node 20
+      // repo with no local `tsx` was told to write `foo.harness.ts` and then
+      // `vigiles test` refused to execute it.
+      canRunTypeScript: canRunTypeScript(detectNodeCaps(basePath)),
     }),
     legacyCoversFiles: tests
       .map((t) => t.path)
