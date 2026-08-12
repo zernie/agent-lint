@@ -11,7 +11,7 @@
  *
  * Hence two consumers of the same pure predicate:
  *   - the hook runtime, to NAME the real cause when a load fails (and to let the
- *     recovery commands through — see `isRecoveryEvent`);
+ *     load-path repair WRITES through — see `isLoadPathRepairEvent`);
  *   - `vigiles audit`, to report the conflicted file as a finding BEFORE the
  *     author starts guessing.
  *

@@ -236,11 +236,14 @@ import {
   type ReactHook,
   type HookProgram,
   isStampRepairEvent,
-  isRecoveryEvent,
+  isLoadPathRepairEvent,
   type Decision,
   type RawHookEvent,
 } from "./core/hook-program.js";
-import { hasMergeConflictMarkers } from "./core/merge-conflict.js";
+import {
+  hasMergeConflictMarkers,
+  HARNESS_CONFIG_FILES,
+} from "./core/merge-conflict.js";
 import {
   discoverHookFiles,
   discoverProviderFiles,
@@ -6724,8 +6727,8 @@ function announceRepairEscape(file: string, why: string): boolean {
   console.error(
     `vigiles: hook ${file} ${why}.\n` +
       `vigiles: ALLOWING this one call because it is a repair or recovery action ` +
-      `(a write to ${file} or to ${hookStampPath(file)}, or ` +
-      `\`git merge --abort\` / \`git rebase --abort\` / \`git checkout -- <path>\`) ` +
+      `(a write to ${file}, to ${hookStampPath(file)}, or to one of ` +
+      `${HARNESS_CONFIG_FILES.join(", ")}) ` +
       `— without this the gate blocks the only actions that can fix it.\n` +
       `vigiles: every OTHER tool call stays BLOCKED until the hook loads again.`,
   );
@@ -6780,8 +6783,8 @@ function verifyStampOrRefuse(file: string, event: RawHookEvent): void {
  * command. A hook that won't load — or whose stamp is stale — fails CLOSED
  * (exit 2), never silent-allow, with two loudly-announced exceptions: the repair
  * action itself ({@link isStampRepairEvent}), and — on a LOAD failure only — the
- * recovery set ({@link isRecoveryEvent}), or the repo wedges with no way to
- * recompile and no way to undo whatever broke the load path.
+ * load-path repair WRITE ({@link isLoadPathRepairEvent}), or the repo wedges
+ * with no way to fix whatever broke the load path.
  */
 async function runHookProgramCommand(file: string | undefined): Promise<void> {
   if (!file) {
@@ -6830,7 +6833,7 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
     //     session; it was fixed by hand-editing the JSON, because file tools do
     //     not go through PreToolUse(Bash)).
     // Everything else stays BLOCKED, and the escapes are whitelists of commands
-    // that restore state — see `isRecoveryEvent` for why that is not a bypass.
+    // that are WRITES — see `isLoadPathRepairEvent` for why no command is one.
     const conflicted = conflictedLoadPathFiles(file);
     const cause =
       conflicted.length > 0
@@ -6838,7 +6841,7 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
           `markers, so Node cannot resolve \`vigiles/hook\` from it (the hook itself ` +
           `may be fine)`
         : "cannot be loaded";
-    if (isStampRepairEvent(event, file) || isRecoveryEvent(event)) {
+    if (isLoadPathRepairEvent(event, file)) {
       announceRepairEscape(file, cause);
       return;
     }
@@ -6846,11 +6849,15 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
       `vigiles: hook ${file} ${cause}.\n` +
         `vigiles: this is the state of the HARNESS, not a decision about your ` +
         `command — the gate never ran. Blocking anyway (a gate that cannot run ` +
-        `must not pass traffic); \`git merge --abort\`, \`git rebase --abort\` and ` +
-        `\`git checkout -- <path>\` stay allowed so the cause can be undone from ` +
-        `here, and file tools were never gated by a Bash gate. ` +
-        `\`vigiles compile\` is NOT allowed and would not help: it loads the hook ` +
-        `through the same resolver that just failed.`,
+        `must not pass traffic).\n` +
+        `vigiles: the way out is a FILE WRITE, not a command. Fix whichever of ` +
+        `${file}, ${HARNESS_CONFIG_FILES.join(", ")} is broken — those writes are ` +
+        `allowed even while this refuses, and a Bash gate never gated file tools ` +
+        `at all. The hook then loads and the gate decides normally again.\n` +
+        `vigiles: no command is allowed, deliberately. \`git merge --abort\` and ` +
+        `\`git checkout\` RUN \`.git/hooks/*\` (measured: reference-transaction, ` +
+        `post-checkout), and \`vigiles compile\` loads the hook through the same ` +
+        `resolver that just failed.`,
     );
     process.exit(2);
     return;

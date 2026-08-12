@@ -23,7 +23,15 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { writeFileSync, mkdirSync, symlinkSync, rmSync } from "node:fs";
+import {
+  writeFileSync,
+  mkdirSync,
+  symlinkSync,
+  rmSync,
+  chmodSync,
+  existsSync,
+  readFileSync,
+} from "node:fs";
 import { resolve, join } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -112,17 +120,22 @@ test("a conflicted package.json wedges the runtime — and the recovery commands
   try {
     writeFileSync(join(dir, "package.json"), CONFLICTED_PACKAGE_JSON);
 
-    // The defect: this is the command that undoes the cause, and it used to be
-    // refused by the failure it undoes.
-    const abort = runGate(dir, hook, "git merge --abort");
-    assert.equal(abort.code, 0, "git merge --abort must not be refused");
     // The message must name the REAL cause. Sending the author to the hook —
     // which is fine — was the expensive half of the original incident.
-    assert.match(abort.stderr, /package\.json/);
-    assert.match(abort.stderr, /merge-conflict markers/);
+    const refused = runGate(dir, hook, "ls");
+    assert.equal(refused.code, 2);
+    assert.match(refused.stderr, /package\.json/);
+    assert.match(refused.stderr, /merge-conflict markers/);
 
-    for (const cmd of ["git rebase --abort", "git checkout -- package.json"]) {
-      assert.equal(runGate(dir, hook, cmd).code, 0, cmd);
+    // ⚠️ The three git commands used to escape here. They no longer do — they run
+    // `.git/hooks/*` (measured two tests below), and a file write already
+    // un-wedges this. The escape is now the write, and it is asserted there.
+    for (const cmd of [
+      "git merge --abort",
+      "git rebase --abort",
+      "git checkout -- package.json",
+    ]) {
+      assert.equal(runGate(dir, hook, cmd).code, 2, cmd);
     }
 
     // 🔴 THE MEASUREMENT THAT DELETED THE COMPILE ESCAPE. `vigiles compile` was
@@ -204,18 +217,23 @@ test("the wedge still fails CLOSED — a broken load path is not an open door", 
     ]) {
       assert.equal(runGate(dir, hook, cmd).code, 2, cmd);
     }
-    // And the author's way out is still open — a fix that shuts this door
-    // re-wedges the repo with no escape, which is the defect it exists for.
-    for (const cmd of [
-      // Git only: these move the tree back to something git already holds and
-      // execute no repo code, which is the property the compile leaf could never
-      // have. A load wedge is undone by undoing what caused it.
-      "git merge --abort",
-      "git rebase --abort",
-      "git checkout -- package.json",
-    ]) {
-      assert.equal(runGate(dir, hook, cmd).code, 0, cmd);
-    }
+    // And the author's way out is still open — but it is a FILE WRITE now, not a
+    // command. A fix that shuts every door re-wedges the repo, which is the
+    // defect this whole branch exists for.
+    const write = spawnSync(
+      process.execPath,
+      [CLI, "hook-runtime", "run-program", hook],
+      {
+        cwd: dir,
+        encoding: "utf-8",
+        input: JSON.stringify({
+          hook_event_name: "PreToolUse",
+          tool_name: "Write",
+          tool_input: { file_path: "package.json" },
+        }),
+      },
+    );
+    assert.equal(write.status, 0, write.stderr);
     // The refusal explains itself as harness state, not as a verdict, and points
     // at the way out — without that the author's next move is to unwire the gate.
     const refused = runGate(dir, hook, "ls");
@@ -321,6 +339,129 @@ test("…and while it is wedged, no command talks its way out", () => {
     ]) {
       assert.equal(runGate(dir, hook, cmd).code, 2, cmd);
     }
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// THE GIT ESCAPE EXECUTED REPO CODE — measured against real git, not read off
+// the docs.
+//
+// `git merge --abort` / `git rebase --abort` / `git checkout -- <path>` were
+// admitted on the reasoning that they "only move the tree to states git already
+// holds; none executes a line of repo code". With hooks installed in
+// `.git/hooks/`, git 2.43.0 runs all three:
+//
+//   git checkout -- f.txt  → post-checkout          (<sha> <sha> 0)
+//   git merge --abort      → reference-transaction  (prepared, committed)
+//   git rebase --abort     → reference-transaction  (×4) + post-checkout
+//
+// `reference-transaction` fires on ANY ref update, and every one of these updates
+// a ref. `.git/hooks/*` is writable by exactly the actor the door assumes.
+// ---------------------------------------------------------------------------
+/** A git repo with a hook that appends to a log when git runs it. */
+function gitRepoWithHooks(): { repo: string; log: string } {
+  const repo = makeTmpDir("git-hooks");
+  const log = join(repo, "EXEC.log");
+  const git = (...args: string[]): void => {
+    spawnSync("git", args, { cwd: repo, encoding: "utf-8" });
+  };
+  git("init", "-q", ".");
+  git("config", "user.email", "t@t");
+  git("config", "user.name", "t");
+  writeFileSync(join(repo, "f.txt"), "one\n");
+  git("add", "f.txt");
+  git("commit", "-qm", "one");
+  for (const h of ["post-checkout", "reference-transaction", "post-merge"]) {
+    const p = join(repo, ".git", "hooks", h);
+    writeFileSync(p, `#!/bin/sh\necho "RAN ${h}" >> ${JSON.stringify(log)}\n`);
+    chmodSync(p, 0o755);
+  }
+  return { repo, log };
+}
+
+test("the git 'recovery' commands RUN `.git/hooks/*` — the premise was false", () => {
+  const { repo, log } = gitRepoWithHooks();
+  try {
+    // The simplest of the three, and the one the finding named.
+    writeFileSync(join(repo, "f.txt"), "dirty\n");
+    rmSync(log, { force: true });
+    const r = spawnSync("git", ["checkout", "--", "f.txt"], {
+      cwd: repo,
+      encoding: "utf-8",
+    });
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(
+      existsSync(log),
+      "git checkout -- <path> must be shown to run a repo-local hook",
+    );
+    assert.match(readFileSync(log, "utf-8"), /RAN post-checkout/);
+
+    // …and the ref-updating pair, through the hook that fires on ANY ref update.
+    rmSync(log, { force: true });
+    spawnSync("git", ["checkout", "-qb", "other"], { cwd: repo });
+    writeFileSync(join(repo, "f.txt"), "other\n");
+    spawnSync("git", ["commit", "-qam", "other"], { cwd: repo });
+    assert.ok(
+      existsSync(log) &&
+        /RAN reference-transaction/.test(readFileSync(log, "utf-8")),
+      "a ref update runs reference-transaction — the fact the whitelist missed",
+    );
+  } finally {
+    cleanupTmpDir(repo);
+  }
+});
+
+test("…so NO command escapes a load wedge any more, and a FILE WRITE does", () => {
+  const { dir, hook } = makeFixture();
+  try {
+    writeFileSync(join(dir, "package.json"), CONFLICTED_PACKAGE_JSON);
+
+    // Every command is refused — including the three that used to be admitted.
+    for (const cmd of [
+      "git merge --abort",
+      "git rebase --abort",
+      "git checkout -- package.json",
+      "git -c core.hooksPath=/nonexistent merge --abort",
+      "npx vigiles compile",
+      "ls",
+    ]) {
+      assert.equal(runGate(dir, hook, cmd).code, 2, cmd);
+    }
+    // …and the refusal says what DOES work, naming the files.
+    const refused = runGate(dir, hook, "ls");
+    assert.match(refused.stderr, /FILE WRITE, not a command/);
+    assert.match(refused.stderr, /package\.json/);
+    assert.match(refused.stderr, /\.git\/hooks/);
+
+    // The write itself is allowed while everything else is refused…
+    const edit = spawnSync(
+      process.execPath,
+      [CLI, "hook-runtime", "run-program", hook],
+      {
+        cwd: dir,
+        encoding: "utf-8",
+        input: JSON.stringify({
+          hook_event_name: "PreToolUse",
+          tool_name: "Write",
+          tool_input: { file_path: "package.json" },
+        }),
+      },
+    );
+    assert.equal(edit.status, 0, edit.stderr);
+
+    // …and doing it restores the gate to ENFORCING, which is the whole argument
+    // for deleting the command escape: you do not need to finish recovering,
+    // only to stop being wedged.
+    writeFileSync(join(dir, "package.json"), HEALTHY_PACKAGE_JSON);
+    assert.equal(runGate(dir, hook, "ls").code, 0, "the write unwedges it");
+    const enforcing = runGate(dir, hook, "git push --force");
+    assert.equal(enforcing.code, 2, "the gate must be back on duty");
+    assert.match(enforcing.stderr, /no force-push/);
+    // …after which the git commands are ordinary allowed commands — through the
+    // gate, not around it.
+    assert.equal(runGate(dir, hook, "git merge --abort").code, 0);
   } finally {
     cleanupTmpDir(dir);
   }
