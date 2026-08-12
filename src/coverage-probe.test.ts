@@ -208,6 +208,69 @@ test("the option grammar is PER INTERPRETER — one spelling, two languages, two
   assert.deepEqual(commandRefs("bash -o pipefail hooks/x.sh"), ["hooks/x.sh"]);
 });
 
+test("bash's own invocation grammar: `-O` takes a value, and parse-only flags run nothing", () => {
+  // 🔴 FIRES: `-O shopt_option` is a bash invocation option (its `--help` says so
+  // on the same line as `-c command`). Without it `extglob` was selected as the
+  // entry, failed SCRIPT_RE, and the hook that DID run was attributed to nothing
+  // — silence, the same shape the per-family split was written to stop.
+  assert.deepEqual(commandRefs("bash -O extglob hooks/pre-edit.sh"), [
+    "hooks/pre-edit.sh",
+  ]);
+  assert.deepEqual(commandRefs("bash +O extglob hooks/pre-edit.sh"), [
+    "hooks/pre-edit.sh",
+  ]);
+
+  // FIRES (the other direction, found by enumerating the same `--help`): these
+  // PARSE the operand and never run it — verified against bash 5.2.21, none of
+  // them produced the script's output. Attributing them is a FALSE GRANT, the
+  // expensive direction, and the exact rule node's `--check` already follows.
+  for (const flag of [
+    "-n",
+    "-D",
+    "--dump-strings",
+    "--dump-po-strings",
+    "--pretty-print",
+  ]) {
+    assert.deepEqual(
+      commandRefs(`bash ${flag} hooks/pre-edit.sh`),
+      [],
+      `bash ${flag} does not execute the script`,
+    );
+  }
+
+  // QUIET: the rest of the grammar is unchanged — the standalone flags still fall
+  // through to the generic skip and the script is still found. A table entry that
+  // over-consumed would pass the assertions above and lose these.
+  assert.deepEqual(commandRefs("bash -e hooks/pre-edit.sh"), [
+    "hooks/pre-edit.sh",
+  ]);
+  assert.deepEqual(commandRefs("bash --norc --noprofile hooks/x.sh"), [
+    "hooks/x.sh",
+  ]);
+  assert.deepEqual(commandRefs("bash -o pipefail hooks/x.sh"), ["hooks/x.sh"]);
+
+  // ⚠️ THE WHOLE-WORD LIMIT, asserted rather than described — this expectation was
+  // written the other way first and the test corrected it. Matching is per WORD,
+  // so a BUNDLED short form is invisible to every table here: `-euo` is skipped as
+  // one flag and `pipefail` (the `-o` value it carries) is then taken as the entry
+  // and rejected, so a very ordinary hook invocation attributes NOTHING.
+  assert.deepEqual(commandRefs("bash -euo pipefail hooks/x.sh"), []);
+  // The same limit points the other way for a bundled parse-only flag, and that
+  // one is a false GRANT: `-en` is skipped whole, so the script that bash only
+  // syntax-checked is attributed as executed.
+  assert.deepEqual(commandRefs("bash -en hooks/x.sh"), ["hooks/x.sh"]);
+  // Pre-existing and NOT introduced here: the unbundled spellings, which are what
+  // the tables are about, are right in both directions.
+  assert.deepEqual(commandRefs("bash -e -u -o pipefail hooks/x.sh"), [
+    "hooks/x.sh",
+  ]);
+  assert.deepEqual(commandRefs("bash -e -n hooks/x.sh"), []);
+  // …and `-O` is bash's alone: it must not leak into the other families, where
+  // the same letter means nothing of the kind.
+  assert.deepEqual(commandRefs("node -O hooks/x.mjs"), ["hooks/x.mjs"]);
+  assert.deepEqual(commandRefs("python3 -O hooks/x.py"), ["hooks/x.py"]);
+});
+
 test("the env is EXPANDED into the command, not scanned alongside it", () => {
   // The documented idiom still works…
   assert.deepEqual(commandRefs('"$GUARD"', { GUARD: "/repo/hooks/guard.sh" }), [

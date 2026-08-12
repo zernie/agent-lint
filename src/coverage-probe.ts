@@ -148,9 +148,48 @@ interface OptionGrammar {
  * attributed nothing. Now each family answers for itself.
  */
 const OPTION_GRAMMAR: Readonly<Record<InterpreterFamily, OptionGrammar>> = {
+  // 🔴 HOW THIS ONE WAS DECIDED COMPLETE, because a table that quietly misses an
+  // entry is what the round before this had to fix twice. `bash --help` (5.2.21)
+  // prints the whole invocation grammar in four lines, and every value-taker in
+  // it is here:
+  //
+  //     -ilrsD or -c command or -O shopt_option      (invocation only)
+  //     -abefhkmnptuvxBCEHPT or -o option
+  //     GNU long options: --debug --debugger --dump-po-strings --dump-strings
+  //       --help --init-file --login --noediting --noprofile --norc --posix
+  //       --pretty-print --rcfile --restricted --verbose --version
+  //
+  // Value-takers: `-c` (the program itself), `-O`/`+O` (a shopt name), `-o`/`+o`
+  // (a set-option name), `--rcfile`/`--init-file` (a path). Everything else in
+  // those lines is a standalone flag the generic `-` skip already handles. `-O`
+  // was the miss: `bash -O extglob hooks/pre-edit.sh` selected `extglob`, which
+  // fails SCRIPT_RE, so the hook that DID run was attributed to nothing.
+  //
+  // The other shells are a SUBSET on this axis — dash/ksh/zsh have `-c` and
+  // `-o`/`+o` and no `-O` — so bash's grammar covers the family. (zsh's
+  // `--emulate <shell>` is the one known non-subset; left out rather than
+  // guessed at, and a miss there costs silence, not a false grant.)
+  //
+  // ⚠️ The five in `withoutScript` beyond `-c` PARSE the operand and never run
+  // it — verified against bash 5.2.21, none of them printed the script's output.
+  // Same rule as node's `--check`, and the direction that matters: without them a
+  // command line that only syntax-checks a hook would claim to have executed it.
+  //
+  // ⚠️ KNOWN LIMIT, stated rather than papered over: matching is on WHOLE WORDS,
+  // so a bundled short form (`bash -en x.sh`) falls through to the generic flag
+  // skip and `x.sh` is attributed. That is a false grant, and it is pre-existing
+  // for every family here — not introduced by this entry.
   shell: {
-    withValue: new Set(["-o", "+o", "--rcfile", "--init-file"]),
-    withoutScript: new Set(["-c", "--command"]),
+    withValue: new Set(["-o", "+o", "-O", "+O", "--rcfile", "--init-file"]),
+    withoutScript: new Set([
+      "-c",
+      "--command",
+      "-n",
+      "-D",
+      "--dump-strings",
+      "--dump-po-strings",
+      "--pretty-print",
+    ]),
   },
   node: {
     withValue: new Set([

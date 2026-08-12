@@ -26,6 +26,7 @@ import {
 import { surfaceSha } from "./coverage-artifact.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
+import { codexLayout } from "./adapters/codex/layout.js";
 import { testFileExt } from "./core/test-file-ext.js";
 import { canRunTypeScript, detectNodeCaps } from "./ts-runner-caps.js";
 import { interpreterArgs } from "./adapters/claude-code/run-scripts.js";
@@ -617,6 +618,33 @@ test("skillTestNudge: a harness-covered skill is nudged about FIRING, not about 
   assert.match(msg, /measureTriggerRate/);
   // It must NOT claim the surface is untested — it isn't.
   assert.doesNotMatch(msg, /no test or eval covers it/);
+  // 🔴 …and it must name the DRIVER argument. The nudge is layout-aware, so it
+  // reaches repos targeting a harness other than the eval tier's default, and a
+  // bare `measureTriggerRate(spec)` falls back to that default driver — it does
+  // not fail, it measures a DIFFERENT harness and reports a number. A remedy that
+  // silently answers about someone else's harness is worse than no remedy.
+  assert.match(msg, /evalDriver/);
+  assert.match(msg, /DEFAULT harness/);
+  cleanupTmpDir(dir);
+});
+
+test("skillTestNudge: the firing remedy is runnable on a NON-default harness too", () => {
+  // The half that pins the reason. Same repo shape, Codex layout: the surfaces
+  // live under `.codex/`, the nudge finds them (that is what layout-awareness
+  // bought), and the remedy it prints must be one this repo can actually run.
+  const dir = makeTmpDir("nudge-uneval-codex");
+  write(dir, ".codex/skills/foo/SKILL.md", skill("foo"));
+  write(dir, ".codex/skills/foo/foo.harness.mjs", "// deterministic only\n");
+  const msg = skillTestNudge(".codex/skills/foo/SKILL.md", {
+    basePath: dir,
+    layout: codexLayout,
+  });
+  assert.ok(msg, "a Codex repo's skill must still be nudged about firing");
+  assert.match(msg, /FIRES/);
+  // Runnable: `measureTriggerRate(spec, { evalDriver: codexEvalDriver })` is
+  // exported from `vigiles/codex`, so the tier IS reachable here — what the old
+  // wording omitted was the argument that points it at THIS harness.
+  assert.match(msg, /evalDriver/);
   cleanupTmpDir(dir);
 });
 

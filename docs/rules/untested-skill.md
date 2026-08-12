@@ -128,6 +128,48 @@ covered and had no test of its own.
 That is the same substitution the removed `mention` tier made — a name near a
 test taken for a test.
 
+### Migrating a test named `foo.test.mjs` (changed in 15.x)
+
+**`*.test.*` and `*.spec.*` no longer count toward Tested.** They used to. If you
+followed the older advice you have a `skills/foo/foo.test.mjs` today, it counts
+for nothing now, and the skill is reported untested.
+
+**The fix is a rename, not a config change:**
+
+```
+skills/foo/foo.test.mjs      ->  skills/foo/foo.harness.mjs
+```
+
+Nothing else changes — same file, same contents, same assertions.
+
+**Why a rename and not `testGlobs`.** You _can_ point `testGlobs` back at
+`**/*.test.mjs` and the count will come back, but that restores the number while
+leaving the actual problem in place. A harness test is not a unit test: it calls
+`runHarnessTest` / `measureTriggerRate`, which **spawn an agent**, and the paid
+tier spends real model budget. Meanwhile `*.test.*` is what every third-party
+runner collects by default:
+
+| runner | default pattern                                                             |
+| ------ | --------------------------------------------------------------------------- |
+| vitest | `**/*.{test,spec}.?(c\|m)[jt]s?(x)`                                         |
+| jest   | `**/?(*.)+(spec\|test).?([mc])[jt]s?(x)`, and every file under `__tests__/` |
+
+Measured: a bare project containing only `package.json` and
+`.claude/skills/foo/foo.test.mjs`, then `npx vitest run` at the repo root —
+`Test Files 1 passed (1)`. Vitest descends into `.claude/`; its `defaultExclude`
+is `node_modules` and `.git` and nothing else. So a file with that name is picked
+up by your ordinary test command, on every push, and can spend model budget
+nobody asked it to spend. `*.harness.mjs` and `*.eval.mjs` match **no**
+third-party default, which is the whole reason those names were chosen.
+
+`vigiles audit`/`lint` reports such a file under its own finding
+(`foreign-runner-test`) when it can prove the file drives an agent, so you do not
+have to go looking for them.
+
+If the file really is an ordinary offline unit test of a bundled script — no
+agent, no model — it is not a harness test at all, and it never counted toward
+Tested even under the old rule. Leave it where it is.
+
 ### Why only one (changed 2026-08-11)
 
 There used to be three — a `vigiles:covers` **declaration**, **colocation**, and a

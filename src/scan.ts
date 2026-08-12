@@ -374,7 +374,7 @@ export interface ScanReport {
   /** Surfaces covered by NEITHER tier — the union count (unchanged). */
   readonly untested: number;
   /**
-   * Surfaces with no DETERMINISTIC harness (`*.harness.mjs` / `*.test.*`) — free,
+   * Surfaces with no DETERMINISTIC harness (`*.harness.*`) — free,
    * millisecond, every-push. Feeds the `Tested` ring. Optional so a hand-built
    * report (and any producer predating the split) falls back to `untested`.
    */

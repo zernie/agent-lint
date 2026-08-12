@@ -25,6 +25,11 @@ import {
   type HookOutput,
 } from "./run-hook.js";
 import type { RunScriptDeps, ScriptSpawnResult } from "./run-script.js";
+import {
+  checksRecorded,
+  resetCheckCount,
+  surfacesRecorded,
+} from "./check-count.js";
 import { sandboxAvailable } from "./sandbox.js";
 
 test("propertyHook: holds for a correct guard, finds a counterexample for a buggy one", () => {
@@ -498,5 +503,101 @@ test("an unconfined run leaves filesWritten UNDEFINED — and a write assertion 
     },
     /never recorded/i,
     "must not green-light a run whose writes were never captured",
+  );
+});
+
+// --- a REFUSED run attributes nothing (the coverage probe follows the spawn) ---
+//
+// 🔴 The probe was recorded BEFORE the branch that can refuse. `runEgress` throws
+// when the allowlist sandbox is missing and `runConfinedOrDirect` throws when
+// confinement was required and bwrap is absent — so a harness asserting exactly
+// that refusal (a documented, legitimate test: "an untrusted hook must not run
+// unconfined here") caught the error, exited 0 with a check recorded, and the CLI
+// runner then wrote an execution-tier coverage record for a hook that never ran.
+// Same substitution as a `fail`/`vacuous` run writing a record, one layer down.
+
+test("a REFUSED run records no surface probe — the intent to run is not a run", () => {
+  const refusing: RunScriptDeps = {
+    available: false,
+    egressAvailable: false,
+    direct: () => {
+      throw new Error("no spawner may be reached in this test");
+    },
+    sandboxed: () => {
+      throw new Error("no spawner may be reached in this test");
+    },
+    egress: () => {
+      throw new Error("no spawner may be reached in this test");
+    },
+  };
+
+  // FIRES (a): confinement required, bwrap absent → `runConfinedOrDirect` throws.
+  resetCheckCount();
+  assert.throws(
+    () => runHookWith("sh hooks/guard.sh", {}, { trusted: false }, refusing),
+    /sandbox|bwrap/,
+  );
+  assert.deepEqual(
+    surfacesRecorded(),
+    [],
+    "a hook that was refused must not be attributed as executed",
+  );
+
+  // FIRES (b): the egress branch refuses on its own path, before any spawner.
+  resetCheckCount();
+  assert.throws(
+    () =>
+      runHookWith(
+        "sh hooks/guard.sh",
+        {},
+        { egress: { allow: ["example.com"] } },
+        refusing,
+      ),
+    /egress/,
+  );
+  assert.deepEqual(surfacesRecorded(), []);
+});
+
+test("…but a run that LAUNCHED and exited NONZERO is still an execution", () => {
+  // The QUIET half, and the one a fix tightened to "exit 0" would break: most of
+  // what the hook tier tests is a hook that ran and BLOCKED (exit 2) or failed
+  // (exit 1). The spawner returning at all is the fact being recorded.
+  const spawning = (status: number): RunScriptDeps => ({
+    available: true,
+    egressAvailable: true,
+    direct: () => spawnRes({ status }),
+    sandboxed: () => spawnRes({ status }),
+    egress: () => spawnRes({ status }),
+  });
+
+  for (const status of [0, 1, 2]) {
+    resetCheckCount();
+    const r = runHookWith("sh hooks/guard.sh", {}, {}, spawning(status));
+    assert.equal(r.exitCode, status);
+    assert.deepEqual(
+      surfacesRecorded(),
+      [{ how: "command", ref: "hooks/guard.sh" }],
+      `exit ${String(status)} still attributes the hook it ran`,
+    );
+  }
+
+  // …and the check count is unaffected in BOTH directions: a refusal is still a
+  // check (the harness asserted something), it is only not an EXECUTION. Without
+  // this the fix could quietly turn a refusal-asserting harness `vacuous`, which
+  // would retract that script's other records.
+  resetCheckCount();
+  assert.throws(() =>
+    runHookWith("sh hooks/guard.sh", {}, { trusted: false }, {
+      available: false,
+      egressAvailable: false,
+      direct: () => spawnRes(),
+      sandboxed: () => spawnRes(),
+      egress: () => spawnRes(),
+    } satisfies RunScriptDeps),
+  );
+  assert.equal(
+    checksRecorded(),
+    1,
+    "a refusal is still a check, just not a run",
   );
 });

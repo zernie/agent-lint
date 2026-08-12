@@ -49,7 +49,7 @@
  * TWO TIERS, discovered SEPARATELY — a harness and an eval are not the same thing
  * and collapsing them at discovery makes the difference unrecoverable downstream:
  *
- *   | | harness (`*.harness.mjs`, `*.test.*`) | eval (`*.eval.mjs`) |
+ *   | | harness (`*.harness.*`) | eval (`*.eval.*`) |
  *   |---|---|---|
  *   | cost    | free                          | paid model calls    |
  *   | cadence | every push                    | scheduled           |
@@ -198,8 +198,9 @@ export interface UntestedReport {
    */
   readonly staleRuns?: readonly StaleRun[];
   /**
-   * DETERMINISTIC coverage only — `*.harness.mjs` and `*.test.*`. Free,
-   * millisecond, every-push. Answers "does this gate still catch what it claims?"
+   * DETERMINISTIC coverage only — `*.harness.*`, plus any custom `testGlobs`.
+   * Free, millisecond, every-push. Answers "does this gate still catch what it
+   * claims?" (`*.test.*` has NOT counted since 15.x — see DEFAULT_TEST_GLOBS.)
    */
   readonly harness: CoverageTier;
   /**
@@ -530,8 +531,8 @@ function coverageOf(
 
 /**
  * Split the discovered tests into the two tiers by SUFFIX — `*.eval.mjs` is the
- * paid real-model tier, everything else (`*.harness.mjs`, `*.test.*`, and any
- * user-supplied `testGlobs`) is the free deterministic tier. Suffix, not glob set,
+ * paid real-model tier, everything else (`*.harness.*` and any user-supplied
+ * `testGlobs`) is the free deterministic tier. Suffix, not glob set,
  * so a custom `testGlobs` (a promptfoo suite, a home-grown loop) still lands in a
  * tier instead of silently disappearing from the split.
  */
@@ -770,6 +771,19 @@ export function skillTestNudge(
 
   // Covered by SOMETHING, but never evaluated — and an edit to a SKILL.md is
   // usually an edit to the description, i.e. to the trigger surface itself.
+  //
+  // 🔴 THE REMEDY NAMES THE DRIVER ARGUMENT, because a bare `measureTriggerRate`
+  // is not this repo's measurement. The nudge became layout-aware, so it now
+  // reaches repos targeting a harness other than the eval tier's default — and
+  // `measureTriggerRate(spec)` falls back to that DEFAULT driver. Following the
+  // old wording there did not fail: it measured a different harness's trigger
+  // rate and reported it as a number, which is worse than an error.
+  //
+  // Deliberately NOT a per-harness branch. The alternative was a capability flag
+  // answered by each adapter, and this round's own regressions came from exactly
+  // that shape — a new table or list that misses an entry. This sentence is true
+  // for every harness including the default (where `{ evalDriver }` is optional),
+  // so there is no case analysis to get wrong and no fourth adapter to remember.
   const unevaluated = report.evals.untested.find(isTarget);
   if (unevaluated)
     return (
@@ -778,7 +792,10 @@ export function skillTestNudge(
       `FIRES — and a harness structurally cannot tell you that.\n` +
       `See the \`test-harness\` skill for which tier answers it ` +
       `(\`measureTriggerRate\`, plus \`irrelevantPrompts\` for the precision ` +
-      `side). This is a reminder, not a block.`
+      `side). Pass your harness's driver — ` +
+      `\`measureTriggerRate(spec, { evalDriver })\` — because a bare call runs ` +
+      `the eval tier's DEFAULT harness, which may not be the one this repo ` +
+      `targets. This is a reminder, not a block.`
     );
 
   return null;

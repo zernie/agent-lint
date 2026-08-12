@@ -24,11 +24,13 @@
  * the file drives an agent (see {@link AGENT_DRIVING_APIS}), and the message
  * quotes that evidence back.
  *
- * The collision is easy to walk into because vigiles ITSELF blesses these
- * names: `DEFAULT_TEST_SUFFIXES` in `test-coverage.ts` accepts `.test.ts` /
- * `.test.mjs` / … as valid harness tests. Our own `*.harness.mjs` and
- * `*.eval.mjs` do NOT match any third-party default; `*.test.*` matches all of
- * them. So the fix is always a rename, never a config edit.
+ * The collision is easy to walk into because vigiles USED TO bless these names:
+ * `*.test.*` counted toward Tested until 15.x, so following the old advice put a
+ * harness test under a surface dir with a name every third-party runner collects.
+ * It no longer counts (see `DEFAULT_TEST_GLOBS` in `test-coverage.ts`), which is
+ * why the fix is a RENAME and not a config edit: `*.harness.mjs` / `*.eval.mjs`
+ * match no third-party default, and restoring the credit with `testGlobs` would
+ * keep the foreign runner collecting the file.
  *
  * Deliberately NOT a config parse. Reading `vitest.config.*` / `jest.config.*`
  * / `package.json#jest` to find out whether THIS repo overrode its globs would

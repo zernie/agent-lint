@@ -372,7 +372,7 @@ the [`vigiles/testing` API](harness-testing.md) via `guardrail-check` /
 `assertBlocksDisasters`, where you opt in explicitly.)
 
 **Tested and Evaluated are two rings, not one number.** A harness
-(`*.harness.mjs`, `*.test.*`) is free, runs in milliseconds on every push, and
+(`*.harness.*`) is free, runs in milliseconds on every push, and
 asks _does this gate still catch what it claims?_ An eval (`*.eval.mjs`) spends
 real model calls, runs on a schedule, and asks the one question a deterministic
 read cannot: _does this skill fire at all?_ Folded together, a repo with complete

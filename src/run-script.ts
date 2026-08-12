@@ -217,18 +217,33 @@ export function runScriptWith(
   // at the primitive, so `runHook` and a bare `runScript` both count. See
   // check-count.ts.
   recordCheck();
-  // …and WHICH surface it exercised, read off the command line that is about to
-  // be executed (plus `opts.env`, because the documented idiom passes the hook
-  // path through one). Attribution by execution, not by file name — see
-  // coverage-probe.ts. Derived here at the primitive so `runHook` and a bare
-  // `runScript` both attribute without either knowing about coverage.
-  probeCommand(command, opts.env);
   // Allowlisted egress is its own confined path (bwrap netns + slirp4netns +
   // nft); it can't run unconfined, so it refuses outright when the tooling is
   // absent rather than falling back to a direct run that ignores the allowlist.
   const res = opts.egress
     ? runEgress(command, stdin, opts, deps)
     : runConfinedOrDirect(command, stdin, opts, deps);
+  // …and WHICH surface it exercised, read off the command line that WAS
+  // executed (plus `opts.env`, because the documented idiom passes the hook path
+  // through one). Attribution by execution, not by file name — see
+  // coverage-probe.ts. Derived here at the primitive so `runHook` and a bare
+  // `runScript` both attribute without either knowing about coverage.
+  //
+  // 🔴 AFTER THE SPAWN, NOT BEFORE, AND THE ORDER IS THE WHOLE CLAIM. Both
+  // branches above can THROW before any spawner is reached: `runEgress` refuses
+  // when the allowlist sandbox is missing, and `runConfinedOrDirect` refuses when
+  // confinement was required and bwrap is absent. A harness that asserts exactly
+  // that refusal — `assert.throws(() => runHook(untrusted…))`, a legitimate and
+  // documented test — caught the error, exited 0 with checks recorded, and the
+  // runner wrote an execution-tier coverage record for a hook that never ran.
+  // Same substitution as a `fail`/`vacuous` run writing a record, reached one
+  // layer down: the intent to run taken for the run.
+  //
+  // ⚠️ LAUNCHED, NOT SUCCEEDED — do not tighten this to a zero exit. A hook that
+  // runs and exits 1 (or 2, a block) HAS executed, and that is most of what the
+  // hook tier exists to test. The spawner returning at all is the fact being
+  // recorded; what it returned is the caller's business.
+  probeCommand(command, opts.env);
   return {
     exitCode: res.status ?? (res.signal ? 1 : 0),
     stdout: res.stdout ?? "",
