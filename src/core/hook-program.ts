@@ -1195,6 +1195,72 @@ function basenameOf(token: string): string {
 }
 
 /**
+ * The tool names a repair may arrive under: the ones MEASURED to write a file
+ * and carry `file_path`. Everything else is refused, including a name this list
+ * has never heard of.
+ *
+ * 🔴 THE ESCAPE USED TO IGNORE `tool_name` ENTIRELY, so a `Read` of
+ * `package.json` was a "repair" — and if the wedged hook was registered for
+ * `Read`, that read went through while the gate was refusing everything else. A
+ * read repairs nothing, so it cannot be a repair. The door's whole justification
+ * is "a file write executes nothing"; a predicate blind to which tool is running
+ * cannot make that claim about anything.
+ *
+ * ## How the list was decided, since an allow-list is the shape that has bitten
+ *
+ * Read off the LIVE harness's own tool schemas rather than from memory or a doc
+ * page (measured 2026-08-12, this Claude Code build):
+ *
+ * ```
+ * Write         file_path            → writes  → ADMITTED
+ * Edit          file_path            → writes  → ADMITTED
+ * MultiEdit     file_path            → writes  → ADMITTED (absent from this
+ *                                                build; a vendored third-party
+ *                                                plugin still matches on it, so
+ *                                                other builds ship it)
+ * Read          file_path            → reads   → refused (the reported hole)
+ * NotebookEdit  notebook_path        → writes, but cannot reach this predicate
+ * Glob / Grep   pattern, path        → no `file_path` at all
+ * Bash          command              → no `file_path` at all
+ * ```
+ *
+ * `NotebookEdit` is deliberately NOT listed. It writes, but its input field is
+ * `notebook_path` — quoted from the live schema: *"notebook_path: The absolute
+ * path to the Jupyter notebook file to edit"* — so it never carries the field
+ * this predicate reads and listing it would be a fragment that can never
+ * execute. If it ever grows `file_path`, this is a one-word change.
+ *
+ * ## What happens to an unrecognised name, and why that is not the wedge
+ *
+ * It is REFUSED. The other direction was weighed first, because "refuse
+ * everything outside cwd" was rejected two rounds ago for making a wedged repo
+ * unrecoverable — and the same objection does not land here. This list does not
+ * have to be COMPLETE; it has to be NON-EMPTY at runtime. A new writing tool
+ * appearing wedges nothing, because the author still repairs with `Write`. Only
+ * the simultaneous disappearance of every name above could strand a repo, and a
+ * release that deletes `Write` and `Edit` together has bigger problems.
+ *
+ * Admitting unknown names was the alternative, and it forfeits the one sentence
+ * this door rests on: with an unrecognised tool we cannot say the call executes
+ * nothing, so the exception would no longer be justified by the argument that
+ * created it.
+ */
+const REPAIR_TOOLS: readonly string[] = ["Write", "Edit", "MultiEdit"];
+
+/**
+ * The file a repair event targets, or `null` when this event is not a repair
+ * shape at all — wrong tool, or no `file_path`. Shared by both doors so the
+ * stamp escape and the load-path escape cannot drift apart (they already did
+ * once: the suffix-match hole was fixed on one and found on the other).
+ */
+function repairTargetOf(event: RawHookEvent): string | null {
+  const tool = event.tool_name;
+  if (typeof tool !== "string" || !REPAIR_TOOLS.includes(tool)) return null;
+  const filePath = event.tool_input?.file_path;
+  return typeof filePath === "string" ? filePath : null;
+}
+
+/**
  * The stamp sidecar a hook's compile writes, as a repo-relative reference.
  * Mirrors `hookStampPath` in cli.ts (`.vigiles/hooks/<basename>.json`); kept as a
  * string here because core takes no `node:path`.
@@ -1262,8 +1328,8 @@ export function isStampRepairEvent(
   hookFile: string,
   repoRoot: string,
 ): boolean {
-  const filePath = event.tool_input?.file_path;
-  if (typeof filePath !== "string") return false;
+  const filePath = repairTargetOf(event);
+  if (filePath === null) return false;
   const target = resolveRef(repoRoot, filePath);
   return (
     target === resolveRef(repoRoot, hookFile) ||
@@ -1345,8 +1411,8 @@ export function isLoadPathRepairEvent(
   repo: HookRepoPaths,
 ): boolean {
   if (isStampRepairEvent(event, hookFile, repo.root)) return true;
-  const filePath = event.tool_input?.file_path;
-  if (typeof filePath !== "string") return false;
+  const filePath = repairTargetOf(event);
+  if (filePath === null) return false;
   const target = resolveRef(repo.root, filePath);
   return [...HARNESS_CONFIG_FILES, ...repo.loadPathFiles].some(
     (f) => target === resolveRef(repo.root, f),

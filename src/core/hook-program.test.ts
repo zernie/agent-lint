@@ -797,6 +797,10 @@ const writeEvent = (file_path: string) => ({
   tool_name: "Write",
   tool_input: { file_path },
 });
+const toolEvent = (tool_name: string, file_path: string) => ({
+  tool_name,
+  tool_input: { file_path },
+});
 
 const ROOT = "/repo";
 /** What the runtime derives: `package.json` up every ancestor + the repo rc. */
@@ -886,6 +890,64 @@ test("isStampRepairEvent: a write in ANOTHER checkout is not this repo's repair"
     ),
     false,
   );
+});
+
+test("a repair is a WRITE — the tool name is checked, on BOTH doors", () => {
+  // 🔴 The reported hole: the predicates read `tool_input.file_path` and never
+  // `tool_name`, so a READ of `package.json` was accepted as a repair. If the
+  // wedged hook was registered for `Read`, that read went through while the gate
+  // refused everything else — and a read cannot repair a load failure.
+  const hook = ".claude/hooks/guard.hook.mjs";
+  const sidecar = ".vigiles/hooks/guard.hook.mjs.json";
+  const targets = [hook, sidecar, "package.json", ".vigilesrc.json"];
+
+  // FIRES: every repair TARGET, under a tool that does not write it.
+  for (const f of targets) {
+    assert.equal(isLoadPathRepairEvent(toolEvent("Read", f), hook, REPO), false, `Read ${f}`); // prettier-ignore
+  }
+  for (const f of [hook, sidecar]) {
+    assert.equal(isStampRepairEvent(toolEvent("Read", f), hook, ROOT), false, `Read ${f}`); // prettier-ignore
+  }
+
+  // FIRES: an unrecognised name is REFUSED, not admitted. The list does not have
+  // to be complete — it has to be non-empty, because a NEW writing tool wedges
+  // nothing (the author still repairs with `Write`). Admitting unknown names
+  // would forfeit the one sentence this door rests on: that the call it lets
+  // through executes nothing.
+  for (const t of ["FutureWrite", "ApplyPatch", "mcp__fs__write", "Task", ""]) {
+    assert.equal(isLoadPathRepairEvent(toolEvent(t, "package.json"), hook, REPO), false, t); // prettier-ignore
+  }
+  // …including no `tool_name` at all.
+  assert.equal(
+    isLoadPathRepairEvent({ tool_input: { file_path: "package.json" } }, hook, REPO), // prettier-ignore
+    false,
+  );
+
+  // ⚠️ `NotebookEdit` WRITES but is deliberately absent, and this is measured
+  // rather than reasoned: its live schema takes `notebook_path`, not
+  // `file_path`, so it can never reach this predicate. Listing it would be a
+  // fragment that cannot execute. Both spellings asserted, so a future rename of
+  // that field is a visible failure here rather than a silent grant.
+  assert.equal(isLoadPathRepairEvent(toolEvent("NotebookEdit", "package.json"), hook, REPO), false); // prettier-ignore
+  // The wire carries more fields than `RawHookEvent` names, so the notebook
+  // shape is built as the harness would send it and cast in.
+  const notebookEvent = {
+    tool_name: "NotebookEdit",
+    tool_input: { notebook_path: "package.json" },
+  } as unknown as Parameters<typeof isLoadPathRepairEvent>[0];
+  assert.equal(isLoadPathRepairEvent(notebookEvent, hook, REPO), false);
+
+  // QUIET: every tool MEASURED to write a file, on both doors. A fix that just
+  // hard-coded "Write" would pass every assertion above and wedge an author
+  // whose harness sends `Edit`.
+  for (const t of ["Write", "Edit", "MultiEdit"]) {
+    for (const f of targets) {
+      assert.equal(isLoadPathRepairEvent(toolEvent(t, f), hook, REPO), true, `${t} ${f}`); // prettier-ignore
+    }
+    for (const f of [hook, sidecar]) {
+      assert.equal(isStampRepairEvent(toolEvent(t, f), hook, ROOT), true, `${t} ${f}`); // prettier-ignore
+    }
+  }
 });
 
 test("isStampRepairEvent: NO Bash command is a stamp repair any more", () => {

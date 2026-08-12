@@ -98,11 +98,12 @@ function runGate(
   return { code: res.status ?? -1, stderr: res.stderr };
 }
 
-/** Same, for a `Write` — the repair action, now the ONLY way out of a wedge. */
+/** Same, for a file tool — the repair action, now the ONLY way out of a wedge. */
 function runWrite(
   dir: string,
   hook: string,
   filePath: string,
+  toolName = "Write",
 ): { status: number | null; stderr: string } {
   const res = spawnSync(
     process.execPath,
@@ -112,7 +113,7 @@ function runWrite(
       encoding: "utf-8",
       input: JSON.stringify({
         hook_event_name: "PreToolUse",
-        tool_name: "Write",
+        tool_name: toolName,
         tool_input: { file_path: filePath },
       }),
     },
@@ -270,10 +271,28 @@ test("the wedge still fails CLOSED — a broken load path is not an open door", 
     } finally {
       cleanupTmpDir(other);
     }
+    // 🔴 …and the repair must be a WRITE, not merely a file EVENT. The
+    // predicates read `file_path` and never `tool_name`, so a READ of
+    // `package.json` walked out through the escape while the gate refused
+    // everything else. Against the real runtime, wedged:
+    for (const target of ["package.json", hook]) {
+      assert.equal(runWrite(dir, hook, target, "Read").status, 2, `Read ${target}`); // prettier-ignore
+    }
+    // An unrecognised tool name is refused too — the list is verified writers,
+    // and ignorance is not a licence.
+    assert.equal(runWrite(dir, hook, "package.json", "ApplyPatch").status, 2);
+    // …while every MEASURED writer still gets the author out.
+    for (const t of ["Write", "Edit", "MultiEdit"]) {
+      assert.equal(runWrite(dir, hook, "package.json", t).status, 0, t);
+    }
     // The refusal explains itself as harness state, not as a verdict, and points
     // at the way out — without that the author's next move is to unwire the gate.
     const refused = runGate(dir, hook, "ls");
     assert.match(refused.stderr, /state of the HARNESS/);
+    // …and it names the tools that count, so an author who tried a Read is not
+    // left guessing why the documented escape did nothing.
+    assert.match(refused.stderr, /Write\/Edit\/MultiEdit/);
+    assert.match(refused.stderr, /a Read of the same path repairs nothing/);
     assert.match(refused.stderr, /git merge --abort/);
   } finally {
     cleanupTmpDir(dir);

@@ -6877,7 +6877,9 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
         `vigiles: this is the state of the HARNESS, not a decision about your ` +
         `command — the gate never ran. Blocking anyway (a gate that cannot run ` +
         `must not pass traffic).\n` +
-        `vigiles: the way out is a FILE WRITE, not a command. Fix whichever of ` +
+        `vigiles: the way out is a FILE WRITE, not a command — under a tool that ` +
+        `WRITES (Write/Edit/MultiEdit); a Read of the same path repairs nothing ` +
+        `and is refused. Fix whichever of ` +
         `${file}, ${HARNESS_CONFIG_FILES.join(", ")} is broken — those writes are ` +
         `allowed even while this refuses, and a Bash gate never gated file tools ` +
         `at all. The hook then loads and the gate decides normally again.\n` +
