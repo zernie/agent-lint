@@ -165,16 +165,46 @@ export function canonicalScript(file: string, root?: string): string {
  * only consistent answer is to drop.
  *
  * A `command` probe is resolved by a LADDER, most precise first: an exact path,
- * then the ref as a DEEPER path (a harness legitimately points at
- * `${CLAUDE_PROJECT_DIR}/.claude/hooks/x.sh`), then the ref as a SHALLOWER one (a
- * harness ran with a `cwd` inside the repo, so it named `guard.sh`). A lower rung
- * is consulted only when the one above it is empty, because the rungs overlap:
- * with both `hooks/pre.sh` and `.claude/hooks/pre.sh` discovered, the ref
- * `.claude/hooks/pre.sh` is an EXACT match for one and a deeper match for the
- * other — flat filtering made a named file ambiguous. On the deeper rung the
- * longest matching surface path wins for the same reason: an absolute ref cannot
- * be the shorter relative path unless the repo root is the other surface's
- * parent, which the other surface's existence rules out.
+ * then the ref as a ROOTED path (a harness legitimately points at
+ * `${CLAUDE_PROJECT_DIR}/.claude/hooks/x.sh`, or at an absolute path inside the
+ * repo), then the ref as a SHALLOWER one (a harness ran with a `cwd` inside the
+ * repo, so it named `guard.sh`). A lower rung is consulted only when the one
+ * above it is empty, because the rungs overlap: with both `hooks/pre.sh` and
+ * `.claude/hooks/pre.sh` discovered, the ref `.claude/hooks/pre.sh` is an EXACT
+ * match for one and a rooted match for the other — flat filtering made a named
+ * file ambiguous.
+ *
+ * 🔴 THE MIDDLE RUNG USED TO ACCEPT ANY REF WHOSE TAIL MATCHED, so an absolute
+ * path in SOMEBODY ELSE'S tree credited a local file. Measured 2026-08-12 against
+ * a single surface `hooks/pre.sh`:
+ *
+ * ```
+ * /workspace/vigiles/hooks/pre.sh        => ["hooks/pre.sh"]   (genuinely ours)
+ * /tmp/fixture/hooks/pre.sh              => ["hooks/pre.sh"]   FALSE GRANT
+ * /home/other/repo/hooks/pre.sh          => ["hooks/pre.sh"]   FALSE GRANT
+ * /nix/store/abc123-plugin/hooks/pre.sh  => ["hooks/pre.sh"]   FALSE GRANT
+ * ```
+ *
+ * Keeping the full qualified path did not fix it — the bottom rung's repair was
+ * about a ref that carried NO directories, and any external path that happens to
+ * end in the complete repo-relative tail still miscredits. It is the same defect
+ * the bottom rung had, one level up: a SUFFIX taken for an identity.
+ *
+ * A path is only ours if it is anchored at our root, so the rung now demands an
+ * anchor and the caller supplies one ({@link ResolveOptions.root}). Two anchors
+ * exist and no third is invented:
+ *
+ *  - the repository root itself, for an absolute ref — it must lie beneath it,
+ *    and the remainder is then a repo-relative path compared EXACTLY;
+ *  - an unexpanded PROJECT-root variable ({@link ROOT_VARS}), which is how a
+ *    settings-file hook reaches this tier (`commandRefs` leaves the name as
+ *    written when nothing in `env` expands it).
+ *
+ * Anything else — an absolute ref outside the root, an absolute ref with NO root
+ * supplied, a relative ref carrying extra leading directories (`../other/…`,
+ * `vendor/plugin/…`) — resolves to nothing. Absent a root the rung abstains
+ * wholesale rather than falling back to the tail match, which is what a caller
+ * that cannot name its own root honestly knows.
  *
  * 🔴 THE BOTTOM RUNG USED TO MATCH BY BARE NAME, and that is the third appearance
  * in this PR of a NAME accepted as an IDENTITY — after the coverage metric's
@@ -220,20 +250,18 @@ export function canonicalScript(file: string, root?: string): string {
 export function resolveProbe(
   probe: SurfaceProbe,
   surfaces: readonly Surface[],
-  selfNamespaces: readonly string[] = [],
+  opts: ResolveOptions = {},
 ): Surface[] {
   if (probe.how === "command") {
     const ref = norm(probe.ref).replace(/^\.\//, "");
     const hooks = surfaces.filter((s) => s.kind === "hook");
     const exact = hooks.filter((s) => norm(s.path) === ref);
     if (exact.length > 0) return only(exact);
-    // The ref is DEEPER than the surface path: absolute, or rooted above the
-    // repo. The longest matching surface wins (see above).
-    const deeper = hooks.filter((s) => ref.endsWith(`/${norm(s.path)}`));
-    if (deeper.length > 0) {
-      const longest = Math.max(...deeper.map((s) => norm(s.path).length));
-      return only(deeper.filter((s) => norm(s.path).length === longest));
-    }
+    // The ref is ROOTED: it carries an anchor that means THIS repository, and
+    // what follows the anchor is a repo-relative path (see above).
+    const rooted = repoRelative(ref, opts.root);
+    if (rooted !== null)
+      return only(hooks.filter((s) => norm(s.path) === rooted));
     // The ref is SHALLOWER: the harness ran with a `cwd` inside the repo, so it
     // named a tail of the surface path (`guard.sh`, `hooks/guard.sh`).
     return only(hooks.filter((s) => norm(s.path).endsWith(`/${ref}`)));
@@ -246,9 +274,57 @@ export function resolveProbe(
   // The agent origin is its OWN, not a widening of `fired` — a widening is how
   // the cross-kind leak existed in the first place.
   const kind = probe.how === "dispatched" ? "agent" : "skill";
-  const name = localName(probe.ref, selfNamespaces);
+  const name = localName(probe.ref, opts.selfNamespaces ?? []);
   if (name === null) return [];
   return only(surfaces.filter((s) => s.kind === kind && s.name === name));
+}
+
+/**
+ * Shell variable names whose value IS the audited project's root, so a ref
+ * spelled `$NAME/rest` names `rest` inside this repository.
+ *
+ * ⚠️ PLUGIN-ROOT TOKENS ARE DELIBERATELY ABSENT — `CLAUDE_PLUGIN_ROOT`,
+ * `PLUGIN_ROOT` and friends name whichever plugin is running, and the
+ * whole-harness tier CO-INSTALLS competitors on purpose (`installSet`, so the
+ * skill under test competes for selection). A competitor's
+ * `${CLAUDE_PLUGIN_ROOT}/hooks/x.sh` would then be credited to a hook of ours
+ * with the same repo-relative path. The project root has no such ambiguity: it
+ * is the thing being audited, by definition.
+ */
+const ROOT_VARS = new Set(["CLAUDE_PROJECT_DIR", "CLAUDE_PROJECT"]);
+
+/** A ref anchored at a root: `/abs/root/...`, `$VAR/...`, `${VAR}/...`. */
+const ROOT_VAR_RE = /^\$\{?(\w+)\}?\//;
+/** POSIX `/x` and Windows `C:/x` — `norm` has already collapsed separators. */
+const ABSOLUTE_RE = /^(?:\/|[A-Za-z]:\/)/;
+
+/**
+ * The repo-relative path a ROOTED ref names, or `null` when the ref is not
+ * anchored at this repository — including when it is absolute and no root was
+ * supplied to say whether it is ours.
+ */
+function repoRelative(ref: string, root: string | undefined): string | null {
+  const v = ROOT_VAR_RE.exec(ref);
+  if (v !== null)
+    return ROOT_VARS.has(v[1] ?? "") ? ref.slice(v[0].length) : null;
+  if (!ABSOLUTE_RE.test(ref) || root === undefined) return null;
+  const base = norm(root).replace(/\/+$/, "");
+  return ref.startsWith(`${base}/`) ? ref.slice(base.length + 1) : null;
+}
+
+/** What {@link resolveProbe} needs beyond the probe and the surfaces. */
+export interface ResolveOptions {
+  /**
+   * Plugin namespaces that mean THIS repo (`plugin:skill` / `plugin:agent`).
+   * Absent → every qualified ref drops; see {@link localName}.
+   */
+  readonly selfNamespaces?: readonly string[];
+  /**
+   * The repository root, so an ABSOLUTE ref can be told from somebody else's
+   * absolute ref. Absent → every absolute ref drops, which is what a caller that
+   * cannot name its own root honestly knows.
+   */
+  readonly root?: string;
 }
 
 /**
@@ -353,29 +429,24 @@ export function runsFromResults(
  * be checked for staleness and would therefore be permanent, unfalsifiable
  * coverage.
  */
-export function recordsFrom(opts: {
-  readonly runs: readonly ScriptRunRecord[];
-  readonly surfaces: readonly Surface[];
-  readonly tier: CoverageTierName;
-  readonly at: string;
-  readonly readSurface: (path: string) => string | null;
-  /**
-   * Namespaces that mean THIS repo (`plugin:skill` / `plugin:agent`). Absent →
-   * every qualified ref drops; see {@link localName}.
-   */
-  readonly selfNamespaces?: readonly string[];
-}): CoverageRun[] {
+export function recordsFrom(
+  opts: ResolveOptions & {
+    readonly runs: readonly ScriptRunRecord[];
+    readonly surfaces: readonly Surface[];
+    readonly tier: CoverageTierName;
+    readonly at: string;
+    readonly readSurface: (path: string) => string | null;
+  },
+): CoverageRun[] {
   const out: CoverageRun[] = [];
   const seen = new Set<string>();
   const pairs = opts.runs.flatMap((run) =>
     run.probes.flatMap((probe) =>
-      resolveProbe(probe, opts.surfaces, opts.selfNamespaces).map(
-        (surface) => ({
-          run,
-          probe,
-          surface,
-        }),
-      ),
+      resolveProbe(probe, opts.surfaces, opts).map((surface) => ({
+        run,
+        probe,
+        surface,
+      })),
     ),
   );
   for (const { run, probe, surface } of pairs) {

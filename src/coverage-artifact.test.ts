@@ -66,17 +66,83 @@ const run = (over: Partial<CoverageRun> = {}): CoverageRun => ({
 
 test("a command ref resolves to the hook it names, by path or by basename", () => {
   const surfaces = [hook("guard", ".claude/hooks/guard.sh")];
-  for (const ref of [
-    ".claude/hooks/guard.sh",
-    "/abs/checkout/.claude/hooks/guard.sh",
-    "guard.sh",
-  ]) {
+  for (const ref of [".claude/hooks/guard.sh", "guard.sh"]) {
     assert.deepEqual(
       resolveProbe({ how: "command", ref }, surfaces).map((s) => s.path),
       [".claude/hooks/guard.sh"],
       ref,
     );
   }
+  // The ABSOLUTE spelling needs the root to say it is ours — see the test below
+  // for what accepting it unconditionally cost.
+  assert.deepEqual(
+    resolveProbe(
+      { how: "command", ref: "/abs/checkout/.claude/hooks/guard.sh" },
+      surfaces,
+      { root: "/abs/checkout" },
+    ).map((s) => s.path),
+    [".claude/hooks/guard.sh"],
+  );
+});
+
+test("an EXTERNAL absolute ref is not ours, however well its tail matches", () => {
+  // 🔴 FIRES. The middle rung accepted any ref whose tail matched a surface path,
+  // so an absolute path in somebody else's tree credited a local file. Measured
+  // 2026-08-12 against the single surface `hooks/pre.sh`:
+  //
+  //     /workspace/vigiles/hooks/pre.sh        => ["hooks/pre.sh"]  (ours)
+  //     /tmp/fixture/hooks/pre.sh              => ["hooks/pre.sh"]  FALSE GRANT
+  //     /home/other/repo/hooks/pre.sh          => ["hooks/pre.sh"]  FALSE GRANT
+  //     /nix/store/abc123-plugin/hooks/pre.sh  => ["hooks/pre.sh"]  FALSE GRANT
+  //
+  // Carrying the full qualified path did not close it: the bottom rung's repair
+  // was about a ref with NO directories, and an external path that ends in the
+  // complete repo-relative tail still miscredits. A suffix taken for an identity,
+  // one rung up.
+  const surfaces = [hook("pre", "hooks/pre.sh")];
+  const paths = (ref: string, root?: string) =>
+    resolveProbe({ how: "command", ref }, surfaces, { root }).map(
+      (s) => s.path,
+    );
+
+  const root = "/workspace/vigiles";
+  assert.deepEqual(paths("/workspace/vigiles/hooks/pre.sh", root), [
+    "hooks/pre.sh",
+  ]);
+  for (const ref of [
+    "/tmp/fixture/hooks/pre.sh",
+    "/home/other/repo/hooks/pre.sh",
+    "/nix/store/abc123-plugin/hooks/pre.sh",
+    // Beneath a SIBLING whose name merely starts with ours — a prefix test on
+    // the string rather than on path segments would let this one through.
+    "/workspace/vigiles-fork/hooks/pre.sh",
+    // Extra leading directories, spelled relatively: same claim, no `/`.
+    "../other/hooks/pre.sh",
+    "vendor/plugin/hooks/pre.sh",
+  ]) {
+    assert.deepEqual(paths(ref, root), [], ref);
+  }
+
+  // ⚠️ WITHOUT A ROOT the rung abstains wholesale — even for the path that IS
+  // ours, because nothing supplied can tell the two apart. Silence, not a guess.
+  assert.deepEqual(paths("/workspace/vigiles/hooks/pre.sh"), []);
+
+  // The other anchor: an unexpanded PROJECT-root variable, which is how a
+  // settings-file hook reaches this tier. It needs no root — the token itself
+  // says whose tree it is.
+  assert.deepEqual(paths("$CLAUDE_PROJECT_DIR/hooks/pre.sh"), ["hooks/pre.sh"]);
+  assert.deepEqual(paths("${CLAUDE_PROJECT_DIR}/hooks/pre.sh"), [
+    "hooks/pre.sh",
+  ]);
+  // …but a PLUGIN-root token does not, and that is deliberate: the whole-harness
+  // tier co-installs competitors, so `${CLAUDE_PLUGIN_ROOT}` names whichever
+  // plugin ran, not necessarily this one.
+  assert.deepEqual(paths("${CLAUDE_PLUGIN_ROOT}/hooks/pre.sh"), []);
+  assert.deepEqual(paths("$FIXTURE_DIR/hooks/pre.sh"), []);
+  // A rooted ref is compared EXACTLY once the anchor is stripped, so it cannot
+  // fall through to a looser rung and match a different file.
+  assert.deepEqual(paths("$CLAUDE_PROJECT_DIR/other/pre.sh"), []);
+  assert.deepEqual(paths("/workspace/vigiles/other/pre.sh", root), []);
 });
 
 test("a QUALIFIED ref that names another directory resolves to NOTHING", () => {
@@ -163,7 +229,7 @@ test("a fired ref NEVER resolves across surface KINDS", () => {
     skill("startup", "skills/startup/SKILL.md"),
   ];
   const paths = (ref: string) =>
-    resolveProbe({ how: "fired", ref }, surfaces, ["SessionStart", "myplug"]).map((s) => s.kind + " " + s.path); // prettier-ignore
+    resolveProbe({ how: "fired", ref }, surfaces, { selfNamespaces: ["SessionStart", "myplug"] }).map((s) => s.kind + " " + s.path); // prettier-ignore
 
   // A hook label must not reach the skill. `SessionStart` is passed as one of
   // OUR namespaces here on purpose — the point is that even when the namespace
@@ -206,7 +272,9 @@ test("a fired ref resolves by name — but only under OUR namespace", () => {
   // firing is the normal outcome of a low trigger rate.
   const surfaces = [skill("alpha", "skills/alpha/SKILL.md")];
   const names = (ref: string, self: readonly string[] = ["myplug"]) =>
-    resolveProbe({ how: "fired", ref }, surfaces, self).map((s) => s.name);
+    resolveProbe({ how: "fired", ref }, surfaces, { selfNamespaces: self }).map(
+      (s) => s.name,
+    );
 
   assert.deepEqual(names("myplug:alpha"), ["alpha"]);
   // FIRES: somebody else's `alpha`.
@@ -245,16 +313,14 @@ test("an AMBIGUOUS fired ref resolves to nothing — the shadowed copy earns no 
   const shipped = skill("foo", "skills/foo/SKILL.md");
   const override = skill("foo", ".claude/skills/foo/SKILL.md");
   assert.deepEqual(
-    resolveProbe({ how: "fired", ref: "plugin:foo" }, [shipped, override], ["plugin"]), // prettier-ignore
+    resolveProbe({ how: "fired", ref: "plugin:foo" }, [shipped, override], { selfNamespaces: ["plugin"] }), // prettier-ignore
     [],
   );
   // The control: with one `foo` in the repo the same probe still resolves.
   assert.deepEqual(
-    resolveProbe(
-      { how: "fired", ref: "plugin:foo" },
-      [shipped],
-      ["plugin"],
-    ).map((s) => s.path),
+    resolveProbe({ how: "fired", ref: "plugin:foo" }, [shipped], {
+      selfNamespaces: ["plugin"],
+    }).map((s) => s.path),
     ["skills/foo/SKILL.md"],
   );
 });
@@ -282,17 +348,17 @@ test("a command ref matches on the most precise rung available, not on all of th
   const shipped = hook("pre", "hooks/pre.sh");
   const override = hook("pre", ".claude/hooks/pre.sh");
   const both = [shipped, override];
-  const paths = (ref: string) =>
-    resolveProbe({ how: "command", ref }, both).map((s) => s.path);
+  const paths = (ref: string, root?: string) =>
+    resolveProbe({ how: "command", ref }, both, { root }).map((s) => s.path);
   assert.deepEqual(paths(".claude/hooks/pre.sh"), [".claude/hooks/pre.sh"]);
   assert.deepEqual(paths("hooks/pre.sh"), ["hooks/pre.sh"]);
-  // An absolute ref lands on the suffix rung, where the LONGEST matching surface
-  // path wins — it cannot be the shorter one unless the repo root is the other
-  // surface's parent, which that surface's existence rules out.
-  assert.deepEqual(paths("/repo/.claude/hooks/pre.sh"), [
+  // An absolute ref lands on the ROOTED rung, where the anchor is stripped and
+  // what remains is compared exactly — so the two surfaces stop competing at all
+  // and no longest-match tiebreak is needed to tell them apart.
+  assert.deepEqual(paths("/repo/.claude/hooks/pre.sh", "/repo"), [
     ".claude/hooks/pre.sh",
   ]);
-  assert.deepEqual(paths("/repo/hooks/pre.sh"), ["hooks/pre.sh"]);
+  assert.deepEqual(paths("/repo/hooks/pre.sh", "/repo"), ["hooks/pre.sh"]);
   // The bare basename names neither, and is dropped rather than guessed.
   assert.deepEqual(paths("pre.sh"), []);
 });

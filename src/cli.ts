@@ -5455,6 +5455,11 @@ function resolveRecords(
     tier,
     at: new Date().toISOString(),
     selfNamespaces: selfNamespaces(cwd),
+    // The root an ABSOLUTE command ref must lie beneath to be OURS. Without it a
+    // harness that executed `/tmp/fixture/hooks/pre.sh` credited this repo's own
+    // `hooks/pre.sh`, because the tail matched. See the ladder note on
+    // `resolveProbe`; absent a root, absolute refs abstain rather than guess.
+    root: cwd,
     readSurface: (p) => {
       try {
         return readFileSync(resolve(cwd, p), "utf-8");
