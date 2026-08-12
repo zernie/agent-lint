@@ -23,7 +23,7 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { writeFileSync, mkdirSync, symlinkSync } from "node:fs";
+import { writeFileSync, mkdirSync, symlinkSync, rmSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -121,13 +121,30 @@ test("a conflicted package.json wedges the runtime — and the recovery commands
     assert.match(abort.stderr, /package\.json/);
     assert.match(abort.stderr, /merge-conflict markers/);
 
-    for (const cmd of [
-      "git rebase --abort",
-      "git checkout -- package.json",
-      "npx vigiles compile .claude/hooks/guard.hook.mjs",
-    ]) {
+    for (const cmd of ["git rebase --abort", "git checkout -- package.json"]) {
       assert.equal(runGate(dir, hook, cmd).code, 0, cmd);
     }
+
+    // 🔴 THE MEASUREMENT THAT DELETED THE COMPILE ESCAPE. `vigiles compile` was
+    // in this set for exactly this wedge — and it CANNOT repair it: compile has
+    // to load the hook through the same resolver that just failed. It was the
+    // only member of the escape set that executed repo code, and it was the one
+    // every finding on this door was about, so it bought nothing and cost four
+    // vulnerabilities. Asserted here so the claim is checked, not remembered.
+    const compile = spawnSync(
+      process.execPath,
+      [CLI, "compile", ".claude/hooks/guard.hook.mjs"],
+      { cwd: dir, encoding: "utf-8" },
+    );
+    assert.equal(compile.status, 1, "compile cannot repair a load wedge");
+    assert.match(compile.stderr, /Cannot load hook/);
+    assert.match(compile.stderr, /Invalid package config/);
+    // …and it is refused by the gate, since it could only ever have run code.
+    assert.equal(
+      runGate(dir, hook, "npx vigiles compile .claude/hooks/guard.hook.mjs")
+        .code,
+      2,
+    );
   } finally {
     cleanupTmpDir(dir);
   }
@@ -172,23 +189,30 @@ test("the wedge still fails CLOSED — a broken load path is not an open door", 
       "npx vigiles compile /tmp/evil/.claude/hooks/guard.hook.mjs",
       // The repaired file plus a second operand.
       "npx vigiles compile .claude/hooks/guard.hook.mjs /tmp/payload.spec.ts",
+      // 🔴 And now EVERY compile form, however impeccably spelled. The door
+      // stopped trying to tell a trusted action from an untrusted string.
+      "vigiles compile",
+      "npx vigiles compile",
+      "vigiles compile .claude/hooks/guard.hook.mjs",
+      "./node_modules/.bin/vigiles compile",
+      "npm exec vigiles -- compile",
+      // The two reported this round.
+      "/tmp/vigiles compile",
+      "cd /tmp/evil && vigiles compile",
+      // …and `cd` in front of a GIT recovery, which is no longer neutral either.
+      "cd /tmp/evil && git merge --abort",
     ]) {
       assert.equal(runGate(dir, hook, cmd).code, 2, cmd);
     }
     // And the author's way out is still open — a fix that shuts this door
     // re-wedges the repo with no escape, which is the defect it exists for.
     for (const cmd of [
-      // The exact command the refusal prints — the operand names the very file
-      // whose failure is being reported, which is repo-owned config (it comes
-      // from the compiled hooks block), not event data.
-      "vigiles compile .claude/hooks/guard.hook.mjs",
-      "npx vigiles compile ./.claude/hooks/guard.hook.mjs",
-      // …and bare, which compiles only what the repo itself declares.
-      "npx -y vigiles compile",
-      "pnpm exec vigiles compile",
-      "npm exec vigiles -- compile",
-      "./node_modules/.bin/vigiles compile",
+      // Git only: these move the tree back to something git already holds and
+      // execute no repo code, which is the property the compile leaf could never
+      // have. A load wedge is undone by undoing what caused it.
       "git merge --abort",
+      "git rebase --abort",
+      "git checkout -- package.json",
     ]) {
       assert.equal(runGate(dir, hook, cmd).code, 0, cmd);
     }
@@ -216,6 +240,87 @@ test("`vigiles audit` reports the conflicted config as a finding", () => {
       warnings.some((w) => w.startsWith("package.json") && /merge-conflict/.test(w)), // prettier-ignore
       `expected a package.json merge-conflict warning, got ${JSON.stringify(warnings)}`,
     );
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// THE STAMP WEDGE, and the measurement the escape's whole design rests on.
+//
+// A stamped PreToolUse Bash gate whose source no longer matches its stamp
+// refuses EVERY Bash command — including the recompile. The escape used to admit
+// `vigiles compile …` for exactly this, which is what four security findings were
+// about. It does not need to: a FILE WRITE clears the wedge, and file tools were
+// never gated by a Bash gate in the first place.
+//
+// Both halves, because the claim has two parts and only one of them is obvious:
+// the write must unwedge, AND the hook that comes back must still ENFORCE — a
+// "fix" that merely disarmed the gate would satisfy the first half alone.
+// ---------------------------------------------------------------------------
+test("a stale stamp is cleared by a FILE WRITE, and the hook comes back ENFORCING", () => {
+  const { dir, hook } = makeFixture();
+  try {
+    const sidecar = join(dir, ".vigiles", "hooks", "guard.hook.mjs.json");
+    mkdirSync(join(dir, ".vigiles", "hooks"), { recursive: true });
+    const stale = JSON.stringify({ stamp: `sha256:${"0".repeat(64)}` });
+    writeFileSync(sidecar, stale);
+
+    // The wedge: everything is refused, the gate never got to decide.
+    const refused = runGate(dir, hook, "ls");
+    assert.equal(refused.code, 2, "a stale stamp refuses every command");
+    assert.match(refused.stderr, /does not match its compiled stamp/);
+    // …and the refusal must tell the author what actually works. It used to
+    // print a command this door no longer accepts.
+    assert.match(refused.stderr, /FILE WRITE, not a command/);
+    assert.match(
+      refused.stderr,
+      /\.vigiles[/\\]hooks[/\\]guard\.hook\.mjs\.json/,
+    );
+
+    // THE FIX: `{}` into the sidecar — no command, no execution.
+    writeFileSync(sidecar, "{}");
+    assert.equal(runGate(dir, hook, "ls").code, 0, "the write unwedges it");
+
+    // …and the QUIET half that makes it a repair rather than a disarm: the hook
+    // is loaded and DECIDING again, with its own reason.
+    const enforcing = runGate(dir, hook, "git push --force");
+    assert.equal(enforcing.code, 2, "the gate must be back on duty");
+    assert.match(enforcing.stderr, /no force-push/);
+
+    // Deleting the sidecar outright is the same story.
+    writeFileSync(sidecar, stale);
+    assert.equal(runGate(dir, hook, "ls").code, 2, "wedged again");
+    rmSync(sidecar);
+    assert.equal(runGate(dir, hook, "ls").code, 0);
+    assert.equal(runGate(dir, hook, "git push --force").code, 2);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("…and while it is wedged, no command talks its way out", () => {
+  // The other half: the file route exists, so the Bash door can stay shut.
+  const { dir, hook } = makeFixture();
+  try {
+    mkdirSync(join(dir, ".vigiles", "hooks"), { recursive: true });
+    writeFileSync(
+      join(dir, ".vigiles", "hooks", "guard.hook.mjs.json"),
+      JSON.stringify({ stamp: `sha256:${"0".repeat(64)}` }),
+    );
+    for (const cmd of [
+      "vigiles compile",
+      "npx vigiles compile .claude/hooks/guard.hook.mjs",
+      "/tmp/vigiles compile",
+      "cd /tmp/evil && vigiles compile",
+      "npx vigiles compile /tmp/payload.spec.ts",
+      // A stale stamp is not a load failure, so the git set does not apply here
+      // either — it never did.
+      "git merge --abort",
+      "ls",
+    ]) {
+      assert.equal(runGate(dir, hook, cmd).code, 2, cmd);
+    }
   } finally {
     cleanupTmpDir(dir);
   }

@@ -242,6 +242,32 @@ const OPTION_GRAMMAR: Readonly<Record<InterpreterFamily, OptionGrammar>> = {
 };
 
 /**
+ * Heads whose file operand sits behind a `run` SUBCOMMAND, so the verb — not the
+ * script — is the first non-flag word.
+ *
+ * 🔴 `bun run hooks/pre-edit.ts` selected `run`, which fails {@link SCRIPT_RE},
+ * so a hook that DID execute attributed nothing. Bun and Deno are package-manager
+ * -shaped CLIs sharing the node family's OPTION grammar while having a verb
+ * grammar node does not.
+ *
+ * HOW THIS LIST WAS DECIDED: every head in {@link INTERPRETER_FAMILY} was checked
+ * for a subcommand form. The five shells, `python`/`python3`, `ruby`, `perl`,
+ * `tsx` and `ts-node` have none. `node` has none either — its `--run` is a FLAG
+ * and runs a package.json script, not a file, so it correctly attributes nothing.
+ * That leaves `bun` and `deno`, and only these two are here.
+ *
+ * ⚠️ ONLY `run`, deliberately. Both CLIs carry more verbs (`deno test`,
+ * `deno serve`, `deno bench`, `bun test`, `bun build`, `deno check`,
+ * `deno cache`), and modelling them faithfully means deciding per verb whether
+ * the operand is EXECUTED — `deno check` and `deno cache` read a file without
+ * running it, so crediting them would be a false grant. Unmodelled, every one of
+ * those verbs fails `SCRIPT_RE` and attributes NOTHING: the cost is silence, and
+ * silence is the direction this module errs in. A miss here loses a warning; a
+ * guess could mint coverage for a file nobody ran.
+ */
+const RUN_SUBCOMMAND_HEADS: ReadonlySet<string> = new Set(["bun", "deno"]);
+
+/**
  * The entry script an interpreter's argv names, or `undefined` when this command
  * line executes no file operand. `argv` is the WHOLE leaf, head included.
  *
@@ -256,7 +282,14 @@ function entryScript(
   family: InterpreterFamily,
 ): string | undefined {
   const grammar = OPTION_GRAMMAR[family];
-  for (let i = 1; i < argv.length; i++) {
+  // A single leading `run` verb, for the two heads that have one. Consumed
+  // before the operand scan, and only in first position: `bun x.mjs run` still
+  // attributes `x.mjs`, because there `run` is the script's own argument.
+  const start =
+    RUN_SUBCOMMAND_HEADS.has(headName(argv[0] ?? "")) && argv[1] === "run"
+      ? 2
+      : 1;
+  for (let i = start; i < argv.length; i++) {
     const word = argv[i] ?? "";
     if (grammar.withoutScript.has(word)) return undefined;
     if (grammar.withValue.has(word)) {

@@ -271,6 +271,43 @@ test("bash's own invocation grammar: `-O` takes a value, and parse-only flags ru
   assert.deepEqual(commandRefs("python3 -O hooks/x.py"), ["hooks/x.py"]);
 });
 
+test("a `run` SUBCOMMAND is not the script — bun and deno put a verb first", () => {
+  // 🔴 FIRES: bun and deno share the node OPTION grammar but have a verb grammar
+  // node does not. `run` was selected as the entry, failed SCRIPT_RE, and a hook
+  // that really executed attributed nothing — silence, the same shape the
+  // per-family split was written to stop.
+  assert.deepEqual(commandRefs("bun run hooks/pre-edit.ts"), [
+    "hooks/pre-edit.ts",
+  ]);
+  assert.deepEqual(commandRefs("deno run hooks/pre-edit.ts"), [
+    "hooks/pre-edit.ts",
+  ]);
+  // With the family's own flags still read on either side of the verb.
+  assert.deepEqual(commandRefs("bun run --bun hooks/x.mjs"), ["hooks/x.mjs"]);
+  assert.deepEqual(commandRefs("deno run --allow-all hooks/x.ts"), [
+    "hooks/x.ts",
+  ]);
+  assert.deepEqual(commandRefs("/usr/local/bin/bun run hooks/x.mjs"), [
+    "hooks/x.mjs",
+  ]);
+
+  // QUIET: the verb is consumed only in FIRST position and only for these two
+  // heads, so nothing else shifts.
+  assert.deepEqual(commandRefs("bun hooks/x.mjs"), ["hooks/x.mjs"]);
+  assert.deepEqual(commandRefs("deno hooks/x.ts"), ["hooks/x.ts"]);
+  // `run` after the entry is the SCRIPT's own argument, not a verb.
+  assert.deepEqual(commandRefs("bun hooks/x.mjs run"), ["hooks/x.mjs"]);
+  // node has no `run` subcommand — `node run x.mjs` would run a file named
+  // `run`, so consuming it there would attribute a file the command never named.
+  assert.deepEqual(commandRefs("node run hooks/x.mjs"), []);
+  // A package.json script name is not a file, so it still attributes nothing.
+  assert.deepEqual(commandRefs("bun run build"), []);
+  // ⚠️ The other verbs are deliberately unmodelled, and cost SILENCE: `deno check`
+  // reads a file without running it, so crediting it would be a false grant.
+  assert.deepEqual(commandRefs("deno check hooks/x.ts"), []);
+  assert.deepEqual(commandRefs("bun test hooks/x.ts"), []);
+});
+
 test("the env is EXPANDED into the command, not scanned alongside it", () => {
   // The documented idiom still works…
   assert.deepEqual(commandRefs('"$GUARD"', { GUARD: "/repo/hooks/guard.sh" }), [

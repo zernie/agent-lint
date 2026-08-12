@@ -242,26 +242,35 @@ Everything is committed, and the source is **adapter-agnostic** — one hook com
 
 Hooks are **not** auto-discovered by sitting just anywhere — they must be under `.vigiles/hooks/` (or named explicitly to `compile`). Because they share one dir, basenames are unique, so the stamp keys safely on the basename.
 
-### Editing a compiled hook (the stamp, and the one escape)
+### Editing a compiled hook (the stamp, and the way out)
 
 The stamp makes the runtime **refuse** a hook whose source no longer matches what was compiled. That's the point — but it also applies while **you** are editing the hook, and a stale `PreToolUse` Bash gate blocks _every_ Bash command, `vigiles compile` included. That would wedge the repo: you couldn't recompile, because the stale gate refused to let you.
 
-So a stale stamp (or a hook that no longer loads at all, e.g. a typo mid-edit) lets exactly **one** thing through, and shouts about it on stderr:
+**The way out is a file write, not a command.** A Bash gate never gated file tools, so both of these work while every command is refused:
 
-- a Bash command that invokes **`vigiles compile`** — the command that regenerates the stamp; or
-- an **edit to the hook's own source file** — so a file gate over the repo can still be fixed.
-
-```
-vigiles: hook guard.mjs does not match its compiled stamp.
-vigiles: ALLOWING this one call because it is the repair action …
-vigiles: every OTHER tool call stays BLOCKED until the hook is recompiled.
-```
-
-Everything else still fails closed. This doesn't soften the tamper guarantee that matters: while the stamp is stale the hook is enforcing **nothing** (it refuses every call), and anyone able to rewrite a hook's source can equally rewrite `.claude/settings.json`. What the stamp buys is that a smuggled capability can never run **silently** — unchanged. Just recompile:
+- **edit the hook's source back** to what was compiled; or
+- **clear its stamp** — write `{}` into `.vigiles/hooks/<name>.json` (or delete it). The hook then loads and runs **unstamped**, and — this is the part that matters — it goes back to **enforcing**. You are not disarming the gate, you are un-sticking it. Then recompile through the normal gate:
 
 ```bash
 npx vigiles compile .vigiles/hooks/guard.mjs
 ```
+
+The refusal prints the exact sidecar path, so you don't have to work it out:
+
+```
+vigiles: hook guard.mjs does not match its compiled stamp (tampered).
+vigiles: if YOU edited it, the way out is a FILE WRITE, not a command — this
+  refusal blocks the recompile too. Either edit guard.mjs back to what was
+  compiled, or clear its stamp by writing `{}` into
+  /repo/.vigiles/hooks/guard.mjs.json. The hook then runs UNSTAMPED but still
+  ENFORCES, so `vigiles compile guard.mjs` goes through the normal gate.
+```
+
+If a hook stops **loading** entirely (a conflicted `package.json` so Node can't resolve `vigiles/hook`, a typo mid-edit), the same fail-closed refusal applies, and three git commands stay allowed so you can undo the cause: `git merge --abort`, `git rebase --abort`, `git checkout -- <path>`. They only move the working tree back to something git already holds — no network, no secrets, and **no repo code executed**.
+
+> **Why `vigiles compile` is not in that list.** It used to be. Two things settled it, both measured rather than argued. During a load wedge `vigiles compile` exits 1 (`Cannot load hook …: Invalid package config`) — it loads the hook through the very resolver that just failed, so it could never repair that state. And it was the only escape that _ran code_: over five review rounds it was found to admit a payload through composition (`curl … | sh && vigiles compile`), through its operand (`vigiles compile /tmp/payload.spec.ts`, which the CLI dynamically imports), through its executable path (`/tmp/vigiles compile`), and through the working directory (`cd /tmp/evil && vigiles compile`). Recognising a trusted _action_ from an untrusted _string_ has unbounded degrees of freedom — argv, cwd, `PATH`, `node_modules` resolution, config discovery — so the primitive was removed rather than constrained a fifth time.
+
+Everything else still fails closed. This doesn't soften the tamper guarantee that matters: while the stamp is stale the hook is enforcing **nothing** (it refuses every call), and anyone able to rewrite a hook's source can equally rewrite `.claude/settings.json`. What the stamp buys is that a smuggled capability can never run **silently** — unchanged.
 
 ## Testing a compiled hook
 

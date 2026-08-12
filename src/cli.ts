@@ -6724,9 +6724,9 @@ function announceRepairEscape(file: string, why: string): boolean {
   console.error(
     `vigiles: hook ${file} ${why}.\n` +
       `vigiles: ALLOWING this one call because it is a repair or recovery action ` +
-      `(\`vigiles compile ${file}\`, an edit to the hook itself, or ` +
+      `(a write to ${file} or to ${hookStampPath(file)}, or ` +
       `\`git merge --abort\` / \`git rebase --abort\` / \`git checkout -- <path>\`) ` +
-      `— without this the gate blocks the only commands that can fix it.\n` +
+      `— without this the gate blocks the only actions that can fix it.\n` +
       `vigiles: every OTHER tool call stays BLOCKED until the hook loads again.`,
   );
   return true;
@@ -6758,8 +6758,12 @@ function verifyStampOrRefuse(file: string, event: RawHookEvent): void {
         return;
       }
       console.error(
-        `vigiles: hook ${file} does not match its compiled stamp (tampered). ` +
-          `If YOU edited it, run \`vigiles compile ${file}\` to regenerate the stamp.`,
+        `vigiles: hook ${file} does not match its compiled stamp (tampered).\n` +
+          `vigiles: if YOU edited it, the way out is a FILE WRITE, not a command — ` +
+          `this refusal blocks the recompile too. Either edit ${file} back to what ` +
+          `was compiled, or clear its stamp by writing \`{}\` into ` +
+          `${stampPath}. The hook then runs UNSTAMPED but still ENFORCES, so ` +
+          `\`vigiles compile ${file}\` goes through the normal gate.`,
       );
       process.exit(2);
     }
@@ -6834,7 +6838,7 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
           `markers, so Node cannot resolve \`vigiles/hook\` from it (the hook itself ` +
           `may be fine)`
         : "cannot be loaded";
-    if (isStampRepairEvent(event, file) || isRecoveryEvent(event, file)) {
+    if (isStampRepairEvent(event, file) || isRecoveryEvent(event)) {
       announceRepairEscape(file, cause);
       return;
     }
@@ -6842,9 +6846,11 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
       `vigiles: hook ${file} ${cause}.\n` +
         `vigiles: this is the state of the HARNESS, not a decision about your ` +
         `command — the gate never ran. Blocking anyway (a gate that cannot run ` +
-        `must not pass traffic); \`git merge --abort\`, \`git rebase --abort\`, ` +
-        `\`git checkout -- <path>\` and \`vigiles compile\` stay allowed so the ` +
-        `cause can be undone from here.`,
+        `must not pass traffic); \`git merge --abort\`, \`git rebase --abort\` and ` +
+        `\`git checkout -- <path>\` stay allowed so the cause can be undone from ` +
+        `here, and file tools were never gated by a Bash gate. ` +
+        `\`vigiles compile\` is NOT allowed and would not help: it loads the hook ` +
+        `through the same resolver that just failed.`,
     );
     process.exit(2);
     return;
