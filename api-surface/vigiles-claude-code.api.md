@@ -203,6 +203,12 @@ export interface SkillSelectionStat {
 }
 
 // @public
+export function splitRequestCounts(requests: readonly ModelRequest[]): {
+    count: number;
+    sideChannelCount: number;
+};
+
+// @public
 export function startMock(script: readonly ModelTurn[], opts?: {
     onTurn?: (info: TurnInfo) => void;
     onRequest?: (req: ModelRequest) => void;

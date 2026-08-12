@@ -57,7 +57,11 @@ import { probeTrace } from "./coverage-probe.js";
 
 import { claudeCodeRuntime } from "./adapters/claude-code/runtime.js";
 
-import { startMock, scriptUnconsumedWarning } from "./mock-model.js";
+import {
+  startMock,
+  scriptUnconsumedWarning,
+  splitRequestCounts,
+} from "./mock-model.js";
 import { resolveHarness } from "./adapters/claude-code/plugin-loader.js";
 import {
   decideSandbox,
@@ -695,11 +699,20 @@ export async function runHarnessTest(
       script: spec.model,
       timeoutMs,
     });
+    // `turns` is the AGENT's turns on both paths. In-process the handle counts
+    // them (`mock.count`); here only the tagged request log crosses the process
+    // boundary, so the same split is recovered from the tags — otherwise every
+    // side-channel call the CLI makes inflates the sandboxed run's count while
+    // the direct one stays right. Same recovery feeds the unconsumed-script
+    // warning, which the sandbox path could not emit at all before.
+    const { count, sideChannelCount } = splitRequestCounts(out.requests);
+    const unconsumed = scriptUnconsumedWarning(count, sideChannelCount);
+    if (unconsumed !== undefined) console.error(unconsumed);
     return makeResult(
       cwd,
       out,
       parseClaudeRun(out.stdout),
-      out.requests.length,
+      count,
       out.requests,
     );
   }

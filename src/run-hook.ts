@@ -181,11 +181,15 @@ export function fileToolEvents(
   path: string,
   opts: FileToolEventOptions = {},
 ): readonly [HookInput, HookInput] {
-  const root = (
-    opts.root ??
-    process.env.CLAUDE_PROJECT_DIR ??
-    process.cwd()
-  ).replace(/[/\\]+$/, "");
+  // `??` alone would let an EMPTY string through — the same silent failure by a
+  // second door, since `projectRootOf` skips an empty `cwd` exactly as it skips
+  // an empty `$CLAUDE_PROJECT_DIR`. An unset-looking root falls through to the
+  // next source rather than becoming an event nothing can decide.
+  const root = normalizeRoot(
+    [opts.root, process.env.CLAUDE_PROJECT_DIR, process.cwd()].find(
+      (r) => typeof r === "string" && r.trim() !== "",
+    ) ?? process.cwd(),
+  );
   const rel = path.replace(/\\/g, "/").replace(/^\.\//, "");
   const base = {
     hook_event_name: opts.event ?? "PostToolUse",
@@ -197,7 +201,35 @@ export function fileToolEvents(
     ...base,
     tool_input: { file_path, ...opts.input },
   });
-  return [build(rel), build(`${root}/${rel}`)];
+  // A root that IS a separator keeps it (see `normalizeRoot`), so joining must
+  // not add a second one — `//x` is a UNC path, not a file at the POSIX root.
+  const sep = /[/\\]$/.test(root) ? "" : "/";
+  return [build(rel), build(`${root}${sep}${rel}`)];
+}
+
+/**
+ * A project root with ordinary trailing separators trimmed — but never trimmed
+ * down to something that is no longer a root.
+ *
+ * 🔴 THE CARVE-OUT IS THE WHOLE POINT, AND ITS FAILURE IS SILENT. Stripping
+ * every trailing separator turns the POSIX root `"/"` into `""` and the Windows
+ * drive root `"C:\"` into `"C:"`. The runtime accepts neither: `projectRootOf`
+ * skips an empty `cwd`, and `usableRoot` requires an ABSOLUTE ref, which is `/x`
+ * or `C:/x` — a bare drive letter is not one. So the event is still built and
+ * the hook still runs; its ABSOLUTE spelling merely stops resolving, every
+ * repo-relative prefix misses, and a negative assertion passes while pinning
+ * nothing. That is precisely the dead-hook-behind-a-green-test shape this
+ * helper's second spelling exists to prevent — reintroduced by the helper.
+ *
+ * A bare `"C:"` with no separator at all gets one for the same reason: what
+ * comes back is always a root the runtime can use.
+ */
+function normalizeRoot(root: string): string {
+  const sep = /[/\\]+$/.exec(root)?.[0];
+  const trimmed = sep === undefined ? root : root.slice(0, -sep.length);
+  return trimmed === "" || /^[A-Za-z]:$/.test(trimmed)
+    ? trimmed + (sep?.[0] ?? "/")
+    : trimmed;
 }
 
 /** The JSON a hook may print on stdout (all fields optional). */

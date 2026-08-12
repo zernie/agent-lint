@@ -13,6 +13,7 @@ import {
   extractRequest,
   isMainLoopRequest,
   scriptUnconsumedWarning,
+  splitRequestCounts,
   type TurnInfo,
 } from "./mock-model.js";
 
@@ -319,4 +320,23 @@ test("scriptUnconsumedWarning: says so when the classifier swallowed the run", (
   assert.match(scriptUnconsumedWarning(0, 4) ?? "", /side-channel/);
   assert.equal(scriptUnconsumedWarning(3, 2), undefined); // the normal case
   assert.equal(scriptUnconsumedWarning(0, 0), undefined); // nothing ran at all
+});
+
+test("splitRequestCounts: recovers the handle's split from the tags alone", () => {
+  // A sandboxed run leaves the mock in another process, so `count` /
+  // `sideChannelCount` have to be rebuilt from the tagged request log. Same
+  // numbers, or `Trace.turns` means one thing direct and another sandboxed.
+  const main = { system: "", messages: [] };
+  const side = { ...main, sideChannel: true };
+  assert.deepEqual(splitRequestCounts([]), { count: 0, sideChannelCount: 0 });
+  assert.deepEqual(splitRequestCounts([side, main, side, main]), {
+    count: 2,
+    sideChannelCount: 2,
+  });
+  // Nothing BUT side channel — the shape `scriptUnconsumedWarning` names, which
+  // the sandbox path can only reach through this split.
+  assert.deepEqual(splitRequestCounts([side, side]), {
+    count: 0,
+    sideChannelCount: 2,
+  });
 });

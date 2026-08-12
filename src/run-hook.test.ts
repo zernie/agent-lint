@@ -32,6 +32,7 @@ import {
   surfacesRecorded,
 } from "./check-count.js";
 import { sandboxAvailable } from "./sandbox.js";
+import { pathView, projectRootOf } from "./core/hook-program.js";
 
 test("propertyHook: holds for a correct guard, finds a counterexample for a buggy one", () => {
   const CMDS = ["ls", "rm -rf /", "rm -rf foo", "git status", "cat x"];
@@ -763,6 +764,66 @@ test("fileToolEvents: with no explicit root it uses $CLAUDE_PROJECT_DIR, then th
     );
     delete process.env.CLAUDE_PROJECT_DIR;
     assert.equal(fileToolEvents("a.md")[1].cwd, process.cwd());
+  } finally {
+    if (saved === undefined) delete process.env.CLAUDE_PROJECT_DIR;
+    else process.env.CLAUDE_PROJECT_DIR = saved;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// A FILESYSTEM ROOT is still a root.
+//
+// 🔴 Trimming every trailing separator turned `"/"` into `""` and `"C:\"` into
+// `"C:"`, and the damage is downstream and SILENT: `projectRootOf` skips an
+// empty `cwd`, `usableRoot` rejects a bare drive letter, so the ABSOLUTE-spelling
+// event became undecidable and every repo-relative prefix missed. The event still
+// existed and the hook still ran — a test asserting a hook does NOT fire would
+// pass on an event that could never have made it fire.
+//
+// So this asserts the RUNTIME's own verdict (`pathView` + `projectRootOf`, the
+// pair a compiled hook uses), not the string shape — the string is what looked
+// fine while the verdict was wrong.
+// ---------------------------------------------------------------------------
+test("fileToolEvents: a filesystem root stays usable — BOTH spellings still decide", () => {
+  const decides = (root: string): [boolean, boolean] => {
+    const events = fileToolEvents("docs/x.md", { root });
+    return events.map((e) => {
+      const fp = (e.tool_input as { file_path: string }).file_path;
+      return pathView(fp, projectRootOf({ cwd: e.cwd })).under(["docs"]);
+    }) as [boolean, boolean];
+  };
+  for (const root of ["/", "C:\\", "C:/", "C:", "//"]) {
+    assert.deepEqual(
+      decides(root),
+      [true, true],
+      `root ${root} went undecidable`,
+    );
+  }
+  // The ordinary case is unchanged: trailing separators still get trimmed.
+  assert.equal(fileToolEvents("a.md", { root: "/repo//" })[0].cwd, "/repo");
+  assert.deepEqual(decides("/repo/"), [true, true]);
+  // And the absolute spelling never grows a doubled separator at the root.
+  const [, abs] = fileToolEvents("docs/x.md", { root: "/" });
+  assert.equal(
+    (abs.tool_input as { file_path: string }).file_path,
+    "/docs/x.md",
+  );
+});
+
+test("fileToolEvents: an EMPTY root is not a root — it falls through, it does not become `/`", () => {
+  // The same undecidable-event failure by a second door: `??` skips only
+  // null/undefined, so `root: ""` used to land in `cwd` verbatim, and
+  // `projectRootOf` skips an empty `cwd` exactly as it skips an empty
+  // `$CLAUDE_PROJECT_DIR`. Treating it as the filesystem root instead would be
+  // worse — `under(["docs"])` would then be TRUE for anything, the wrong error
+  // direction for an allowlist.
+  const saved = process.env.CLAUDE_PROJECT_DIR;
+  try {
+    process.env.CLAUDE_PROJECT_DIR = "/from/env";
+    assert.equal(fileToolEvents("a.md", { root: "" })[0].cwd, "/from/env");
+    assert.equal(fileToolEvents("a.md", { root: "   " })[0].cwd, "/from/env");
+    process.env.CLAUDE_PROJECT_DIR = "";
+    assert.equal(fileToolEvents("a.md")[0].cwd, process.cwd());
   } finally {
     if (saved === undefined) delete process.env.CLAUDE_PROJECT_DIR;
     else process.env.CLAUDE_PROJECT_DIR = saved;

@@ -8,6 +8,14 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
+import {
+  appendFileSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 
 import {
   decideSandbox,
@@ -19,6 +27,7 @@ import {
   parseEgressLog,
   diffTrees,
 } from "./sandbox.js";
+import { startMock, splitRequestCounts } from "./mock-model.js";
 import {
   runHarnessTest,
   claudeAvailable,
@@ -133,6 +142,71 @@ test("parseRequestLog: parses ndjson, skips blank and partial lines", () => {
   assert.equal(reqs[0]?.system, "s1");
   assert.equal(reqs[1]?.system, "s2");
   assert.deepEqual(parseRequestLog(""), []);
+});
+
+// ---------------------------------------------------------------------------
+// `Trace.turns` must mean the SAME thing on both execution paths.
+//
+// 🔴 THE REGRESSION THIS PINS: the direct path reports `mock.count` — the
+// agent's own turns — while the sandbox path reported `out.requests.length`,
+// which counts the CLI's side-channel bookkeeping calls too. MEASURED on Claude
+// Code 2.1.228 with a 3-entry script: 27 requests for 9 agent turns. So
+// `assertTurnsAtLeast(10)` passed on a 9-turn run, but ONLY when the run was
+// sandboxed — a number whose meaning depends on the execution path.
+//
+// This walks the REAL boundary with no bwrap: `mock-entry.ts`'s `onRequest` →
+// ndjson file → `parseRequestLog` → the count `harness-test.ts` hands to
+// `makeResult`. It fails if the log's `sideChannel` tags stop surviving
+// serialization, or if the count goes back to counting lines.
+// ---------------------------------------------------------------------------
+test("the sandboxed request log yields the AGENT's turns, not every HTTP call", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "vigiles-reqlog-"));
+  const reqsF = join(dir, "requests.ndjson");
+  writeFileSync(reqsF, "");
+  // EXACTLY what src/mock-entry.ts does inside the netns.
+  const mock = await startMock(scriptModel([{ text: "A" }, { text: "B" }]), {
+    onRequest: (req) => {
+      appendFileSync(reqsF, JSON.stringify(req) + "\n");
+    },
+  });
+  // Main-loop requests declare tools; the CLI's side channel declares none.
+  const main = (content: string): Promise<Response> =>
+    fetch(`${mock.url}/v1/messages`, {
+      method: "POST",
+      body: JSON.stringify({
+        tools: [{ name: "Bash" }],
+        messages: [{ content }],
+      }),
+    });
+  const side = (content: string): Promise<Response> =>
+    fetch(`${mock.url}/v1/messages`, {
+      method: "POST",
+      body: JSON.stringify({ messages: [{ content }] }),
+    });
+  try {
+    await main("go");
+    await side("classify");
+    await main("go on");
+    await side("classify");
+
+    const requests = parseRequestLog(readFileSync(reqsF, "utf-8"));
+    // Every request still crosses the boundary — routed, not hidden.
+    assert.equal(requests.length, 4);
+    const split = splitRequestCounts(requests);
+    // The count that becomes `Trace.turns` agrees with what the DIRECT path
+    // reports off the in-process handle. Counting log lines gave 4.
+    assert.equal(split.count, 2, "sandboxed turns must be the agent's turns");
+    assert.equal(
+      split.count,
+      mock.count,
+      "sandbox path must match direct path",
+    );
+    assert.equal(split.sideChannelCount, 2);
+    assert.equal(split.sideChannelCount, mock.sideChannelCount);
+  } finally {
+    mock.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("parseEgressLog: parses host/port, skips blank/partial/invalid lines", () => {

@@ -253,6 +253,32 @@ export function scriptUnconsumedWarning(
   );
 }
 
+/**
+ * Recover the main-loop / side-channel split from a captured request LOG.
+ *
+ * 🔴 THIS EXISTS BECAUSE `Trace.turns` MEANT TWO DIFFERENT THINGS. The
+ * in-process handle carries the split as `count` / `sideChannelCount`, and the
+ * direct path reads `mock.count` — the agent's own turns. A SANDBOXED run has
+ * the mock in another process, so all that crosses the boundary is the tagged
+ * ndjson request log (`mock-entry.ts` → `parseRequestLog`); counting its lines
+ * counted the CLI's bookkeeping calls as agent turns. MEASURED on Claude Code
+ * 2.1.228, a 3-entry script: 27 requests for 9 turns — `assertTurnsAtLeast(10)`
+ * would have passed on a 9-turn run, and only when sandboxed. One number with
+ * two meanings depending on the execution path is worse than either meaning.
+ *
+ * The tag is what makes this recoverable at all: `sideChannel` survives
+ * `JSON.stringify` into the log, so the counts here are equal by construction to
+ * the ones the handle would have reported in-process.
+ */
+export function splitRequestCounts(requests: readonly ModelRequest[]): {
+  count: number;
+  sideChannelCount: number;
+} {
+  let sideChannelCount = 0;
+  for (const r of requests) if (r.sideChannel === true) sideChannelCount++;
+  return { count: requests.length - sideChannelCount, sideChannelCount };
+}
+
 /** Flatten Anthropic content (string, or an array of text/other blocks) to text. */
 function flattenContent(content: unknown): string {
   if (typeof content === "string") return content;
