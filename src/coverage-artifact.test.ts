@@ -72,6 +72,53 @@ test("a command ref resolves to the hook it names, by path or by basename", () =
   }
 });
 
+test("a QUALIFIED ref that names another directory resolves to NOTHING", () => {
+  // 🔴 The reported false grant, and the third appearance in this PR of a NAME
+  // taken for an IDENTITY. The bottom rung used to throw the ref's directories
+  // away, so a passing harness that executed `/tmp/guard.sh` credited the repo's
+  // sole `hooks/guard.sh` — a file that never ran.
+  const surfaces = [hook("guard", "hooks/guard.sh")];
+  const paths = (ref: string) =>
+    resolveProbe({ how: "command", ref }, surfaces).map((s) => s.path);
+  for (const ref of [
+    "/tmp/guard.sh",
+    "/usr/local/bin/guard.sh",
+    "vendor/oh-my-claudecode/guard.sh",
+    "test/dogfood/repo@abc/scripts/guard.sh",
+    // The live near-miss measured on this repo's own corpus: a VENDORED
+    // third-party script reached the bottom rung. It resolved to nothing only
+    // because no hook here is named `run.cjs`.
+    "/workspace/vigiles/test/dogfood/omc@deee3a4/scripts/guard.sh",
+  ]) {
+    assert.deepEqual(paths(ref), [], ref);
+  }
+  // …and the reason it is not simply DELETED: a ref that carries no directory
+  // contradicts none, so matching it discards nothing. A harness that ran with a
+  // `cwd` inside the repo names a TAIL of the surface path, and every segment it
+  // does carry has to lie on that path.
+  assert.deepEqual(paths("guard.sh"), ["hooks/guard.sh"]);
+  assert.deepEqual(paths("./guard.sh"), ["hooks/guard.sh"]);
+  assert.deepEqual(paths("hooks/guard.sh"), ["hooks/guard.sh"]);
+  // A tail that does not align is still nothing — `guard.sh` sits in `hooks/`.
+  assert.deepEqual(paths("bin/guard.sh"), []);
+});
+
+test("the shallow rung is still ambiguity-safe", () => {
+  // Two hooks of the same name: exactly one ran, and the ref cannot say which.
+  // Crediting both would invent a record, so it drops — the rule the whole tier
+  // follows, asserted on the rung that was rewritten.
+  const surfaces = [
+    hook("guard", "hooks/guard.sh"),
+    hook("guard", ".claude/hooks/guard.sh"),
+  ];
+  assert.deepEqual(resolveProbe({ how: "command", ref: "guard.sh" }, surfaces), []); // prettier-ignore
+  // …while a ref that names enough of the path to disambiguate still resolves.
+  assert.deepEqual(
+    resolveProbe({ how: "command", ref: ".claude/hooks/guard.sh" }, surfaces).map((s) => s.path), // prettier-ignore
+    [".claude/hooks/guard.sh"],
+  );
+});
+
 test("a command ref NEVER resolves to a non-hook surface", () => {
   // A command runs a program; the only surface kind that IS a program is a hook.
   // A skill's bundled helper being executed is a test of THAT SCRIPT, not of the

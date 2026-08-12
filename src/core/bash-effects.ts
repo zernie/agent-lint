@@ -966,34 +966,113 @@ export function leafArgvSource(command: string): string[][] {
     const dropped = probe.length - stripWrappers(probe).argv.length;
     out.push(argv.slice(dropped));
   };
-  const stmts = (list: readonly MvdanNode[] | undefined): void => {
-    for (const st of list ?? []) descend(st);
+  // Both return TRUE when control provably does not continue past this node in
+  // the ENCLOSING shell — the list stops there.
+  const stmts = (list: readonly MvdanNode[] | undefined): boolean => {
+    for (const st of list ?? []) if (descend(st)) return true;
+    return false;
   };
-  const descend = (node: MvdanNode | undefined): void => {
-    if (!node) return;
+  const descend = (node: MvdanNode | undefined): boolean => {
+    if (!node) return false;
     switch (sh.syntax.NodeType(node)) {
       case "Stmt":
-        descend(node.Cmd);
-        return;
+        // `cmd &` runs in a background SUBSHELL, so a terminator inside it never
+        // reaches this shell (measured: `exit 0 & ./x.sh` runs `./x.sh`).
+        return descend(node.Cmd) && node.Background !== true;
       case "CallExpr":
         emit(node);
-        return;
+        return terminates(node);
       case "BinaryCmd":
         // `&&` (10) and `||` (11) short-circuit, so only X is certain; a
         // PIPELINE (`|` 12, `|&` 13) runs both sides.
-        descend(node.X);
-        if (node.Op === PIPE_OP || node.Op === PIPE_ALL_OP) descend(node.Y);
-        return;
+        if (node.Op === PIPE_OP || node.Op === PIPE_ALL_OP) {
+          descend(node.X);
+          descend(node.Y);
+          // Each side of a pipeline is its own subshell — `exit 0 | cat; ./x.sh`
+          // runs `./x.sh` (measured).
+          return false;
+        }
+        return descend(node.X);
       case "Subshell":
-      case "Block":
         stmts(node.Stmts);
-        return;
+        return false; // `( exit 0 ); ./x.sh` runs `./x.sh` (measured)
+      case "Block":
+        return stmts(node.Stmts); // `{ exit 0; }; ./x.sh` does NOT (measured)
+      case "FuncDecl":
+        // A declaration executes nothing, so it neither contributes leaves nor
+        // terminates: `f() { exit 0; }; ./x.sh` runs `./x.sh` (measured).
+        return false;
       default:
-        return; // conditional or deferred body — not known to have executed
+        // A conditional or deferred body — not entered, because whether it ran
+        // is a runtime fact this parse cannot have. But whether control REACHES
+        // the next statement is a separate question, and if the body can
+        // terminate the shell the answer is unknown, so the list stops here.
+        return mayTerminate(node);
     }
   };
   stmts(file.Stmts);
   return out;
+}
+
+/**
+ * Does this simple command end the shell, so that nothing after it in the same
+ * list runs? MEASURED against bash 5.2 and dash on 2026-08-12 — the numbers and
+ * the disagreement below are why this is not read off a POSIX table:
+ *
+ * ```
+ *                                     bash            dash
+ * exit 0; ./x.sh                      x NOT run       x NOT run
+ * return 0; ./x.sh                    x RAN (+error)  x NOT run
+ * exec ./x.sh; echo AFTER             AFTER not run   AFTER not run
+ * exec > /dev/null; ./x.sh            x RAN           x RAN
+ * ```
+ *
+ *  - `exit` — unconditional, both shells.
+ *  - `return` — the two shells DISAGREE at top level: bash prints "can only
+ *    `return' from a function or sourced script" and carries on; dash stops.
+ *    `leafArgvSource` never enters a `FuncDecl`, so every `return` it can see is
+ *    one of those top-level ones. Where the shells disagree the rule is to
+ *    abstain, and for a coverage probe abstaining means NOT crediting what
+ *    follows — so it truncates. Under bash that under-credits by one line; the
+ *    other choice would be a false grant under `/bin/sh`, which is the shell
+ *    `spawnSync(..., { shell: true })` actually uses.
+ *  - `exec` — only with a command. `exec > file` (redirections and nothing else)
+ *    just rewires the current shell and execution continues; that is the neighbour
+ *    this rule would most easily get wrong, and the measurement above is why it
+ *    does not. The exec'd program itself is emitted as a leaf like any other.
+ */
+function terminates(call: MvdanNode): boolean {
+  const head = call.Args?.[0] ? getLiteral(call.Args[0]) : null;
+  if (head === "exit" || head === "return") return true;
+  // `exec` with at least one more word. A word that is only an option
+  // (`exec -c`) counts too: mistaking it for a terminator drops later leaves,
+  // which is the silent direction.
+  return head === "exec" && (call.Args?.length ?? 0) > 1;
+}
+
+/**
+ * Could this un-entered construct end the shell? A conservative YES stops the
+ * statement list, because `if [ -z "$X" ]; then exit 1; fi; bash hooks/x.sh` does
+ * not necessarily reach the hook (measured: with the branch taken, `./x.sh` does
+ * NOT run).
+ *
+ * Deliberately conservative in the direction of SILENCE: an `exit` that could
+ * only ever run inside a nested subshell still stops the list, costing one
+ * coverage line. The common guard shape is untouched — a conditional containing
+ * no terminator answers `false`, so `if …; then echo warn; fi; bash hooks/x.sh`
+ * still attributes the hook.
+ */
+function mayTerminate(node: MvdanNode): boolean {
+  let found = false;
+  sh.syntax.Walk(node, (n) => {
+    if (found) return false;
+    // A function BODY is not executed where it is written, so a `return`/`exit`
+    // inside one says nothing about control here.
+    if (sh.syntax.NodeType(n) === "FuncDecl") return false;
+    if (sh.syntax.NodeType(n) === "CallExpr" && terminates(n)) found = true;
+    return !found;
+  });
+  return found;
 }
 
 /** `BinaryCmd.Op` for `|` and `|&` — the two that run BOTH sides. */

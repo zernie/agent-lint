@@ -43,7 +43,7 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, isAbsolute, posix, relative, resolve } from "node:path";
+import { isAbsolute, posix, relative, resolve } from "node:path";
 
 import type { ProbeOrigin, SurfaceProbe } from "./check-count.js";
 import type { Surface, SurfaceKind } from "./test-coverage.js";
@@ -164,33 +164,78 @@ export function canonicalScript(file: string, root?: string): string {
  * already follows — an unresolvable ref is never guessed into a match — so the
  * only consistent answer is to drop.
  *
- * A `command` probe accepts the same three shapes as before, but now as a
- * LADDER, most precise first: an exact path, then a suffix (a harness
- * legitimately points at `${CLAUDE_PROJECT_DIR}/.claude/hooks/x.sh`), then the
- * bare basename. A lower rung is consulted only when the one above it is empty,
- * because the rungs overlap: with both `hooks/pre.sh` and `.claude/hooks/pre.sh`
- * discovered, the ref `.claude/hooks/pre.sh` is an EXACT match for one and a
- * suffix match for the other — flat filtering made a named file ambiguous. On
- * the suffix rung the longest matching surface path wins for the same reason: an
- * absolute ref cannot be the shorter relative path unless the repo root is the
- * other surface's parent, which the other surface's existence rules out.
+ * A `command` probe is resolved by a LADDER, most precise first: an exact path,
+ * then the ref as a DEEPER path (a harness legitimately points at
+ * `${CLAUDE_PROJECT_DIR}/.claude/hooks/x.sh`), then the ref as a SHALLOWER one (a
+ * harness ran with a `cwd` inside the repo, so it named `guard.sh`). A lower rung
+ * is consulted only when the one above it is empty, because the rungs overlap:
+ * with both `hooks/pre.sh` and `.claude/hooks/pre.sh` discovered, the ref
+ * `.claude/hooks/pre.sh` is an EXACT match for one and a deeper match for the
+ * other — flat filtering made a named file ambiguous. On the deeper rung the
+ * longest matching surface path wins for the same reason: an absolute ref cannot
+ * be the shorter relative path unless the repo root is the other surface's
+ * parent, which the other surface's existence rules out.
+ *
+ * 🔴 THE BOTTOM RUNG USED TO MATCH BY BARE NAME, and that is the third appearance
+ * in this PR of a NAME accepted as an IDENTITY — after the coverage metric's
+ * "mention" tier (deleted; it produced 9 of 10 covered surfaces, ≥3 falsely) and
+ * the foreign-runner gate's identifier search (replaced by a call site). It threw
+ * the ref's directories away, so executing `/tmp/guard.sh` in a passing harness
+ * credited the repo's sole `hooks/guard.sh` — a file that never ran.
+ *
+ * It is now a TAIL ALIGNMENT in the other direction rather than a qualified
+ * name: every segment the ref carries must lie on the surface's path. That
+ * distinguishes it from the two deletions, and the distinction is the whole
+ * argument for keeping a third rung at all — those matched on a PROJECTION of
+ * the evidence (a name pulled out of a file, an identifier pulled out of a
+ * module), discarding what the rest of it said. Here nothing is discarded: a ref
+ * with no directories contradicts no directory, and a ref with directories must
+ * agree with them. `/tmp/guard.sh` now resolves to NOTHING, because no repo
+ * surface path can end in `//tmp/guard.sh`.
+ *
+ * The new rung is a strict SUBSET of the old one (tail alignment implies equal
+ * basenames), so this can only ever remove grants, never add one.
+ *
+ * ⚠️ MEASURED ON THIS REPO'S OWN CORPUS, and the honest answer is that the corpus
+ * does not vote. `vigiles test` over all 13 example harnesses yields THREE
+ * `command` probes, all of which fell to the bottom rung and all of which
+ * resolved to NOTHING:
+ *
+ * ```
+ * basename → miss   examples/harness/protect-main.hook.mjs
+ * basename → miss   examples/harness/warn-on-failure.hook.mjs
+ * basename → miss   /workspace/vigiles/test/dogfood/oh-my-claudecode@…/scripts/run.cjs
+ * exact  : 0 calls
+ * suffix : 0 calls
+ * ```
+ *
+ * A second real corpus (a 43-harness consumer repo) produced ZERO command probes
+ * at all. So no rung has granted coverage on any corpus available here, and the
+ * bottom rung cannot be justified by what it has resolved — only by what it
+ * would resolve for a harness using the `{ cwd }` idiom this very file's sibling
+ * (`leafArgvSource`) recommends. The third line above is the live near-miss that
+ * settles the direction: a VENDORED third-party script would have credited a hook
+ * of this repo named `run.cjs`, had one existed.
  */
 export function resolveProbe(
   probe: SurfaceProbe,
   surfaces: readonly Surface[],
 ): Surface[] {
   if (probe.how === "command") {
-    const ref = norm(probe.ref);
-    const leaf = basename(ref);
+    const ref = norm(probe.ref).replace(/^\.\//, "");
     const hooks = surfaces.filter((s) => s.kind === "hook");
     const exact = hooks.filter((s) => norm(s.path) === ref);
     if (exact.length > 0) return only(exact);
-    const suffix = hooks.filter((s) => ref.endsWith(`/${norm(s.path)}`));
-    if (suffix.length > 0) {
-      const longest = Math.max(...suffix.map((s) => norm(s.path).length));
-      return only(suffix.filter((s) => norm(s.path).length === longest));
+    // The ref is DEEPER than the surface path: absolute, or rooted above the
+    // repo. The longest matching surface wins (see above).
+    const deeper = hooks.filter((s) => ref.endsWith(`/${norm(s.path)}`));
+    if (deeper.length > 0) {
+      const longest = Math.max(...deeper.map((s) => norm(s.path).length));
+      return only(deeper.filter((s) => norm(s.path).length === longest));
     }
-    return only(hooks.filter((s) => basename(norm(s.path)) === leaf));
+    // The ref is SHALLOWER: the harness ran with a `cwd` inside the repo, so it
+    // named a tail of the surface path (`guard.sh`, `hooks/guard.sh`).
+    return only(hooks.filter((s) => norm(s.path).endsWith(`/${ref}`)));
   }
   const name = probe.ref.includes(":")
     ? probe.ref.slice(probe.ref.lastIndexOf(":") + 1)

