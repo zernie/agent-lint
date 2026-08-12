@@ -169,6 +169,45 @@ test("…and reading the option grammar does not slide a DATA operand into the s
   ]);
 });
 
+test("the option grammar is PER INTERPRETER — one spelling, two languages, two answers", () => {
+  // 🔴 Reproduced 2026-08-12 against the real binaries, because the shared table
+  // asserted these agree and they do not:
+  //
+  //   python3 -I /tmp/probe.py   → prints, exit 0   (`-I` = isolated mode,
+  //                                                  consumes NOTHING)
+  //   ruby -I /tmp -e 'puts 1'   → prints, exit 0   (`-I` = load path,
+  //                                                  consumes a DIRECTORY)
+  //
+  // FIRES: with `-I` in one shared value table, python's hook path was eaten as
+  // `-I`'s value, no operand was left, and a passing run earned no execution
+  // coverage at all — the exact silent loss the table exists to prevent.
+  assert.deepEqual(commandRefs("python3 -I hooks/x.py"), ["hooks/x.py"]);
+  // `-E` is the same disagreement again: python ignores the environment and
+  // consumes nothing, ruby sets an encoding and consumes a value.
+  assert.deepEqual(commandRefs("python3 -E hooks/x.py"), ["hooks/x.py"]);
+  // `-p`/`-n` wrap the script in a read-print loop in ruby and perl, and the
+  // operand really is executed. The shared table had to pick one meaning and
+  // picked node's, so this used to attribute nothing.
+  assert.deepEqual(commandRefs("ruby -p hooks/x.rb"), ["hooks/x.rb"]);
+
+  // QUIET: the OTHER family's reading of the same spellings is unchanged, so the
+  // split is a split and not a blanket "stop consuming values".
+  assert.deepEqual(commandRefs("ruby -I lib hooks/x.rb"), ["hooks/x.rb"]);
+  assert.deepEqual(commandRefs("ruby -E UTF-8 hooks/x.rb"), ["hooks/x.rb"]);
+  // perl consumes `-I`'s value like ruby. Probed with a `.sh` operand on purpose:
+  // SCRIPT_RE carries no `.pl`, so a perl-named file can never be attributed and
+  // the grammar is only observable through an extension the set does recognise.
+  assert.deepEqual(commandRefs("perl -I lib hooks/x.sh"), ["hooks/x.sh"]);
+  // node's `-p` still carries an expression, so there is no script operand…
+  assert.deepEqual(commandRefs("node -p 'process.version' hooks/x.mjs"), []);
+  // …and perl's `-E` carries the PROGRAM, the opposite conclusion from ruby's.
+  assert.deepEqual(commandRefs("perl -E 'say 1' hooks/x.sh"), []);
+  // A family's own value-takers keep working (the round-before's fix, per family).
+  assert.deepEqual(commandRefs("python3 -W ignore hooks/x.py"), ["hooks/x.py"]);
+  assert.deepEqual(commandRefs("node --loader tsx hooks/x.ts"), ["hooks/x.ts"]);
+  assert.deepEqual(commandRefs("bash -o pipefail hooks/x.sh"), ["hooks/x.sh"]);
+});
+
 test("the env is EXPANDED into the command, not scanned alongside it", () => {
   // The documented idiom still works…
   assert.deepEqual(commandRefs('"$GUARD"', { GUARD: "/repo/hooks/guard.sh" }), [

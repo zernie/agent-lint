@@ -81,6 +81,7 @@
  * filesystem and therefore no run records, so `executed` is structurally
  * impossible there and its count is 0 — see `test-coverage-files.ts`.
  */
+import { readFrontmatter, frontmatterScalar } from "./core/frontmatter-read.js";
 
 /**
  * How a covered surface was decided to be covered.
@@ -178,4 +179,39 @@ export function formatEvidence(counts: EvidenceCounts): string {
   }
   if (parts.length === 0) return "";
   return `How coverage was decided: ${parts.join("; ")}.`;
+}
+
+/**
+ * A root `SKILL.md`'s DECLARED `name:`, or `null` — the identity of a
+ * single-skill-at-root repo.
+ *
+ * 🔴 SHARED BECAUSE IT DRIFTED. This lived only in the disk detector
+ * (`test-coverage.ts`), and the browser twin hard-coded the string `"SKILL"` in
+ * its place. For a single-skill repo declaring `name: foo`, the disk engine
+ * therefore counted a top-level `foo.harness.mjs` as colocated coverage and the
+ * GitHub/file-map engine — the SAME audit, same files — called the skill untested
+ * and lowered its Tested score. That is the third time in this PR that a change
+ * landed in one report builder and not the other, so the field is no longer
+ * mirrored: both twins call this one function, and there is nothing left to
+ * mirror wrong.
+ *
+ * The name matters only at the ROOT. For a nested skill the DIRECTORY is the
+ * identity (`skills/foo/SKILL.md` → `foo`); the base of a single-skill target is
+ * wherever the thing happens to be checked out — a temp dir, `~/src/wip-2`, a CI
+ * workspace — and since colocation requires the test to be NAMED after the
+ * surface, taking the identity from the path would ask the author to name their
+ * test after their checkout directory.
+ *
+ * Read through the SHARED lenient frontmatter reader rather than a private
+ * `load()` + regex — a small behaviour change, stated rather than smuggled: a
+ * root SKILL.md whose YAML is malformed but whose `name:` line is salvageable now
+ * keys coverage on that name instead of on the checkout directory. That is the
+ * name `scanSkills` already prints for the same file, so the report and the
+ * coverage tier stop disagreeing about what the skill is called. A file with no
+ * declaration at all still returns `null` and the caller's fallback applies
+ * (`basename` of the audited dir on disk, the repo name in the browser).
+ */
+export function declaredSurfaceName(content: string): string | null {
+  const name = frontmatterScalar(readFrontmatter(content), "name");
+  return name !== undefined && name.trim() ? name.trim() : null;
 }

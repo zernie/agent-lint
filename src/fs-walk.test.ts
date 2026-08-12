@@ -1,17 +1,21 @@
 /**
- * The shared symlink policy for recursive walks (`entryOf`).
+ * The shared symlink policy for recursive walks: `entryOf` for every entry INSIDE
+ * a walk, `walkableRoot` for the walk's entry point.
  *
  * Both halves per shape: a symlinked DIRECTORY is refused (the cycle/escape case),
  * and everything else classifies exactly as a plain `statSync` walk would — a fix
  * that simply returned `"skip"` for everything would pass the first assertion
- * alone and silently empty every report built on these walks.
+ * alone and silently empty every report built on these walks. The root half has
+ * the same shape with the OPPOSITE default, and for a stated reason: a linked-in
+ * shared skills dir is a real layout, so refusing every symlinked root would empty
+ * the surface list for those repos — see `walkableRoot`.
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
 import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { entryOf } from "./fs-walk.js";
+import { entryOf, walkableRoot } from "./fs-walk.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 test("a symlinked directory is refused; a symlinked file is not", () => {
@@ -48,5 +52,54 @@ test("the size comes back with the classification, so nobody stats twice", () =>
   assert.equal(entryOf(join(dir, "linkfile")).size, 5, "the TARGET's size");
   assert.equal(entryOf(join(dir, "d")).size, 0);
   assert.equal(entryOf(join(dir, "does-not-exist")).size, 0);
+  cleanupTmpDir(dir);
+});
+
+test("a symlinked ROOT is followed, unless it swallows the tree being scanned", () => {
+  // 🔴 The entry point never went through the policy at all: both walks hand a
+  // surface root straight to `readdirSync`, which FOLLOWS the link. So the
+  // containment each walk promises ("only the surface dirs are walked, the rest of
+  // the repo and any node_modules beside it is never entered") held for every
+  // entry except the one the walk starts at.
+  const dir = makeTmpDir("fs-walk-root");
+  const repo = join(dir, "repo");
+  mkdirSync(join(repo, ".claude"), { recursive: true });
+  mkdirSync(join(dir, "shared-skills"), { recursive: true });
+  mkdirSync(join(repo, "real-skills"), { recursive: true });
+
+  // FIRES: a root whose target CONTAINS the scanned repo — the cycle-and-swallow
+  // case, where the walk re-enters the tree it is scanning through a door the
+  // layout did not open.
+  symlinkSync(repo, join(repo, ".claude", "up-self"), "dir");
+  symlinkSync(dir, join(repo, ".claude", "up-parent"), "dir");
+  assert.equal(walkableRoot(join(repo, ".claude", "up-self"), repo), false);
+  assert.equal(walkableRoot(join(repo, ".claude", "up-parent"), repo), false);
+
+  // QUIET: the ordinary layouts must all still be walked. A blanket refusal would
+  // pass the two assertions above and silently report ZERO skills for every repo
+  // that links its skills directory somewhere — the failure this rule is shaped
+  // to avoid, and the reason a root is not judged like an inner entry.
+  symlinkSync(
+    join(dir, "shared-skills"),
+    join(repo, ".claude", "skills"),
+    "dir",
+  );
+  assert.equal(
+    walkableRoot(join(repo, ".claude", "skills"), repo),
+    true,
+    "a shared skills dir linked in from outside is an ordinary, supported layout",
+  );
+  symlinkSync(
+    join(repo, "real-skills"),
+    join(repo, ".claude", "inside"),
+    "dir",
+  );
+  assert.equal(walkableRoot(join(repo, ".claude", "inside"), repo), true);
+  // A plain directory is unchanged — this must not become a second existence check.
+  assert.equal(walkableRoot(join(repo, "real-skills"), repo), true);
+  // …and an unreadable or dangling root is refused rather than thrown at.
+  symlinkSync(join(dir, "nowhere"), join(repo, ".claude", "dangling"), "dir");
+  assert.equal(walkableRoot(join(repo, ".claude", "dangling"), repo), false);
+  assert.equal(walkableRoot(join(repo, "does-not-exist"), repo), false);
   cleanupTmpDir(dir);
 });

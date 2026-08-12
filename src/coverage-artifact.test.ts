@@ -462,6 +462,9 @@ test("every status but a skip is an execution", () => {
 
 // --- staleness ---------------------------------------------------------------
 
+/** Every script the artifact names is still on disk — the ordinary checkout. */
+const scriptsPresent = (): boolean => true;
+
 test("a run against the CURRENT text is fresh; against older text it is stale", () => {
   const artifact = {
     v: COVERAGE_ARTIFACT_VERSION,
@@ -469,13 +472,13 @@ test("a run against the CURRENT text is fresh; against older text it is stale", 
     runs: [run({ sha: surfaceSha("v1") })],
   };
   assert.equal(
-    indexRuns(artifact, () => surfaceSha("v1")).get(
+    indexRuns(artifact, () => surfaceSha("v1"), scriptsPresent).get(
       "skills/alpha/SKILL.md",
     )?.[0].fresh,
     true,
   );
   assert.equal(
-    indexRuns(artifact, () => surfaceSha("v2")).get(
+    indexRuns(artifact, () => surfaceSha("v2"), scriptsPresent).get(
       "skills/alpha/SKILL.md",
     )?.[0].fresh,
     false,
@@ -488,7 +491,58 @@ test("a record for a surface that no longer exists is dropped, not counted", () 
     generated: "",
     runs: [run()],
   };
-  assert.equal(indexRuns(artifact, () => null).size, 0);
+  assert.equal(indexRuns(artifact, () => null, scriptsPresent).size, 0);
+});
+
+test("…and so is a record whose EXECUTING SCRIPT no longer exists", () => {
+  // 🔴 The staleness contract was half-built: the surface was pinned by hash, the
+  // thing that DID the executing was not. Delete or rename a passing harness and
+  // its record stays fresh forever — freshness is keyed to the SURFACE's text,
+  // which removing the test does not touch. And the credit is PERMANENT: the
+  // retraction set is the scripts a run EXECUTED, and a file that is gone can
+  // never appear in `discoverScripts` output again, so no future run can withdraw
+  // it. Nothing else in this tier can expire it either.
+  const artifact = {
+    v: COVERAGE_ARTIFACT_VERSION,
+    generated: "",
+    runs: [run({ by: "deleted.harness.mjs", sha: surfaceSha("body") })],
+  };
+  assert.equal(
+    indexRuns(
+      artifact,
+      () => surfaceSha("body"),
+      (by) => by !== "deleted.harness.mjs",
+    ).size,
+    0,
+  );
+  // The QUIET half: the same record, with the script still there, is untouched.
+  // A check that simply dropped everything would pass the assertion above and
+  // silently delete the whole execution tier.
+  const kept = indexRuns(artifact, () => surfaceSha("body"), scriptsPresent);
+  assert.equal(kept.get("skills/alpha/SKILL.md")?.length, 1);
+  assert.equal(kept.get("skills/alpha/SKILL.md")?.[0].fresh, true);
+});
+
+test("…and the script is asked about ONCE per spelling, not once per record", () => {
+  // Two surfaces measured by one harness — the shape the presence rule has to be
+  // cheap for, since one script legitimately covers many surfaces.
+  const asked: string[] = [];
+  indexRuns(
+    {
+      v: COVERAGE_ARTIFACT_VERSION,
+      generated: "",
+      runs: [
+        run({ path: "hooks/a.sh", name: "a", kind: "hook" }),
+        run({ path: "hooks/b.sh", name: "b", kind: "hook" }),
+      ],
+    },
+    () => surfaceSha("body"),
+    (by) => {
+      asked.push(by);
+      return true;
+    },
+  );
+  assert.deepEqual(asked, ["t.harness.mjs"]);
 });
 
 // --- the file ----------------------------------------------------------------

@@ -14,7 +14,13 @@
  */
 import { test, beforeEach, afterEach } from "vitest";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import {
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+  rmSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 
@@ -59,6 +65,21 @@ function vigilesTest(...args: string[]): void {
     stdio: "pipe",
     timeout: 60000,
   });
+}
+
+/** `vigiles lint`'s output. It exits non-zero on findings, which is not an error here. */
+function vigilesLint(): string {
+  try {
+    return execFileSync("node", [CLI, "lint"], {
+      cwd: dir,
+      encoding: "utf-8",
+      stdio: "pipe",
+      timeout: 60000,
+    });
+  } catch (e) {
+    const r = e as { stdout?: string; stderr?: string };
+    return `${r.stdout ?? ""}${r.stderr ?? ""}`;
+  }
 }
 
 beforeEach(() => {
@@ -164,6 +185,49 @@ test("one script run under two spellings holds ONE record", () => {
     runs: { path: string; by: string }[];
   };
   assert.equal(doc.runs.length, 1, JSON.stringify(doc.runs));
+});
+
+test("a DELETED harness stops granting coverage — the case no re-run can withdraw", () => {
+  // 🔴 The retraction set is the scripts a run EXECUTED, so it can only ever
+  // withdraw what `discoverScripts` still finds. Delete the harness and there is
+  // no future `vigiles test` that names it — while the record stays FRESH,
+  // because freshness is keyed to the SURFACE's text and deleting the test does
+  // not touch the hook. Permanent, unfalsifiable execution coverage.
+  //
+  // Driven through `lint` rather than `test`, because that is the whole point:
+  // the record survives precisely when nobody re-runs the tier.
+  write("t.harness.mjs", harnessExercising("hooks/a.sh"));
+  vigilesTest();
+  assert.deepEqual(recorded(), ["hooks/a.sh"], "precondition: a real record");
+  assert.match(
+    vigilesLint(),
+    /1 MEASURED BY A RUN/,
+    "precondition: lint reads the record as execution coverage",
+  );
+
+  // One change: the harness is gone. The artifact is untouched on purpose — the
+  // rule is a read-time judgement about this checkout, not a rewrite.
+  rmSync(join(dir, "t.harness.mjs"));
+  assert.deepEqual(recorded(), ["hooks/a.sh"], "the record is still on disk");
+  const after = vigilesLint();
+  assert.doesNotMatch(
+    after,
+    /MEASURED BY A RUN/,
+    "nothing in this tree executes the hook any more",
+  );
+  assert.match(after, /no test or eval/);
+});
+
+test("…and putting the harness back restores the credit, without re-running it", () => {
+  // The QUIET half, and the property that makes this safe for a partial checkout:
+  // nothing is deleted, so the answer follows the tree rather than outliving it.
+  write("t.harness.mjs", harnessExercising("hooks/a.sh"));
+  vigilesTest();
+  const saved = readFileSync(join(dir, "t.harness.mjs"), "utf-8");
+  rmSync(join(dir, "t.harness.mjs"));
+  assert.doesNotMatch(vigilesLint(), /MEASURED BY A RUN/);
+  writeFileSync(join(dir, "t.harness.mjs"), saved);
+  assert.match(vigilesLint(), /1 MEASURED BY A RUN/);
 });
 
 test("a repo whose run exercises nothing still gets NO artifact", () => {

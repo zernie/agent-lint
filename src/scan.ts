@@ -19,7 +19,7 @@ import { loadPlugin } from "./adapters/claude-code/plugin-loader.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
 import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
 import { danglingRefs } from "./plugin-loader.js";
-import { entryOf } from "./fs-walk.js";
+import { entryOf, walkableRoot } from "./fs-walk.js";
 import { brokenSkillRefs, formatSkillRefIssue } from "./skill-refs.js";
 import type { PluginLayout } from "./core/layout.js";
 import type { HarnessDialect } from "./core/dialect.js";
@@ -518,8 +518,11 @@ function ownTestSignalOnDisk(dir: string): boolean {
  * loader's walk over the same trees ({@link entryOf}); that module carries the
  * measurement and states exactly what the refusal deliberately misses.
  *
- * A symlinked surface dir at the TOP is unaffected — those go straight to
- * `readdirSync` and are never classified.
+ * A symlinked surface dir at the TOP gets {@link walkableRoot} instead, which is a
+ * DIFFERENT rule on purpose (a linked-in shared skills dir is a real layout, and
+ * refusing it would empty the surface list) — that function states why. Before it,
+ * the root went straight to `readdirSync`, which follows the link, so this
+ * function's own promise above held everywhere except at its entry point.
  *
  * The browser twin needs none of this: it is handed a file MAP, and whoever built
  * the map already resolved (or did not resolve) its links. So parity is unchanged
@@ -547,7 +550,8 @@ function harnessSurfaceFilesOnDisk(
     }
   };
   for (const surface of harnessSurfaceDirs(layout)) {
-    walk(join(dir, surface), surface);
+    const abs = join(dir, surface);
+    if (walkableRoot(abs, dir)) walk(abs, surface);
   }
   return out;
 }

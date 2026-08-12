@@ -51,139 +51,176 @@ import { leafArgvSource } from "./core/bash-effects.js";
 const SCRIPT_RE = /^[\w./${}@:\\-]+\.(?:sh|mjs|cjs|js|mts|cts|ts|py|rb)$/;
 
 /**
- * Heads that EXECUTE a script named in their operands. Everything else — `cat`,
- * `cp`, `grep`, `shasum` — takes the same word as DATA.
+ * Which option grammar a head speaks. Not decoration: the same spelling means
+ * different things in different families (see {@link OPTION_GRAMMAR}), so the
+ * family has to be decided before any option word can be read.
  */
-const INTERPRETERS = new Set([
-  "bash",
-  "sh",
-  "dash",
-  "zsh",
-  "ksh",
-  "node",
-  "nodejs",
-  "deno",
-  "bun",
-  "tsx",
-  "ts-node",
-  "python",
-  "python3",
-  "ruby",
-  "perl",
-]);
+type InterpreterFamily = "shell" | "node" | "python" | "ruby" | "perl";
 
 /**
- * Interpreter options that CONSUME THE NEXT WORD, so that word is an option
- * value and not the entry script.
+ * Heads that EXECUTE a script named in their operands, each mapped to the option
+ * grammar it speaks. Everything else — `cat`, `cp`, `grep`, `shasum` — takes the
+ * same word as DATA and never reaches this table.
+ */
+const INTERPRETER_FAMILY: Readonly<Record<string, InterpreterFamily>> = {
+  bash: "shell",
+  sh: "shell",
+  dash: "shell",
+  zsh: "shell",
+  ksh: "shell",
+  node: "node",
+  nodejs: "node",
+  deno: "node",
+  bun: "node",
+  tsx: "node",
+  "ts-node": "node",
+  python: "python",
+  python3: "python",
+  ruby: "ruby",
+  perl: "perl",
+};
+
+/** One family's option grammar. */
+interface OptionGrammar {
+  /**
+   * Options that CONSUME THE NEXT WORD, so that word is an option value and not
+   * the entry script.
+   */
+  readonly withValue: ReadonlySet<string>;
+  /**
+   * Options after which THERE IS NO SCRIPT OPERAND at all: the program is given
+   * as source text or as a module name, or the file is parsed and never run.
+   */
+  readonly withoutScript: ReadonlySet<string>;
+}
+
+/**
+ * The option grammar, PER INTERPRETER FAMILY.
  *
  * 🔴 "THE FIRST NON-FLAG OPERAND" IS NOT THE SCRIPT WHEN AN OPTION ATE IT, and
- * the previous version assumed it was. `node --loader tsx hooks/pre-edit.ts`
- * selected `tsx`, which fails {@link SCRIPT_RE}, so the hook that DID run was
- * recorded as nothing at all; `node --require setup.js app.js` selected the
- * PRELOAD and stopped, so `app.js` — the file whose execution the coverage claim
- * is about — never appeared. Both are silent: a passing test simply earns no
- * execution coverage, which reads exactly like a test that exercised nothing.
+ * the version before the tables assumed it was. `node --loader tsx
+ * hooks/pre-edit.ts` selected `tsx`, which fails {@link SCRIPT_RE}, so the hook
+ * that DID run was recorded as nothing at all; `node --require setup.js app.js`
+ * selected the PRELOAD and stopped, so `app.js` — the file whose execution the
+ * coverage claim is about — never appeared. Both are silent: a passing test
+ * simply earns no execution coverage, which reads exactly like a test that
+ * exercised nothing.
  *
- * ONE table for every interpreter head rather than one per tool. Where these
- * tools' spellings overlap they agree (`-r`/`--require` in node and ruby, `-C`
- * in node and ruby, `-I` in ruby and perl), and where they do not, the option is
- * simply absent from the other's grammar. Ambiguity is bounded in the SAFE
- * direction anyway: mis-skipping a word can only move the selection off the
- * script and onto nothing (silence), because the first operand that still fails
- * `SCRIPT_RE` ends the search.
+ * 🔴 AND ONE SHARED TABLE COULD NOT EXPRESS THEM, which the first version of it
+ * claimed it could ("where these tools' spellings overlap they agree"). They do
+ * not. Measured 2026-08-12 with the real binaries:
  *
- * `--opt=value` needs no entry — it is one word starting with `-`, already
- * skipped as a flag. Only the space-separated spelling reaches this table.
+ *   python3 -I /tmp/probe.py   → runs the script, exit 0   (`-I` = isolated mode,
+ *                                                           consumes NOTHING)
+ *   ruby -I /tmp -e '…'        → runs, exit 0              (`-I` = load path,
+ *                                                           consumes a DIRECTORY)
+ *
+ * With `-I` in one shared value table, `python3 -I hooks/x.py` fed the hook path
+ * to `-I`, found no operand left, and attributed nothing — the same silent loss
+ * the table was written to stop, reintroduced by the table itself. `-E` is the
+ * second disagreement in the same direction: python's ignores the environment and
+ * consumes nothing, ruby's sets an encoding and consumes a value, and perl's
+ * carries the PROGRAM (so there is no script operand at all).
+ *
+ * `--opt=value` needs no entry anywhere — it is one word starting with `-`,
+ * already skipped as a flag. Only the space-separated spelling reaches a table.
+ *
+ * Ambiguity is still bounded in the SAFE direction: mis-skipping a word can only
+ * move the selection off the script and onto nothing (silence), because the first
+ * operand that still fails {@link SCRIPT_RE} ends the search.
  *
  * Deliberately NOT here: `ruby -S prog`. Its operand is a program looked up on
  * PATH, so consuming it would let the NEXT operand — `rake`'s own argument, i.e.
  * data — be selected as the executed script. That is the round-before's defect
- * (activity taken for the property) and the one direction this table must not
+ * (activity taken for the property) and the one direction these tables must not
  * open. Left out, `ruby -S rake x.rb` selects `rake`, fails `SCRIPT_RE`, and
  * attributes nothing.
+ *
+ * `-m` (python) runs a MODULE, so `python -m pytest hooks/x.py` runs pytest and
+ * the hook is pytest's ARGUMENT; `-c`/`--check` (node) and `-c` (ruby, perl)
+ * PARSE the file and never run it. Both land in `withoutScript`, so a command
+ * line that only syntax-checks a hook no longer claims to have executed it.
+ *
+ * ⚠️ `-p`/`-n` are the disagreement the split RESOLVES rather than documents. In
+ * node `-p` prints an evaluated expression and there is no script operand; in
+ * ruby and perl it wraps the script in a read-print loop and the operand IS
+ * executed. The shared table had to pick one and picked node's, so `ruby -p x.rb`
+ * attributed nothing. Now each family answers for itself.
  */
-const OPTIONS_WITH_VALUE = new Set([
-  // node / tsx / ts-node — module hooks, preloads, resolution
-  "-r",
-  "--require",
-  "--loader",
-  "--experimental-loader",
-  "--import",
-  "-C",
-  "--conditions",
-  "--env-file",
-  "--input-type",
-  "--watch-path",
-  "--title",
-  "--test-name-pattern",
-  "--test-reporter",
-  "--test-shard",
-  "--report-dir",
-  "--report-filename",
-  // POSIX shells
-  "-o",
-  "+o",
-  "--rcfile",
-  "--init-file",
-  // python
-  "-W",
-  "-X",
-  "-Q",
-  "--check-hash-based-pycs",
-  // ruby / perl
-  "-I",
-  "-E",
-  "-F",
-]);
-
-/**
- * Options after which THERE IS NO SCRIPT OPERAND at all: the program to run is
- * given as source text or as a module name, so no file on this command line is
- * the thing executed.
- *
- * `sh -c 'bash hooks/x.sh'` was already attributing nothing (the inner command
- * sits inside a string the shell grammar does not open — see {@link commandRefs});
- * this states the same rule for the rest of the family, and adds the case that
- * matters most: `python -m pytest hooks/x.py` runs pytest, and `hooks/x.py` is
- * pytest's ARGUMENT. Without this, skipping `-m`'s value would have selected it
- * and minted execution coverage for a file this command line did not execute.
- *
- * `node -c file.js` / `--check` land here too, and correctly: they parse the file
- * and never run it — so a command line that only syntax-checks a hook no longer
- * claims to have executed it.
- *
- * ⚠️ ONE KNOWN DISAGREEMENT, stated rather than hidden: `-p` means "print the
- * evaluated expression" in node but "loop and print" in ruby/perl, where a script
- * operand CAN follow. So `ruby -p x.rb` attributes nothing where it used to
- * attribute `x.rb`. That is a lost warning, not a false one — the direction this
- * whole module errs in — and in practice ruby's `-p` is written with `-e`
- * (`ruby -pe '…'`), which has no script operand either way.
- */
-const OPTIONS_WITHOUT_SCRIPT = new Set([
-  "-c",
-  "--command",
-  "--check",
-  "-e",
-  "--eval",
-  "-p",
-  "--print",
-  "-m",
-]);
+const OPTION_GRAMMAR: Readonly<Record<InterpreterFamily, OptionGrammar>> = {
+  shell: {
+    withValue: new Set(["-o", "+o", "--rcfile", "--init-file"]),
+    withoutScript: new Set(["-c", "--command"]),
+  },
+  node: {
+    withValue: new Set([
+      "-r",
+      "--require",
+      "--loader",
+      "--experimental-loader",
+      "--import",
+      "-C",
+      "--conditions",
+      "--env-file",
+      "--input-type",
+      "--watch-path",
+      "--title",
+      "--test-name-pattern",
+      "--test-reporter",
+      "--test-shard",
+      "--report-dir",
+      "--report-filename",
+    ]),
+    withoutScript: new Set(["-e", "--eval", "-p", "--print", "-c", "--check"]),
+  },
+  python: {
+    // `-I` (isolated), `-E` (ignore env), `-B`, `-s`, `-S`, `-u`, `-v`, `-O` all
+    // consume NOTHING; they are ordinary flags and the generic `-` skip handles
+    // them. Listing them as value-takers is what ate the hook path.
+    withValue: new Set(["-W", "-X", "-Q", "--check-hash-based-pycs"]),
+    withoutScript: new Set(["-c", "-m"]),
+  },
+  ruby: {
+    withValue: new Set([
+      "-I",
+      "-E",
+      "-F",
+      "-C",
+      "-r",
+      "--require",
+      "--encoding",
+      "--enable",
+      "--disable",
+    ]),
+    withoutScript: new Set(["-e", "-c"]),
+  },
+  perl: {
+    // perl's `-E` is `-e` with features on: it carries the PROGRAM, so there is
+    // no script operand — the opposite conclusion from ruby's `-E`.
+    withValue: new Set(["-I"]),
+    withoutScript: new Set(["-e", "-E", "-c"]),
+  },
+};
 
 /**
  * The entry script an interpreter's argv names, or `undefined` when this command
  * line executes no file operand. `argv` is the WHOLE leaf, head included.
  *
- * Still "the first non-flag operand", only now the option grammar is read first
- * so an option's VALUE cannot be mistaken for it. Everything after the entry stays
- * data (`node lint.mjs hooks/x.sh` attributes `lint.mjs` alone), which is the
- * property the round before this one bought.
+ * Still "the first non-flag operand", only now the option grammar OF THIS HEAD'S
+ * FAMILY is read first, so an option's VALUE cannot be mistaken for it and a
+ * neighbouring language's spelling cannot eat it. Everything after the entry
+ * stays data (`node lint.mjs hooks/x.sh` attributes `lint.mjs` alone), which is
+ * the property the round before this one bought.
  */
-function entryScript(argv: readonly string[]): string | undefined {
+function entryScript(
+  argv: readonly string[],
+  family: InterpreterFamily,
+): string | undefined {
+  const grammar = OPTION_GRAMMAR[family];
   for (let i = 1; i < argv.length; i++) {
     const word = argv[i] ?? "";
-    if (OPTIONS_WITHOUT_SCRIPT.has(word)) return undefined;
-    if (OPTIONS_WITH_VALUE.has(word)) {
+    if (grammar.withoutScript.has(word)) return undefined;
+    if (grammar.withValue.has(word)) {
       i++; // its value is not the script
       continue;
     }
@@ -206,6 +243,22 @@ function headName(word: string): string {
   const unescaped = word.startsWith("\\") ? word.slice(1) : word;
   const slash = unescaped.lastIndexOf("/");
   return slash >= 0 ? unescaped.slice(slash + 1) : unescaped;
+}
+
+/**
+ * The program file this leaf's INTERPRETER head executes, or `undefined`.
+ *
+ * A head that is an interpreter brings its own option grammar with it — `-I`
+ * consumes a path for ruby and nothing for python — so the family is resolved
+ * first and the entry script is the first operand THAT grammar has not already
+ * claimed ({@link entryScript}). Everything after it is the script's own argv,
+ * where a path is data again (`node lint.mjs hooks/x.sh`).
+ */
+function interpretedScript(argv: readonly string[]): string | undefined {
+  const family = INTERPRETER_FAMILY[headName(argv[0] ?? "")];
+  if (family === undefined) return undefined;
+  const script = entryScript(argv, family);
+  return script !== undefined && SCRIPT_RE.test(script) ? script : undefined;
 }
 
 /**
@@ -259,12 +312,9 @@ export function commandRefs(
     const argv = leaf.map(expand);
     const head = argv[0] ?? "";
     if (SCRIPT_RE.test(head)) out.add(head);
-    else if (INTERPRETERS.has(headName(head))) {
-      // The entry script is the first operand the option grammar has not already
-      // claimed ({@link entryScript}); the rest is that script's own argv, where a
-      // path is data again (`node lint.mjs hooks/x.sh`).
-      const script = entryScript(argv);
-      if (script !== undefined && SCRIPT_RE.test(script)) out.add(script);
+    else {
+      const script = interpretedScript(argv);
+      if (script !== undefined) out.add(script);
     }
     for (let i = 1; i < argv.length - 1; i++) {
       const next = argv[i + 1] ?? "";

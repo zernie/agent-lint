@@ -123,14 +123,30 @@ const EVAL_MARKER = ".eval.";
  * A closed list, not a heuristic: every name here is a vigiles API that drives the
  * `claude`/`codex` binary — `runHarnessTest`/`runHarness` spawn one against a
  * scripted model, the `measure*`/`runEval`/`probe*` family drives the REAL model
- * and bills for it — plus `scriptModel`, which exists only to be handed to one of
- * them. None of them appears in a test that does not drive an agent, and that is
- * the property which makes a plain identifier match honest here.
+ * and bills for it. Calling any of them IS the spawn, and that is the property
+ * which makes a plain identifier match honest here.
  *
  * The cheap tier is deliberately ABSENT. `runHook` (`vigiles/unit`) pipes an event
  * to a hook process: no binary, no model, no bill. A foreign runner that collects
  * one has collected an ordinary test, and telling its author to rename it would be
  * the same harmful advice in a smaller size.
+ *
+ * 🔴 `scriptModel` WAS ON THIS LIST, AS AN INTENT ARGUMENT RATHER THAN A PROPERTY.
+ * It was justified here as "exists only to be handed to one of them" — a claim
+ * about what the author probably means, inside a list whose entire warrant is that
+ * the CALL spawns an agent. Both exported implementations are pure and spawn
+ * nothing: `scriptModel` in `mock-model.ts` returns `[...turns]`, a copied array;
+ * `scriptModel` in `skill-test.ts` returns a `ModelFn` closure. Neither reaches a
+ * process unless its RESULT is later handed to a runner — and when it is, that
+ * runner is named in the same file and is the honest evidence. So a file whose
+ * only vigiles call BUILDS or unit-tests a scripted model (this repo's own
+ * `mock-model.test.ts` is that shape) was told to rename itself out of its
+ * runner's collection on the strength of a helper that does nothing.
+ *
+ * Removing it costs no recall on the case the finding is about: a file that
+ * scripts a model AND runs it still names the runner. It loses only the file that
+ * scripts a model and never runs one — exactly the file that should never have
+ * been reported.
  *
  * 🔴 A NAME IS NOT A CALL, and the first version of this gate accepted one. It
  * searched for the bare identifier, so `import { runEval } from "vigiles/testing"`
@@ -164,7 +180,6 @@ const AGENT_DRIVING_APIS = [
   "measurePluginSelection",
   "probePluginTriggers",
   "measureGateAdversarial",
-  "scriptModel",
 ] as const;
 
 /**

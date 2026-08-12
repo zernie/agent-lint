@@ -63,7 +63,6 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { load } from "js-yaml";
 import { testFileExt } from "./core/test-file-ext.js";
 import { canRunTypeScript, detectNodeCaps } from "./ts-runner-caps.js";
 import { globSync } from "glob";
@@ -71,6 +70,7 @@ import type { PluginLayout } from "./core/layout.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
 import {
   countEvidence,
+  declaredSurfaceName,
   evidenceFor,
   formatEvidence,
   prepareTest,
@@ -79,6 +79,7 @@ import {
   type PreparedTest,
 } from "./coverage-evidence.js";
 import {
+  canonicalScript,
   indexRuns,
   readCoverageArtifact,
   surfaceSha,
@@ -349,7 +350,7 @@ function discoverSkills(
     // the test to be NAMED after the surface, taking the identity from the path
     // would ask the author to name their test after their checkout directory.
     const content = read(rootSkill);
-    const name = declaredName(content) ?? basename(basePath);
+    const name = declaredSurfaceName(content) ?? basename(basePath);
     out.push({
       kind: "skill",
       path: "SKILL.md",
@@ -359,19 +360,6 @@ function discoverSkills(
     });
   }
   return out;
-}
-
-/** A skill's declared `name:`, or null. YAML scalar via the real parser. */
-function declaredName(content: string): string | null {
-  const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
-  if (!fm?.[1]) return null;
-  try {
-    const doc = load(fm[1]) as Record<string, unknown> | null;
-    const name = doc?.["name"];
-    return typeof name === "string" && name.trim() ? name.trim() : null;
-  } catch {
-    return null; // malformed frontmatter is another rule's finding, not ours
-  }
 }
 
 /**
@@ -647,10 +635,19 @@ export function findUntestedSurfaces(
   // The run record, if there is one. NO artifact ⇒ an empty index ⇒ every
   // decision below falls through to colocation, byte-for-byte as before: a fresh
   // clone and someone else's repo must not get one extra nudge from this tier.
-  const runIndex = indexRuns(readCoverageArtifact(basePath), (p) => {
-    const abs = join(basePath, p);
-    return existsSync(abs) ? surfaceSha(read(abs)) : null;
-  });
+  const runIndex = indexRuns(
+    readCoverageArtifact(basePath),
+    (p) => {
+      const abs = join(basePath, p);
+      return existsSync(abs) ? surfaceSha(read(abs)) : null;
+    },
+    // The SCRIPT that did the exercising has to still be here too — a deleted or
+    // renamed harness can never re-enter the retraction set, so without this its
+    // record is permanent, unfalsifiable coverage. `canonicalScript` first: one
+    // file has several legitimate spellings (`x.mjs`, `./x.mjs`, absolute), and
+    // the artifact records whichever one was typed.
+    (by) => existsSync(join(basePath, canonicalScript(by, basePath))),
+  );
   const union = tierOf(considered, tests, runIndex, undefined);
 
   return {

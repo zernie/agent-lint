@@ -687,7 +687,11 @@ export function scanFiles(
   ): T[] => remapFindingPaths(findings, loaded.sources, BROWSER_ROOT);
   // ONE discovery pass, read three ways — the union, the free deterministic tier
   // (`Tested`), and the paid real-model tier (`Evaluated`). Mirrors scanPlugin.
-  const coverage = findUntestedSurfacesInFiles(files, lay);
+  const coverage = findUntestedSurfacesInFiles(
+    files,
+    lay,
+    repoName ?? basename(BROWSER_ROOT),
+  );
   return {
     dir: BROWSER_ROOT,
     instructions,

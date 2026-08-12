@@ -31,6 +31,8 @@
  *    the same disease as a PIPELINE-STATUS tick against a document that was
  *    rewritten afterwards. A stale record grants NO coverage; it falls back to
  *    colocation like any other surface, and gets a line in the report saying so.
+ *    A record names TWO files, and both must still be there — see
+ *    {@link indexRuns}.
  *
  * 3. **Absent artifact = today's behaviour, exactly.** A fresh clone, a repo that
  *    never ran `vigiles test`, and anyone else's project have no file here, and
@@ -462,20 +464,72 @@ export interface ExecutedRecord {
 
 /**
  * Index the artifact by surface path, judging each record fresh or stale against
- * the surface as it is NOW. `currentSha` returns `null` for a surface that no
- * longer exists — whose records are dropped, not counted.
+ * the surface as it is NOW.
+ *
+ * A record names TWO files — the surface it is about (`path`) and the script that
+ * did the exercising (`by`) — and **it is counted only while BOTH are still
+ * present.** `currentSha` returns `null` for a surface that is gone; `scriptExists`
+ * answers the same question for the script. Either missing ⇒ the record is
+ * dropped, not counted and not reported as stale.
+ *
+ * 🔴 THE SURFACE HALF WAS PINNED AND THE EXECUTING HALF WAS NOT, so the guarantee
+ * was half-built. Delete or rename a passing harness and its record stays FRESH
+ * forever: freshness is keyed to the SURFACE's text, which removing the test does
+ * not touch. Worse, that credit is PERMANENT — retraction is scoped to the scripts
+ * a run executed, and a file that no longer exists can never appear in
+ * `discoverScripts` output again, so no future `vigiles test` can ever withdraw
+ * it. Execution-tier coverage for a surface with nothing left to execute it, with
+ * no expiry and no way to falsify it.
+ *
+ * ## The guarantee chosen, and the one deliberately not chosen
+ *
+ * **Chosen: PRESENCE of both files, judged at read time.** It is the exact
+ * symmetric twin of the rule already here for the surface, and it closes the
+ * half retraction structurally cannot reach — the deleted and the renamed script.
+ * It only ever REMOVES credit (the surface falls back to colocation, which needs
+ * the same file to exist anyway), and it is non-destructive: nothing here rewrites
+ * the artifact, so a sparse or partial checkout stops counting a record without
+ * destroying it, and restoring the file restores the credit.
+ *
+ * **Not chosen: hashing the script's CONTENT into the record.** It would catch one
+ * more case — a script still present but emptied — and that case already has a
+ * mechanism: RETRACTION. A gutted harness re-run reports `vacuous`, `vacuous` is
+ * in the retraction set on purpose, and every record that script wrote is dropped.
+ * So content-hashing buys the same outcome one run later, and charges for it in
+ * false alarms: one script legitimately covers MANY surfaces (a single
+ * `hooks.harness.mjs` exercising thirty hooks is this author's own repo), so a
+ * reformat — or an added assertion, i.e. the harness getting STRONGER — would
+ * invalidate all thirty records at once. A hash cannot tell "strengthened" from
+ * "gutted", and thirty simultaneous "measured, but not this version" lines are
+ * the shape a reader mutes. The surface hash does not have this problem because
+ * it is one-to-one.
+ *
+ * ⚠️ WHAT PRESENCE DELIBERATELY DOES NOT CATCH: a script that still exists and no
+ * longer exercises the surface — emptied, or repointed at something else. That is
+ * retraction's job, it is transient (one run of the tier that wrote it closes it),
+ * and it is already tested end-to-end in `cli-coverage-record.test.ts`.
+ *
+ * ⚠️ AND THIS IS NOT THE `skip` ASYMMETRY, WHICH STANDS UNCHANGED. A skip must not
+ * RETRACT — that would delete a real measurement from the artifact because today's
+ * machine lacks `claude` (see the table on {@link runsFromResults}). This rule
+ * deletes nothing: it is a read-time judgement about a checkout, made fresh on
+ * every scan. The two rules coexist; neither is the other simplified.
  */
 export function indexRuns(
   artifact: CoverageArtifact | undefined,
   currentSha: (path: string) => string | null,
+  scriptExists: (by: string) => boolean,
 ): Map<string, ExecutedRecord[]> {
   const index = new Map<string, ExecutedRecord[]>();
   if (!artifact) return index;
   const shaCache = new Map<string, string | null>();
+  const byCache = new Map<string, boolean>();
   for (const run of artifact.runs) {
     if (!shaCache.has(run.path)) shaCache.set(run.path, currentSha(run.path));
     const now = shaCache.get(run.path) ?? null;
     if (now === null) continue;
+    if (!byCache.has(run.by)) byCache.set(run.by, scriptExists(run.by));
+    if (byCache.get(run.by) !== true) continue;
     const list = index.get(run.path) ?? [];
     list.push({ run, fresh: now === run.sha });
     index.set(run.path, list);

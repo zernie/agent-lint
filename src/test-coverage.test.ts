@@ -13,8 +13,8 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
 
 import {
   coverageEvidenceCounts,
@@ -797,7 +797,14 @@ test("…and a repo that never used the marker hears nothing about it", () => {
 // artifact present, and the corpus is untouched when there is none — a fresh
 // clone and somebody else's repo must not get one extra nudge from this tier.
 
-/** Write a run artifact naming `surfacePath` as exercised by `by`. */
+/**
+ * Write a run artifact naming `surfacePath` as exercised by `by` — AND put that
+ * script on disk, because a run that produced the record necessarily executed a
+ * file that was there. A record counts only while BOTH files it names are still
+ * present, so a fixture that named a script it never created was describing a
+ * checkout that cannot happen (and, before that rule, was the fixture shape in
+ * which a deleted harness kept granting coverage forever).
+ */
 function artifact(
   dir: string,
   entries: readonly {
@@ -810,23 +817,29 @@ function artifact(
     kind?: "skill" | "agent" | "hook";
   }[],
 ): void {
+  const runs = entries.map((e) => ({
+    kind: e.kind ?? "skill",
+    path: e.path,
+    name: e.name,
+    tier: e.tier ?? "harness",
+    how: "fired",
+    by: e.by ?? "runner.harness.mjs",
+    at: e.at ?? "2026-08-11T10:00:00.000Z",
+    sha: e.sha,
+  }));
+  for (const by of new Set(runs.map((r) => r.by))) {
+    // `by` reaches the artifact exactly as it was typed, absolute spellings
+    // included — so resolve it the way the detector does before creating it.
+    const abs = isAbsolute(by) ? by : join(dir, by);
+    if (!existsSync(abs)) {
+      mkdirSync(join(abs, ".."), { recursive: true });
+      writeFileSync(abs, "// the script that ran\n");
+    }
+  }
   write(
     dir,
     ".vigiles/coverage.json",
-    JSON.stringify({
-      v: 1,
-      generated: "2026-08-11T10:00:00.000Z",
-      runs: entries.map((e) => ({
-        kind: e.kind ?? "skill",
-        path: e.path,
-        name: e.name,
-        tier: e.tier ?? "harness",
-        how: "fired",
-        by: e.by ?? "runner.harness.mjs",
-        at: e.at ?? "2026-08-11T10:00:00.000Z",
-        sha: e.sha,
-      })),
-    }),
+    JSON.stringify({ v: 1, generated: "2026-08-11T10:00:00.000Z", runs }),
   );
 }
 
@@ -893,6 +906,102 @@ test("a run against OLDER text grants nothing, and says so out loud", () => {
   // Silently counting it is the PIPELINE-STATUS disease — a tick against a
   // document somebody rewrote afterwards.
   assert.match(formatUntestedReport(r), /BEFORE their current/);
+  cleanupTmpDir(dir);
+});
+
+test("a record whose HARNESS was deleted grants nothing — and that is the permanent case", () => {
+  // 🔴 The staleness contract pinned the SURFACE and not the thing that did the
+  // executing. Delete the passing harness and the record stays fresh forever:
+  // freshness is keyed to the surface's text, which removing the test does not
+  // touch. And unlike an emptied harness — which the next `vigiles test` retracts
+  // because a `vacuous` run is in the retraction set — a DELETED file can never
+  // appear in `discoverScripts` output again, so no future run can withdraw it.
+  // Permanent, unfalsifiable execution coverage.
+  const dir = makeTmpDir("cov-deleted-harness");
+  const body = skill("alpha");
+  write(dir, "skills/alpha/SKILL.md", body);
+  artifact(dir, [
+    {
+      path: "skills/alpha/SKILL.md",
+      name: "alpha",
+      sha: surfaceSha(body),
+      by: "test/pipeline.harness.mjs",
+    },
+  ]);
+  // The precondition, so the assertion below cannot pass by measuring nothing.
+  const before = findUntestedSurfaces({ basePath: dir });
+  assert.equal(before.untested.length, 0);
+  assert.deepEqual(coverageEvidenceCounts(before), {
+    executed: 1,
+    colocated: 0,
+  });
+
+  // FIRES: exactly one change — the harness is gone.
+  rmSync(join(dir, "test/pipeline.harness.mjs"));
+  const after = findUntestedSurfaces({ basePath: dir });
+  assert.equal(after.untested.length, 1, "nothing left in this tree ran it");
+  assert.deepEqual(coverageEvidenceCounts(after), {
+    executed: 0,
+    colocated: 0,
+  });
+  // Not "measured, but not this version" either: the surface was never edited,
+  // so calling it stale would name the wrong file.
+  assert.deepEqual(after.staleRuns ?? [], []);
+  assert.doesNotMatch(formatUntestedReport(after), /MEASURED BY A RUN/);
+  cleanupTmpDir(dir);
+});
+
+test("…and a RENAMED harness is the same case, because the old name never returns", () => {
+  // The rename is why presence is checked at read time rather than left to
+  // retraction: the new name writes a new record, and the OLD record — which the
+  // retraction set can never name again — would otherwise sit there green.
+  const dir = makeTmpDir("cov-renamed-harness");
+  const body = skill("alpha");
+  write(dir, "skills/alpha/SKILL.md", body);
+  artifact(dir, [
+    {
+      path: "skills/alpha/SKILL.md",
+      name: "alpha",
+      sha: surfaceSha(body),
+      by: "test/old-name.harness.mjs",
+    },
+  ]);
+  rmSync(join(dir, "test/old-name.harness.mjs"));
+  write(dir, "test/new-name.harness.mjs", "// same file, new name\n");
+  const r = findUntestedSurfaces({ basePath: dir });
+  assert.deepEqual(coverageEvidenceCounts(r), { executed: 0, colocated: 0 });
+  cleanupTmpDir(dir);
+});
+
+test("…but a spelling of the SAME file still counts — presence, not string equality", () => {
+  // The QUIET half, and the one a naive `existsSync(by)` gets wrong.
+  // `discoverScripts` passes an argument naming an existing file through
+  // VERBATIM, so `by` can be `./t.harness.mjs` or an absolute path, and reading
+  // either as "not on disk" would delete real coverage on every scan.
+  const dir = makeTmpDir("cov-by-spellings");
+  const body = skill("alpha");
+  write(dir, "skills/alpha/SKILL.md", body);
+  write(dir, "test/t.harness.mjs", "// the script that ran\n");
+  for (const by of [
+    "test/t.harness.mjs",
+    "./test/t.harness.mjs",
+    "test/fixtures/../t.harness.mjs",
+    join(dir, "test/t.harness.mjs"),
+  ]) {
+    artifact(dir, [
+      {
+        path: "skills/alpha/SKILL.md",
+        name: "alpha",
+        sha: surfaceSha(body),
+        by,
+      },
+    ]);
+    assert.deepEqual(
+      coverageEvidenceCounts(findUntestedSurfaces({ basePath: dir })),
+      { executed: 1, colocated: 0 },
+      by,
+    );
+  }
   cleanupTmpDir(dir);
 });
 

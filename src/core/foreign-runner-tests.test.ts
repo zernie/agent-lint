@@ -13,6 +13,10 @@ import {
   type ForeignRunnerTest,
 } from "./foreign-runner-tests.js";
 import { claudeCodeLayout } from "../adapters/claude-code/layout.js";
+// The two exported `scriptModel`s, imported so the premise of dropping the name
+// from AGENT_DRIVING_APIS is a checked fact and not a comment: both are pure.
+import { scriptModel as scriptTurns } from "../mock-model.js";
+import { scriptModel as scriptAnswers } from "../skill-test.js";
 
 const LAYOUT = claudeCodeLayout;
 
@@ -227,6 +231,49 @@ test("evidence: only the AGENT-driving tiers count, and the message quotes the o
   });
   assert.equal(found[0].evidence, "measureTriggerRate");
   assert.match(foreignRunnerTestWarning(found[0]), /measureTriggerRate/);
+});
+
+test("evidence: `scriptModel` is not a spawn — building a scripted model is not driving an agent", () => {
+  // 🔴 It was on the list, justified as "exists only to be handed to one of
+  // them" — an argument about INTENT inside a list whose whole warrant is that
+  // the CALL spawns an agent. The premise is CHECKED here rather than asserted:
+  // both exported implementations are pure, so calling either reaches no process.
+  assert.deepEqual(scriptTurns([{ text: "hi" }]), [{ text: "hi" }]);
+  assert.equal(typeof scriptAnswers(["hi"]), "function");
+
+  // QUIET: a surface-local `*.test.mjs` that only constructs or unit-tests a
+  // scripted model earns no finding. This repo's own `mock-model.test.ts` is
+  // that shape, and the advice it used to draw ("rename it out of your runner's
+  // collection") would have removed a working offline test from its suite.
+  assert.equal(
+    agentDrivingApi(
+      `import { scriptModel } from "vigiles/claude-code";\n` +
+        `const turns = scriptModel([{ text: "ok" }]);\n` +
+        `assert.equal(turns.length, 1);\n`,
+    ),
+    undefined,
+  );
+  assert.deepEqual(
+    findWith({
+      ".claude/skills/foo/foo.test.mjs": `const t = scriptModel([{ text: "ok" }]);`,
+    }),
+    [],
+  );
+
+  // FIRES: the case the finding is actually about is untouched — a file that
+  // scripts a model AND runs it names the runner, and the runner is the honest
+  // evidence. Dropping `scriptModel` therefore costs no recall here.
+  const found = findWith({
+    ".claude/skills/foo/foo.test.mjs":
+      `const turns = scriptModel([{ text: "ok" }]);\n` +
+      `await runHarnessTest({ model: turns });\n`,
+  });
+  assert.equal(found.length, 1);
+  assert.equal(
+    found[0].evidence,
+    "runHarnessTest",
+    "the spawn is the evidence, not the helper that built its argument",
+  );
 });
 
 test("evidence: an `*.eval.*` name stands alone — the paid tier is declared, not read", () => {

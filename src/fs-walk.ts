@@ -15,7 +15,8 @@
  * to one of two report builders has broken it before), and the two walks must
  * agree on what a surface CONTAINS, so the policy lives here and both call it.
  */
-import { lstatSync, statSync } from "node:fs";
+import { lstatSync, realpathSync, statSync } from "node:fs";
+import { resolve, sep } from "node:path";
 
 /** What a walk should do with one directory entry. */
 export type EntryKind = "dir" | "file" | "skip";
@@ -68,4 +69,79 @@ export function entryOf(path: string): Entry {
   } catch {
     return { kind: "skip", size: 0 };
   }
+}
+
+/**
+ * May a walk DESCEND INTO THIS ROOT — a top-level surface dir such as
+ * `.claude/skills`, `skills` or `agents`?
+ *
+ * 🔴 THE POLICY ABOVE WAS APPLIED TO EVERY ENTRY INSIDE A WALK AND TO NO WALK'S
+ * ENTRY POINT. Both walks take their roots straight to `readdirSync`, which
+ * FOLLOWS a link, so a symlinked `.claude/skills` was never classified at all —
+ * the containment each walk documents ("only the surface dirs are walked, so the
+ * rest of the repo and any `node_modules` beside it is never entered"; "a foreign
+ * tree is not read into the file map the whole report is computed from") simply
+ * did not hold at the top. Same class as the entry-level defect, one level up.
+ *
+ * ⚠️ A ROOT GETS A DIFFERENT RULE FROM AN INNER ENTRY, AND THE DIFFERENCE IS
+ * DELIBERATE — do not "fix" the inconsistency later. An inner symlinked dir is one
+ * the walk FOUND BY ITSELF; following it is the walk deciding to leave the tree on
+ * its own initiative, so it is refused outright. A surface root is one the LAYOUT
+ * NAMES: `.claude/skills` is where a Claude Code repo keeps skills, and linking
+ * that at a shared directory (one skills folder used by several checkouts) is an
+ * ordinary, supported setup. Refusing it the way an inner entry is refused would
+ * report ZERO skills for those repos, silently — a worse failure than the one
+ * being fixed, and the exact silent-under-report this file exists to prevent.
+ *
+ * So a symlinked root IS followed, with one refusal: a target that CONTAINS the
+ * scanned root. That is the cycle-and-swallow case — `.claude/skills -> ..`,
+ * `skills -> /`, `.claude/skills -> .` — where the walk re-enters the very tree it
+ * is scanning through a door the layout did not open, and starts reading
+ * `node_modules`, `.git` and every sibling as harness surface.
+ *
+ * Termination is still by CONSTRUCTION, not by bookkeeping: everything BELOW a
+ * followed root goes through {@link entryOf}, which refuses a symlinked dir, so
+ * exactly one link hop is taken per root and the hop count for a whole scan is
+ * bounded by the number of surface dirs. There is no visited-set to get wrong.
+ *
+ * WHAT THIS DELIBERATELY DOES NOT CATCH: a root linked at a huge unrelated
+ * external tree (`.claude/skills -> ~/`). Reading it is slow and wide, but the
+ * user pointed at it — refusing would be the silent-empty failure above, and
+ * "the user asked for a big directory" is not a defect we can tell apart from
+ * "the user has a big skills library".
+ *
+ * A root that is not a symlink at all is `true` unchanged: callers have already
+ * established it is a directory, and this must not become a second existence
+ * check that quietly disagrees with the first.
+ */
+export function walkableRoot(dir: string, scanRoot: string): boolean {
+  let link;
+  try {
+    link = lstatSync(dir);
+  } catch {
+    return false; // unreadable: the same answer `entryOf` gives
+  }
+  if (!link.isSymbolicLink()) return true;
+  try {
+    return !contains(realpathSync(dir), realpath(scanRoot));
+  } catch {
+    return false; // dangling link — nothing to walk
+  }
+}
+
+/** `realpathSync`, falling back to a plain resolve for a root that is not there. */
+function realpath(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    return resolve(p);
+  }
+}
+
+/** Whether `outer` is `inner` itself or one of its ancestors. */
+function contains(outer: string, inner: string): boolean {
+  return (
+    inner === outer ||
+    inner.startsWith(outer.endsWith(sep) ? outer : outer + sep)
+  );
 }

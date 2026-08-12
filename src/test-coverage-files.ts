@@ -38,6 +38,7 @@ import type {
   SurfaceKind,
 } from "./test-coverage.js";
 import {
+  declaredSurfaceName,
   evidenceFor,
   prepareTest,
   type PreparedTest,
@@ -104,6 +105,7 @@ function matchSurface(
 function discoverSkills(
   files: Record<string, string>,
   layout: PluginLayout,
+  repoName: string,
 ): Surface[] {
   const out: Surface[] = [];
   if (layout.skillDir) {
@@ -121,9 +123,18 @@ function discoverSkills(
     }
   }
   // Single-skill-directory target: a bare `SKILL.md` at the repo root.
+  //
+  // 🔴 THIS HARD-CODED THE STRING `"SKILL"` while the disk detector used the
+  // DECLARED `name:`. For a single-skill repo declaring `name: foo`, the disk
+  // engine counted a top-level `foo.harness.mjs` as colocated coverage and this
+  // one — the SAME audit over the same files, just fetched from GitHub — called
+  // the skill untested and lowered its Tested score. The parser is now the shared
+  // `declaredSurfaceName`, so there is no second copy to fall behind, and the
+  // fallback is the repo name the caller supplies, mirroring the disk detector's
+  // `basename(basePath)` (a browser has no real base dir — see BROWSER_ROOT).
   if (Object.prototype.hasOwnProperty.call(files, "SKILL.md")) {
-    const name = "SKILL"; // browser has no real base dir name (see BROWSER_ROOT).
     const content = files["SKILL.md"];
+    const name = declaredSurfaceName(content) ?? repoName;
     out.push({
       kind: "skill",
       path: "SKILL.md",
@@ -271,6 +282,12 @@ function tierOf(
 export function findUntestedSurfacesInFiles(
   files: Record<string, string>,
   layout: PluginLayout,
+  /**
+   * The audited repo's name — the browser's stand-in for the disk detector's
+   * `basename(basePath)`, used only to name a root `SKILL.md` that declares no
+   * `name:`. Same value `scanFiles` already threads for the skill inventory.
+   */
+  repoName: string,
 ): {
   untested: Surface[];
   decisions: readonly CoverageDecision[];
@@ -278,7 +295,7 @@ export function findUntestedSurfacesInFiles(
   evals: CoverageTier;
 } {
   const surfaces: Surface[] = [
-    ...discoverSkills(files, layout),
+    ...discoverSkills(files, layout, repoName),
     ...discoverAgents(files, layout),
     ...discoverHooks(files, layout),
   ];

@@ -1815,6 +1815,77 @@ test("a directory symlink is not descended into, so a cycle cannot hang the scan
   cleanupTmpDir(dir);
 });
 
+// ─── …and the walk's ENTRY POINT is classified too ────────────────────────────
+//
+// 🔴 The policy above was applied to every entry INSIDE a walk and to no walk's
+// root. Both walks hand a top-level surface dir straight to `readdirSync`, which
+// FOLLOWS a link — so `.claude/skills -> <repo>` re-entered the whole checkout
+// through a door the layout never opened, and the containment both walks promise
+// ("only the surface dirs are walked, so the rest of the repo and any
+// node_modules beside it is never entered") held everywhere except at the top.
+//
+// A root is judged by a DIFFERENT rule from an inner entry, on purpose: refusing
+// every symlinked root would report zero skills for the ordinary layout in the
+// second test below. See `walkableRoot` in src/fs-walk.ts.
+test("a surface ROOT that links back over the repo is refused, so the walk stays inside", () => {
+  const dir = makeTmpDir("scan-symlink-root");
+  // The tree the walk must NOT swallow: a foreign-runner finding and a file the
+  // loader would otherwise read into the map the whole report is computed from.
+  write(
+    dir,
+    "node_modules/junk/planted.test.mjs",
+    'import { runEval } from "vigiles/testing";\nawait runEval({});\n',
+  );
+  write(dir, "unrelated/notes.md", "# not a surface\n");
+  mkdirSync(join(dir, ".claude"), { recursive: true });
+  // BOTH root shapes point back at the repo: the user form (`.claude/skills`) and
+  // the plugin form (`skills`). Between them they are the entry point of every
+  // walk in the codebase — `harnessSurfaceFilesOnDisk`, the loader's root-surface
+  // pass, its user-surface pass, and `executableSources` (which feeds
+  // `danglingRefs`) — and each was reached through `readdirSync` unclassified.
+  symlinkSync(join(dir), join(dir, ".claude", "skills"), "dir");
+  symlinkSync(join(dir), join(dir, "skills"), "dir");
+
+  const r = scanPlugin(dir);
+  assert.deepEqual(
+    r.warnings.filter((w) => w.includes("planted.test.mjs")),
+    [],
+    "a file under node_modules is not harness surface, whatever a root link says",
+  );
+  assert.deepEqual(
+    Object.keys(loadPlugin(dir).files).filter(
+      (k) => k.includes("node_modules") || k.includes("unrelated"),
+    ),
+    [],
+    "the loader must not read the whole checkout in through a symlinked root",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("…but a shared skills directory linked in from OUTSIDE is still read", () => {
+  // The QUIET half, and the reason the root rule is not the entry rule. One
+  // skills folder linked into several checkouts is an ordinary setup; a blanket
+  // refusal would pass the test above while silently reporting ZERO skills here,
+  // which is a worse failure than the one being fixed.
+  const dir = makeTmpDir("scan-symlink-root-ok");
+  const repo = join(dir, "repo");
+  mkdirSync(join(repo, ".claude"), { recursive: true });
+  write(
+    dir,
+    "shared/linked/SKILL.md",
+    "---\nname: linked\ndescription: A shared skill linked into several checkouts at once\n---\n# linked\n",
+  );
+  symlinkSync(join(dir, "shared"), join(repo, ".claude", "skills"), "dir");
+
+  const r = scanPlugin(repo);
+  assert.deepEqual(
+    r.skills.map((s) => s.name),
+    ["linked"],
+    "a symlinked surface root is the layout naming where the skills live",
+  );
+  cleanupTmpDir(dir);
+});
+
 test("…but a symlink to a FILE is still collected — it cannot recurse", () => {
   // The QUIET half of the same fix: refusing descent must not quietly drop links
   // to files. A foreign runner really does collect one, so it is still a finding.
