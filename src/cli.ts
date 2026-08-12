@@ -5344,7 +5344,11 @@ function recordRunCoverage(
 ): void {
   try {
     const previous = readCoverageArtifact(cwd);
-    const executed = { scripts: executedScripts(results), tier };
+    // `root` so an ABSOLUTE target (`vigiles test /abs/x.harness.mjs`) retracts
+    // what the same file recorded when the default glob found it relatively —
+    // `discoverScripts` passes an existing file's argument through verbatim, so
+    // the spelling that reaches `by` is whatever the person typed.
+    const executed = { scripts: executedScripts(results), tier, root: cwd };
     const runs = runsFromResults(results);
     // Discovery is only needed to RESOLVE new probes; a pure retraction needs
     // nothing but the artifact, so a repo scan is skipped when there are none.

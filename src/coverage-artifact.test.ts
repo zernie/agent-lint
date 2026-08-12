@@ -336,6 +336,100 @@ test("without a retraction set, merge behaves exactly as it did", () => {
   );
 });
 
+// --- one script, many spellings ----------------------------------------------
+//
+// 🔴 Reproduced 2026-08-12 through the real CLI (see cli-coverage-record.test.ts):
+// `vigiles test` then `vigiles test ./t.harness.mjs` left `hooks/a.sh` "MEASURED
+// BY A RUN" after the harness had been emptied, because the two spellings are
+// different keys. `discoverScripts` hands an existing file's argument through
+// verbatim, so `./x`, `x` and an absolute path all reach `by` as typed.
+
+test("a `./`-spelled run retracts what the bare spelling recorded", () => {
+  assert.deepEqual(
+    mergeRuns([run({ path: "hooks/a.sh", by: "t.harness.mjs" })], [], {
+      scripts: ["./t.harness.mjs"],
+      tier: "harness",
+    }),
+    [],
+  );
+});
+
+test("…and so does an ABSOLUTE one, once the root is known", () => {
+  assert.deepEqual(
+    mergeRuns([run({ path: "hooks/a.sh", by: "t.harness.mjs" })], [], {
+      scripts: ["/repo/t.harness.mjs"],
+      tier: "harness",
+      root: "/repo",
+    }),
+    [],
+  );
+});
+
+test("…and a `..` detour is the same file too", () => {
+  assert.deepEqual(
+    mergeRuns([run({ by: "tests/t.harness.mjs" })], [], {
+      scripts: ["tests/fixtures/../t.harness.mjs"],
+      tier: "harness",
+    }),
+    [],
+  );
+});
+
+test("two spellings of one script hold ONE record, not two", () => {
+  // The second symptom, and the reason the MERGE key is canonicalised as well as
+  // the retraction set: running once by `./t.harness.mjs` and once by the glob
+  // left two entries for one script on the measured fixture.
+  const merged = mergeRuns(
+    [
+      run({
+        path: "hooks/a.sh",
+        by: "./t.harness.mjs",
+        at: "2026-08-11T10:00:00.000Z",
+      }),
+    ],
+    [
+      run({
+        path: "hooks/a.sh",
+        by: "t.harness.mjs",
+        at: "2026-08-12T10:00:00.000Z",
+      }),
+    ],
+  );
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].at, "2026-08-12T10:00:00.000Z");
+});
+
+test("…but a DIFFERENT script is still a different script", () => {
+  // The quiet half. Canonicalising must collapse spellings, not files: if `./u`
+  // retracted `t`, naming one test would erase another's records — the property
+  // the retraction set was scoped by script to preserve in the first place.
+  const merged = mergeRuns(
+    [
+      run({ path: "hooks/a.sh", by: "t.harness.mjs" }),
+      run({ path: "hooks/b.sh", by: "u.harness.mjs" }),
+    ],
+    [],
+    { scripts: ["./t.harness.mjs"], tier: "harness" },
+  );
+  assert.deepEqual(
+    merged.map((r) => r.by),
+    ["u.harness.mjs"],
+  );
+});
+
+test("…and an unrelated absolute script retracts nothing", () => {
+  // The other quiet half: relativising is injective from a fixed root, so an
+  // absolute path that is NOT the recorded file must leave the record alone.
+  assert.deepEqual(
+    mergeRuns([run({ by: "t.harness.mjs" })], [], {
+      scripts: ["/repo/other/t.harness.mjs"],
+      tier: "harness",
+      root: "/repo",
+    }).map((r) => r.by),
+    ["t.harness.mjs"],
+  );
+});
+
 test("a Windows-recorded `by` is retracted by its POSIX equivalent", () => {
   // The artifact outlives the machine that wrote it; a checkout shared by a
   // Windows dev and a CI runner would otherwise accumulate two records per

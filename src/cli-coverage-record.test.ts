@@ -126,6 +126,46 @@ test("…but running ONE test by name leaves the other's records alone", () => {
   );
 });
 
+test("…and the retraction survives being spelled `./t.harness.mjs`", () => {
+  // 🔴 Measured 2026-08-12, the same fixture as the test above with ONE change:
+  // the second run names the file with a `./`. That used to be a different key,
+  // so nothing was withdrawn and `lint` printed "1 MEASURED BY A RUN" for a hook
+  // an emptied harness no longer touches — with no expiry, since freshness is
+  // keyed to the SURFACE's text and rewriting the test does not change it.
+  write("t.harness.mjs", harnessExercising("hooks/a.sh"));
+  vigilesTest();
+  assert.deepEqual(recorded(), ["hooks/a.sh"]);
+
+  write("t.harness.mjs", "// nothing left to run\n");
+  vigilesTest("./t.harness.mjs");
+  assert.deepEqual(
+    recorded(),
+    [],
+    "a spelling of the same file must retract the same record",
+  );
+});
+
+test("…and being spelled as an ABSOLUTE path", () => {
+  write("t.harness.mjs", harnessExercising("hooks/a.sh"));
+  vigilesTest();
+  write("t.harness.mjs", "// nothing left to run\n");
+  vigilesTest(join(dir, "t.harness.mjs"));
+  assert.deepEqual(recorded(), []);
+});
+
+test("one script run under two spellings holds ONE record", () => {
+  // The other half of the same split: without a canonical key the artifact grows
+  // an entry per spelling, so `by` stops identifying the script that ran.
+  write("t.harness.mjs", harnessExercising("hooks/a.sh"));
+  vigilesTest("./t.harness.mjs");
+  vigilesTest();
+  const file = join(dir, ".vigiles", "coverage.json");
+  const doc = JSON.parse(readFileSync(file, "utf-8")) as {
+    runs: { path: string; by: string }[];
+  };
+  assert.equal(doc.runs.length, 1, JSON.stringify(doc.runs));
+});
+
 test("a repo whose run exercises nothing still gets NO artifact", () => {
   // The invariant that survived the retraction change: absent artifact = today's
   // behaviour, exactly. Nothing to record and nothing to withdraw ⇒ no file, so

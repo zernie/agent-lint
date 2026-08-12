@@ -41,7 +41,7 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, isAbsolute, posix, relative, resolve } from "node:path";
 
 import type { ProbeOrigin, SurfaceProbe } from "./check-count.js";
 import type { Surface, SurfaceKind } from "./test-coverage.js";
@@ -94,6 +94,47 @@ export function surfaceSha(content: string): string {
 /** POSIX-ify a path so a Windows-recorded ref matches a repo-relative surface. */
 function norm(p: string): string {
   return p.replaceAll("\\", "/");
+}
+
+/**
+ * ONE spelling for one script file — the identity a coverage record is keyed by.
+ *
+ * 🔴 SEPARATORS WERE NOT THE ONLY WAY TO SPELL THE SAME FILE, and keying on the
+ * raw string reopened the defect the retraction set exists to close. Measured
+ * 2026-08-12 on the two-hook fixture in `cli-coverage-record.test.ts`:
+ *
+ *   vigiles test                    → record `by: t.harness.mjs`
+ *   (empty the harness)
+ *   vigiles test ./t.harness.mjs    → `hooks/a.sh` STILL "MEASURED BY A RUN"
+ *
+ * because `./t.harness.mjs` and `t.harness.mjs` are different keys. Nothing
+ * expires it either: freshness is keyed to the SURFACE's text, which emptying
+ * the test does not touch, so that record stays green forever. The same spelling
+ * split also DOUBLES records — running once by `./t.harness.mjs` and once by the
+ * default glob left two entries for one script, measured on the same fixture.
+ *
+ * `discoverScripts` is where the spellings come from: it passes an argument that
+ * names an existing file through VERBATIM (`./x`, an absolute path, `a/../x`)
+ * and only globs otherwise, which yields the bare relative form. So both are
+ * ordinary, both are what a person types, and neither is wrong.
+ *
+ * `root` is needed only to bring an ABSOLUTE spelling back to repo-relative; a
+ * caller that cannot say where the repo is gets separator + `./` + `..`
+ * collapsing, which is what it could do before, and no worse.
+ */
+export function canonicalScript(file: string, root?: string): string {
+  // `relative` from a FIXED root is injective, so two different files can never
+  // collapse onto one key: an absolute and a relative spelling meet only when
+  // they name the same location under that root, which is exactly when they
+  // should. (A guard keeping escaping paths absolute was written here first and
+  // removed — mutating it away changed no test, because it could not: it was the
+  // dead-fragment class this same change is removing elsewhere.)
+  const p =
+    root !== undefined && isAbsolute(file)
+      ? norm(relative(root, file))
+      : norm(file);
+  const normalized = posix.normalize(p);
+  return normalized === "./" ? "." : normalized.replace(/^\.\//, "");
 }
 
 /**
@@ -243,6 +284,13 @@ export interface ExecutedScripts {
   /** Script files, exactly as `by` records them (`ScriptRunResult.file`). */
   readonly scripts: readonly string[];
   readonly tier: CoverageTierName;
+  /**
+   * Repo root, so an ABSOLUTE spelling (`vigiles test /abs/x.harness.mjs`)
+   * retracts the record a repo-relative run wrote. Optional: without it the
+   * canonicalisation still collapses separators, `./` and `..`, which is all a
+   * caller that does not know the root can honestly do.
+   */
+  readonly root?: string;
 }
 
 /**
@@ -287,22 +335,31 @@ export function executedScripts(
  * so it can only ever retract what that script previously claimed. Omitting
  * `executed` keeps the old merge-only behaviour, which is what a caller that
  * does not know which scripts ran must get.
+ *
+ * 🔴 BOTH KEYS GO THROUGH {@link canonicalScript}. One script has many
+ * legitimate spellings (`x.mjs`, `./x.mjs`, an absolute path — `discoverScripts`
+ * passes an existing file's argument through VERBATIM), and keying on the raw
+ * string made one run's records unretractable by the next. The MERGE key is
+ * canonicalised too, not only the retraction set: the second symptom was a merge
+ * -key split — one script accumulating two records, one per spelling — and
+ * fixing only the retraction would have left it standing.
  */
 export function mergeRuns(
   previous: readonly CoverageRun[],
   next: readonly CoverageRun[],
   executed?: ExecutedScripts,
 ): CoverageRun[] {
+  const script = (p: string): string => canonicalScript(p, executed?.root);
   const retracted = new Set<string>();
   if (executed)
     for (const file of executed.scripts)
-      retracted.add(`${executed.tier}\u0000${norm(file)}`);
+      retracted.add(`${executed.tier}\u0000${script(file)}`);
   const kept = previous.filter(
-    (r) => !retracted.has(`${r.tier}\u0000${norm(r.by)}`),
+    (r) => !retracted.has(`${r.tier}\u0000${script(r.by)}`),
   );
   const byKey = new Map<string, CoverageRun>();
   for (const run of [...kept, ...next]) {
-    const key = `${run.path}\u0000${run.tier}\u0000${run.by}`;
+    const key = `${run.path}\u0000${run.tier}\u0000${script(run.by)}`;
     const held = byKey.get(key);
     if (!held || held.at <= run.at) byKey.set(key, run);
   }
