@@ -254,7 +254,7 @@ test("a skill with NO fence holds all three legs, whatever it pre-approved", () 
   assert.deepEqual(f?.legs.untrusted, ["WebFetch", "WebSearch", "Bash"]);
 });
 
-test("🔴 an EMPTY deny list is exactly as exposed as no list — allow-side width is not an input", () => {
+test("🔴 an EMPTY deny list is exactly as EXPOSED as no list — allow-side width is not an input", () => {
   // `skillTrifectaIssue` has no `allowed-tools` parameter at all, so the only way
   // to express "declared a lot" vs "declared a little" is the deny list. Both
   // degenerate deny lists must produce the same exposure; if a future change adds
@@ -263,8 +263,33 @@ test("🔴 an EMPTY deny list is exactly as exposed as no list — allow-side wi
   const empty = skillTrifectaIssue([], claudeCodeDialect);
   assert.notEqual(none, null);
   assert.equal(empty?.severity, none?.severity);
-  assert.equal(empty?.fence, none?.fence);
   assert.deepEqual(empty?.legs, none?.legs);
+});
+
+test("🔴 …but an EXPLICIT `disallowed-tools: []` is an ATTEMPT, not a missing line", () => {
+  // The two states differ in what the AUTHOR did, and the doc contract on
+  // `skillTrifectaIssue` always said so — the code folded them together anyway.
+  // The damage was ROUTING, not wording: `fence: "none"` is swept into the
+  // whole-surface aggregate ("N of M skills declare no tool fence"), so the one
+  // author who reached for the field and got nothing from it was the one who
+  // never got a line of their own.
+  const empty = skillTrifectaIssue([], claudeCodeDialect);
+  assert.equal(empty?.fence, "ineffective");
+  assert.match(empty?.message ?? "", /declared but EMPTY/);
+  // It must NOT claim the line is absent — that is the sentence which sends an
+  // author looking for something they have already written.
+  assert.doesNotMatch(empty?.message ?? "", /No `disallowed-tools:` line/);
+  // The absent case keeps saying exactly that.
+  const none = skillTrifectaIssue(null, claudeCodeDialect);
+  assert.equal(none?.fence, "none");
+  assert.match(none?.message ?? "", /No `disallowed-tools:` line/);
+  // 🔴 Unreadable frontmatter is NOT an attempt: a strict loader parses no block,
+  // so whatever it appears to declare denies nothing and it stays in the aggregate.
+  const broken = skillTrifectaIssue([], claudeCodeDialect, {
+    contractUnreadable: true,
+  });
+  assert.equal(broken?.fence, "none");
+  assert.match(broken?.message ?? "", /not valid YAML/);
 });
 
 test("a fence that closes a WHOLE leg clears the finding (Rule of Two)", () => {

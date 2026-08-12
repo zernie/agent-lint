@@ -117,3 +117,40 @@ test("calibration: davila7 PostToolUse exit-2 hook is NOT flagged (feedback, not
     "a PostToolUse exit-2 hook must not fire hook-block-ineffective (it's a feedback channel)",
   );
 });
+
+// FP-GUARD (real corpus) — the two 2026-08-12 corrections, each checked on the
+// wild plugins rather than on a fixture written to pass.
+//
+// 1. FOREIGN-RUNNER TESTS. The rule used to accuse any `*.test.*` file living
+//    under a surface dir and tell its author to rename it. Measured on the
+//    author's own repo, that hit an offline test of a pure reducer
+//    (`skills/verify-citations/scripts/verify-cites.test.mjs`) — a working test
+//    the advice would have dropped out of vitest's run. Nothing in these vendored
+//    plugins drives an agent, so the warning must be absent here.
+// 2. EMPTY FENCE. `disallowed-tools: []` now reports as `"ineffective"` instead of
+//    `"none"`. No real plugin here writes that, so the aggregate must not move —
+//    a change to how one state is ROUTED must not silently re-bucket the corpus.
+for (const prefix of [
+  "oh-my-claudecode",
+  "wshobson-accessibility",
+  "superpowers",
+  "madappgang-frontend",
+  "davila7-perf-guard",
+]) {
+  test(`FP-guard: no foreign-runner or empty-fence finding on ${prefix}`, () => {
+    const r = scanPlugin(vendored(prefix));
+    assert.deepEqual(
+      r.warnings.filter((w) => w.includes("COLLECTS AND EXECUTES")),
+      [],
+      `${prefix} must not be told to rename a file it does not run a model from`,
+    );
+    assert.deepEqual(
+      r.trifectaFindings.filter(
+        (t) =>
+          t.kind === "skill" && /declared but EMPTY/.test(t.finding.message),
+      ),
+      [],
+      `${prefix} declares no empty fence, so the new branch must stay silent`,
+    );
+  });
+}

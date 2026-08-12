@@ -649,7 +649,7 @@ export function skillTrifectaIssue(
   );
   if (open.length < 3) return null; // a whole leg is closed — Rule of Two holds
 
-  if (declared === null || declared.length === 0) {
+  if (declared === null) {
     return {
       severity: "advisory",
       legs,
@@ -667,6 +667,33 @@ export function skillTrifectaIssue(
           PREAPPROVAL_NOTE +
           " " +
           fenceFix(dialect),
+    };
+  }
+  // 🔴 An EXPLICIT empty list is an ATTEMPT, and the doc contract above already
+  // said so ("the two are NOT the same … the message should not tell an author who
+  // wrote the line that they didn't") — the code then folded it in with the absent
+  // case anyway. The cost was not just wording: `fence: "none"` routes into the
+  // whole-surface AGGREGATE ("N of M skills declare no tool fence"), so the one
+  // author who reached for the field and got nothing from it was the one who never
+  // heard about it. `disallowed-tools: []` denies nothing, which is exactly what
+  // `"ineffective"` means, and that state keeps its own per-skill line.
+  //
+  // Grading is untouched: both states are `"advisory"` and both count once toward
+  // `trifectaExposure`. An empty fence has capability equal to no fence, so moving
+  // it must not make it score worse — see the non-monotonicity note above.
+  if (declared.length === 0) {
+    return {
+      severity: "advisory",
+      legs,
+      fence: "ineffective",
+      message:
+        "`disallowed-tools:` is declared but EMPTY, so it denies nothing and this " +
+        "skill still holds all three lethal-trifecta legs — private-data read is " +
+        `supplied by ${legs.private.join(", ")}, untrusted intake by ` +
+        `${legs.untrusted.join(", ")}, exfiltration by ${legs.exfil.join(", ")}. ` +
+        "The line exists, so this is a fence that was attempted and closes nothing, " +
+        "not a missing one. " +
+        fenceFix(dialect),
     };
   }
   return {
