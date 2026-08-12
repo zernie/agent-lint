@@ -421,6 +421,30 @@ inputs," not "they reflect today's model." Re-run `--update` when you want fresh
 numbers. In CI it's `command: eval-check` — a green no-op until you commit your
 first lock, and `vigiles init` scaffolds the job.
 
+### Three files, three different jobs
+
+An eval leaves up to three artifacts behind and they are easy to confuse — the
+product's own author could not tell the lock from the cache, which is what
+prompted this table.
+
+| Artifact                     | What question does it answer?                                  | Where                                  | Who writes it                        | Committed?                            |
+| ---------------------------- | -------------------------------------------------------------- | -------------------------------------- | ------------------------------------ | ------------------------------------- |
+| **Ledger** (flight recorder) | "what did my harness actually do, locally, over time?"         | `.vigiles/runs.jsonl`                  | every run, automatically             | ❌ gitignored — local only            |
+| **Cache**                    | "can I re-score this eval without paying for the model again?" | `.vigiles/eval-cache/`                 | `cache: "readwrite"` on an eval spec | ❌ gitignored — local only            |
+| **Lock**                     | "do my committed numbers still match my current inputs?"       | `.vigiles/eval-locks/<name>.lock.json` | `vigiles eval --update`              | ✅ **yes — this is the one CI reads** |
+
+**The lock is the only one that leaves your machine.** Run a hundred evals and
+commit no lock, and CI can verify nothing: the ledger and the cache are both
+gitignored by design. `vigiles audit` says so out loud when it finds eval runs in
+the ledger and no committed lock.
+
+The one design difference worth knowing: **the cache keys on the harness binary
+version and the lock deliberately does not.** The cache's key is strict because
+replaying a recorded model call under a different `claude` build would not be an
+honest replay. The lock's key is loose on purpose — CI pins one `claude` version
+and your laptop has another, so folding that in would fail `--check` on every PR
+without a single input having changed.
+
 **How the agent gets reminded** is the same on both harnesses — the hook injects the
 nudge as `additionalContext` (Claude Code and Codex both honor it). See the per-harness guides:
 [Claude Code](harness-testing-claude-code.md#keeping-eval-results-fresh--the-nudge-claude-code)

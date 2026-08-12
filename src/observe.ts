@@ -232,6 +232,7 @@ export function summarizeObservations(
  */
 export function formatLedgerSummary(
   records: readonly ObservationRecord[],
+  committedLocks?: number,
 ): string {
   if (records.length === 0) return "";
   const lines: string[] = [
@@ -245,12 +246,59 @@ export function formatLedgerSummary(
     .join(", ");
   lines.push(`  by kind: ${byKind}`);
 
+  const unreachable = evalsUnreachable(records, committedLocks);
+  if (unreachable) lines.push(unreachable);
+
   const denials = records.filter(isDenial);
   if (denials.length > 0) {
     lines.push(`  recent denials (${denials.length}):`);
     for (const r of denials.slice(-5)) lines.push(denialLine(r));
   }
   return lines.join("\n");
+}
+
+/**
+ * The line that says what the eval numbers can and cannot reach — or `""`.
+ *
+ * 🔴 THE PRODUCT'S OWN AUTHOR COULD NOT TELL THE LOCK FROM THE CACHE, which is
+ * the strongest evidence a discoverability defect can have. MEASURED on his repo
+ * the day it came up:
+ *
+ *   .vigiles/runs.jsonl     276 KB, 105 eval entries, 11–12 Aug   gitignored
+ *   .vigiles/eval-locks/    does not exist, 0 locks               (committed)
+ *   eval cache              does not exist
+ *   audit / lint about any of the above:  0 lines
+ *
+ * Evals had been run over a hundred times and the result reached NOBODY: the
+ * ledger is local, the lock is the only channel outward, and nothing said the
+ * lock was missing. The summary above already printed `105 eval` — a number with
+ * no meaning attached, which is exactly how this stayed invisible.
+ *
+ * So the CONSEQUENCE is the sentence and the counts are the evidence for it.
+ *
+ * Fires only when there are eval runs AND no committed lock. Silent with no
+ * evals (nothing to say) and silent once a lock exists (nothing wrong) — the
+ * whole point is that a lock is the fix, so having one must not keep nagging.
+ *
+ * ⚠️ AUDIT ONLY, NOT LINT, and the reason is mechanical rather than editorial:
+ * the input is `.vigiles/runs.jsonl`, which is GITIGNORED. In CI — where lint
+ * runs — the ledger does not exist, so this finding could never fire there. Put
+ * it in lint and it would be dead code that reads as a gate.
+ */
+function evalsUnreachable(
+  records: readonly ObservationRecord[],
+  committedLocks: number | undefined,
+): string {
+  if (committedLocks === undefined || committedLocks > 0) return "";
+  const evals = records.filter((r) => r.kind === "eval").length;
+  if (evals === 0) return "";
+  return (
+    `  ⚠ CI cannot verify any eval result — ${String(evals)} eval run(s) are ` +
+    `recorded here and 0 locks are committed. This ledger is local and ` +
+    `gitignored; a committed \`.vigiles/eval-locks/<name>.lock.json\` is the ` +
+    `only channel outward. Give the eval a \`name\`, run \`vigiles eval ` +
+    `--update\`, and commit the lock so \`--check\` can gate on it.`
+  );
 }
 
 /** Parse one JSONL line into a record, or `null` if it is not a well-formed record. */

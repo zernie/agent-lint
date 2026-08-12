@@ -48,6 +48,7 @@ import {
   anyLocksCommitted,
   evalLockNudge,
   DEFAULT_LOCK_DIR,
+  countLocks,
 } from "./eval-lock.js";
 import { applyConfigFlags } from "./cli-flags.js";
 import { VERBS, type Verb } from "./cli-commands.js";
@@ -7823,7 +7824,10 @@ async function main(): Promise<void> {
           // The flight recorder: a compact summary of what the harness actually
           // DID in real sessions (hook/agent decisions), read off the local
           // agent-readable ledger. Empty (skipped) until something is recorded.
-          const ledgerSummary = formatLedgerSummary(ledgerRecords);
+          const ledgerSummary = formatLedgerSummary(
+            ledgerRecords,
+            countLocks(resolve(root, DEFAULT_LOCK_DIR)),
+          );
           if (ledgerSummary) console.log("\n" + ledgerSummary);
         }
         // LIVE MCP tool resolution STARTS each declared MCP server — a server is
