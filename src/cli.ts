@@ -6834,7 +6834,7 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
           `markers, so Node cannot resolve \`vigiles/hook\` from it (the hook itself ` +
           `may be fine)`
         : "cannot be loaded";
-    if (isStampRepairEvent(event, file) || isRecoveryEvent(event)) {
+    if (isStampRepairEvent(event, file) || isRecoveryEvent(event, file)) {
       announceRepairEscape(file, cause);
       return;
     }
