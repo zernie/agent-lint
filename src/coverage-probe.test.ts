@@ -249,18 +249,8 @@ test("bash's own invocation grammar: `-O` takes a value, and parse-only flags ru
   ]);
   assert.deepEqual(commandRefs("bash -o pipefail hooks/x.sh"), ["hooks/x.sh"]);
 
-  // ⚠️ THE WHOLE-WORD LIMIT, asserted rather than described — this expectation was
-  // written the other way first and the test corrected it. Matching is per WORD,
-  // so a BUNDLED short form is invisible to every table here: `-euo` is skipped as
-  // one flag and `pipefail` (the `-o` value it carries) is then taken as the entry
-  // and rejected, so a very ordinary hook invocation attributes NOTHING.
-  assert.deepEqual(commandRefs("bash -euo pipefail hooks/x.sh"), []);
-  // The same limit points the other way for a bundled parse-only flag, and that
-  // one is a false GRANT: `-en` is skipped whole, so the script that bash only
-  // syntax-checked is attributed as executed.
-  assert.deepEqual(commandRefs("bash -en hooks/x.sh"), ["hooks/x.sh"]);
-  // Pre-existing and NOT introduced here: the unbundled spellings, which are what
-  // the tables are about, are right in both directions.
+  // The unbundled spellings, which are what the whole-word tables are about, are
+  // right in both directions. (Bundled clusters are the next test.)
   assert.deepEqual(commandRefs("bash -e -u -o pipefail hooks/x.sh"), [
     "hooks/x.sh",
   ]);
@@ -306,6 +296,87 @@ test("a `run` SUBCOMMAND is not the script — bun and deno put a verb first", (
   // reads a file without running it, so crediting it would be a false grant.
   assert.deepEqual(commandRefs("deno check hooks/x.ts"), []);
   assert.deepEqual(commandRefs("bun test hooks/x.ts"), []);
+});
+
+test("a BUNDLED short-option cluster is attributed only when every letter is known", () => {
+  // 🔴 FIRES. `-en` and `-nc` carry bash's `n` — "Read commands but do not
+  // execute them" — but neither is a whole word in any table, so the generic `-`
+  // skip walked past it and the path became the entry. A harness that
+  // syntax-checks a hook recorded execution coverage for a hook nothing ran:
+  // a FALSE GRANT, the expensive direction.
+  assert.deepEqual(commandRefs("bash -en hooks/pre.sh"), []);
+  assert.deepEqual(commandRefs("bash -nc hooks/pre.sh"), []);
+  assert.deepEqual(commandRefs("sh -vn hooks/pre.sh"), []);
+  // `D` dumps translatable strings and implies `-n` — same class, same answer.
+  assert.deepEqual(commandRefs("bash -eD hooks/pre.sh"), []);
+
+  // QUIET: a cluster whose letters are ALL accounted for still attributes, so
+  // this is a model and not a blanket refusal. `-euo pipefail` is the single
+  // most common way a hook is launched, and it used to attribute NOTHING
+  // (`pipefail`, the value `-o` carries, was taken for the script and rejected).
+  assert.deepEqual(commandRefs("bash -euo pipefail hooks/x.sh"), [
+    "hooks/x.sh",
+  ]);
+  assert.deepEqual(commandRefs("bash -ex hooks/x.sh"), ["hooks/x.sh"]);
+  assert.deepEqual(commandRefs("bash -eu hooks/x.sh"), ["hooks/x.sh"]);
+
+  // …and an UNKNOWN letter abstains rather than guessing: it might be another
+  // `n`. One lost warning beats one false claim that a hook was tested.
+  assert.deepEqual(commandRefs("bash -eZ hooks/x.sh"), []);
+
+  // ⚠️ Only shells are modelled — bash publishes its complete invocation letter
+  // set, the others do not. A bundle under any other family abstains, which is a
+  // deliberate loss of a warning, not a false grant.
+  assert.deepEqual(commandRefs("python3 -EsI hooks/x.py"), []);
+  // The unbundled spelling of the same command still works everywhere.
+  assert.deepEqual(commandRefs("python3 -E -s -I hooks/x.py"), ["hooks/x.py"]);
+});
+
+test("`run-program` is a command SHAPE, not a word that may appear anywhere", () => {
+  // 🔴 FIRES. The verb was searched across the whole argv, so any command that
+  // merely PRINTED it attributed the following path — `echo` ran, the hook did
+  // not. The same substitution the `cat hooks/x.sh` bug was, reached through the
+  // one runner whose contract we own.
+  assert.deepEqual(commandRefs("echo run-program hooks/pre.sh"), []);
+  assert.deepEqual(
+    commandRefs("echo hook-runtime run-program hooks/pre.sh"),
+    [],
+  );
+  assert.deepEqual(
+    commandRefs("cat hook-runtime run-program hooks/pre.sh"),
+    [],
+  );
+  // The words in the right order but owned by something else.
+  assert.deepEqual(
+    commandRefs("node -e 'x' hook-runtime run-program hooks/pre.sh"),
+    [],
+  );
+
+  // QUIET: every shape our installer and our own tests actually emit.
+  assert.deepEqual(
+    commandRefs("npx vigiles hook-runtime run-program .vigiles/hooks/g.mjs"),
+    [".vigiles/hooks/g.mjs"],
+  );
+  assert.deepEqual(
+    commandRefs("vigiles hook-runtime run-program .vigiles/hooks/g.mjs"),
+    [".vigiles/hooks/g.mjs"],
+  );
+  assert.deepEqual(
+    commandRefs(
+      "./node_modules/.bin/vigiles hook-runtime run-program .vigiles/hooks/g.mjs",
+    ),
+    [".vigiles/hooks/g.mjs"],
+  );
+  // Driven through node, which is how this repo's own harnesses run it: the CLI
+  // is the entry, and the hook is attributed relative to it.
+  assert.deepEqual(
+    commandRefs("node cli.js hook-runtime run-program .claude/hooks/x.hook.ts"),
+    ["cli.js", ".claude/hooks/x.hook.ts"],
+  );
+  assert.deepEqual(
+    commandRefs("node /abs/dist/cli.js hook-runtime run-program g.mjs"),
+    ["/abs/dist/cli.js", "g.mjs"],
+  );
 });
 
 test("the env is EXPANDED into the command, not scanned alongside it", () => {

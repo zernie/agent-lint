@@ -33,6 +33,38 @@
  *
  * Both halves are pure and exported so they are testable without a process: the
  * recording wrappers are one line each on top.
+ *
+ * ## Why this file PARSES at all — asked properly 2026-08-12, after five rounds
+ *
+ * This module has produced findings in five separate review rounds, every one the
+ * same shape: it infers what executed by parsing an arbitrary command string, and
+ * a string's grammar is unbounded. The obvious question is whether the EXECUTOR
+ * could just report the path instead. Measured, not assumed:
+ *
+ *  - **The subprocess tier structurally cannot.** `runHook`/`runScript` take a
+ *    COMMAND STRING and hand it to `spawnSync(cmd, { shell: true })`. vigiles
+ *    never resolves a path — `sh -c` does — so there is nothing to report back.
+ *    And the corpus confirms there is often no path to report at all: this repo's
+ *    own examples pass inline program TEXT
+ *    (`CMD=$(cat | jq -r …); case "$CMD" in …`, `node -e '<source>'`), where no
+ *    file is named by anyone. That API contract is the feature — it is how you
+ *    test a hook you did not write, verbatim as its plugin ships it.
+ *
+ *  - **The in-process tier CAN, and currently reports nothing.** `loadHook(file)`
+ *    resolves the path itself, and `harness-assert.ts` / `load-hook.ts` contain
+ *    ZERO `recordSurfaceProbe` calls — so the tier where attribution needs no
+ *    parsing at all is the tier that attributes nothing. That is a real gap and a
+ *    better source of truth than any parse, but it ADDS a source; it cannot
+ *    retire this one while `runHook(command)` remains public.
+ *
+ * So parsing stays, and the lesson taken instead is about DIRECTION. The scan was
+ * a deny-list — skip what we recognise, attribute what is left — so every gap in
+ * every table produced a FALSE GRANT: a claim that a surface was tested when
+ * nothing ran it. Where the grammar cannot be closed, the rule is now inverted:
+ * attribute only what is positively recognised, and abstain otherwise
+ * ({@link classifyCluster}, {@link runProgramRef}). A missed probe costs one
+ * coverage line; a false grant costs the one thing this whole tier exists to
+ * protect.
  */
 import { recordSurfaceProbe, type SurfaceProbe } from "./check-count.js";
 import { leafArgvSource } from "./core/bash-effects.js";
@@ -296,6 +328,12 @@ function entryScript(
       i++; // its value is not the script
       continue;
     }
+    const verdict = clusterVerdict(word, family);
+    if (verdict === "none") return undefined;
+    if (verdict === "value") {
+      i++; // the cluster's last letter took the next word
+      continue;
+    }
     if (word.startsWith("-")) continue;
     return word;
   }
@@ -303,12 +341,130 @@ function entryScript(
 }
 
 /**
- * Our own runtime's verb (`vigiles hook-runtime run-program <hook>`): the word
- * after it is a program vigiles is about to execute. Listed because it is OUR
- * contract, not a guess about someone's CLI — `hook-install` emits exactly this
- * line, and it is how every compiled hook in this repo is exercised.
+ * The letters of a BUNDLED short-option token (`-en` → `"en"`), or `undefined`
+ * when the word is not one: a long `--option`, a single `-e`, a bare `-`, or an
+ * operand. Single letters are excluded because they are already answered by the
+ * per-family whole-word tables above; this is only about the bundle.
  */
+function shortCluster(word: string): string | undefined {
+  if (!word.startsWith("-") || word.startsWith("--")) return undefined;
+  const letters = word.slice(1);
+  return letters.length >= 2 && /^[A-Za-z]+$/.test(letters)
+    ? letters
+    : undefined;
+}
+
+/**
+ * What `word` does to attribution when it is a bundled cluster — `"skip"` when it
+ * is not one at all, so the caller's flow stays flat.
+ */
+function clusterVerdict(
+  word: string,
+  family: InterpreterFamily,
+): "run" | "value" | "none" | "skip" {
+  const letters = shortCluster(word);
+  return letters === undefined ? "skip" : classifyCluster(letters, family);
+}
+
+/**
+ * Every letter a bundled shell cluster may carry, from `bash --help` (5.2.21) —
+ * the SAME four lines the option tables above were derived from, so the universe
+ * is closed and re-derivable:
+ *
+ *     -ilrsD or -c command or -O shopt_option      (invocation only)
+ *     -abefhkmnptuvxBCEHPT or -o option
+ *
+ * `n` and `D` PARSE the operand and never run it (measured against bash 5.2.21:
+ * neither printed the script's output); `c`, `o` and `O` take a value; the rest
+ * consume nothing and execute normally.
+ */
+const SHELL_CLUSTER = {
+  noExec: "nD",
+  value: "coO",
+  safe: "ilrsabefhkmptuvxBCEHPT",
+} as const;
+
+/**
+ * What a bundled cluster does to attribution.
+ *
+ * 🔴 THE DIRECTION IS INVERTED HERE, AND THAT IS THE POINT. Everywhere else this
+ * function SKIPS what it recognises and attributes whatever is left — a
+ * deny-list, where a gap means an unrecognised word is taken for the executed
+ * script. That is how `bash -en hooks/pre.sh` recorded coverage for a hook bash
+ * only syntax-checked: `-en` is not a whole word in any table, so the generic
+ * `-` skip walked past it and the path became the "entry". A FALSE GRANT — a
+ * claim that something was tested when nothing ran it.
+ *
+ * A cluster is therefore attributed only when EVERY letter is accounted for.
+ * Unknown letter ⇒ `"none"` ⇒ no attribution, because an unknown option might
+ * suppress execution (`n`), and guessing costs a false claim while abstaining
+ * costs one coverage line. That asymmetry is the whole argument.
+ *
+ * ⚠️ ONLY SHELLS ARE MODELLED. bash publishes its complete invocation letter set
+ * in four lines of `--help`; node, python, ruby and perl do not, and inventing
+ * one from memory is what this module keeps being punished for. So a bundle
+ * under any other family is `"none"` — `python3 -EsI x.py` now attributes
+ * nothing where it used to attribute `x.py`. That is a deliberate loss of one
+ * warning in exchange for closing a class of false grant, and it is the only
+ * direction this module is allowed to err in.
+ */
+function classifyCluster(
+  letters: string,
+  family: InterpreterFamily,
+): "run" | "value" | "none" {
+  if (family !== "shell") return "none";
+  let takesValue = false;
+  for (const ch of letters) {
+    if (SHELL_CLUSTER.noExec.includes(ch)) return "none";
+    if (SHELL_CLUSTER.value.includes(ch)) takesValue = true;
+    else if (!SHELL_CLUSTER.safe.includes(ch)) return "none"; // unknown ⇒ abstain
+  }
+  return takesValue ? "value" : "run";
+}
+
+/**
+ * Our own runtime's invocation (`<vigiles> hook-runtime run-program <hook>`): the
+ * word after it is a program vigiles is about to execute. Listed because it is
+ * OUR contract, not a guess about someone's CLI — `hook-install` emits exactly
+ * this line, and it is how every compiled hook in this repo is exercised.
+ */
+const RUNTIME_VERB = "hook-runtime";
 const RUN_PROGRAM_VERB = "run-program";
+
+/** `vigiles`, `./node_modules/.bin/vigiles`, `vigiles@15.0.2` — however spelled. */
+function isVigilesProgram(token: string): boolean {
+  const base = headName(token);
+  const at = base.indexOf("@", 1);
+  return (at === -1 ? base : base.slice(0, at)) === "vigiles";
+}
+
+/**
+ * The hook path OUR OWN runtime was pointed at, or `undefined`.
+ *
+ * 🔴 THE VERB USED TO BE SEARCHED ANYWHERE IN THE ARGV, which made it a free
+ * -floating keyword rather than a command shape: `echo run-program hooks/pre.sh`
+ * recorded execution coverage for a hook that `echo` merely printed. Same
+ * substitution the rest of this module exists to remove — a WORD taken for the
+ * position it usually occupies — reached through the one runner we own.
+ *
+ * So the shape is required, positively: `hook-runtime` immediately followed by
+ * `run-program`, and the token BEFORE `hook-runtime` must be the program that is
+ * actually running — either `vigiles` itself (`npx vigiles hook-runtime …`,
+ * `vigiles hook-runtime …`) or the entry script this command line already
+ * resolved (`node dist/cli.js hook-runtime …`). Anything else is a command that
+ * merely contains our words.
+ */
+function runProgramRef(
+  argv: readonly string[],
+  entry: string | undefined,
+): string | undefined {
+  const i = argv.indexOf(RUNTIME_VERB);
+  if (i < 1 || argv[i + 1] !== RUN_PROGRAM_VERB) return undefined;
+  const owner = argv[i - 1] ?? "";
+  if (!isVigilesProgram(owner) && owner !== entry) return undefined;
+  const file = argv[i + 2] ?? "";
+  return SCRIPT_RE.test(file) ? file : undefined;
+}
 
 /** The basename of a head, so `/bin/bash` and `bash` classify alike. */
 function headName(word: string): string {
@@ -383,15 +539,15 @@ export function commandRefs(
   for (const leaf of leafArgvSource(command)) {
     const argv = leaf.map(expand);
     const head = argv[0] ?? "";
-    if (SCRIPT_RE.test(head)) out.add(head);
-    else {
-      const script = interpretedScript(argv);
-      if (script !== undefined) out.add(script);
-    }
-    for (let i = 1; i < argv.length - 1; i++) {
-      const next = argv[i + 1] ?? "";
-      if (argv[i] === RUN_PROGRAM_VERB && SCRIPT_RE.test(next)) out.add(next);
-    }
+    // The program this leaf runs: the head when it IS a script, else whatever the
+    // interpreter's own grammar names. Held, because our runtime's invocation is
+    // recognised RELATIVE to it (`node dist/cli.js hook-runtime run-program …`).
+    let entry: string | undefined;
+    if (SCRIPT_RE.test(head)) entry = head;
+    else entry = interpretedScript(argv);
+    if (entry !== undefined) out.add(entry);
+    const hook = runProgramRef(argv, entry);
+    if (hook !== undefined) out.add(hook);
   }
   return [...out];
 }
