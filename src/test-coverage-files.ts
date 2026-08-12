@@ -41,16 +41,13 @@ import {
   declaredSurfaceName,
   evidenceFor,
   hookScriptRefs,
+  isEvalScript,
   prepareTest,
   type PreparedTest,
 } from "./coverage-evidence.js";
 
 // Mirrors src/test-coverage.ts constants. VALUES are re-declared, never imported
 // — test-coverage.ts pulls in node:fs/glob, and this twin must stay browser-safe.
-// The paid tier by INFIX, not by full suffix: `.eval.ts` must not fall into the
-// free branch and get run on every push. See the reasoning in test-coverage.ts.
-const EVAL_INFIX = ".eval.";
-
 const DEFAULT_TEST_SUFFIXES = [
   ".harness.ts",
   ".harness.mts",
@@ -300,11 +297,11 @@ export function findUntestedSurfacesInFiles(
     decisions: union.decisions,
     harness: tierOf(
       considered,
-      tests.filter((t) => !basename(t.path).includes(EVAL_INFIX)),
+      tests.filter((t) => !isEvalScript(basename(t.path))),
     ),
     evals: tierOf(
       considered,
-      tests.filter((t) => basename(t.path).includes(EVAL_INFIX)),
+      tests.filter((t) => isEvalScript(basename(t.path))),
     ),
   };
 }

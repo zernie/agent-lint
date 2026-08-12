@@ -25,6 +25,8 @@ import {
   suggestedTestPath,
 } from "./test-coverage.js";
 import { findUntestedSurfacesInFiles } from "./test-coverage-files.js";
+import { isEvalScript } from "./coverage-evidence.js";
+import { SCRIPT_EXTS } from "./adapters/claude-code/run-scripts.js";
 import { surfaceSha } from "./coverage-artifact.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
@@ -354,6 +356,79 @@ test("the BROWSER twin reads the PROJECT var too — one settings file, one read
     ).untested.filter((x) => x.kind === "hook"),
     [],
   );
+});
+
+test("`.eval.` in the MIDDLE of a name is not the paid tier — the runner would never run it", () => {
+  // 🔴 THE TIER SPLIT CLAIMED A SURFACE WAS EVAL-COVERED BY A FILE NO RUNNER
+  // RUNS. The splitter tested `.eval.` as an INFIX, so a colocated deterministic
+  // test named `parser.eval.test.ts` — picked up by a `testGlobs` of
+  // `**/*.test.ts` — was pushed into the paid EVAL tier and REMOVED from the
+  // free one. But `vigiles eval` discovers `**/*.eval.{mjs,cjs,js,mts,cts,ts}`
+  // (scriptGlob, SCRIPT_EXTS in adapters/claude-code/run-scripts.ts): the name
+  // ends `.test.ts`, so the eval runner never sees it. The surface was reported
+  // as covered by the tier that cannot run it and uncovered by the tier that
+  // does — exactly backwards.
+  const dir = makeTmpDir("cov-eval-infix");
+  write(dir, ".claude/skills/parser/SKILL.md", "---\nname: parser\n---\nbody\n");
+  write(dir, ".claude/skills/parser/parser.eval.test.ts", "// deterministic\n");
+  const r = findUntestedSurfaces({
+    basePath: dir,
+    testGlobs: ["**/*.test.ts"],
+  });
+  assert.deepEqual(
+    r.harness.covered.map((s) => s.name),
+    ["parser"],
+    "a *.test.ts file is deterministic — it belongs to the FREE tier",
+  );
+  assert.deepEqual(
+    r.evals.covered.map((s) => s.name),
+    [],
+    "nothing the paid runner can discover covers this surface",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("…and the money hazard the infix was guarding stays closed", () => {
+  // The infix was not arbitrary: it replaced the full suffix `.eval.mjs` because
+  // `foo.eval.ts` would then have fallen into the FREE branch and been run on
+  // every push, spending real model calls in CI. Narrowing to a SUFFIX must not
+  // reopen that — every extension the eval runner accepts still lands paid.
+  // The list is SCRIPT_EXTS, read from the runner, not from memory.
+  for (const ext of SCRIPT_EXTS) {
+    const dir = makeTmpDir(`cov-eval-paid-${ext}`);
+    write(dir, ".claude/skills/p/SKILL.md", "---\nname: p\n---\nbody\n");
+    write(dir, `.claude/skills/p/p.eval.${ext}`, "// paid\n");
+    const r = findUntestedSurfaces({ basePath: dir });
+    assert.deepEqual(
+      r.evals.covered.map((s) => s.name),
+      ["p"],
+      `.eval.${ext} must be the PAID tier`,
+    );
+    assert.deepEqual(
+      r.harness.covered.map((s) => s.name),
+      [],
+      `.eval.${ext} must NOT be run by the free per-push tier`,
+    );
+    cleanupTmpDir(dir);
+  }
+});
+
+test("the eval-suffix rule is pinned to the extensions the runner really globs", () => {
+  // The predicate lives in coverage-evidence.ts (browser-safe, both twins route
+  // through it) and therefore re-declares the extension list rather than
+  // importing the node-only runner module. This is the assertion that keeps the
+  // copy honest: if SCRIPT_EXTS gains an extension, the splitter must gain it
+  // too, or a paid file starts running on every push again.
+  for (const ext of SCRIPT_EXTS) {
+    assert.ok(
+      isEvalScript(`x.eval.${ext}`),
+      `SCRIPT_EXTS has .${ext} but the tier splitter does not know it`,
+    );
+  }
+  assert.ok(!isEvalScript("parser.eval.test.ts"));
+  assert.ok(!isEvalScript("evaluate.ts"));
+  assert.ok(!isEvalScript("x.eval.mjs.bak"));
+  assert.ok(!isEvalScript("x.harness.ts"));
 });
 
 test("hook scripts are discovered from plugin.json and matched by path", () => {

@@ -75,6 +75,7 @@ import {
   evidenceFor,
   formatEvidence,
   hookScriptRefs,
+  isEvalScript,
   prepareTest,
   type CoverageEvidence,
   type EvidenceCounts,
@@ -251,18 +252,6 @@ export interface TestCoverageOptions {
 // ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------
-
-/**
- * The REAL-MODEL tier, by INFIX — the one file kind that costs money to run.
- *
- * 🔴 IT USED TO BE THE FULL SUFFIX `.eval.mjs`, and that was a money hazard the
- * moment TypeScript was accepted: `foo.eval.ts` would have fallen into the
- * `harness` branch, so a file that spends real model calls would have been
- * classified as the free deterministic tier and run on every push, in CI. Not a
- * naming detail — the tier split is the only thing standing between a scheduled
- * paid run and a per-push one.
- */
-const EVAL_INFIX = ".eval.";
 
 /** Every extension Node executes directly. `.mts`/`.cts` are real (TS 4.7+) and
  * Node 22 strips their types with no toolchain — measured, not assumed. */
@@ -517,11 +506,13 @@ function coverageOf(
 }
 
 /**
- * Split the discovered tests into the two tiers by SUFFIX — `*.eval.mjs` is the
+ * Split the discovered tests into the two tiers — `*.eval.<runnable-ext>` is the
  * paid real-model tier, everything else (`*.harness.*` and any user-supplied
- * `testGlobs`) is the free deterministic tier. Suffix, not glob set,
+ * `testGlobs`) is the free deterministic tier. Decided by NAME, not by glob set,
  * so a custom `testGlobs` (a promptfoo suite, a home-grown loop) still lands in a
- * tier instead of silently disappearing from the split.
+ * tier instead of silently disappearing from the split. The rule itself is
+ * `isEvalScript` — shared with the browser twin, and see its header for the two
+ * opposite ways this has been wrong.
  */
 function partitionTests(tests: readonly PreparedTest[]): {
   harness: PreparedTest[];
@@ -530,7 +521,7 @@ function partitionTests(tests: readonly PreparedTest[]): {
   const harness: PreparedTest[] = [];
   const evals: PreparedTest[] = [];
   for (const t of tests)
-    (basename(t.path).includes(EVAL_INFIX) ? evals : harness).push(t);
+    (isEvalScript(basename(t.path)) ? evals : harness).push(t);
   return { harness, evals };
 }
 

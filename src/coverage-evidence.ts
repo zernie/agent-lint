@@ -125,6 +125,41 @@ export function prepareTest(path: string): PreparedTest {
 const SCRIPT_RE = /[\w./${}@-]+\.(?:sh|mjs|cjs|js|ts|py|rb)/g;
 
 /**
+ * Is this filename one the PAID real-model runner would actually run?
+ *
+ * The tier split decides which of two runners owns a test file, and it is the
+ * only thing standing between a scheduled paid run and a per-push one. It has
+ * now been wrong in both directions:
+ *
+ * - As the full suffix `.eval.mjs` it was a MONEY HAZARD — `foo.eval.ts` fell
+ *   into the free branch and would have spent real model calls on every push.
+ * - As the bare INFIX `.eval.` it made a FALSE GRANT — `parser.eval.test.ts`,
+ *   an ordinary deterministic test discovered by a `testGlobs` of
+ *   `**\/*.test.ts`, was credited to the paid tier and dropped from the free
+ *   one. `vigiles eval` globs `**\/*.eval.{mjs,cjs,js,mts,cts,ts}`, so that name
+ *   is not discoverable by the eval runner at all: the surface was reported
+ *   covered by the tier that cannot run it, and uncovered by the tier that does.
+ *
+ * The rule that is wrong in neither direction is the one the runner itself uses:
+ * `.eval.` followed by a runnable extension AT THE END of the name. Anything
+ * else — including a name that merely contains `.eval.` — is deterministic, or
+ * is not a script at all.
+ *
+ * ⚠️ The extension list is RE-DECLARED, not imported: the authority is
+ * `SCRIPT_EXTS` in adapters/claude-code/run-scripts.ts, which pulls in
+ * `node:child_process` and `glob` and so cannot be imported by this
+ * browser-safe module. A test in test-coverage.test.ts asserts the two agree,
+ * so an extension added to the runner cannot silently fail to be billed here.
+ */
+const EVAL_SCRIPT_RE = /\.eval\.(?:mjs|cjs|js|mts|cts|ts)$/;
+
+/** @param filename a BASENAME — callers strip the directory with their own path
+ * helper (`node:path` on disk, `posix-path` in the browser twin). */
+export function isEvalScript(filename: string): boolean {
+  return EVAL_SCRIPT_RE.test(filename);
+}
+
+/**
  * The root variables a hook command may be written against — the structural
  * slice of `PluginLayout` this needs, taken by SHAPE so the browser twin does
  * not have to import the layout module.
