@@ -149,3 +149,42 @@ export function foreignRunnerRefusal(runner: string, what: string): string {
     `  If ${runner} is meant to run it, it must not call the real-model tier.`
   );
 }
+
+/**
+ * Refuse to spend model budget when a foreign test runner started this process.
+ *
+ * 🔴 CALL THIS AT EVERY REAL-MODEL SPAWN. It used to live privately in `eval.ts`
+ * and be called from exactly one place — `spawnAgent`, the real `claude` runner —
+ * on the reasoning that the composition root funnels every paid path. Measured
+ * 2026-08-12: it funnels ONE of four.
+ *
+ *   src/eval.ts               spawn(claudeCodeRuntime.agentBinary)  guarded
+ *   src/adapters/codex/eval.ts  spawnSync("codex", …)               UNGUARDED
+ *   src/judge.ts                spawnSync("claude", …)              UNGUARDED
+ *   src/scan-behavioral.ts      spawnSync("claude", …)              UNGUARDED
+ *
+ * `measureTriggerRate(spec, { evalDriver })` calls the injected driver's runner
+ * DIRECTLY, so a Codex eval collected by a stray `npx vitest run` spent real
+ * money on every push while the guard looked complete. The irony is worth
+ * recording: the untested-skill nudge now tells Codex users to pass
+ * `{ evalDriver }` — the product recommends the shape that bypassed the guard.
+ *
+ * Lives here, in a module that imports NOTHING, so any adapter can call it
+ * without a cycle. `foreignRunner` stays pure; this is the one impure wrapper,
+ * and it is impure precisely so callers cannot forget to pass the facts.
+ *
+ * ⚠️ CALL IT OUTSIDE ANY `try` THAT SWALLOWS. `judge` and `deriveAttackReal` both
+ * wrap their spawn in `try { … } catch { return fallback }`, so a refusal thrown
+ * inside would be caught and downgraded to a score of 0 / a canned string — a
+ * silent wrong answer instead of a stop. Both call it before the `try`.
+ */
+export function refuseUnderForeignRunner(what: string): void {
+  // `node --test` is INVISIBLE in argv (it is a flag on node, not an installed
+  // binary), so the two facts that do identify it are read here — the one impure
+  // place — and handed to the pure decision above.
+  const runner = foreignRunner(process.argv[1], {
+    execArgv: process.execArgv,
+    nodeTestContext: process.env["NODE_TEST_CONTEXT"],
+  });
+  if (runner !== null) throw new Error(foreignRunnerRefusal(runner, what));
+}

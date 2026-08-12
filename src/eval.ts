@@ -21,7 +21,7 @@
  * Real model → real cost + statistical, not deterministic. For fast, free,
  * deterministic checks of hook *logic*, see `harness-test.ts`.
  */
-import { foreignRunner, foreignRunnerRefusal } from "./core/foreign-runner.js";
+import { refuseUnderForeignRunner } from "./core/foreign-runner.js";
 import { spawn, execSync } from "node:child_process";
 import {
   mkdtempSync,
@@ -369,29 +369,6 @@ export function resolveSpawnEnv(
   base: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv {
   return a.replaceEnv ? (a.env ?? {}) : { ...base, ...a.env };
-}
-
-/**
- * 🔴 THE GUARD IS HERE, AT THE COMPOSITION ROOT, ON PURPOSE. Every paid path —
- * `runEval`, `measureTriggerRate`, `measureArms`, the audit's trigger tier — ends
- * up in this one function, so guarding it guards all of them, and a path added
- * later inherits it instead of having to remember. Money is spent on the line
- * below; nothing between here and there can be forgotten.
- *
- * Refusal is a THROW, not a failed run: a run result would be recorded, compared
- * and averaged, and "0% trigger rate" is exactly the confident zero this project
- * keeps mistaking for a finding.
- */
-function refuseUnderForeignRunner(what: string): void {
-  // `node --test` is INVISIBLE in argv (it is a flag on node, not an installed
-  // binary), so the two facts that do identify it travel alongside — see the
-  // measurements in core/foreign-runner.ts. Reading `process` here, at the one
-  // place that already does, keeps the decision itself pure.
-  const runner = foreignRunner(process.argv[1], {
-    execArgv: process.execArgv,
-    nodeTestContext: process.env.NODE_TEST_CONTEXT,
-  });
-  if (runner !== null) throw new Error(foreignRunnerRefusal(runner, what));
 }
 
 /* v8 ignore start -- real claude subprocess; exercised by bench/, not the unit gate */

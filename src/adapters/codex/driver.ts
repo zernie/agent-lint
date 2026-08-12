@@ -60,6 +60,7 @@ export function parseCodexRun(stdout: string): ParsedRun {
 function codexAvailable(): boolean {
   try {
     return (
+      // vigiles:free-tier — availability probe; `--version` prints and exits.
       spawnSync(codexRuntime.agentBinary, ["--version"], {
         stdio: "ignore",
       }).status === 0
