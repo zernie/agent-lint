@@ -369,7 +369,11 @@ test("`.eval.` in the MIDDLE of a name is not the paid tier — the runner would
   // as covered by the tier that cannot run it and uncovered by the tier that
   // does — exactly backwards.
   const dir = makeTmpDir("cov-eval-infix");
-  write(dir, ".claude/skills/parser/SKILL.md", "---\nname: parser\n---\nbody\n");
+  write(
+    dir,
+    ".claude/skills/parser/SKILL.md",
+    "---\nname: parser\n---\nbody\n",
+  );
   write(dir, ".claude/skills/parser/parser.eval.test.ts", "// deterministic\n");
   const r = findUntestedSurfaces({
     basePath: dir,
