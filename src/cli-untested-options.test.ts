@@ -68,21 +68,40 @@ afterEach(() => {
   cleanupTmpDir(dir);
 });
 
+/**
+ * The extension DETECTION arrives at on THIS host, and one it never would.
+ *
+ * 🔴 BOTH HALVES ARE HOST-DEPENDENT, AND PINNING EITHER ONE HAS BROKEN CI. A
+ * `tsconfig.json` buys `.ts` only where a TypeScript file can actually RUN, so a
+ * Node 22 dev box detects `.ts` and CI's Node 20 detects `.mjs` — and both are
+ * correct. That cuts both ways: a config test that pins `.mjs` proves the option
+ * travelled on the dev box and proves NOTHING on Node 20, where detection would
+ * have produced `.mjs` unaided. So the configured value is picked to DIFFER from
+ * the detected one on every host, and a pass can only mean the config was read.
+ */
+function extensions(): { detected: RegExp; configure: string; want: RegExp } {
+  return canRunTypeScript(detectNodeCaps(dir))
+    ? { detected: /\.ts$/, configure: "mjs", want: /\.mjs$/ }
+    : { detected: /\.mjs$/, configure: "cjs", want: /\.cjs$/ };
+}
+
 test("detection decides the suggested test extension with no config", () => {
-  // The control. A tsconfig.json is enough to write TypeScript, unasked.
-  assert.match(suggestion(lint()), /\.ts$/);
+  // The control. A tsconfig.json is enough to write TypeScript, unasked —
+  // wherever TypeScript can be executed at all.
+  assert.match(suggestion(lint()), extensions().detected);
 });
 
 test("…and `testExtension` in .vigilesrc.json overrides it", () => {
+  const { configure, want } = extensions();
   write(
     ".vigilesrc.json",
     JSON.stringify({
-      rules: { "untested-skill": ["warn", { testExtension: "mjs" }] },
+      rules: { "untested-skill": ["warn", { testExtension: configure }] },
     }),
   );
   assert.match(
     suggestion(lint()),
-    /\.mjs$/,
+    want,
     "the configured extension must reach the finding",
   );
 });
@@ -91,13 +110,14 @@ test("…from any of the three untested-* rules, since they share their options"
   // `checkUntestedSurfaces` merges the options of all three rules, so an author
   // who configured it on the hook rule must not find it works only on the skill
   // one — the merge is the documented behaviour, and it must apply to every key.
+  const { configure, want } = extensions();
   write(
     ".vigilesrc.json",
     JSON.stringify({
-      rules: { "untested-hook": ["warn", { testExtension: "mjs" }] },
+      rules: { "untested-hook": ["warn", { testExtension: configure }] },
     }),
   );
-  assert.match(suggestion(lint()), /\.mjs$/);
+  assert.match(suggestion(lint()), want);
 });
 
 test("a nonsense extension is ignored, not written into an unrunnable path", () => {
