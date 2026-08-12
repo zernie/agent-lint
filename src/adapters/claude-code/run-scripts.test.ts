@@ -394,10 +394,17 @@ test("the runner reads back WHICH surfaces a script exercised", () => {
   try {
     const hook = pathToFileURL(resolve(process.cwd(), "dist/run-hook.js")).href;
     const mod = JSON.stringify(countModuleUrl());
+    // The hook has to EXIST and run. It used to be absent, and the fixture still
+    // "attributed" it: `bash <missing>` exits 127 without launching anything, so
+    // the assertion below was satisfied by a hook that never ran — the exact
+    // false grant the launch check now closes. Measured 2026-08-12.
+    mkdirSync(join(dir, "hooks"), { recursive: true });
+    writeFileSync(join(dir, "hooks", "guard.sh"), "#!/bin/bash\nexit 0\n");
     writeFileSync(
       join(dir, "attributes.harness.mjs"),
       `import { runHook } from ${JSON.stringify(hook)};\n` +
-        `runHook("bash hooks/guard.sh", { hook_event_name: "PreToolUse" });\n`,
+        `const r = runHook("bash hooks/guard.sh", { hook_event_name: "PreToolUse" });\n` +
+        `if (r.exitCode !== 0) process.exit(1);\n`,
     );
     // The control: same channel, no surface — a unit test of a pure helper.
     writeFileSync(

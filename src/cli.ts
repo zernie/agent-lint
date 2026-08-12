@@ -6691,7 +6691,24 @@ function hookLoadPathFiles(hookFile: string): readonly string[] {
   const files: string[] = [];
   let dir = dirname(resolve(process.cwd(), hookFile));
   for (;;) {
-    files.push(resolve(dir, "package.json"));
+    const pkg = resolve(dir, "package.json");
+    files.push(pkg);
+    // 🔴 THE WALK STOPS AT THE FIRST ONE THAT EXISTS, and this list is now also
+    // the set of writes the repair door accepts, so its length is a blast
+    // radius. Unbounded, it reached `/home/package.json` and `/package.json` —
+    // files Node never opens once a nearer one is found. MEASURED against this
+    // runtime, hook at `gp/p/repo/.claude/hooks/`, conflict markers planted at
+    // one ancestor:
+    //
+    //   repo pkg PRESENT , parent conflicted        → loads fine
+    //   repo pkg absent  , parent conflicted        → WEDGES (cause: ../package.json)
+    //   repo pkg absent  , parent absent, gp broken → WEDGES (cause: ../../package.json)
+    //   repo pkg PRESENT , parent absent, gp broken → loads fine
+    //   repo pkg absent  , parent HEALTHY, gp broken→ loads fine
+    //
+    // A missing one is still pushed before the check: `package.json` may be the
+    // file the author has to CREATE, and it is the commonest repair of all.
+    if (existsSync(pkg)) break;
     const up = dirname(dir);
     if (up === dir) break;
     dir = up;
@@ -6756,7 +6773,7 @@ function verifyStampOrRefuse(file: string, event: RawHookEvent): void {
     };
     const source = readFileSync(resolve(process.cwd(), file), "utf-8");
     if (stamp && !verifyHookStamp(source, stamp as SHA256Hash)) {
-      if (isStampRepairEvent(event, file)) {
+      if (isStampRepairEvent(event, file, process.cwd())) {
         announceRepairEscape(file, "does not match its compiled stamp");
         return;
       }
@@ -6841,7 +6858,17 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
           `markers, so Node cannot resolve \`vigiles/hook\` from it (the hook itself ` +
           `may be fine)`
         : "cannot be loaded";
-    if (isLoadPathRepairEvent(event, file)) {
+    if (
+      isLoadPathRepairEvent(event, file, {
+        // The root the REST of this runtime already uses: `hookStampPath` and
+        // `verifyStampOrRefuse` read the hook and its sidecar via `process.cwd()`,
+        // so a repair accepted against any other root would name a file the
+        // runtime never reads. The hook's own path cannot supply it (a hook sits
+        // at any depth, and a `.git` probe would be a disk read core does not do).
+        root: process.cwd(),
+        loadPathFiles: hookLoadPathFiles(file),
+      })
+    ) {
       announceRepairEscape(file, cause);
       return;
     }
@@ -6854,6 +6881,10 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
         `${file}, ${HARNESS_CONFIG_FILES.join(", ")} is broken — those writes are ` +
         `allowed even while this refuses, and a Bash gate never gated file tools ` +
         `at all. The hook then loads and the gate decides normally again.\n` +
+        `vigiles: those paths resolve under ${process.cwd()} — plus any ancestor ` +
+        `\`package.json\` Node actually reads, so whatever is named above as the ` +
+        `cause is writable. A path in a DIFFERENT checkout is refused: it cannot ` +
+        `repair this failure.\n` +
         `vigiles: no command is allowed, deliberately. \`git merge --abort\` and ` +
         `\`git checkout\` RUN \`.git/hooks/*\` (measured: reference-transaction, ` +
         `post-checkout), and \`vigiles compile\` loads the hook through the same ` +

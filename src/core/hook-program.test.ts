@@ -798,16 +798,47 @@ const writeEvent = (file_path: string) => ({
   tool_input: { file_path },
 });
 
+const ROOT = "/repo";
+/** What the runtime derives: `package.json` up every ancestor + the repo rc. */
+const loadPath = (root: string, hook: string): readonly string[] => {
+  const files: string[] = [];
+  const parts = `${root}/${hook}`.split("/").slice(0, -1);
+  for (let i = parts.length; i > 0; i--)
+    files.push(`${parts.slice(0, i).join("/")}/package.json`);
+  files.push("/package.json", `${root}/.vigilesrc.json`);
+  return files;
+};
+const REPO = { root: ROOT, loadPathFiles: loadPath(ROOT, ".claude/hooks") };
+
 test("isStampRepairEvent: the repair is a FILE WRITE — the hook, or its stamp sidecar", () => {
   const hook = ".claude/hooks/guard.hook.mjs";
   const sidecar = ".vigiles/hooks/guard.hook.mjs.json";
   // Editing the hook back to what was compiled.
-  assert.equal(isStampRepairEvent(writeEvent(hook), hook), true);
-  assert.equal(isStampRepairEvent(writeEvent(`/repo/${hook}`), hook), true);
+  assert.equal(isStampRepairEvent(writeEvent(hook), hook, ROOT), true);
+  // The tolerance that suffix matching was reached for, and the reason it is not
+  // needed: the harness sends an ABSOLUTE file_path while settings carry a
+  // relative one, and resolving both against the root matches them properly.
+  assert.equal(
+    isStampRepairEvent(writeEvent(`${ROOT}/${hook}`), hook, ROOT),
+    true,
+  );
+  assert.equal(
+    isStampRepairEvent(writeEvent(`${ROOT}/./x/../${hook}`), hook, ROOT),
+    true,
+  );
+  assert.equal(isStampRepairEvent(writeEvent(`./${hook}`), hook, ROOT), true);
+  // …and the same hook named absolutely on BOTH sides.
+  assert.equal(
+    isStampRepairEvent(writeEvent(`${ROOT}/${hook}`), `${ROOT}/${hook}`, ROOT),
+    true,
+  );
   // Clearing the stamp, which is what actually unwedges (measured in
   // hook-load-wedge.test.ts: the hook then LOADS and still ENFORCES).
-  assert.equal(isStampRepairEvent(writeEvent(sidecar), hook), true);
-  assert.equal(isStampRepairEvent(writeEvent(`/repo/${sidecar}`), hook), true);
+  assert.equal(isStampRepairEvent(writeEvent(sidecar), hook, ROOT), true);
+  assert.equal(
+    isStampRepairEvent(writeEvent(`${ROOT}/${sidecar}`), hook, ROOT),
+    true,
+  );
 
   // …and nothing else. An unrelated file is not the repair.
   for (const f of [
@@ -816,8 +847,45 @@ test("isStampRepairEvent: the repair is a FILE WRITE — the hook, or its stamp 
     "package.json",
     "src/index.ts",
   ]) {
-    assert.equal(isStampRepairEvent(writeEvent(f), hook), false, f);
+    assert.equal(isStampRepairEvent(writeEvent(f), hook, ROOT), false, f);
   }
+});
+
+test("isStampRepairEvent: a write in ANOTHER checkout is not this repo's repair", () => {
+  // 🔴 The suffix trap, at the stamp door. `/home/another-project/.claude/hooks/
+  // guard.hook.mjs` ends exactly the way this repo's hook does, so `endsWith`
+  // said yes: one wedged checkout granted a write into every other checkout on
+  // the disk. Neither file can clear THIS runtime's stale stamp — it reads the
+  // hook and the sidecar under its own root.
+  const hook = ".claude/hooks/guard.hook.mjs";
+  const sidecar = ".vigiles/hooks/guard.hook.mjs.json";
+  for (const f of [
+    `/home/another-project/${hook}`,
+    `/home/another-project/${sidecar}`,
+    `${ROOT}-evil/${hook}`,
+    `../another-project/${hook}`,
+    `${ROOT}/${hook}/../../../elsewhere/${hook}`,
+  ]) {
+    assert.equal(isStampRepairEvent(writeEvent(f), hook, ROOT), false, f);
+  }
+  // Windows separators resolve the same way on both sides — the tolerance is
+  // about SPELLING, and it never was about which repository.
+  assert.equal(
+    isStampRepairEvent(
+      writeEvent("C:\\repo\\a.hook.mjs"),
+      "a.hook.mjs",
+      "C:\\repo",
+    ),
+    true,
+  );
+  assert.equal(
+    isStampRepairEvent(
+      writeEvent("C:\\other\\a.hook.mjs"),
+      "a.hook.mjs",
+      "C:\\repo",
+    ),
+    false,
+  );
 });
 
 test("isStampRepairEvent: NO Bash command is a stamp repair any more", () => {
@@ -841,7 +909,7 @@ test("isStampRepairEvent: NO Bash command is a stamp repair any more", () => {
     "env NODE_OPTIONS=--require=/tmp/p.js vigiles compile",
     "PATH=/tmp vigiles compile",
   ]) {
-    assert.equal(isStampRepairEvent(bashEvent(cmd), hook), false, cmd);
+    assert.equal(isStampRepairEvent(bashEvent(cmd), hook, ROOT), false, cmd);
   }
 });
 
@@ -849,18 +917,33 @@ test("isLoadPathRepairEvent: the repair is a FILE WRITE over the load path", () 
   const hook = ".claude/hooks/guard.hook.mjs";
   const sidecar = ".vigiles/hooks/guard.hook.mjs.json";
   // The hook itself and its stamp (as before) …
-  assert.equal(isLoadPathRepairEvent(writeEvent(hook), hook), true);
-  assert.equal(isLoadPathRepairEvent(writeEvent(sidecar), hook), true);
+  assert.equal(isLoadPathRepairEvent(writeEvent(hook), hook, REPO), true);
+  assert.equal(isLoadPathRepairEvent(writeEvent(sidecar), hook, REPO), true);
   // … plus the config whose breakage takes the LOADER down. `checkHookImports`
   // allows only `vigiles/hook`, so the load path is the hook file plus the config
   // that resolves that specifier — the set is closed, not a guess.
-  assert.equal(isLoadPathRepairEvent(writeEvent("package.json"), hook), true);
   assert.equal(
-    isLoadPathRepairEvent(writeEvent(".vigilesrc.json"), hook),
+    isLoadPathRepairEvent(writeEvent("package.json"), hook, REPO),
     true,
   );
   assert.equal(
-    isLoadPathRepairEvent(writeEvent("/repo/package.json"), hook),
+    isLoadPathRepairEvent(writeEvent(".vigilesrc.json"), hook, REPO),
+    true,
+  );
+  // The absolute spelling of the SAME file, which is what the harness actually
+  // sends — the reason the comparison is tolerant at all.
+  assert.equal(
+    isLoadPathRepairEvent(writeEvent(`${ROOT}/package.json`), hook, REPO),
+    true,
+  );
+  // A monorepo package's own package.json IS on Node's resolution chain, so the
+  // runtime derived it and repairing it must work.
+  assert.equal(
+    isLoadPathRepairEvent(
+      writeEvent(`${ROOT}/.claude/package.json`),
+      hook,
+      REPO,
+    ),
     true,
   );
 
@@ -871,8 +954,35 @@ test("isLoadPathRepairEvent: the repair is a FILE WRITE over the load path", () 
     "tsconfig.json",
     ".git/hooks/post-checkout",
   ]) {
-    assert.equal(isLoadPathRepairEvent(writeEvent(f), hook), false, f);
+    assert.equal(isLoadPathRepairEvent(writeEvent(f), hook, REPO), false, f);
   }
+});
+
+test("isLoadPathRepairEvent: the repair is bound to THIS repository", () => {
+  // 🔴 The reported hole. `samePathRef` matched by SUFFIX, so any absolute path
+  // ending in `package.json` was accepted — including one in a checkout that
+  // cannot repair this failure. "A write executes nothing" answered the
+  // execution objection and never answered this one.
+  const hook = ".claude/hooks/guard.hook.mjs";
+  for (const f of [
+    "/home/another-project/package.json",
+    "/home/another-project/.vigilesrc.json",
+    "/tmp/evil/package.json",
+    `${ROOT}-evil/package.json`,
+    "../another-project/package.json",
+    // Escaping upward and coming back down with the right tail.
+    `${ROOT}/../another-project/package.json`,
+    // A sibling DIRECTORY of the load path, not on it.
+    `${ROOT}/src/package.json`,
+  ]) {
+    assert.equal(isLoadPathRepairEvent(writeEvent(f), hook, REPO), false, f);
+  }
+  // …while the same file named inside this repo still is the repair, so the
+  // narrowing did not re-wedge the door it exists to keep open.
+  assert.equal(
+    isLoadPathRepairEvent(writeEvent(`${ROOT}/package.json`), hook, REPO),
+    true,
+  );
 });
 
 test("isLoadPathRepairEvent: NO Bash command is a repair — the git escape is gone", () => {
@@ -896,7 +1006,7 @@ test("isLoadPathRepairEvent: NO Bash command is a repair — the git escape is g
     "cd /tmp/evil && git merge --abort",
     "",
   ]) {
-    assert.equal(isLoadPathRepairEvent(bashEvent(cmd), hook), false, cmd);
+    assert.equal(isLoadPathRepairEvent(bashEvent(cmd), hook, REPO), false, cmd);
   }
-  assert.equal(isLoadPathRepairEvent({}, hook), false);
+  assert.equal(isLoadPathRepairEvent({}, hook, REPO), false);
 });

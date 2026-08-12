@@ -1128,11 +1128,64 @@ export function runHookProgram(
 // SILENTLY, and that is unchanged.
 // ---------------------------------------------------------------------------
 
-/** Compare two path references without node:path (core stays dependency-free). */
-function samePathRef(a: string, b: string): boolean {
-  const norm = (p: string) => p.replace(/\\/g, "/").replace(/^\.\//, "");
-  const [x, y] = [norm(a), norm(b)];
-  return x === y || x.endsWith("/" + y) || y.endsWith("/" + x);
+/** A reference that already names a root — POSIX `/x` or Windows `C:/x`. */
+function isAbsoluteRef(ref: string): boolean {
+  return ref.startsWith("/") || /^[A-Za-z]:\//.test(ref);
+}
+
+/**
+ * Resolve a path reference against a root, without node:path (core stays
+ * dependency-free). Mirrors `resolve(root, ref)`: an absolute ref wins, a
+ * relative one hangs off the root, and `.` / `..` / `//` collapse.
+ *
+ * 🔴 THIS REPLACED A SUFFIX COMPARISON, and the difference is SCOPE, not
+ * spelling. The old helper accepted `a.endsWith("/" + b)`, so a write to
+ * `/home/another-project/package.json` counted as a repair of THIS repo's
+ * `package.json` — one wedged checkout handed out a write in every other
+ * checkout on the disk. The tolerance that motivated the looseness is real (the
+ * harness sends an absolute `file_path` while settings carry a relative one) and
+ * survives untouched: both sides resolve against the same root and compare
+ * whole, so `/repo/package.json` and `package.json` still match while a sibling
+ * repo's never can.
+ */
+function resolveRef(root: string, ref: string): string {
+  const slashes = (s: string) => s.replace(/\\/g, "/");
+  const r = slashes(ref);
+  const joined = isAbsoluteRef(r)
+    ? r
+    : `${slashes(root).replace(/\/+$/, "")}/${r}`;
+  const out: string[] = [];
+  for (const seg of joined.split("/")) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") {
+      out.pop();
+      continue;
+    }
+    out.push(seg);
+  }
+  return (joined.startsWith("/") ? "/" : "") + out.join("/");
+}
+
+/**
+ * The repository a wedged hook belongs to, as the runtime sees it. Supplied by
+ * the caller because core takes no `node:path` and reads no disk — and because
+ * the hook's own path does NOT determine it (see {@link isLoadPathRepairEvent}).
+ */
+export interface HookRepoPaths {
+  /**
+   * Absolute root that relative references resolve against. Must be the SAME
+   * root the runtime reads the hook and its stamp with, or the write accepted
+   * here is not the file the runtime reads.
+   */
+  readonly root: string;
+  /**
+   * The actual files whose breakage can wedge THIS hook's module resolution,
+   * already resolved by the caller: the `package.json` at every ancestor of the
+   * hook, plus the repo's `.vigilesrc.json`. Node walks that chain, so a
+   * monorepo package's own `package.json` is on it and a sibling checkout's is
+   * not.
+   */
+  readonly loadPathFiles: readonly string[];
 }
 
 /** The basename of a path token — the sidecar is keyed by the hook's basename. */
@@ -1191,12 +1244,13 @@ function stampSidecarRef(hookFile: string): string {
  * (`.vigiles/hooks/<basename>.json`). Both are repo-owned paths derived from the
  * file the runtime was invoked with, never from the event.
  *
- * `samePathRef` (suffix-tolerant) is right for a WRITE and would be wrong for an
- * exec: the harness sends an absolute `file_path` while settings may carry a
- * relative one, and the worst a loose match buys is the ability to write a file
- * whose path ends the same way — no execution. That distinction is why the
- * operand rule needed exact equality and this does not; with the exec path gone,
- * so is the reason to be exact.
+ * 🔴 SCOPE IS NOT THE SAME QUESTION AS EXECUTION. A previous round defended a
+ * suffix comparison here on the ground that a write executes nothing — true, and
+ * beside the point: `/home/another-project/.claude/hooks/guard.hook.mjs` ends
+ * the same way as this repo's hook, so a wedge in one checkout granted a write
+ * into another. Both sides now resolve against `repoRoot` and compare whole
+ * ({@link resolveRef}); the absolute-vs-relative tolerance that suffix matching
+ * was reached for is what resolution gives you properly.
  *
  * This grants nothing new: a Bash gate never gated file tools in the first place
  * (the 2026-08-10 incident was fixed by hand-editing JSON while every Bash
@@ -1206,12 +1260,14 @@ function stampSidecarRef(hookFile: string): string {
 export function isStampRepairEvent(
   event: RawHookEvent,
   hookFile: string,
+  repoRoot: string,
 ): boolean {
   const filePath = event.tool_input?.file_path;
   if (typeof filePath !== "string") return false;
+  const target = resolveRef(repoRoot, filePath);
   return (
-    samePathRef(filePath, hookFile) ||
-    samePathRef(filePath, stampSidecarRef(hookFile))
+    target === resolveRef(repoRoot, hookFile) ||
+    target === resolveRef(repoRoot, stampSidecarRef(hookFile))
   );
 }
 
@@ -1261,13 +1317,38 @@ export function isStampRepairEvent(
  *
  * A file write executes nothing, which is the property no command on this door
  * ever had.
+ *
+ * ## …IN THIS REPOSITORY, which is a separate question
+ *
+ * "A write executes nothing" answers the EXECUTION objection and says nothing
+ * about SCOPE. Under the suffix comparison this used to do, a write to
+ * `/home/another-project/package.json` was accepted while THIS repo was wedged —
+ * a file that cannot repair the failure, in a checkout the wedged session has no
+ * business touching. Every candidate is now resolved against
+ * {@link HookRepoPaths.root} and compared whole against the paths the runtime
+ * itself derived ({@link HookRepoPaths.loadPathFiles}, plus this root's
+ * {@link HARNESS_CONFIG_FILES} so the floor case can never be argued away).
+ *
+ * ⚠️ THE HOOK'S OWN PATH DOES NOT GIVE THE ROOT, so the caller passes it. A hook
+ * lives at `.claude/hooks/…`, `.vigiles/hooks/…`, a plugin subdirectory or the
+ * repo root itself; there is no fixed depth to walk up, and finding a `.git`
+ * marker would mean reading disk, which core does not do. Nor would a
+ * git-derived root be RIGHT: `verifyStampOrRefuse` reads the hook and its stamp
+ * sidecar via `process.cwd()`, so any other root would accept writes to files
+ * the runtime does not read — repairs that do not repair. The root is therefore
+ * the one the rest of the runtime already uses, and it is passed in rather than
+ * invented here.
  */
 export function isLoadPathRepairEvent(
   event: RawHookEvent,
   hookFile: string,
+  repo: HookRepoPaths,
 ): boolean {
-  if (isStampRepairEvent(event, hookFile)) return true;
+  if (isStampRepairEvent(event, hookFile, repo.root)) return true;
   const filePath = event.tool_input?.file_path;
   if (typeof filePath !== "string") return false;
-  return HARNESS_CONFIG_FILES.some((f) => samePathRef(filePath, f));
+  const target = resolveRef(repo.root, filePath);
+  return [...HARNESS_CONFIG_FILES, ...repo.loadPathFiles].some(
+    (f) => target === resolveRef(repo.root, f),
+  );
 }

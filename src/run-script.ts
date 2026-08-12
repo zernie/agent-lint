@@ -201,6 +201,58 @@ export interface RunScriptDeps {
 }
 
 /**
+ * True when the exit code is the shell's own report that it never reached the
+ * program — so nothing of the harness ran and no surface may be credited.
+ *
+ * 🔴 THE NUMBERS ARE MEASURED, NOT CITED. 126/127 are POSIX *conventions*; what
+ * matters is what `spawnSync(cmd, { shell: true })` actually returns here.
+ * Measured 2026-08-12, `/bin/sh` → dash (Debian), each case a real file:
+ *
+ * ```
+ *  126 | direct non-executable    | ./noexec.sh      | out=""    | Permission denied
+ *  127 | direct missing           | ./missing.sh     | out=""    | not found
+ *  127 | bare unknown command     | nosuchcmd-xyz    | out=""    | not found
+ *  127 | bad shebang (exists+x)   | ./badshebang.sh  | out=""    | env: 'nosuchinterp'
+ *  126 | is a directory           | ./               | out=""    | Permission denied
+ *    3 | real hook, exit 3        | ./exit3.sh       | out="ran" |
+ *    0 | real hook, exit 0        | ./ok.sh          | out="ran" |
+ * ```
+ *
+ * The exposure this closes: a harness may legitimately assert that a hook is
+ * NOT executable (`assert.equal(runHook("./hooks/a.sh").exitCode, 126)`). That
+ * test passes, records a check — and the unconditional probe used to credit
+ * `hooks/a.sh` with an execution-tier record although only `/bin/sh` ran. The
+ * file exists and IS a discovered surface, so `resolveProbe` resolves it happily.
+ *
+ * ⚠️ TWO SHAPES ARE DELIBERATELY MISSED, both toward SILENCE (a missed probe
+ * costs one coverage line; a false grant costs the claim). Measured, same run:
+ *
+ * ```
+ *    2 | sh + missing             | sh ./missing.sh          | out=""    | cannot open
+ *    0 | sh + non-executable      | sh ./noexec.sh           | out="ran" |
+ *    0 | bash + non-executable    | bash ./noexec.sh         | out="ran" |
+ *  127 | ran, THEN failed to launch| ./ok.sh && ./missing.sh | out="ran" |
+ * ```
+ *
+ *  - `sh <missing>` exits **2** under dash, which is Claude Code's BLOCK code —
+ *    indistinguishable from a gate legitimately denying, so it cannot be encoded.
+ *    It is also mostly moot: a path that does not exist was never discovered as a
+ *    surface, and `resolveProbe` matches only discovered surfaces.
+ *  - `sh <file>` / `bash <file>` on a non-executable file exit **0 and print
+ *    "ran"** — the interpreter reads the file as an argument, so the exec bit is
+ *    irrelevant and the hook genuinely EXECUTED. Those must keep attributing, and
+ *    do.
+ *  - A compound whose last leaf fails to launch reports 126/127 for the whole
+ *    line even though an earlier leaf ran. We abstain: silence, not a false grant.
+ *
+ * A hook that deliberately exits 126/127 itself is missed the same way, and the
+ * same direction.
+ */
+function shellNeverLaunched(status: number | null | undefined): boolean {
+  return status === 126 || status === 127;
+}
+
+/**
  * The run orchestration with injectable spawn seams: pick direct vs. confined
  * via the safe-by-default policy (`decideSandbox`), then assemble the result.
  * Exported so all three branches (direct / sandbox / refuse) are unit-tested
@@ -241,9 +293,10 @@ export function runScriptWith(
   //
   // ⚠️ LAUNCHED, NOT SUCCEEDED — do not tighten this to a zero exit. A hook that
   // runs and exits 1 (or 2, a block) HAS executed, and that is most of what the
-  // hook tier exists to test. The spawner returning at all is the fact being
-  // recorded; what it returned is the caller's business.
-  probeCommand(command, opts.env);
+  // hook tier exists to test. The spawner returning at all is *nearly* the fact
+  // being recorded; the one thing it does not tell you is whether the shell got
+  // as far as the program — see `shellNeverLaunched`.
+  if (!shellNeverLaunched(res.status)) probeCommand(command, opts.env);
   return {
     exitCode: res.status ?? (res.signal ? 1 : 0),
     stdout: res.stdout ?? "",

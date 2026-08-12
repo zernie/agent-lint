@@ -98,6 +98,28 @@ function runGate(
   return { code: res.status ?? -1, stderr: res.stderr };
 }
 
+/** Same, for a `Write` — the repair action, now the ONLY way out of a wedge. */
+function runWrite(
+  dir: string,
+  hook: string,
+  filePath: string,
+): { status: number | null; stderr: string } {
+  const res = spawnSync(
+    process.execPath,
+    [CLI, "hook-runtime", "run-program", hook],
+    {
+      cwd: dir,
+      encoding: "utf-8",
+      input: JSON.stringify({
+        hook_event_name: "PreToolUse",
+        tool_name: "Write",
+        tool_input: { file_path: filePath },
+      }),
+    },
+  );
+  return { status: res.status, stderr: res.stderr };
+}
+
 test("a healthy project is unaffected — the gate loads and decides as before", () => {
   const { dir, hook } = makeFixture();
   try {
@@ -220,20 +242,34 @@ test("the wedge still fails CLOSED — a broken load path is not an open door", 
     // And the author's way out is still open — but it is a FILE WRITE now, not a
     // command. A fix that shuts every door re-wedges the repo, which is the
     // defect this whole branch exists for.
-    const write = spawnSync(
-      process.execPath,
-      [CLI, "hook-runtime", "run-program", hook],
-      {
-        cwd: dir,
-        encoding: "utf-8",
-        input: JSON.stringify({
-          hook_event_name: "PreToolUse",
-          tool_name: "Write",
-          tool_input: { file_path: "package.json" },
-        }),
-      },
-    );
+    const write = runWrite(dir, hook, "package.json");
     assert.equal(write.status, 0, write.stderr);
+    // …the ABSOLUTE spelling of that same file, which is what the harness
+    // actually sends, goes through too — that tolerance is the whole reason the
+    // comparison was loose in the first place.
+    assert.equal(runWrite(dir, hook, join(dir, "package.json")).status, 0);
+    // 🔴 …but ONLY in this repository. A suffix comparison accepted any absolute
+    // path ending in `package.json`, so a wedge here granted a write into a
+    // checkout that cannot repair it. Real second repo on disk, real wedge here.
+    const other = makeTmpDir("other-repo");
+    try {
+      writeFileSync(join(other, "package.json"), '{"name":"other"}\n');
+      for (const outside of [
+        join(other, "package.json"),
+        join(other, ".vigilesrc.json"),
+        join(other, hook), // the hook's own path, same tail, wrong repo
+        join(dir, "..", "another-project", "package.json"),
+      ]) {
+        assert.equal(runWrite(dir, hook, outside).status, 2, outside);
+      }
+      // …and the neighbour is untouched by the refusal, which is the point.
+      assert.equal(
+        readFileSync(join(other, "package.json"), "utf-8"),
+        '{"name":"other"}\n',
+      );
+    } finally {
+      cleanupTmpDir(other);
+    }
     // The refusal explains itself as harness state, not as a verdict, and points
     // at the way out — without that the author's next move is to unwire the gate.
     const refused = runGate(dir, hook, "ls");
@@ -464,5 +500,66 @@ test("…so NO command escapes a load wedge any more, and a FILE WRITE does", ()
     assert.equal(runGate(dir, hook, "git merge --abort").code, 0);
   } finally {
     cleanupTmpDir(dir);
+  }
+});
+
+test("the ONE repair path outside the repo root is the one Node actually reads", () => {
+  // 🔴 The counterweight to the scope fix, and it is measured rather than
+  // reasoned. Binding repairs to "inside cwd" would have been the obvious
+  // narrowing and it would have re-wedged this case: with the repo's own
+  // `package.json` absent, Node keeps walking UP, so an ancestor above the root
+  // can break the load — and the runtime names it as the cause while refusing
+  // the write that fixes it. That is the exact defect this whole branch exists
+  // for, reintroduced by a security fix.
+  //
+  // So the accepted set is the chain the runtime DERIVED (`hookLoadPathFiles`),
+  // not a containment test. A sibling checkout is still refused: it is not on
+  // any chain.
+  const outer = makeTmpDir("wedge-outer");
+  try {
+    const dir = join(outer, "repo");
+    mkdirSync(join(dir, "node_modules"), { recursive: true });
+    symlinkSync(REPO_ROOT, join(dir, "node_modules", "vigiles"), "dir");
+    mkdirSync(join(dir, ".claude", "hooks"), { recursive: true });
+    writeFileSync(join(dir, ".claude", "hooks", "guard.hook.mjs"), HOOK);
+    const hook = ".claude/hooks/guard.hook.mjs";
+
+    // A healthy repo package.json ends Node's walk, so a conflicted ancestor is
+    // invisible — nothing to repair, and the gate decides normally.
+    writeFileSync(join(dir, "package.json"), HEALTHY_PACKAGE_JSON);
+    writeFileSync(join(outer, "package.json"), CONFLICTED_PACKAGE_JSON);
+    assert.equal(runGate(dir, hook, "ls").code, 0, "walk stops at the repo");
+
+    // Remove it and the walk continues past the root: NOW it wedges, and the
+    // cause the runtime prints is the ancestor.
+    rmSync(join(dir, "package.json"));
+    const refused = runGate(dir, hook, "ls");
+    assert.equal(refused.code, 2);
+    assert.match(refused.stderr, /\.\.[/\\]package\.json/);
+    // …and the write that fixes exactly that is allowed, though it is outside
+    // the repo root.
+    assert.equal(runWrite(dir, hook, join(outer, "package.json")).status, 0);
+    // A sibling of the repo, same depth, same basename — not on any chain.
+    assert.equal(
+      runWrite(dir, hook, join(outer, "sibling", "package.json")).status,
+      2,
+    );
+
+    // …and the chain STOPS at the first `package.json` that exists, because
+    // that is where Node stops reading (measured — the five shapes are listed
+    // in `hookLoadPathFiles`). Put the repo's own back and the ancestor above
+    // it is no longer repairable, because it is no longer capable of wedging:
+    // the accepted set is the files that can break this load, nothing wider.
+    writeFileSync(join(dir, "package.json"), HEALTHY_PACKAGE_JSON);
+    assert.equal(runGate(dir, hook, "ls").code, 0, "healthy again");
+    writeFileSync(join(dir, "package.json"), CONFLICTED_PACKAGE_JSON);
+    assert.equal(runGate(dir, hook, "ls").code, 2, "wedged on its OWN config");
+    assert.equal(runWrite(dir, hook, join(dir, "package.json")).status, 0);
+    assert.equal(runWrite(dir, hook, join(outer, "package.json")).status, 2);
+    // The far end of the old unbounded walk, which used to be accepted from
+    // any wedged repo on the machine.
+    assert.equal(runWrite(dir, hook, "/package.json").status, 2);
+  } finally {
+    cleanupTmpDir(outer);
   }
 });

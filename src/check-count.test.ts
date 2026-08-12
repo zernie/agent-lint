@@ -16,6 +16,10 @@ import {
   surfacesRecorded,
   parseCheckReport,
 } from "./check-count.js";
+import { join } from "node:path";
+import { writeFileSync } from "node:fs";
+
+import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 import { runHook } from "./run-hook.js";
 import { assertHookAllows } from "./harness-assert.js";
 import { defineHook, allow, tool } from "./hook.js";
@@ -197,16 +201,27 @@ test("a probe with an unknown origin is dropped, the rest of the report survives
 
 test("runHook attributes the hook it ran, not just that it ran", () => {
   // Derived from the command about to be executed — the author declares nothing.
-  runHook(
-    '"$GUARD"',
-    { hook_event_name: "PreToolUse" },
-    {
-      env: { GUARD: "/repo/hooks/guard.sh" },
-    },
-  );
-  assert.deepEqual(surfacesRecorded(), [
-    { how: "command", ref: "/repo/hooks/guard.sh" },
-  ]);
+  //
+  // The guard has to be a REAL executable. It used to be `/repo/hooks/guard.sh`,
+  // a path that exists nowhere: the shell exited 127 without launching anything
+  // and the probe was recorded anyway, so this test asserted attribution over a
+  // hook that never ran. Fixed with the launch check that now suppresses it.
+  const dir = makeTmpDir("check-count-guard");
+  try {
+    const guard = join(dir, "guard.sh");
+    writeFileSync(guard, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    const r = runHook(
+      '"$GUARD"',
+      { hook_event_name: "PreToolUse" },
+      {
+        env: { GUARD: guard },
+      },
+    );
+    assert.equal(r.exitCode, 0, r.stderr);
+    assert.deepEqual(surfacesRecorded(), [{ how: "command", ref: guard }]);
+  } finally {
+    cleanupTmpDir(dir);
+  }
 });
 
 test("a hook command that names no program attributes nothing", () => {
