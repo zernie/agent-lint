@@ -335,6 +335,86 @@ test("evidence: a bodiless TYPE MEMBER is not a call — `):` abstains", () => {
   assert.equal(agentDrivingApi("runEval(x)\n{ y }"), undefined);
 });
 
+test("evidence: a TYPE BODY is blanked, so a bodiless member is not a call", () => {
+  // 🔴 The class the `):` fix did not close. `runEval(o);` inside an interface and
+  // `runEval({});` in a function are LEXICALLY IDENTICAL, so no rule over the
+  // tokens around the match can separate them — the discriminator is WHERE the
+  // match sits. A type body is a delimited region, and blanking those is what
+  // `stripNonCode` already does for comments and strings, so this is one more
+  // region kind in the same lexer: no parser, no dependency, byte-parity intact.
+  //
+  // Each of these returned an API name before the fix.
+  for (const src of [
+    "interface R { runEval(o); }",
+    "interface Runner { runEval(o: Opts): void; }",
+    "type R = { runEval(o); };",
+    "type R = { runEval(o), other: 1 };",
+    'declare module "x" { interface I { runEval(o); } }',
+    "declare global { interface G { runEval(o); } }",
+    // A generic head carries braces of its own, so the search repeats past them.
+    "interface X<T extends { a: 1 }> { runEval(o); }",
+    "type R = { measureTriggerRate(o: O): Promise<number>; };",
+  ]) {
+    assert.equal(agentDrivingApi(src), undefined, src);
+  }
+
+  // 🔴 QUIET HALF, AND THE ONE THAT MATTERS: a brace-blanker that swallowed real
+  // code would be worse than the false positives it fixes. Every one of these is
+  // a genuine call sitting inside braces a naive blanker could have eaten.
+  for (const src of [
+    "await runEval({});",
+    "const s = `${runEval(x)}`;",
+    "const s = `a${`b${runEval(x)}`}c`;",
+    "class F { run() { return runEval({}); } }",
+    "class F { run = () => runEval({}); }",
+    "const o = { run: () => runEval({}) };",
+    "const o = { run() { return runEval({}); } };",
+    "try { await runEval({}); } catch {}",
+    "it('x', async () => { await runEval({}); });",
+    // …and a call that FOLLOWS a type declaration, where the blanker must stop
+    // at the body's closing brace and not run on.
+    "interface R { a: 1 }\nawait runEval({});",
+    "type A = { a: 1 };\nawait runEval({});",
+    "type A = { a: 1 };\nawait runEval({});\ntype B = { b: 2 };",
+    "interface X<T extends { a: 1 }> { m(): T }\nawait runEval({});",
+    "interface R { runEval(o): void }\nconst x: R = null;\nawait runEval({});",
+  ]) {
+    assert.notEqual(agentDrivingApi(src), undefined, src);
+  }
+
+  // 🔴 THE OVERSHOOT GUARD. Semicolon-less code must not send the body search
+  // into the next function: without the newline bound, each of these loses a real
+  // call, which is the worse direction.
+  for (const src of [
+    "type A = string\nfunction f() { runEval({}); }",
+    "declare const x: T\nfunction f() { runEval({}); }",
+    "interface R { a: 1 }\nfunction f() { runEval({}) }",
+    "type A =\n  | 'a'\n  | 'b'\nawait runEval({});",
+    // `type` is not a reserved word, so a variable or property named `type` must
+    // not open a "type body" — these object literals HOLD the call, so blanking
+    // one loses it outright.
+    "const type = { run: () => runEval({}) };",
+    "obj.type = { run: () => runEval({}) };",
+    // …and a PROPERTY named after a keyword, which only the `.` lookbehind stops.
+    "obj.interface = { run: () => runEval({}) };",
+    "const type = { a: 1 };\nawait runEval({});",
+    "obj.type = { a: 1 };\nawait runEval({});",
+    // A truncated file blanks nothing rather than swallowing the rest.
+    "interface R { a: 1\nawait runEval({});",
+  ]) {
+    assert.notEqual(agentDrivingApi(src), undefined, src);
+  }
+
+  // ⚠️ WHAT IS STILL OPEN, executed and pinned: a class overload signature. A
+  // class body cannot be blanked — the true positives above include a call inside
+  // one — and telling an overload from an expression statement needs to know the
+  // enclosing brace is a class body.
+  assert.equal(
+    agentDrivingApi("class C { runEval(o: A); runEval(o: B) { return 1; } }"),
+    "runEval",
+  );
+});
+
 test("evidence: an eval NAME stands alone — but only a name eval discovery collects", () => {
   // Our own convention says what tier this is, so no read is needed and an empty
   // body does not excuse it — for a name `vigiles eval` would actually run.

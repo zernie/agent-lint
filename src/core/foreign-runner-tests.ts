@@ -417,6 +417,139 @@ export function stripNonCode(src: string): string {
 }
 
 /**
+ * A TYPE-LEVEL declaration keyword that opens a braced region containing no
+ * runtime code. `declare` is deliberately ABSENT: `declare module "x" { … }` is
+ * closed by the `interface` inside it (measured), while `declare const x: T`
+ * with no semicolon would send the body search running into the next function.
+ */
+const TYPE_KEYWORD = /(?<![\p{L}\p{N}_$.])(interface|type)(?![\p{L}\p{N}_$])/gu;
+
+/**
+ * The index of the braced body opening at/after `from`, or `-1`.
+ *
+ * 🔴 THE BOUND IS THE WHOLE SAFETY ARGUMENT. Anything may sit on the keyword's
+ * OWN line (`interface X extends Y {`); once a newline is crossed, the next
+ * significant character must BE the `{`. Without that, a semicolon-less
+ * `type A = string` followed by `function f() { runEval({}); }` would find the
+ * FUNCTION's brace and blank a real call — trading the false positives this
+ * closes for false negatives, which is the worse direction. Measured: with the
+ * bound, that input still reports `runEval`.
+ */
+function typeBodyOpen(src: string, from: number): number {
+  let crossed = false;
+  for (let k = from; k < src.length; k++) {
+    const c = src[k] ?? "";
+    if (c === ";") return -1;
+    if (c === "\n") {
+      crossed = true;
+      continue;
+    }
+    if (/\s/.test(c)) continue;
+    if (c === "{") return k;
+    if (crossed) return -1;
+  }
+  return -1;
+}
+
+/**
+ * Blank the BODY of every type-level declaration — the region kind that made a
+ * bodiless member indistinguishable from a call.
+ *
+ * 🔴 WHY A REGION AND NOT ANOTHER SHAPE RULE. `runEval(o);` inside an interface
+ * and `runEval({});` in a function are lexically identical, so no rule over the
+ * tokens around the match can separate them; the discriminator is WHERE the match
+ * sits. A type body is a delimited region, and blanking delimited regions is
+ * exactly what {@link stripNonCode} already does for comments, strings and
+ * template text — so this is one more region kind in the same lexer, not a
+ * seventh special case. No parser, no dependency, so both engines compute it
+ * identically and the byte-parity gate is untouched.
+ *
+ * Runs AFTER {@link stripNonCode}, and only then is brace counting sound: a `}`
+ * inside a string or comment is already gone, so the depth count cannot be
+ * confused by one.
+ *
+ * A generic head can carry braces of its own (`interface X<T extends { a: 1 }> {…}`),
+ * so the search repeats from each closing brace under the same bound.
+ *
+ * MEASURED — five of the six known false positives close, and no true positive
+ * moves (22 call shapes checked, including `` `${runEval(x)}` ``, a call in a
+ * class method body, and one in an object literal, which a naive brace-blanker
+ * would have eaten):
+ *
+ *     interface R { runEval(o); }                        → undefined  (was "runEval")
+ *     type R = { runEval(o); };                          → undefined  (was "runEval")
+ *     type R = { runEval(o), other: 1 };                 → undefined  (was "runEval")
+ *     declare module "x" { interface I { runEval(o); } } → undefined  (was "runEval")
+ *     interface X<T extends { a: 1 }> { runEval(o); }    → undefined  (was "runEval")
+ *
+ * ⚠️ WHAT IT STILL MISSES, run rather than asserted — a CLASS overload signature:
+ *
+ *     agentDrivingApi("class C { runEval(o: A); runEval(o: B) { return 1; } }")
+ *                                                        → "runEval"
+ *
+ * A class body is NOT blankable: it holds real method bodies, and one of the true
+ * positives above is a call inside one. Separating an overload signature from an
+ * expression statement needs to know whether the enclosing brace is a class body
+ * — the context this lexical layer does not carry. Left open deliberately, and
+ * cheaply: the blast radius is a type-level test, named `*.test.*`, under a
+ * surface dir, declaring an overload of a vigiles API.
+ */
+export function stripTypeRegions(src: string): string {
+  const out = src.split("");
+  TYPE_KEYWORD.lastIndex = 0;
+  for (let m = TYPE_KEYWORD.exec(src); m !== null; m = TYPE_KEYWORD.exec(src)) {
+    const after = m.index + (m[1] ?? "").length;
+    if (!namesAType(src, after, m[1] ?? "")) continue;
+    const end = blankBodies(src, out, after);
+    if (end !== -1) TYPE_KEYWORD.lastIndex = end;
+  }
+  return out.join("");
+}
+
+/**
+ * Whether this keyword opens a DECLARATION. `type` is not reserved, so
+ * `const type = {…}` and `obj.type = {…}` are ordinary code whose object literal
+ * must not be blanked — a real call can live inside one. (`obj.interface` is
+ * excluded by the lookbehind in {@link TYPE_KEYWORD}, which has no such guard.)
+ */
+function namesAType(src: string, after: number, keyword: string): boolean {
+  if (keyword !== "type") return true;
+  let k = after;
+  while (k < src.length && /\s/.test(src[k] ?? "")) k++;
+  return /[A-Za-z_$]/.test(src[k] ?? "");
+}
+
+/** Index of the `}` closing the `{` at `open`, or -1 when the source is cut off. */
+function matchingBrace(src: string, open: number): number {
+  let depth = 0;
+  for (let k = open; k < src.length; k++) {
+    if (src[k] === "{") depth++;
+    else if (src[k] === "}" && --depth === 0) return k;
+  }
+  return -1;
+}
+
+/**
+ * Blank every braced group this declaration owns, returning the last one's close
+ * index (or -1). A generic head carries braces of its own
+ * (`interface X<T extends { a: 1 }> {…}`), so the bounded search repeats.
+ */
+function blankBodies(src: string, out: string[], from: number): number {
+  let last = -1;
+  for (
+    let open = typeBodyOpen(src, from);
+    open !== -1;
+    open = typeBodyOpen(src, last + 1)
+  ) {
+    const close = matchingBrace(src, open);
+    if (close === -1) return last; // truncated source — blank nothing more
+    for (let k = open + 1; k < close; k++) if (out[k] !== "\n") out[k] = " ";
+    last = close;
+  }
+  return last;
+}
+
+/**
  * A CANDIDATE call of one of {@link AGENT_DRIVING_APIS} — the identifier, then
  * optional whitespace, then `(`. Only a candidate: a DEFINITION has the same
  * shape, so every match is put through {@link isCallSite} before it counts.
@@ -535,33 +668,15 @@ function significantAt(src: string, from: number): number {
  * report is compared byte-for-byte with the disk engine's, so it must stay free
  * of native/runtime imports.
  *
- * ⚠️ OPEN DEFECT, MEASURED 2026-08-12 AND NOT FIXED — a bodiless member with NO
- * return type still reads as a call, because it is lexically identical to one:
+ * ⚠️ THE REMAINING GAP, run rather than asserted — a CLASS overload signature:
  *
- *     agentDrivingApi("interface R { runEval(o); }")                → "runEval"
- *     agentDrivingApi("type R = { runEval(o); };")                  → "runEval"
- *     agentDrivingApi("class C { runEval(o: A); runEval(o: B) {} }") → "runEval"
- *     agentDrivingApi('declare module "x" { interface I { runEval(o); } }')
- *                                                                  → "runEval"
- *     agentDrivingApi("type R = { runEval(o), other: 1 };")         → "runEval"
+ *     agentDrivingApi("class C { runEval(o: A); runEval(o: B) { return 1; } }")
+ *                                                              → "runEval"
  *
- * `runEval({});` — a genuine call — is `)` followed by `;` too, so no rule over
- * the token AFTER the parameter list can separate them. The discriminator is
- * whether the match sits inside a TYPE BODY, which needs context this lexical
- * layer does not carry. Two structural fixes were considered:
- *
- *   1. A TS-aware parse. Correct, and currently forbidden by the byte-parity
- *      constraint above (no native/runtime imports in this shared module).
- *   2. Require a RUNTIME import from a vigiles specifier, so a type-only file
- *      (which imports `import type …`, or nothing) cannot be evidence. MEASURED:
- *      it separates every false positive above and every true positive tried —
- *      and then MISSES this repo's own agent-driving examples, which import from
- *      `"../../dist/harness-assert.js"`, a relative path with no `vigiles` in the
- *      specifier (4 of 4 checked scored zero). It trades a bounded false-positive
- *      class for an unbounded false-negative one, so it is not a drop-in.
- *
- * Recorded rather than patched again: the shapes above are the same defect as the
- * one just fixed, and case-by-case rules for each is what produced this series.
+ * The five bodiless-member shapes that used to sit here are CLOSED, by blanking
+ * type bodies as a region ({@link stripTypeRegions}) rather than by another shape
+ * rule. A class body is the one that cannot be blanked — it holds real method
+ * bodies, and a call inside one is a true positive the tests pin.
  */
 function isCallSite(src: string, start: number, paren: number): boolean {
   const prev = wordBefore(src, start);
@@ -591,7 +706,9 @@ function isCallSite(src: string, start: number, paren: number): boolean {
  * thing is still a finding.
  */
 export function agentDrivingApi(content: string): string | undefined {
-  const src = stripNonCode(content);
+  // Two region passes, in order: quotes/comments first (so brace counting is
+  // sound), then type bodies (so a bodiless member is not read as a call).
+  const src = stripTypeRegions(stripNonCode(content));
   AGENT_CALL_RE.lastIndex = 0;
   for (
     let m = AGENT_CALL_RE.exec(src);
