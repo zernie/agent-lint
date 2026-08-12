@@ -374,13 +374,29 @@ function clusterVerdict(
  *     -ilrsD or -c command or -O shopt_option      (invocation only)
  *     -abefhkmnptuvxBCEHPT or -o option
  *
- * `n` and `D` PARSE the operand and never run it (measured against bash 5.2.21:
- * neither printed the script's output); `c`, `o` and `O` take a value; the rest
- * consume nothing and execute normally.
+ * `n`, `D` and `c` leave NO executed file operand; `o` and `O` take a value; the
+ * rest consume nothing and execute normally.
+ *
+ * 🔴 `c` BELONGS WITH `n` AND `D`, NOT WITH THE VALUE-TAKERS, even though it is
+ * the one that actually runs something. It was listed as a value-taker, which is
+ * true of the word right after it and false of everything past that: under `-c`
+ * the shell runs the STRING, and the operands that follow become `$0`, `$1` …
+ * Skipping only the string therefore walked on and selected the next operand as
+ * the entry script. Measured 2026-08-12 against bash 5.2.21, with a hook whose
+ * only job is to leave a marker file:
+ *
+ *     $ bash -ce 'exit 0' hooks/pre.sh   →  exit=0, NO MARKER — never executed
+ *     $ bash -e hooks/pre.sh             →  exit=0, marker present  (control)
+ *     $ bash -ce 'echo "0=$0 1=$1"' A B  →  0=A 1=B  — operands are $0, $1
+ *
+ * and `commandRefs("bash -ce 'exit 0' hooks/pre.sh")` returned `["hooks/pre.sh"]`
+ * — a false GRANT, execution coverage for a hook that did not run. Position in
+ * the cluster is irrelevant (`-ce`, `-ec`, `-xc` all behave the same), so any
+ * cluster CONTAINING `c` yields the no-script verdict.
  */
 const SHELL_CLUSTER = {
-  noExec: "nD",
-  value: "coO",
+  noScript: "nDc",
+  value: "oO",
   safe: "ilrsabefhkmptuvxBCEHPT",
 } as const;
 
@@ -415,7 +431,7 @@ function classifyCluster(
   if (family !== "shell") return "none";
   let takesValue = false;
   for (const ch of letters) {
-    if (SHELL_CLUSTER.noExec.includes(ch)) return "none";
+    if (SHELL_CLUSTER.noScript.includes(ch)) return "none";
     if (SHELL_CLUSTER.value.includes(ch)) takesValue = true;
     else if (!SHELL_CLUSTER.safe.includes(ch)) return "none"; // unknown ⇒ abstain
   }

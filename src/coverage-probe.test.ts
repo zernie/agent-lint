@@ -552,6 +552,36 @@ test("a BUNDLED short-option cluster is attributed only when every letter is kno
   assert.deepEqual(commandRefs("python3 -E -s -I hooks/x.py"), ["hooks/x.py"]);
 });
 
+test("a clustered `-c` selects NO script — the operand after the string is `$0`", () => {
+  // 🔴 FIRES. `c` was filed with the value-takers, which is true of the word
+  // right after it and false of everything past that: `-c` runs the STRING, and
+  // the operands behind it become `$0`, `$1` … Skipping only the string walked
+  // on and took the next operand for the entry script. Measured 2026-08-12
+  // against bash 5.2.21 with a hook whose only job is to leave a marker file:
+  //
+  //     $ bash -ce 'exit 0' hooks/pre.sh   →  exit=0, NO MARKER — never ran
+  //     $ bash -e hooks/pre.sh             →  exit=0, marker present (control)
+  //     $ bash -ce 'echo "0=$0 1=$1"' A B  →  0=A 1=B
+  //
+  // and `commandRefs` returned `["hooks/pre.sh"]` for the first of those: a
+  // FALSE GRANT, execution coverage minted for a hook nothing executed.
+  //
+  // Position inside the cluster is irrelevant — bash accepts `c` anywhere in the
+  // bundle and it means the same thing every time.
+  assert.deepEqual(commandRefs("bash -ce 'exit 0' hooks/pre.sh"), []);
+  assert.deepEqual(commandRefs("bash -ec 'exit 0' hooks/pre.sh"), []);
+  assert.deepEqual(commandRefs("bash -xc 'exit 0' hooks/pre.sh"), []);
+  assert.deepEqual(commandRefs("sh -uc 'exit 0' hooks/pre.sh"), []);
+  // The whole-word spelling was already right, via `withoutScript`; the cluster
+  // now agrees with it instead of contradicting it.
+  assert.deepEqual(commandRefs("bash -c 'exit 0' hooks/pre.sh"), []);
+
+  // QUIET: a value-taking cluster with no `c` still attributes, so this narrows
+  // the model rather than blanket-refusing every bundle that consumes a word.
+  assert.deepEqual(commandRefs("bash -eo pipefail hooks/x.sh"), ["hooks/x.sh"]);
+  assert.deepEqual(commandRefs("bash -eO extglob hooks/x.sh"), ["hooks/x.sh"]);
+});
+
 test("`run-program` is a command SHAPE, not a word that may appear anywhere", () => {
   // 🔴 FIRES. The verb was searched across the whole argv, so any command that
   // merely PRINTED it attributed the following path — `echo` ran, the hook did
