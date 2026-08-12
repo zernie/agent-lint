@@ -1,18 +1,40 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   foreignRunnerTests,
   foreignRunnerTestWarning,
   collectingRunners,
   harnessSurfaceDirs,
+  agentDrivingApi,
   type ForeignRunnerTest,
 } from "./foreign-runner-tests.js";
 import { claudeCodeLayout } from "../adapters/claude-code/layout.js";
 
 const LAYOUT = claudeCodeLayout;
+
+/** A body that DOES drive an agent — the default for the name/location tests,
+ *  which are about names and locations, not about evidence. */
+const DRIVES = `import { runHarnessTest } from "vigiles/testing";\nawait runHarnessTest({});\n`;
+
 const find = (...paths: string[]): readonly ForeignRunnerTest[] =>
-  foreignRunnerTests(() => paths, LAYOUT);
+  foreignRunnerTests(
+    () => paths,
+    LAYOUT,
+    () => DRIVES,
+  );
+
+/** Same, with per-path bodies — for the evidence half. */
+const findWith = (
+  bodies: Record<string, string | undefined>,
+): readonly ForeignRunnerTest[] =>
+  foreignRunnerTests(
+    () => Object.keys(bodies),
+    LAYOUT,
+    (p) => bodies[p],
+  );
 
 /** The single finding for `path` — fails loudly if the check found none. */
 function only(...paths: string[]): ForeignRunnerTest {
@@ -116,7 +138,7 @@ test("the message names the FILE, the RUNNER and the CONSEQUENCE — and bills t
   assert.match(msg, /\.claude\/skills\/foo\/foo\.test\.mjs/); // which file
   assert.match(msg, /vitest and jest/); // which runner
   assert.match(msg, /COLLECTS AND EXECUTES/); // what happens
-  assert.match(msg, /drive an agent/); // why it costs
+  assert.match(msg, /spawns an agent/); // why it costs
   assert.match(msg, /harness\.mjs/); // the fix is a rename
 
   // An eval file wearing a foreign name is the expensive case: it drives the
@@ -124,10 +146,95 @@ test("the message names the FILE, the RUNNER and the CONSEQUENCE — and bills t
   const paidMsg = foreignRunnerTestWarning(
     only(".claude/skills/foo/__tests__/foo.eval.mjs"),
   );
+  assert.equal(msg.includes("runHarnessTest"), true); // the evidence it read
   assert.match(paidMsg, /REAL model/);
   assert.match(paidMsg, /burns model budget/);
   // The free tier must NOT claim a model bill.
   assert.doesNotMatch(msg, /burns model budget/);
+});
+
+test("silent: a REAL offline unit test under a surface dir is not accused", () => {
+  // 🔴 The regression this gate exists for. `.claude/skills/verify-citations/
+  // scripts/verify-cites.test.mjs` in the author's own repo is an offline test of
+  // a pure reducer — no model, no network, no vigiles import — and the name+
+  // location rule reported it and told him to rename it, which would have taken a
+  // working test out of that repo's vitest run.
+  //
+  // Real bytes, not a fixture written to pass: this repo's own
+  // `core/test-file-ext.test.ts`, which is exactly that shape (pure function in,
+  // value out), read off disk and placed at the surface path Codex named.
+  const pure = readFileSync(join(__dirname, "test-file-ext.test.ts"), "utf-8");
+  assert.equal(agentDrivingApi(pure), undefined);
+  assert.deepEqual(
+    findWith({ ".claude/skills/foo/scripts/parser.test.ts": pure }),
+    [],
+  );
+  // Same for the `__tests__/` half — jest collects by location, but a pure file
+  // parked there is still not driving anything.
+  assert.deepEqual(findWith({ "skills/foo/__tests__/parser.ts": pure }), []);
+  // Unreadable / absent content is NOT evidence either: no read, no accusation.
+  assert.deepEqual(
+    findWith({ ".claude/skills/foo/foo.test.mjs": undefined }),
+    [],
+  );
+});
+
+test("fires: a REAL harness file, if it were named `*.test.*`, still costs money", () => {
+  // The other half on real bytes — one of this repo's shipped example harnesses,
+  // which genuinely calls `runHarnessTest`. Renaming THAT one is sound advice.
+  const real = readFileSync(
+    join(
+      __dirname,
+      "..",
+      "..",
+      "examples",
+      "harness",
+      "effect-boundary.harness.mjs",
+    ),
+    "utf-8",
+  );
+  assert.ok(agentDrivingApi(real) !== undefined);
+  const found = findWith({ ".claude/skills/foo/foo.test.mjs": real });
+  assert.equal(found.length, 1);
+  assert.match(foreignRunnerTestWarning(found[0]), /spawns an agent/);
+});
+
+test("evidence: only the AGENT-driving tiers count, and the message quotes the one it found", () => {
+  // `runHook` is the no-capability tier — a hook process, no binary, no model, no
+  // bill. Collecting one is collecting an ordinary test, so it must stay silent;
+  // otherwise the harmful "rename it" advice just moves down a tier.
+  assert.equal(
+    agentDrivingApi(
+      `import { runHook } from "vigiles/unit";\nawait runHook({});`,
+    ),
+    undefined,
+  );
+  assert.deepEqual(
+    findWith({
+      ".claude/skills/foo/foo.test.mjs": `import { runHook } from "vigiles/unit";`,
+    }),
+    [],
+  );
+  // Identifier boundaries: a longer name that merely CONTAINS one is not a call.
+  assert.equal(agentDrivingApi("const myRunEvaluator = 1;"), undefined);
+  assert.equal(agentDrivingApi("$runEval"), undefined);
+  assert.equal(agentDrivingApi("obj.runEval();"), "runEval");
+  // The finding carries WHICH api it saw, and the message quotes it back — the
+  // claim is now about this file, not about the class.
+  const found = findWith({
+    ".claude/skills/foo/foo.test.mjs": `await measureTriggerRate({});`,
+  });
+  assert.equal(found[0].evidence, "measureTriggerRate");
+  assert.match(foreignRunnerTestWarning(found[0]), /measureTriggerRate/);
+});
+
+test("evidence: an `*.eval.*` name stands alone — the paid tier is declared, not read", () => {
+  // Our own convention says what tier this is, so no read is needed and an empty
+  // body does not excuse it.
+  const found = findWith({ ".claude/skills/foo/foo.eval.test.mjs": "" });
+  assert.equal(found.length, 1);
+  assert.equal(found[0].evidence, "eval-name");
+  assert.match(foreignRunnerTestWarning(found[0]), /burns model budget/);
 });
 
 test("harnessSurfaceDirs is layout-driven, in both the plugin and the user shape", () => {

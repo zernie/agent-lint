@@ -703,9 +703,19 @@ export function scanPlugin(
       // merge conflict: a warning, never scored. The grade must not move because
       // of what someone named a file next to a hook; this is a hazard in how the
       // repo meets OTHER tools, not a fact about how the harness was designed.
-      ...foreignRunnerTests(() => harnessSurfaceFilesOnDisk(dir, lay), lay).map(
-        foreignRunnerTestWarning,
-      ),
+      // …and only when the file is measured to DRIVE AN AGENT: the same rule
+      // reported a skill's ordinary offline unit test and told its author to
+      // rename it, which would have dropped a working test from that repo's
+      // vitest run. Reads only the name/location candidates; an unreadable one
+      // yields `undefined` = no evidence = no finding.
+      ...foreignRunnerTests(
+        () => harnessSurfaceFilesOnDisk(dir, lay),
+        lay,
+        (f) => {
+          const p = join(dir, f);
+          return existsSync(p) ? nodeReadFile(p) : undefined;
+        },
+      ).map(foreignRunnerTestWarning),
     ],
     untested: coverage.untested.length,
     untestedHarness: coverage.harness.untested.length,

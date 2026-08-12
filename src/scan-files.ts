@@ -768,9 +768,15 @@ export function scanFiles(
       // Same detector as `scanPlugin`, over the map instead of a disk walk. The
       // shared predicate does the surface-dir filtering, so handing it every key
       // reaches the same list the disk side reaches by walking only those dirs.
-      ...foreignRunnerTests(() => Object.keys(files), lay).map(
-        foreignRunnerTestWarning,
-      ),
+      // The content gate reads from the SAME map — a key with no entry yields
+      // `undefined`, i.e. no evidence, which is the disk side's behaviour for an
+      // unreadable file. Both engines therefore withhold the finding in the same
+      // places and the byte-parity gate still holds.
+      ...foreignRunnerTests(
+        () => Object.keys(files),
+        lay,
+        (f) => files[f],
+      ).map(foreignRunnerTestWarning),
     ],
     untested: coverage.untested.length,
     untestedHarness: coverage.harness.untested.length,
