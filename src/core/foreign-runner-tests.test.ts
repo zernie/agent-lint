@@ -1,6 +1,6 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -9,6 +9,7 @@ import {
   collectingRunners,
   harnessSurfaceDirs,
   agentDrivingApi,
+  stripNonCode,
   type ForeignRunnerTest,
 } from "./foreign-runner-tests.js";
 import { claudeCodeLayout } from "../adapters/claude-code/layout.js";
@@ -256,5 +257,143 @@ test("findings are sorted, because the parity gate compares reports byte for byt
   assert.deepEqual(
     found.map((f) => f.path),
     [".claude/skills/a/a.test.mjs", ".claude/skills/z/z.test.mjs"],
+  );
+});
+
+// ---------------------------------------------------------------------------
+// A NAME IS NOT A CALL — the gate's evidence must be a call site, not a
+// substring. Both halves per shape: the mention stays SILENT, the call FIRES.
+// ---------------------------------------------------------------------------
+
+test("evidence: a MENTION is not a call — import, comment, string, mock all stay silent", () => {
+  // The regression this replaces: the gate searched for the bare identifier, so
+  // every one of these was reported as an agent-spawning call AND told to rename
+  // a working test. A `*.test.*` name under a surface dir is the trigger, so each
+  // of these bodies is one edit away from the harmful advice.
+  const mentions: Record<string, string> = {
+    "a named import of the API, to test a wrapper around it":
+      'import { runEval } from "vigiles/testing";\nexport const wrap = 1;\n',
+    "a line comment forbidding it":
+      "// never call runEval in this file\nconst a = 1;\n",
+    "a block comment": "/* runEval is banned here */\nconst a = 1;\n",
+    "a string fixture": 'const expected = "runEval";\n',
+    "template TEXT, which is data": "const label = `runEval(x)`;\n",
+    "a mocked property, which is a definition and not a call":
+      'vi.mock("vigiles/testing", () => ({ runEval: fake }));\n',
+    "a type-only reference": "let f: typeof runEval;\n",
+  };
+  for (const [why, body] of Object.entries(mentions)) {
+    assert.equal(agentDrivingApi(body), undefined, why);
+    assert.deepEqual(
+      findWith({ ".claude/skills/foo/foo.test.mjs": body }),
+      [],
+      why,
+    );
+  }
+});
+
+test("evidence: a real CALL fires, through every spelling that is still a call", () => {
+  const calls: Record<string, string> = {
+    "a plain awaited call":
+      'import { runEval } from "vigiles/testing";\nawait runEval({});\n',
+    "a namespace call, which is the same function":
+      'import * as v from "vigiles/testing";\nv.runEval({});\n',
+    "whitespace before the paren": "runEval ({});\n",
+    "inside a template INTERPOLATION, which is code":
+      "const s = `${runEval({})}`;\n",
+    "after the regex that used to swallow it":
+      'const t = s.replace(/[.`"\']/g, "");\nawait measureTriggerRate({});\n',
+  };
+  for (const [why, body] of Object.entries(calls)) {
+    assert.notEqual(agentDrivingApi(body), undefined, why);
+    assert.equal(
+      findWith({ ".claude/skills/foo/foo.test.mjs": body }).length,
+      1,
+      why,
+    );
+  }
+});
+
+test("stripNonCode lexes regex literals — measured, not assumed, on this repo's own sources", () => {
+  // 🔴 The first draft called regex literals "too rare to bother with" and the
+  // first real file checked disproved it: a `.replace(/[.`"']/g, "")` in the
+  // author's corpus opened a template literal that ran to end-of-file and blanked
+  // a real `measureTriggerRate({` fifty lines below — a silent false NEGATIVE.
+  //
+  // The quiet half on real input: every .ts source in this repo, plus a canary
+  // call appended. If the lexer ends in a string/comment/template state that it
+  // should have closed, the canary disappears and the assert names the file.
+  const walk = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) return walk(p);
+      return /\.[cm]?[jt]sx?$/.test(e.name) ? [p] : [];
+    });
+  // `src/` for TS and `site/src/` for TSX — JSX is in on purpose: `</span>` puts
+  // a `/` in expression position, which is the shape that needs the same-line
+  // guard on a regex candidate. Six real files here depend on it.
+  const files = [
+    ...readdirSync(join(__dirname, ".."), { withFileTypes: true })
+      .filter((e) => e.isFile() && e.name.endsWith(".ts"))
+      .map((e) => join(__dirname, "..", e.name)),
+    ...walk(join(__dirname, "..", "..", "site", "src")),
+  ];
+  assert.ok(
+    files.length > 50,
+    "expected this repo's sources to be the real corpus",
+  );
+  // Blanking preserves length and position, so an untouched tail is proof the
+  // lexer closed everything it opened. (Asserting on `agentDrivingApi` instead
+  // would be a weaker test AND a wrong one: several of these files call an
+  // agent-driving API of their own, and the FIRST match would be that one.)
+  const canary = "\nrunEval(1);\n";
+  for (const file of files) {
+    const stripped = stripNonCode(readFileSync(file, "utf-8") + canary);
+    assert.equal(
+      stripped.slice(-canary.length),
+      canary,
+      `lexer ended unbalanced on ${file} — the canary call was swallowed`,
+    );
+  }
+});
+
+test("stripNonCode: a `/` that divides is not a regex, so it cannot eat the code after it", () => {
+  // The disambiguation, both ways. A value before `/` means division; if a
+  // candidate finds no closing `/` before the newline it is division after all,
+  // which is what stops a misread from swallowing a file.
+  assert.equal(agentDrivingApi("const r = a / b;\nrunEval(1);\n"), "runEval");
+  assert.equal(
+    agentDrivingApi("const r = arr[0] / 2;\nrunEval(1);\n"),
+    "runEval",
+  );
+  assert.equal(
+    agentDrivingApi("const r = f(x) / 2;\nrunEval(1);\n"),
+    "runEval",
+  );
+  // …and the keyword case, where the previous character IS an identifier char
+  // but the position is expression-start.
+  assert.equal(
+    agentDrivingApi('function f() { return /["`]/.test(x); }\nrunEval(1);\n'),
+    "runEval",
+  );
+  // Two divisions on ONE line: here the same-line guard cannot rescue a misread,
+  // because there IS a second `/` to close on — only "a value cannot be followed
+  // by a regex" gets it right. Asserted on the stripped text, since the damage
+  // is a blanked middle rather than a swallowed tail.
+  assert.equal(
+    stripNonCode("const r = xs[0] / a / b;"),
+    "const r = xs[0] / a / b;",
+  );
+  assert.equal(
+    stripNonCode("const r = f(x) / a / b;"),
+    "const r = f(x) / a / b;",
+  );
+  // A `/` INSIDE a character class does not close the regex. Real line, from
+  // `src/instruction-sources.ts`: without class tracking the literal ends at the
+  // first inner slash and the rest of the line is lexed as something else.
+  const split = String.raw`const segs = relPath.split(/[/\\]/).slice(0, -1);`;
+  assert.equal(
+    stripNonCode(split),
+    `const segs = relPath.split(${" ".repeat(7)}).slice(0, -1);`,
   );
 });

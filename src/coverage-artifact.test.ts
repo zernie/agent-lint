@@ -570,6 +570,32 @@ test("a FAILED script contributes nothing, however much it exercised", () => {
   );
 });
 
+test("a SKIPPED script writes nothing, but it also retracts nothing", () => {
+  // 🔴 The leak: a skip is not "nothing happened first". A script can drive a
+  // hook (`runHook` records its probe there and then), THEN discover a missing
+  // capability and call `skip()` — and the probes are still attached to the
+  // result. The old deny-list (`status !== "fail"`) let them through, so a run
+  // whose own exit code says "I did not finish" wrote execution-tier coverage.
+  const probes = [{ how: "command" as const, ref: "hooks/a.sh" }];
+  const results = [
+    { file: "s.harness.mjs", status: "skip", surfaces: probes },
+    { file: "v.harness.mjs", status: "vacuous", surfaces: probes },
+  ];
+  assert.deepEqual(runsFromResults(results), []);
+  // The control: the same script, finished.
+  assert.deepEqual(
+    runsFromResults([
+      { file: "s.harness.mjs", status: "pass", surfaces: probes },
+    ]),
+    [{ file: "s.harness.mjs", probes }],
+  );
+  // ⚠️ AND THE ASYMMETRY SURVIVES. Not writing is not the same as retracting: a
+  // skip must NOT drop the record a machine that HAD `claude` measured, while a
+  // vacuous run must. If someone ever "simplifies" the two rules into one, this
+  // is the assert that stops it.
+  assert.deepEqual(executedScripts(results), ["v.harness.mjs"]);
+});
+
 test("a script that reported no surfaces is not a run record", () => {
   assert.deepEqual(
     runsFromResults([

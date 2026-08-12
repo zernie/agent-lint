@@ -211,12 +211,36 @@ export interface ScriptRunRecord {
 /**
  * The runs worth recording, out of a whole `vigiles test` / `vigiles eval`.
  *
- * 🔴 A FAILED SCRIPT CONTRIBUTES NOTHING. It exercised the surface — that much
- * is true — but it did not establish that the surface behaves, and recording it
- * would let a RED test paint a surface covered: activity taken for the property,
- * which is the substitution this whole tier exists to remove. A skipped run has
- * no transcript and a vacuous one asserted nothing, so neither reports surfaces
- * anyway; the filter lives here so the rule is stated where it can be tested.
+ * 🔴 ONLY A PASS WRITES. A record here says "this surface was exercised and it
+ * behaved", so every other status is disqualified for its own reason, and the
+ * filter is an ALLOW-list because the reasons do not generalise:
+ *
+ *  - `fail` — it exercised the surface, but established nothing about it.
+ *    Recording it would let a RED test paint a surface covered.
+ *  - `vacuous` — it exited clean having asserted nothing at all.
+ *  - `skip` — 🔴 THE ONE THAT WAS LEAKING. A skip is not "nothing happened
+ *    first": a script may drive a hook, THEN discover a missing capability and
+ *    call `skip()` (say, `claude` is absent). The probes it already recorded are
+ *    still attached to the result, and the old deny-list (`status !== "fail"`)
+ *    let them through — so a run whose own exit code says "I did not finish"
+ *    wrote or refreshed execution-tier coverage. `runHook` is precisely the tier
+ *    that runs before the skip decision, so this was reachable, not theoretical.
+ *
+ * ⚠️ THIS IS NOT THE SAME RULE AS {@link executedScripts}, AND THE ASYMMETRY IS
+ * DELIBERATE. Writing and RETRACTING ask different questions:
+ *
+ * | status | writes a record? | retracts its old records? |
+ * |---|---|---|
+ * | `pass` | yes | yes |
+ * | `fail` | no | yes — it ran and proved nothing |
+ * | `vacuous` | no | yes — same |
+ * | `skip` | no | **no** — it did not run |
+ *
+ * A skip must not retract, because the deterministic tier skips when `claude` is
+ * missing and deleting yesterday's measurement because today's machine lacks a
+ * CLI would destroy a real result. A skip must not write, because it did not
+ * finish. Both follow from "a skip is not an execution"; only the direction of
+ * the conclusion differs.
  */
 export function runsFromResults(
   results: readonly {
@@ -226,7 +250,7 @@ export function runsFromResults(
   }[],
 ): ScriptRunRecord[] {
   return results
-    .filter((r) => r.status !== "fail" && (r.surfaces?.length ?? 0) > 0)
+    .filter((r) => r.status === "pass" && (r.surfaces?.length ?? 0) > 0)
     .map((r) => ({ file: r.file, probes: r.surfaces ?? [] }));
 }
 
@@ -303,6 +327,9 @@ export interface ExecutedScripts {
  * in: a script that ran and proved nothing must not keep yesterday's green
  * record alive, which is the same "activity taken for the property" that
  * {@link runsFromResults} refuses to write in the first place.
+ *
+ * Deny-list here, ALLOW-list there, on purpose — see the table on
+ * {@link runsFromResults} for why the two rules are not each other's negation.
  */
 export function executedScripts(
   results: readonly { readonly file: string; readonly status: string }[],

@@ -873,6 +873,82 @@ export function leafCommandsNormalized(command: string): NormalizedLeaf[] {
   return out;
 }
 
+/**
+ * Reconstruct a Word's SOURCE-level text: quotes unwrapped, parameter references
+ * kept verbatim (`${CLAUDE_PROJECT_DIR}` → `$CLAUDE_PROJECT_DIR`). `null` when a
+ * segment cannot be reconstructed at all (command substitution, arithmetic,
+ * process substitution).
+ *
+ * The twin of {@link normalizeParts}, and deliberately NOT the same function.
+ * `normalizeParts` answers "what OPERATION is this" and therefore collapses
+ * `$HOME` to `~` and gives up on every other parameter; a caller that needs the
+ * PATH a word names can use neither behaviour — `$CLAUDE_PROJECT_DIR/.claude/hooks/x.sh`
+ * has to survive as written, because a file resolver matches it by suffix.
+ */
+function sourceParts(parts: readonly MvdanNode[] | undefined): string | null {
+  if (!parts) return null;
+  let out = "";
+  for (const p of parts) {
+    const t = sh.syntax.NodeType(p);
+    if (t === "Lit" || t === "SglQuoted") {
+      out += p.Value ?? "";
+    } else if (t === "DblQuoted") {
+      const inner = sourceParts((p as MvdanWord).Parts);
+      if (inner === null) return null;
+      out += inner;
+    } else if (t === "ParamExp") {
+      const name = p.Param?.Value;
+      if (!name) return null;
+      out += `$${name}`;
+    } else {
+      return null; // CmdSubst / ArithmExp / ProcSubst / … → unreconstructable
+    }
+  }
+  return out;
+}
+
+/**
+ * Every simple command's argv, POSITIONALLY, each word reconstructed at source
+ * level — the primitive a caller needs to tell an EXECUTED PROGRAM from a DATA
+ * OPERAND.
+ *
+ * 🔴 WHY POSITION, AND WHY A THIRD EXTRACTOR. `leafCommands` DROPS the words it
+ * cannot reduce to a literal, so `"$GUARD" --flag` yields `["--flag"]` — a
+ * dynamic head silently promotes an argument into head position, which is worse
+ * than useless to a positional reader. `leafCommandsNormalized` skips such a leaf
+ * outright AND basenames the head, so `./hooks/x.sh` loses the path a file
+ * resolver needs. This one keeps every word in its slot (an unreconstructable
+ * word becomes `""`) and keeps the head's spelling.
+ *
+ * Wrappers are still resolved through (`env FOO=1 bash x.sh` → `bash x.sh`)
+ * using the same wrapper table as the normalized extractor, not a second copy.
+ *
+ * Parse failure → `[]`.
+ */
+export function leafArgvSource(command: string): string[][] {
+  let file: MvdanNode;
+  try {
+    file = sh.syntax.NewParser().Parse(command, "cmd.sh");
+  } catch {
+    return [];
+  }
+  const out: string[][] = [];
+  sh.syntax.Walk(file, (node) => {
+    if (sh.syntax.NodeType(node) !== "CallExpr" || !node.Args?.length)
+      return true;
+    const argv = node.Args.map((w) => sourceParts(w.Parts) ?? "");
+    // The wrapper table keys on the BASENAME head (`/usr/bin/env` is `env`), so
+    // detection runs on a basenamed copy while the returned words stay verbatim.
+    // Wrappers only ever drop words off the FRONT, so a count maps the result
+    // back onto the original spellings.
+    const probe = [normalizeHead(argv[0] ?? ""), ...argv.slice(1)];
+    const dropped = probe.length - stripWrappers(probe).argv.length;
+    out.push(argv.slice(dropped));
+    return true;
+  });
+  return out;
+}
+
 /** Normalize a Stmt's redirections into {@link LeafRedirect}s (source order). */
 function normalizeRedirects(redirs: readonly MvdanRedirect[]): LeafRedirect[] {
   return redirs.map((r) => {

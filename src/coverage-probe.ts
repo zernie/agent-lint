@@ -35,21 +35,83 @@
  * recording wrappers are one line each on top.
  */
 import { recordSurfaceProbe, type SurfaceProbe } from "./check-count.js";
+import { leafArgvSource } from "./core/bash-effects.js";
 
 /**
- * Program-file-looking tokens in a command line. Same shape as the hook-script
+ * A whole word that spells a program file. Same extension set as the hook-script
  * scanner in `test-coverage.ts` (which reads settings.json the same way) — kept
  * as its own copy because this module must not pull in the disk detector.
+ *
+ * ANCHORED, unlike that scanner's: this one is asked about a word the parser
+ * already isolated, so a substring match would be a second guess on top of a
+ * decided question. `sh -c 'bash hooks/x.sh'` therefore attributes NOTHING — the
+ * inner script is inside a string the shell grammar does not open, and reaching
+ * into it is the very substring habit that produced the bug below.
  */
-const SCRIPT_RE = /[\w./${}@:\\-]+\.(?:sh|mjs|cjs|js|mts|cts|ts|py|rb)/g;
+const SCRIPT_RE = /^[\w./${}@:\\-]+\.(?:sh|mjs|cjs|js|mts|cts|ts|py|rb)$/;
 
 /**
- * The program files a command line names, plus those reachable through its env.
+ * Heads that EXECUTE a script named in their operands. Everything else — `cat`,
+ * `cp`, `grep`, `shasum` — takes the same word as DATA.
+ */
+const INTERPRETERS = new Set([
+  "bash",
+  "sh",
+  "dash",
+  "zsh",
+  "ksh",
+  "node",
+  "nodejs",
+  "deno",
+  "bun",
+  "tsx",
+  "ts-node",
+  "python",
+  "python3",
+  "ruby",
+  "perl",
+]);
+
+/**
+ * Our own runtime's verb (`vigiles hook-runtime run-program <hook>`): the word
+ * after it is a program vigiles is about to execute. Listed because it is OUR
+ * contract, not a guess about someone's CLI — `hook-install` emits exactly this
+ * line, and it is how every compiled hook in this repo is exercised.
+ */
+const RUN_PROGRAM_VERB = "run-program";
+
+/** The basename of a head, so `/bin/bash` and `bash` classify alike. */
+function headName(word: string): string {
+  const unescaped = word.startsWith("\\") ? word.slice(1) : word;
+  const slash = unescaped.lastIndexOf("/");
+  return slash >= 0 ? unescaped.slice(slash + 1) : unescaped;
+}
+
+/**
+ * The program files a command line EXECUTES.
  *
- * The env matters because the documented `runHook` idiom passes the path through
- * one: `runHook('"$GUARD"', event, { env: { GUARD: guardPath } })`. Reading only
- * the command string would attribute nothing for exactly the shape the docs
- * teach. Values are scanned, never keys — a variable NAME is not a path.
+ * 🔴 THE WORD IS NOT THE POSITION, and this used to be a scan for script-looking
+ * TOKENS anywhere in the command (and anywhere in the env). Which means a
+ * passing harness that runs `cat hooks/pre-edit.sh`, `cp hooks/pre-edit.sh …` or
+ * `grep -n foo hooks/pre-edit.sh` minted an execution-tier coverage record for a
+ * hook that never ran — the same substitution this whole tier exists to remove,
+ * activity taken for the property, only now manufactured by the attribution half
+ * instead of the recording half. So the command is PARSED (`leafArgvSource`,
+ * mvdan-sh) and only these positions count:
+ *
+ *  - the leaf HEAD, when it is itself a script (`./hooks/x.sh`, `/abs/x.mjs`);
+ *  - the first non-flag operand of an {@link INTERPRETERS} head (`bash x.sh`);
+ *  - the word after our own {@link RUN_PROGRAM_VERB}.
+ *
+ * AST-backed, so a leaf nested behind `&&`, a pipeline or a subshell is still
+ * found and `cd /repo && bash hooks/x.sh` attributes the hook — which the old
+ * token scan also did, but for the wrong reason.
+ *
+ * The env is still consulted, because the documented `runHook` idiom passes the
+ * path through one: `runHook('"$GUARD"', event, { env: { GUARD: guardPath } })`.
+ * It is now an EXPANSION, not a scan: `$GUARD` is substituted into the word that
+ * references it and then classified by position, so an env entry the command
+ * never mentions (a fixture path, a temp dir) attributes nothing.
  *
  * Deliberately not resolved to absolute paths here: the process's cwd is the
  * test's, not the repo's, and inventing a root would manufacture a match. The
@@ -59,12 +121,34 @@ export function commandRefs(
   command: string,
   env?: Record<string, string>,
 ): string[] {
+  // Expansion of a variable INTO a word — a string-value substitution, after the
+  // grammar has already decided where the word boundaries are. Names not in
+  // `env` are left as written, because `$CLAUDE_PROJECT_DIR/.claude/hooks/x.sh`
+  // still resolves by suffix against a real surface.
+  const expand = (word: string): string =>
+    env === undefined
+      ? word
+      : word.replace(
+          /\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)/g,
+          (whole, braced?: string, bare?: string) =>
+            env[braced ?? bare ?? ""] ?? whole,
+        );
   const out = new Set<string>();
-  const scan = (text: string): void => {
-    for (const m of text.matchAll(SCRIPT_RE)) out.add(m[0]);
-  };
-  scan(command);
-  for (const value of Object.values(env ?? {})) scan(value);
+  for (const leaf of leafArgvSource(command)) {
+    const argv = leaf.map(expand);
+    const head = argv[0] ?? "";
+    if (SCRIPT_RE.test(head)) out.add(head);
+    else if (INTERPRETERS.has(headName(head))) {
+      // The FIRST non-flag operand is the script; the rest is that script's own
+      // argv, where a path is data again (`node lint.mjs hooks/x.sh`).
+      const script = argv.slice(1).find((w) => !w.startsWith("-"));
+      if (script !== undefined && SCRIPT_RE.test(script)) out.add(script);
+    }
+    for (let i = 1; i < argv.length - 1; i++) {
+      const next = argv[i + 1] ?? "";
+      if (argv[i] === RUN_PROGRAM_VERB && SCRIPT_RE.test(next)) out.add(next);
+    }
+  }
   return [...out];
 }
 
