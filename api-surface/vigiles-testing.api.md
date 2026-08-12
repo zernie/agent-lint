@@ -681,6 +681,7 @@ export interface ModelRequest {
         readonly role: string;
         readonly text: string;
     }[];
+    readonly sideChannel?: boolean;
     readonly system: string;
 }
 

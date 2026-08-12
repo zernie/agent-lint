@@ -6995,8 +6995,13 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
     }
     case "bash-gate": {
       const ctx = await gatherHookContext(program);
+      // The same `projectRoot` the file gates get: without it every
+      // repo-relative prefix in a DENYLIST matcher (`touches`/`writesTo`) is
+      // matched by over-blocking alone, and with it an absolute token is placed
+      // exactly. Measured bypass this closes: `sed -i s/a/b/ <abs>/paper.tex`
+      // exited 0 against a guard that blocked the relative spelling.
       emitGate(
-        decideProgram(program as HookProgram, event, ctx),
+        decideProgram(program as HookProgram, event, ctx, projectRoot),
         program.on,
         hookMode(program),
         file,

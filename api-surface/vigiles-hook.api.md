@@ -40,8 +40,8 @@ export interface CommandView {
     writesTo(prefixes: readonly string[]): boolean;
 }
 
-// @public (undocumented)
-export function commandView(raw: string): CommandView;
+// @public
+export function commandView(raw: string, root?: string): CommandView;
 
 // @public
 export interface CompiledHookProgram {
@@ -87,7 +87,8 @@ export function decideProgram<N extends readonly NeedSpec[]>(program: HookProgra
     tool_input?: {
         command?: unknown;
     };
-}, ctx?: Record<string, string | boolean>): Decision;
+    cwd?: unknown;
+}, ctx?: Record<string, string | boolean>, root?: string | undefined): Decision;
 
 // @public
 export function decidePromptGate<N extends readonly NeedSpec[]>(hook: PromptGateHook<N>, raw: {

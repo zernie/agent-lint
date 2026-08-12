@@ -434,3 +434,119 @@ test("…and the Claude Code path is untouched by that gate", () => {
     null,
   );
 });
+
+// ---------------------------------------------------------------------------
+// The remedy is split by CAUSE — a check that fires on every unit carries no
+// information unless it says why THIS unit fired.
+//
+// MEASURED: after `allowed-tools:` stopped counting as a bound, a real 38-skill
+// repo went 18 of 38 exposed → 38 of 38, Safety 86 → 70. The classification is
+// right; the single sentence "Drop at least one leg" was identical for three
+// situations needing three different actions, and it pointed at narrowing
+// `Bash(...)` — a door `EFFECT_FREE` has closed for anything an author actually
+// runs. These tests pin the split, and each asserts BOTH the sentence it must
+// carry and the one it must not.
+// ---------------------------------------------------------------------------
+
+test("remedy (a) unrestricted shell: name the one edit that closes it", () => {
+  const m =
+    lethalTrifectaIssues(["Read", "WebFetch", "Bash"], claudeCodeDialect)
+      ?.message ?? "";
+  assert.match(m, /Bash alone supplies two of the three legs/);
+  // It must still WARN that narrowing is nearly useless, rather than recommend it.
+  assert.match(m, /only helps for a program whose effects are enumerable/);
+  assert.doesNotMatch(m, /narrowed but still counts/);
+});
+
+test("remedy (b) a NARROWED shell grant that still counts: say why, do not re-recommend narrowing", () => {
+  // The worst of the three: this author already took the old advice.
+  const m =
+    lethalTrifectaIssues(
+      ["Read", "WebFetch", "Bash(node ./x.mjs:*)"],
+      claudeCodeDialect,
+    )?.message ?? "";
+  assert.match(m, /`Bash\(node \.\/x\.mjs:\*\)` is narrowed but still counts/);
+  assert.match(m, /narrowing further will not move this finding/);
+  // …and it must name a remedy that actually works.
+  assert.match(m, /remove Bash from the contract/);
+});
+
+test("remedy (c) no shell leg: there is nothing to narrow, so do not imply there is", () => {
+  const named =
+    lethalTrifectaIssues(["Read", "WebSearch", "WebFetch"], claudeCodeDialect)
+      ?.message ?? "";
+  assert.match(named, /No shell grant supplies a leg here/);
+  assert.doesNotMatch(named, /Bash alone supplies/);
+
+  // 🔴 The same branch must cover a shell grant that IS present but BOUNDED.
+  // `Bash(echo ready:*)` contributes no leg, so telling this author to remove
+  // Bash would send them to undo the one narrowing that worked. The first draft
+  // of this branch keyed on "a shell is named" and got exactly that wrong.
+  const bounded =
+    lethalTrifectaIssues(
+      ["Read", "WebFetch", "Bash(echo ready:*)"],
+      claudeCodeDialect,
+    )?.message ?? "";
+  assert.match(bounded, /No shell grant supplies a leg here/);
+  assert.doesNotMatch(bounded, /remove Bash from the contract/);
+});
+
+test("the three remedies are actually DIFFERENT text", () => {
+  // The whole point. If a refactor collapses them back to one sentence, this
+  // fails even though every message still 'mentions the legs'.
+  const messages = [
+    ["Read", "WebFetch", "Bash"],
+    ["Read", "WebFetch", "Bash(node ./x.mjs:*)"],
+    ["Read", "WebSearch", "WebFetch"],
+  ].map((tools) => lethalTrifectaIssues(tools, claudeCodeDialect)?.message);
+  assert.equal(new Set(messages).size, 3);
+  // Classification is untouched by any of this: all three are still `hard`.
+  for (const tools of [
+    ["Read", "WebFetch", "Bash"],
+    ["Read", "WebFetch", "Bash(node ./x.mjs:*)"],
+    ["Read", "WebSearch", "WebFetch"],
+  ]) {
+    assert.equal(
+      lethalTrifectaIssues(tools, claudeCodeDialect)?.severity,
+      "hard",
+    );
+  }
+  // And a bounded grant still drops the legs it always did — text work must not
+  // move the line between found and not-found.
+  assert.equal(
+    lethalTrifectaIssues(["Read", "Bash(echo ready:*)"], claudeCodeDialect),
+    null,
+  );
+});
+
+test("skill fence: a RESTRICTED deny is DISCARDED, and the message says so", () => {
+  // `Bash(curl:*)` is not weighed and found wanting — it is thrown away, because
+  // denying one invocation of the shell says nothing about the rest of it. The
+  // generic "a leg is closed only when EVERY built-in is denied" sent that author
+  // to add more restricted denies and watch nothing happen.
+  const all = skillTrifectaIssue(["Bash(curl:*)"], claudeCodeDialect);
+  assert.equal(all?.fence, "ineffective"); // classification unchanged
+  assert.match(all?.message ?? "", /RESTRICTED deny is discarded, not weighed/);
+  assert.match(all?.message ?? "", /Every entry in this fence is restricted/);
+
+  // A MIXED fence: one real deny that does not close a whole leg, one discarded.
+  const mixed = skillTrifectaIssue(
+    ["WebFetch", "Bash(curl:*)"],
+    claudeCodeDialect,
+  );
+  assert.match(mixed?.message ?? "", /`Bash\(curl:\*\)` denies nothing/);
+  assert.match(mixed?.message ?? "", /unrestricted entries that remain/);
+  assert.doesNotMatch(mixed?.message ?? "", /Every entry in this fence/);
+
+  // A fence with NO restricted entry keeps the original wording — the split must
+  // not relabel the plain "you did not cover a whole leg" case.
+  const plain = skillTrifectaIssue(["WebFetch"], claudeCodeDialect);
+  assert.match(plain?.message ?? "", /closes no lethal-trifecta leg/);
+  assert.doesNotMatch(plain?.message ?? "", /discarded/);
+
+  // And an EFFECTIVE fence is still clean — text work moved no verdict.
+  assert.equal(
+    skillTrifectaIssue(["WebFetch", "WebSearch", "Bash"], claudeCodeDialect),
+    null,
+  );
+});

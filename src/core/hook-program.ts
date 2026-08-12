@@ -130,6 +130,14 @@ export interface CommandView {
    * line happens to be side-effecting for an unrelated reason (`grep -c x
    * notes/S.md 2>/dev/null`) matches both and gets blocked. To gate WRITES to a
    * directory, use {@link writesTo}; conflating the two is the trap.
+   *
+   * OVER-INCLUSIVE ON PURPOSE, AND THE OPPOSITE WAY ROUND FROM {@link
+   * PathView.under}. This is a DENYLIST primitive — every caller spells
+   * `touches(secret) ? deny() : allow()` — so a miss is an ALLOW, not silence. An
+   * unprovable answer is therefore reported as a MATCH: a token that could name
+   * something under the prefix under some root or some `cd` matches, and the gate
+   * blocks. See {@link prefixVerdict} for the three answers and {@link
+   * matchesPrefix} for the two biases.
    */
   touches(prefixes: readonly string[]): boolean;
   /**
@@ -180,10 +188,157 @@ function runsSeq(argv: readonly string[], tokens: readonly string[]): boolean {
   return i === tokens.length;
 }
 
-/** Does a single token name a path at/under `prefix` (boundary-aware)? */
-function tokenUnder(token: string, prefix: string): boolean {
-  const t = token.replace(/^\.\//, "");
-  return t === prefix || t.startsWith(prefix + "/") || t.endsWith("/" + prefix);
+// ---------------------------------------------------------------------------
+// Prefix matching — ONE rule, THREE answers, and the bias named at every call
+//
+// 🔴 THE TWO PRIMITIVES BUILT ON THIS WANT OPPOSITE DEFAULTS, AND ONE OF THEM
+// FAILS OPEN WHEN IT GUESSES WRONG. `PathView.under` is an ALLOWLIST (confinement,
+// coverage): an unprovable answer must be a MISS, so a gate fails closed and a
+// nudge stays quiet. `CommandView.touches` / `CommandView.writesTo` are DENYLISTS:
+// an unprovable answer must be a MATCH, or the gate waves the command through.
+//
+// MEASURED 2026-08-12, the reason this exists. `touches` compared a repo-relative
+// prefix against a raw bash token, with no project root anywhere in `decideProgram`
+// — exactly the root-blindness `pathView` had just been fixed for, except a miss
+// here is an ALLOW. Against a real shipped guard (`paper-edit-guard.hook.ts` in a
+// consumer repo, `CLAUDE_PROJECT_DIR` set, exit 2 = blocked):
+//
+//   sed -i s/a/b/ migratsiya/papers/x/paper.tex                  → 2  blocked
+//   sed -i s/a/b/ /home/user/mine/migratsiya/papers/x/paper.tex  → 0  ALLOWED
+//   cp /tmp/a     migratsiya/papers/x/paper.tex                  → 2  blocked
+//   cp /tmp/a     /home/user/mine/migratsiya/papers/x/paper.tex  → 0  ALLOWED
+//
+// Spelling the path absolutely walked straight through the gate. (Redirects still
+// blocked — that guard decodes its own redirect targets with a hand-written
+// `includes("/" + p + "/")`, which is this bias, hand-rolled, by an author who
+// happened to think of it. `dna-privacy-guard.hook.ts` is the other hand-patch:
+// it declares `needs: ["git.root"]` purely to build `${root}/${DNA}` itself. Every
+// gate whose author did not think of that was exposed.)
+//
+// The fix is one shared rule that cannot be resolved to a boolean without NAMING
+// the bias: `matchesPrefix` takes `onUndecidable` with NO DEFAULT, so a future
+// caller cannot inherit the wrong one silently — picking it is a `tsc` error away
+// from being skipped. That is deliberate: the previous shape (a single boolean
+// helper, `tokenUnder`, shared by an allowlist and two denylists) is precisely
+// what let one bias serve three callers that do not agree on it.
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a path sits relative to a prefix — with an explicit third answer for the
+ * case the two spellings cannot be reconciled.
+ *
+ * - `"under"` — the path was PLACED (made comparable to the prefix in the
+ *   prefix's own spelling) and is at/under it. A fact, biased neither way.
+ * - `"outside"` — either placed and not under it, or not placeable AND the
+ *   prefix's segments appear nowhere in the path. Also a fact: no root and no
+ *   `cd` could make this path be under this prefix.
+ * - `"undecidable"` — not placeable, but the prefix's segments DO occur as a
+ *   whole run in the path, so SOME project root or working directory would make
+ *   it true. The answer callers must break with their own bias.
+ */
+type PrefixVerdict = "under" | "outside" | "undecidable";
+
+/**
+ * Collapse a {@link PrefixVerdict} to the boolean a matcher returns.
+ *
+ * `onUndecidable` HAS NO DEFAULT ON PURPOSE. The two callers need opposite
+ * values, and the one that guesses wrong (`"miss"` for a denylist) fails OPEN —
+ * the failure mode that made this refactor necessary. A default here would make
+ * that bug reachable by omission, which is how it was reachable before.
+ */
+const matchesPrefix = (
+  verdict: PrefixVerdict,
+  onUndecidable: "match" | "miss",
+): boolean =>
+  verdict === "under" ||
+  (verdict === "undecidable" && onUndecidable === "match");
+
+/**
+ * A prefix with its glob tail and trailing slash removed — `"src/**"`, `"src/"`
+ * and `"src"` all mean the same directory.
+ *
+ * The trailing slash is not cosmetic: a prefix of `"papers/"` used to compare
+ * against `"papers//"` and match NOTHING, a trap a shipped guard's own header
+ * records having fallen into.
+ */
+const normalizePrefix = (prefix: string): string =>
+  prefix
+    .replace(/\\/g, "/")
+    .replace(/\/?\*+$/, "")
+    .replace(/\/+$/, "");
+
+/** Is `candidate` the prefix itself, or something below it? Boundary-aware. */
+const isAtOrUnder = (candidate: string, base: string): boolean =>
+  candidate === base || candidate.startsWith(base + "/");
+
+/**
+ * Could this path be under this prefix under SOME root or working directory?
+ *
+ * The tractable stand-in for "unprovable": the prefix's segments occur as a whole
+ * contiguous run somewhere in the path. `/home/u/mine/migratsiya/papers/x.tex`
+ * could be `migratsiya/papers/x.tex` in a repo rooted at `/home/u/mine`; the
+ * leading directories are exactly what we cannot rule out without a root.
+ *
+ * A leading `/` is stripped from the prefix first, so an ABSOLUTE prefix can
+ * still be recognized inside a relative token (`/etc` vs `etc/passwd` under an
+ * unknown `cd`).
+ *
+ * ⚠️ WHAT THIS STILL MISSES, stated rather than implied — in both cases the
+ * verdict is `"outside"`, so the denylist misses too:
+ *
+ * 1. The segments must be PRESENT. `cd migratsiya && sed -i s/a/b/ papers/x.tex`
+ *    names only `papers/x.tex`, so a prefix of `migratsiya/papers` finds nothing.
+ *    Resolving a leaf's argument against a preceding `cd` is a parser change, not
+ *    a matcher one; it is the blind spot both shipped guards already document.
+ * 2. An ABSOLUTE prefix against a RELATIVE token with NO root — `touches(["/r/
+ *    health/data/dna"])` vs the token `health/data/dna/g.txt`. The needle is the
+ *    longer string, so containment cannot see it. Deliberately not chased: the
+ *    runtime always supplies a root ({@link projectRootOf} falls back to the
+ *    event's `cwd`, which Claude Code sends on every payload), and a gate that
+ *    builds absolute prefixes at all builds them FROM a root, so by construction
+ *    it has one. Widening this arm would also cost precision in the case that
+ *    matters — a token that IS placeable would start matching on segments alone.
+ */
+const mightBeUnder = (path: string, base: string): boolean => {
+  const needle = base.replace(/^\/+/, "").replace(/^[A-Za-z]:\//, "");
+  if (needle === "") return true;
+  const p = path.replace(/\\/g, "/").replace(/^\.\//, "");
+  return (
+    isAtOrUnder(p, needle) ||
+    p.endsWith("/" + needle) ||
+    p.includes("/" + needle + "/")
+  );
+};
+
+/**
+ * The verdict for ONE path against ONE prefix, given the project root.
+ *
+ * A prefix is matched in ITS OWN spelling — a repo-relative prefix against the
+ * path made repo-relative, an absolute prefix against the path made absolute —
+ * because those are the only two comparisons that mean anything. When the needed
+ * spelling cannot be produced (an absolute path with no root, a path resolving
+ * outside the root, a relative path with no root to absolutize it), the path was
+ * not PLACED, and the answer falls to {@link mightBeUnder}.
+ *
+ * Note what does NOT happen: a placed path that is not under the prefix comes
+ * back `"under"`-less but is still offered to `mightBeUnder`, so a denylist
+ * over-blocks a sibling checkout's `…/migratsiya/papers/…` rather than silently
+ * allowing it. That over-block is the chosen error direction, not an oversight —
+ * `under` never sees it, because `under` accepts `"under"` only.
+ */
+function prefixVerdict(
+  path: string,
+  prefix: string,
+  root: string | undefined,
+): PrefixVerdict {
+  const base = normalizePrefix(prefix);
+  if (base === "") return "under"; // `"/"`, `"**"` — everything is under it
+  const slashed = path.replace(/\\/g, "/");
+  const placed = isAbsoluteRef(base)
+    ? absoluteSpelling(slashed, root)
+    : relativeSpelling(slashed, root);
+  if (placed !== undefined && isAtOrUnder(placed, base)) return "under";
+  return mightBeUnder(slashed, base) ? "undecidable" : "outside";
 }
 
 /** A leaf whose head is a shell reading stdin (no script-file argument). */
@@ -266,7 +421,19 @@ function writeTargetsOf(leaf: NormalizedLeaf): string[] {
   }
 }
 
-export function commandView(raw: string): CommandView {
+/**
+ * An AST-backed view of a Bash command.
+ *
+ * @param raw - the command line as the tool event carried it.
+ * @param root - the project root repo-relative prefixes resolve against, from
+ *   the runtime ({@link projectRootOf}: `$CLAUDE_PROJECT_DIR`, else the event's
+ *   own `cwd`, never `process.cwd()`). Omitting it does NOT disarm the denylist
+ *   matchers — without a root an absolute token is `"undecidable"` rather than
+ *   placeable, and {@link CommandView.touches} treats that as a match. It does
+ *   cost precision: with a root, `/somewhere-else/notes/x` is provably not this
+ *   repo's `notes`; without one it can only be over-blocked.
+ */
+export function commandView(raw: string, root?: string): CommandView {
   const leaves = leafCommands(raw);
   // The operation-normalized leaves carry the redirections (and quote-unwrapped,
   // wrapper-resolved argv) that `writesTo` needs; `leafCommands` cannot see them.
@@ -287,12 +454,23 @@ export function commandView(raw: string): CommandView {
       );
     },
     isSideEffecting: () => classifyBashCommand(raw) === "side-effecting",
+    // Both of these are DENYLIST matchers, so both break an undecidable verdict
+    // toward "match" — see the block above `PrefixVerdict` for the measurement
+    // that made the opposite default a security hole.
     touches: (prefixes) =>
       leaves.some((argv) =>
-        argv.slice(1).some((tok) => prefixes.some((p) => tokenUnder(tok, p))),
+        argv
+          .slice(1)
+          .some((tok) =>
+            prefixes.some((p) =>
+              matchesPrefix(prefixVerdict(tok, p, root), "match"),
+            ),
+          ),
       ),
     writesTo: (prefixes) =>
-      writeTargets.some((t) => prefixes.some((p) => tokenUnder(t, p))),
+      writeTargets.some((t) =>
+        prefixes.some((p) => matchesPrefix(prefixVerdict(t, p, root), "match")),
+      ),
     pipesToShell: () => leaves.some(isBareShellLeaf),
   };
 }
@@ -337,11 +515,28 @@ export function defineHook<const N extends readonly NeedSpec[] = readonly []>(
 // Run the program against a raw PreToolUse event (the runtime half)
 // ---------------------------------------------------------------------------
 
-/** Build the typed event from a raw PreToolUse event, then decide. */
+/**
+ * Build the typed event from a raw PreToolUse event, then decide.
+ *
+ * `root` is the project root repo-relative prefixes in the hook resolve against,
+ * threaded exactly as {@link decideFileGate} threads it: omitted, it falls back
+ * to the event's OWN `cwd` (a payload field, so this stays pure and reads no
+ * environment); the CLI passes {@link projectRootOf}, which prefers
+ * `$CLAUDE_PROJECT_DIR`. Until 2026-08-12 no root reached here at all, and the
+ * denylist matchers on {@link CommandView} were bypassable by spelling a path
+ * absolutely — see the block above {@link PrefixVerdict} for the measurement.
+ */
 export function decideProgram<N extends readonly NeedSpec[]>(
   program: HookProgram<N>,
-  rawEvent: { tool_name?: string; tool_input?: { command?: unknown } },
+  rawEvent: {
+    tool_name?: string;
+    tool_input?: { command?: unknown };
+    cwd?: unknown;
+  },
   ctx: Record<string, string | boolean> = {},
+  root: string | undefined = typeof rawEvent.cwd === "string"
+    ? rawEvent.cwd
+    : undefined,
 ): Decision {
   if (rawEvent.tool_name !== program.match.tool) return allow();
   const command =
@@ -351,7 +546,7 @@ export function decideProgram<N extends readonly NeedSpec[]>(
   return program.decide({
     event: program.on,
     tool: "Bash",
-    command: commandView(command),
+    command: commandView(command, root),
     ctx: ctx as unknown as HookCtx<N>,
   });
 }
@@ -705,9 +900,11 @@ export interface PathView {
  * ⚠️ THE ASYMMETRY INVERTS FOR A DENYLIST, AND `under` DOES NOT SERVE THAT CASE.
  * A gate written `under(["secrets"]) ? deny() : allow()` reads an unprovable
  * `false` as ALLOW — a false grant. The Bash-side counterpart {@link
- * CommandView.touches} exists precisely for that direction and is deliberately
- * over-inclusive (it suffix-matches). `PathView` has no such counterpart; a
- * file-side denylist inherits the allowlist bias. Reported, not papered over.
+ * CommandView.touches} exists precisely for that direction and takes the
+ * opposite bias from the SAME rule ({@link prefixVerdict}), which is why the
+ * resolver {@link matchesPrefix} makes each caller name its own. `PathView` has
+ * no such counterpart; a file-side denylist inherits the allowlist bias.
+ * Reported, not papered over.
  *
  * @param raw - the `file_path` the tool event carried, any spelling.
  * @param root - the project root relative prefixes resolve against. Comes from
@@ -718,25 +915,19 @@ export interface PathView {
  */
 export function pathView(raw: string, root?: string): PathView {
   const slashed = raw.replace(/\\/g, "/");
-  // The two candidate spellings. Each is `undefined` when this view cannot
-  // produce it, and `under` matches a prefix only against its OWN spelling — so
-  // a missing candidate is a miss, never a silent fallback to the other one.
-  const absolute = absoluteSpelling(slashed, root);
-  const rel = relativeSpelling(slashed, root);
   return {
     raw,
-    rel,
+    rel: relativeSpelling(slashed, root),
+    // A prefix is matched only against its OWN spelling, and a path that cannot
+    // be produced in that spelling is a miss — never a silent fallback to the
+    // other one. `"miss"` is the ALLOWLIST bias, named here rather than
+    // inherited: `matchesPrefix` has no default, so the denylist matchers on
+    // `CommandView` cannot pick this one up by accident (and did not, for the
+    // whole time they shared a single boolean helper with it).
     under: (prefixes) =>
-      prefixes.some((p) => {
-        const base = p
-          .replace(/\\/g, "/")
-          .replace(/\/?\*+$/, "")
-          .replace(/\/$/, "");
-        if (base === "") return true; // `"/"`, `"**"` — everything is under it
-        const candidate = isAbsoluteRef(base) ? absolute : rel;
-        if (candidate === undefined) return false;
-        return candidate === base || candidate.startsWith(base + "/");
-      }),
+      prefixes.some((p) =>
+        matchesPrefix(prefixVerdict(slashed, p, root), "miss"),
+      ),
   };
 }
 
@@ -1284,7 +1475,7 @@ export function runHookProgram(
     case "bash-gate":
       return {
         kind: "decision",
-        decision: decideProgram(hook as HookProgram, event, ctx),
+        decision: decideProgram(hook as HookProgram, event, ctx, root),
       };
     case "file-gate":
       return {

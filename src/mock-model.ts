@@ -41,8 +41,16 @@ export interface TurnInfo {
 export interface MockHandle {
   readonly url: string;
   close(): void;
-  /** Number of model turns served so far. */
+  /**
+   * Number of SCRIPT turns served so far — MAIN-LOOP requests only. A
+   * side-channel request is answered without touching the script and is not
+   * counted here, so this is the agent's turn count rather than the CLI's
+   * HTTP-call count. (Before 2026-08-12 it was the latter: a 3-entry script
+   * against Claude Code 2.1.228 reported 27.)
+   */
   readonly count: number;
+  /** Side-channel requests answered so far — never script-consuming. */
+  readonly sideChannelCount: number;
   /** Every `/v1/messages` request the mock received, in order. */
   readonly requests: readonly ModelRequest[];
 }
@@ -157,6 +165,92 @@ interface ReqBody {
   model?: string;
   system?: unknown;
   messages?: { role?: unknown; content?: unknown }[];
+  tools?: unknown;
+}
+
+// ---------------------------------------------------------------------------
+// Side-channel requests — the CLI's own model calls, which must NOT eat the script
+//
+// 🔴 MEASURED 2026-08-12, Claude Code 2.1.228, one `runHarnessTest` with a
+// THREE-entry script: the mock served 27 requests — 9 main-loop and 18
+// side-channel, two per turn. The CLI runs a `post_turn_summary` classifier after
+// each turn ("decide which of four states the agent is in, so the system knows
+// whether to notify the user"), and it retries once because our text reply was
+// not the JSON it wanted. The mock handed the NEXT SCRIPT ENTRY to whichever
+// request arrived first, so entry #2 went to the notification classifier and the
+// agent never saw it. Symptom: `a blocking Stop hook forces the agent to keep
+// working` failed locally — the agent was never given the turn that creates DONE.
+//
+// This is not one flaky test. The same mock underpins the whole deterministic
+// tier we advertise as "real harness, fake model", so ANY new side channel the
+// CLI grows silently shifts every script by however many calls it makes.
+//
+// THE DISCRIMINATOR IS `tools`, AND IT IS STRUCTURAL, NOT TEXTUAL. Measured on
+// all 27 requests: main-loop requests carry `tools` (40 definitions),
+// `stream: true`, `max_tokens: 32000`; side-channel requests carry NO `tools`,
+// no `stream`, `max_tokens: 1024`, and a completely different system prompt.
+// Matching the system prompt's text would work today and rot on the next release.
+// `tools` is the one that follows from what the request IS: only a request that
+// declares tools can act on a scripted `tool_use`, so serving a script entry to a
+// request without them cannot be what the script author meant.
+//
+// ⚠️ WHAT THIS DOES NOT PROVE, because the argument for `tools` is about
+// SUFFICIENCY and the measurement only shows the current split: a future side
+// channel that DOES declare tools would still consume a script entry, and a
+// main-loop request with every tool disabled would stop consuming one. Neither
+// occurs on 2.1.228. The mitigation is visibility rather than cleverness —
+// `sideChannelCount` and `ModelRequest.sideChannel` put the split in the handle,
+// so a drift shows up as a number instead of as a mysteriously shifted script.
+// ---------------------------------------------------------------------------
+
+/**
+ * Is this request the AGENT LOOP asking for its next turn (as opposed to a
+ * side-channel call the CLI makes for its own bookkeeping)?
+ *
+ * Pure and exported so the classification is unit-tested without HTTP. See the
+ * block above for the measurement and for what the criterion does not settle.
+ */
+export function isMainLoopRequest(body: { tools?: unknown }): boolean {
+  return Array.isArray(body.tools) && body.tools.length > 0;
+}
+
+/**
+ * The reply a side-channel request gets: valid, tool-free JSON, from OUTSIDE the
+ * script.
+ *
+ * JSON specifically, and measured: Claude Code's notification classifier asks for
+ * a JSON object and RETRIES once with "Previous response was not valid JSON"
+ * when it does not get one — which is why the 3-entry script drew two
+ * side-channel calls per turn rather than one. Answering in JSON halves that
+ * traffic. It is a courtesy, not the fix; the fix is that this text never comes
+ * from the script.
+ */
+const SIDE_CHANNEL_REPLY = "{}";
+
+/**
+ * The stated residual risk of keying on `tools`, made LOUD instead of silent.
+ *
+ * If a future main-loop request ever arrives WITHOUT tool declarations it is
+ * misrouted to the side channel, the script is never consumed, and the agent
+ * loops on `{}` — a failure with no symptom except a test that mysteriously
+ * asserts against an empty run. Every real run that reached the model at all
+ * consumes at least one script turn, so "side-channel requests arrived and
+ * script turns did not" cannot happen in the healthy case. Returns the warning
+ * line, or `undefined` when there is nothing to say (including the run that
+ * never reached the model at all — that has its own, visible, failure).
+ */
+export function scriptUnconsumedWarning(
+  count: number,
+  sideChannelCount: number,
+): string | undefined {
+  if (count > 0 || sideChannelCount === 0) return undefined;
+  return (
+    `vigiles: the scripted mock served ${String(sideChannelCount)} side-channel ` +
+    `request(s) and ZERO script turns. Every request the agent CLI made declared ` +
+    `no tools, so none of them looked like an agent turn (see isMainLoopRequest) ` +
+    `— the script was never consumed and the run decided on nothing. If the CLI ` +
+    `changed shape, that classifier is what needs updating.`
+  );
 }
 
 /** Flatten Anthropic content (string, or an array of text/other blocks) to text. */
@@ -194,9 +288,11 @@ export function extractRequest(body: {
 }
 
 /**
- * Start the scripted mock on a free port. Each `/v1/messages` POST consumes the
- * next turn (the last turn repeats if the client asks for more). Resolves to a
- * handle with the base `url` and a `close()`.
+ * Start the scripted mock on a free port. Each MAIN-LOOP `/v1/messages` POST
+ * consumes the next turn (the last turn repeats if the client asks for more);
+ * a SIDE-CHANNEL POST — the CLI's own bookkeeping calls, see
+ * {@link isMainLoopRequest} — is answered from outside the script and consumes
+ * nothing. Resolves to a handle with the base `url` and a `close()`.
  */
 export function startMock(
   script: readonly ModelTurn[],
@@ -208,6 +304,7 @@ export function startMock(
   } = {},
 ): Promise<MockHandle> {
   let i = 0;
+  let sideChannelCount = 0;
   const requests: ModelRequest[] = [];
   const server = http.createServer((req, res) => {
     let body = "";
@@ -232,9 +329,26 @@ export function startMock(
         res.end(JSON.stringify({ input_tokens: 10 }));
         return;
       }
-      const request = extractRequest(reqBody);
+      const isMainLoop = isMainLoopRequest(reqBody);
+      const request: ModelRequest = isMainLoop
+        ? extractRequest(reqBody)
+        : { ...extractRequest(reqBody), sideChannel: true };
+      // EVERY request is still recorded — the side channel is routed, not
+      // hidden. `requests` is what harness tests assert against, and a request
+      // the mock silently dropped from the record would be the next invisible
+      // failure rather than a fix for this one.
       requests.push(request);
       opts.onRequest?.(request);
+      const model = reqBody.model ?? "claude-mock";
+      if (!isMainLoop) {
+        // Answered from OUTSIDE the script, and `i` is untouched: the CLI's own
+        // bookkeeping call cannot shift the agent's turns.
+        sideChannelCount++;
+        const reply = { text: SIDE_CHANNEL_REPLY };
+        if (reqBody.stream === true) streamTurn(res, reply, model);
+        else jsonTurn(res, reply, model);
+        return;
+      }
       const last = JSON.stringify(reqBody.messages?.at(-1)?.content ?? "");
       opts.onTurn?.({
         n: i,
@@ -243,7 +357,6 @@ export function startMock(
       });
       const turn = script[Math.min(i, script.length - 1)] ?? { text: "" };
       i++;
-      const model = reqBody.model ?? "claude-mock";
       if (reqBody.stream === true) streamTurn(res, turn, model);
       else jsonTurn(res, turn, model);
     });
@@ -256,6 +369,9 @@ export function startMock(
         close: () => server.close(),
         get count() {
           return i;
+        },
+        get sideChannelCount() {
+          return sideChannelCount;
         },
         get requests() {
           return requests;

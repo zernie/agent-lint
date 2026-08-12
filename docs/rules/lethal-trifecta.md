@@ -166,6 +166,26 @@ _session_ provides can re-supply a leg the fence closed, and no static read of a
 among the built-ins_ — the part the author can control from frontmatter — not a
 proof of absence.
 
+### The remedy is split by CAUSE
+
+A check that fires on every unit carries no information unless it says **why this
+unit fired**. After the `allowed-tools` inversion a real 38-skill repo went from
+18 of 38 exposed units to **38 of 38** (Safety 86 → 70) — the classification is
+right and stays, but the single remedy sentence it carried ("drop at least one
+leg") was identical for situations needing different edits, and it pointed at
+**narrowing `Bash(...)`**, which `EFFECT_FREE` has closed for anything an author
+actually runs. So the remedy now names the cause:
+
+| what the contract holds                                                               | what the message says                                                                                                                                              |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| an **unrestricted** shell grant (`Bash`)                                              | the shell alone supplies two legs — removing it closes the path in one edit; narrowing only helps for an enumerably effect-free program                            |
+| a **restricted** shell grant that still counts (`Bash(node ./x.mjs:*)`)               | you already narrowed, and it did not count — nothing has read your script, an interpreter runs whatever it is handed, narrowing further will not move this finding |
+| **no shell leg at all** (`Read`, `WebFetch`) — including a _bounded_ `Bash(echo …:*)` | there is nothing to narrow; remove one of the named tools                                                                                                          |
+| a skill fence whose entries are **restricted** (`disallowed-tools: Bash(curl:*)`)     | a restricted deny is **discarded**, not weighed — only an unrestricted name removes the tool                                                                       |
+
+Grading is untouched by all of this: the same units are found, with the same
+severities and the same score.
+
 ### Two states, one grade, two presentations
 
 ```

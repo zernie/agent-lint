@@ -91,6 +91,11 @@ export interface HarnessDialect {
     readonly skillFrontmatter: SkillFrontmatterProfile;
 }
 
+// @public
+export function isMainLoopRequest(body: {
+    tools?: unknown;
+}): boolean;
+
 // @public (undocumented)
 export interface LoadedPlugin {
     readonly files: Record<string, string>;
@@ -113,6 +118,7 @@ export interface MockHandle {
     close(): void;
     readonly count: number;
     readonly requests: readonly ModelRequest[];
+    readonly sideChannelCount: number;
     // (undocumented)
     readonly url: string;
 }
@@ -126,6 +132,7 @@ export interface ModelRequest {
         readonly role: string;
         readonly text: string;
     }[];
+    readonly sideChannel?: boolean;
     readonly system: string;
 }
 
@@ -148,6 +155,9 @@ export function resolveHarness(opts: {
 
 // @public
 export function scriptModel(turns: readonly ModelTurn[]): ModelTurn[];
+
+// @public
+export function scriptUnconsumedWarning(count: number, sideChannelCount: number): string | undefined;
 
 // @public
 export interface SelectionMatrixOptions extends SelectionOptions {

@@ -57,7 +57,7 @@ import { probeTrace } from "./coverage-probe.js";
 
 import { claudeCodeRuntime } from "./adapters/claude-code/runtime.js";
 
-import { startMock } from "./mock-model.js";
+import { startMock, scriptUnconsumedWarning } from "./mock-model.js";
 import { resolveHarness } from "./adapters/claude-code/plugin-loader.js";
 import {
   decideSandbox,
@@ -716,6 +716,15 @@ export async function runHarnessTest(
       mock.url,
       timeoutMs,
     );
+    // A script that was never consumed is otherwise invisible — the run just
+    // looks empty. `scriptUnconsumedWarning` names the one shape that produces
+    // it (every request arriving without tool declarations, so nothing looked
+    // like an agent turn) instead of leaving it to be rediscovered.
+    const unconsumed = scriptUnconsumedWarning(
+      mock.count,
+      mock.sideChannelCount ?? 0,
+    );
+    if (unconsumed !== undefined) console.error(unconsumed);
     return makeResult(cwd, out, driver.parseRun(out.stdout), mock.count, [
       ...mock.requests,
     ]);
