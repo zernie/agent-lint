@@ -396,9 +396,10 @@ export function isStateWrite(w: unknown): w is StateWrite {
  * Everything that is not a well-formed write with a valid key is dropped here,
  * before any path is computed from it.
  */
-export function admissibleWrites(
-  writes: readonly unknown[],
-): { readonly ok: readonly StateWrite[]; readonly refused: readonly string[] } {
+export function admissibleWrites(writes: readonly unknown[]): {
+  readonly ok: readonly StateWrite[];
+  readonly refused: readonly string[];
+} {
   const ok: StateWrite[] = [];
   const refused: string[] = [];
   for (const w of writes) {

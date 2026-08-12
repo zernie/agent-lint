@@ -164,7 +164,8 @@ test("a key can never address a path: a smuggled write is refused, LOUDLY, and i
   assert.match(res.stderr, /refused to record \.\.\/\.\.\/\.\.\/pwned/);
   assert.equal(res.code, 0, "an advisory react must stay advisory");
   assert.ok(
-    !existsSync(join(dir, "pwned.json")) && !existsSync(join(dir, "..", "pwned.json")),
+    !existsSync(join(dir, "pwned.json")) &&
+      !existsSync(join(dir, "..", "pwned.json")),
     "traversal must produce no file anywhere",
   );
   // Only the store directory exists, and only the valid key is in it — a refusal
@@ -174,9 +175,11 @@ test("a key can never address a path: a smuggled write is refused, LOUDLY, and i
     ["legit.key.json"],
   );
   assert.equal(
-    (JSON.parse(readFileSync(statePath(dir, "legit.key"), "utf-8")) as {
-      value: string;
-    }).value,
+    (
+      JSON.parse(readFileSync(statePath(dir, "legit.key"), "utf-8")) as {
+        value: string;
+      }
+    ).value,
     "ok",
   );
 });
@@ -211,7 +214,10 @@ test("scope is the hook's DIRECTORY: siblings share a fact, a vendored plugin ca
   // A second hook set, shipped somewhere else in the same checkout — the shape a
   // vendored plugin has.
   mkdirSync(join(dir, "vendor", "plugin", "hooks"), { recursive: true });
-  writeFileSync(join(dir, "vendor", "plugin", "hooks", "reader.hook.mjs"), READER);
+  writeFileSync(
+    join(dir, "vendor", "plugin", "hooks", "reader.hook.mjs"),
+    READER,
+  );
 
   runHook(dir, "witness.hook.mjs", {
     tool_name: "mcp__x__list_events",
@@ -235,7 +241,15 @@ test("scope is the hook's DIRECTORY: siblings share a fact, a vendored plugin ca
   );
   assert.ok(
     existsSync(
-      join(dir, ".vigiles", "state", "vendor", "plugin", "hooks", "calendar.nagged.json"),
+      join(
+        dir,
+        ".vigiles",
+        "state",
+        "vendor",
+        "plugin",
+        "hooks",
+        "calendar.nagged.json",
+      ),
     ),
     "the store MIRRORS the hook's directory, so a human can find the fact",
   );

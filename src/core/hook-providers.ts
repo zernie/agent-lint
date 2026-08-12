@@ -68,7 +68,11 @@ export interface InlineProvider<Name extends string = string> {
  * from outside the hook, and reading an undeclared one is a `tsc` error. See the
  * design note in `hook-state.ts`.
  */
-export type NeedSpec = ProviderName | InlineProvider | RegisteredRef | StateNeed;
+export type NeedSpec =
+  | ProviderName
+  | InlineProvider
+  | RegisteredRef
+  | StateNeed;
 
 /**
  * Declare an INLINE read-only fact: `provide("k8sCtx", "kubectl config current-context")`.

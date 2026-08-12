@@ -137,7 +137,11 @@ test("a CORRUPT timestamp reads as never-recorded (noisy), not as recorded-now (
   const corrupt = stateFact({ value: "x", at: "not-a-date" }, NOW);
   assert.equal(corrupt.recorded, false);
   assert.equal(corrupt.ageSeconds, Infinity);
-  assert.equal(corrupt.fresherThan("100d"), false, "corruption must not silence");
+  assert.equal(
+    corrupt.fresherThan("100d"),
+    false,
+    "corruption must not silence",
+  );
   // Clean half: a well-formed entry is honoured.
   assert.equal(stateFact(agoEntry(5), NOW).recorded, true);
 });
@@ -309,35 +313,50 @@ test("an inject reads state and records its own nudge in ONE return", () => {
   const hook = defineInject({
     on: "UserPromptSubmit",
     needs: [state("calendar.synced"), state("calendar.nagged")] as const,
-    produce: (e) =>
-      e.ctx["calendar.synced"].fresherThan("12h")
-        ? inject("")
-        : e.ctx["calendar.nagged"].fresherThan("3h")
-          ? inject("short escalation")
-          : inject("FULL BLOCK", record("calendar.nagged")),
+    produce: (e) => {
+      if (e.ctx["calendar.synced"].fresherThan("12h")) return inject("");
+      if (e.ctx["calendar.nagged"].fresherThan("3h"))
+        return inject("short escalation");
+      return inject("FULL BLOCK", record("calendar.nagged"));
+    },
   });
-  const fresh = runHookProgram(hook, {}, {
-    "calendar.synced": stateFact(agoEntry(60), NOW),
-    "calendar.nagged": stateFact(null, NOW),
-  });
+  const fresh = runHookProgram(
+    hook,
+    {},
+    {
+      "calendar.synced": stateFact(agoEntry(60), NOW),
+      "calendar.nagged": stateFact(null, NOW),
+    },
+  );
   assert.equal(fresh.kind === "injection" && fresh.context, "");
   assert.deepEqual(outcomeWrites(fresh).ok, [], "silence records nothing");
 
-  const nagged = runHookProgram(hook, {}, {
-    "calendar.synced": stateFact(agoEntry(90000), NOW),
-    "calendar.nagged": stateFact(agoEntry(60), NOW),
-  });
-  assert.equal(nagged.kind === "injection" && nagged.context, "short escalation");
+  const nagged = runHookProgram(
+    hook,
+    {},
+    {
+      "calendar.synced": stateFact(agoEntry(90000), NOW),
+      "calendar.nagged": stateFact(agoEntry(60), NOW),
+    },
+  );
+  assert.equal(
+    nagged.kind === "injection" && nagged.context,
+    "short escalation",
+  );
   assert.deepEqual(
     outcomeWrites(nagged).ok,
     [],
     "the escalation line must NOT move the nag stamp, or it silences the full block",
   );
 
-  const full = runHookProgram(hook, {}, {
-    "calendar.synced": stateFact(agoEntry(90000), NOW),
-    "calendar.nagged": stateFact(null, NOW),
-  });
+  const full = runHookProgram(
+    hook,
+    {},
+    {
+      "calendar.synced": stateFact(agoEntry(90000), NOW),
+      "calendar.nagged": stateFact(null, NOW),
+    },
+  );
   assert.equal(full.kind === "injection" && full.context, "FULL BLOCK");
   assert.deepEqual(
     outcomeWrites(full).ok.map((w) => w.name),
@@ -351,7 +370,8 @@ test("a GATE cannot record: a Decision carries no writes, in either direction", 
     on: "PreToolUse",
     match: tool("Bash"),
     needs: [state("deploy.done")] as const,
-    decide: (e) => (e.ctx["deploy.done"].fresherThan("1h") ? allow() : deny("no")),
+    decide: (e) =>
+      e.ctx["deploy.done"].fresherThan("1h") ? allow() : deny("no"),
   });
   for (const fact of [stateFact(agoEntry(10), NOW), stateFact(null, NOW)]) {
     const outcome = runHookProgram(
@@ -368,10 +388,7 @@ test("a GATE cannot record: a Decision carries no writes, in either direction", 
     { tool_name: "Bash", tool_input: { command: "ls" } },
     { "deploy.done": stateFact(agoEntry(10), NOW) },
   );
-  assert.equal(
-    allowed.kind === "decision" && allowed.decision.kind,
-    "allow",
-  );
+  assert.equal(allowed.kind === "decision" && allowed.decision.kind, "allow");
 });
 
 // ---------------------------------------------------------------------------
@@ -438,7 +455,10 @@ test("a react on a TOOL-LESS event fires; one that declared tools still filters"
     "import {} from 'vigiles/hook';",
     stopHook,
   );
-  assert.equal(JSON.parse(compiled.settingsBlock).hooks.Stop[0].matcher, undefined);
+  const block = JSON.parse(compiled.settingsBlock) as {
+    hooks: Record<string, { matcher?: string }[]>;
+  };
+  assert.equal(block.hooks.Stop[0].matcher, undefined);
 
   // Defect half: omitting `match` must not turn every react into a catch-all.
   const toolHook = defineReact({
@@ -448,9 +468,11 @@ test("a react on a TOOL-LESS event fires; one that declared tools still filters"
   });
   assert.equal(
     runHookProgram(toolHook, { tool_name: "Bash" }).kind === "reaction" &&
-      (runHookProgram(toolHook, { tool_name: "Bash" }) as {
-        reaction: { kind: string };
-      }).reaction.kind,
+      (
+        runHookProgram(toolHook, { tool_name: "Bash" }) as {
+          reaction: { kind: string };
+        }
+      ).reaction.kind,
     "none",
   );
 });

@@ -1786,13 +1786,10 @@ export function outcomeWrites(outcome: HookProgramOutcome): {
   readonly ok: readonly StateWrite[];
   readonly refused: readonly string[];
 } {
-  const declared =
-    outcome.kind === "injection"
-      ? outcome.records
-      : outcome.kind === "reaction"
-        ? outcome.reaction.records
-        : [];
-  return admissibleWrites(declared);
+  if (outcome.kind === "injection") return admissibleWrites(outcome.records);
+  if (outcome.kind === "reaction")
+    return admissibleWrites(outcome.reaction.records);
+  return admissibleWrites([]);
 }
 
 /**
