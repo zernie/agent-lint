@@ -383,7 +383,14 @@ export function resolveSpawnEnv(
  * keeps mistaking for a finding.
  */
 function refuseUnderForeignRunner(what: string): void {
-  const runner = foreignRunner(process.argv[1]);
+  // `node --test` is INVISIBLE in argv (it is a flag on node, not an installed
+  // binary), so the two facts that do identify it travel alongside — see the
+  // measurements in core/foreign-runner.ts. Reading `process` here, at the one
+  // place that already does, keeps the decision itself pure.
+  const runner = foreignRunner(process.argv[1], {
+    execArgv: process.execArgv,
+    nodeTestContext: process.env.NODE_TEST_CONTEXT,
+  });
   if (runner !== null) throw new Error(foreignRunnerRefusal(runner, what));
 }
 

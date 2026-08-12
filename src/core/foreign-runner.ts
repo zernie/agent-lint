@@ -40,10 +40,47 @@
  * runs (and may cost money) rather than a legitimate run being blocked by a
  * pattern nobody predicted.
  *
- * Pure: a string in, a name or null out. No process access, no filesystem.
+ * ## 🔴 `node --test` HAS NO argv SIGNAL AT ALL, and the line that claimed one
+ * was dead from the day it was written
+ *
+ * `["node --test", ["node_modules/.bin/node--test"]]` used to sit in the table
+ * below. It was added by analogy with the npx-installed runners and never
+ * measured. There is no such binary: Node's test runner is a FLAG on node
+ * itself, so nothing under `node_modules/.bin/` can appear in `argv[1]`, and the
+ * entry could not fire under any invocation. That is worse than its absence — it
+ * READ as coverage while the paid tier stayed reachable from a legacy harness
+ * named `*.test.mjs`, a name Node's own default patterns collect.
+ *
+ * Measured 2026-08-12 (Node 22.22, a fixture printing its own process facts):
+ *
+ *   node --test foo.test.mjs
+ *     argv[1]           = /abs/foo.test.mjs   ← the TEST FILE, no runner in sight
+ *     execArgv          = []                  ← the flag is not here either
+ *     NODE_TEST_CONTEXT = child-v8            ← the only signal
+ *
+ *   node --test --experimental-test-isolation=none foo.test.mjs
+ *     argv[1]           = foo.test.mjs
+ *     execArgv          = ["--test", "--experimental-test-isolation=none"]
+ *     NODE_TEST_CONTEXT = undefined           ← in-process: no child, no var
+ *
+ * The two modes therefore need two different facts, and both are read here.
+ *
+ * ⚠️ THIS IS NOT THE `process.env.VITEST` IDIOM REJECTED ABOVE, and the
+ * difference is the reason it is allowed. `VITEST` is a USER-VISIBLE CONVENTION:
+ * a person can put it in a `.env` or a CI job for unrelated reasons, so a guard
+ * reading it fires on correct input. `NODE_TEST_CONTEXT` is set by NODE ITSELF in
+ * the child it spawns — the internal protocol between runner and test process,
+ * which nobody writes into their own environment. Same for `execArgv`: the flag
+ * list node was launched with (`--test` is explicitly refused inside
+ * `NODE_OPTIONS` — verified — so it cannot arrive from a stray env either). Do
+ * not "fix" this back into an argv fragment: for `node --test` an argv signal
+ * does not exist, so the choice is these facts or no detection at all.
+ *
+ * Pure: facts in, a name or null out. No process access, no filesystem.
  */
 
-/** Path fragments that identify a runner owning the process. POSIX-normalised. */
+/** Path fragments that identify a runner owning the process. POSIX-normalised.
+ *  Every fragment was MEASURED from a real run of that runner — see the tests. */
 const RUNNERS: readonly (readonly [string, readonly string[]])[] = [
   ["vitest", ["node_modules/vitest/", "node_modules/.bin/vitest"]],
   [
@@ -57,16 +94,40 @@ const RUNNERS: readonly (readonly [string, readonly string[]])[] = [
   ],
   ["mocha", ["node_modules/mocha/", "node_modules/.bin/mocha"]],
   ["ava", ["node_modules/ava/", "node_modules/.bin/ava"]],
-  ["node --test", ["node_modules/.bin/node--test"]],
 ];
+
+/** The name reported for Node's built-in runner — also the command to blame. */
+const NODE_TEST = "node --test";
+
+/**
+ * The process facts identifying Node's own test runner, which leaves no trace in
+ * `argv[1]`. Passed in rather than read, so the decision stays pure.
+ */
+export interface NodeTestFacts {
+  /** `process.execArgv` — carries `--test` when the runner is IN-PROCESS. */
+  readonly execArgv?: readonly string[];
+  /** `process.env.NODE_TEST_CONTEXT` — node sets it in the test CHILD it spawns. */
+  readonly nodeTestContext?: string | undefined;
+}
 
 /**
  * The foreign test runner that started this process, or `null`.
  *
- * `argv1` is `process.argv[1]` — passed in rather than read, so the decision is a
- * pure function the tests can drive with the paths measured from real runs.
+ * `argv1` is `process.argv[1]`; `node` carries the two facts that identify Node's
+ * built-in runner (see the header). Both are passed in rather than read, so the
+ * decision is a pure function the tests drive with values measured from real runs.
  */
-export function foreignRunner(argv1: string | undefined): string | null {
+export function foreignRunner(
+  argv1: string | undefined,
+  node: NodeTestFacts = {},
+): string | null {
+  // `--test` EXACTLY: `--test-only` / `--test-name-pattern` are ordinary flags a
+  // plain `node foo.eval.mjs` may carry, and a prefix match would refuse it.
+  if (
+    (node.nodeTestContext ?? "") !== "" ||
+    (node.execArgv ?? []).includes("--test")
+  )
+    return NODE_TEST;
   if (!argv1) return null;
   const p = argv1.replaceAll("\\", "/");
   for (const [name, fragments] of RUNNERS)
