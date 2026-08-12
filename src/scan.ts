@@ -19,7 +19,7 @@ import { loadPlugin } from "./adapters/claude-code/plugin-loader.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
 import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
 import { danglingRefs } from "./plugin-loader.js";
-import { entryKind } from "./fs-walk.js";
+import { entryOf } from "./fs-walk.js";
 import { brokenSkillRefs, formatSkillRefIssue } from "./skill-refs.js";
 import type { PluginLayout } from "./core/layout.js";
 import type { HarnessDialect } from "./core/dialect.js";
@@ -515,7 +515,7 @@ function ownTestSignalOnDisk(dir: string): boolean {
  * 🔴 A SYMLINKED DIRECTORY IS NOT DESCENDED INTO, and this used to `statSync`
  * every entry — which FOLLOWS the link, so `.claude/skills/self -> ..` was a
  * CYCLE and every real file came back once per lap. The policy is SHARED with the
- * loader's walk over the same trees ({@link entryKind}); that module carries the
+ * loader's walk over the same trees ({@link entryOf}); that module carries the
  * measurement and states exactly what the refusal deliberately misses.
  *
  * A symlinked surface dir at the TOP is unaffected — those go straight to
@@ -541,7 +541,7 @@ function harnessSurfaceFilesOnDisk(
     for (const entry of entries) {
       const key = `${rel}/${entry}`;
       const child = join(abs, entry);
-      const kind = entryKind(child);
+      const { kind } = entryOf(child);
       if (kind === "dir") walk(child, key);
       else if (kind === "file") out.push(key);
     }

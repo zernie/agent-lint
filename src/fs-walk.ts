@@ -20,9 +20,24 @@ import { lstatSync, statSync } from "node:fs";
 /** What a walk should do with one directory entry. */
 export type EntryKind = "dir" | "file" | "skip";
 
+/** A classified entry, plus the size the loader needs. */
+export interface Entry {
+  readonly kind: EntryKind;
+  /** Byte size of the target; `0` for anything that is not a `"file"`. */
+  readonly size: number;
+}
+
 /**
  * Classify a directory entry for a recursive walk, refusing to descend into a
  * symlinked DIRECTORY.
+ *
+ * 🔴 THE SIZE COMES BACK FROM THE SAME `stat`, and that is not a convenience. The
+ * loader needs both "is this a file" and "is it under the size cap", and asking
+ * twice produced a SECOND failure path that nothing could reach: between a
+ * successful classification and a second `statSync` the file has to vanish, so the
+ * `catch` around the size check was dead code that the 100% coverage gate could
+ * only ever fail on. One syscall answers both questions and there is no second
+ * path to test.
  *
  * `lstat` describes the ENTRY, `stat` describes its target, and both are needed:
  * the first decides whether descending is safe, the second decides what a link
@@ -38,16 +53,19 @@ export type EntryKind = "dir" | "file" | "skip";
  * Anything unreadable (a dangling link, a permissions error, a socket) is
  * `"skip"`: a walk feeding a read-only report must not die on one bad entry.
  */
-export function entryKind(path: string): EntryKind {
+export function entryOf(path: string): Entry {
   try {
     if (lstatSync(path).isSymbolicLink()) {
-      return statSync(path).isFile() ? "file" : "skip";
+      const target = statSync(path);
+      return target.isFile()
+        ? { kind: "file", size: target.size }
+        : { kind: "skip", size: 0 };
     }
     const st = statSync(path);
-    if (st.isDirectory()) return "dir";
-    if (st.isFile()) return "file";
-    return "skip";
+    if (st.isDirectory()) return { kind: "dir", size: 0 };
+    if (st.isFile()) return { kind: "file", size: st.size };
+    return { kind: "skip", size: 0 };
   } catch {
-    return "skip";
+    return { kind: "skip", size: 0 };
   }
 }

@@ -35,7 +35,7 @@ import { parse as parseToml } from "@iarna/toml";
 
 import { assertNever } from "./core/hash.js";
 import type { PluginLayout } from "./core/layout.js";
-import { entryKind } from "./fs-walk.js";
+import { entryOf } from "./fs-walk.js";
 
 export interface LoadedPlugin {
   /** A `.claude/settings.json`-shaped object with hooks resolved. */
@@ -151,7 +151,7 @@ function readHooks(root: string, layout: PluginLayout): unknown {
  * quieter half of the same bug: the loader reads a foreign tree into the file map
  * that the entire report is computed from.
  *
- * The decision is {@link entryKind}, SHARED with `harnessSurfaceFilesOnDisk` in
+ * The decision is {@link entryOf}, SHARED with `harnessSurfaceFilesOnDisk` in
  * `scan.ts` — the other walk over the same trees, and exactly the kind of pair
  * this repo has been bitten by fixing on only one side. That module carries the
  * full rationale: a symlinked FILE is still read (it cannot recurse), and an
@@ -162,22 +162,17 @@ function readTree(dir: string, base: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
-    const kind = entryKind(full);
+    const { kind, size } = entryOf(full);
     if (kind === "dir") Object.assign(out, readTree(full, base));
-    else if (kind === "file" && fileWithinSizeCap(full)) {
+    // The cap keeps a stray binary out of the in-memory file map, and the size
+    // comes from the SAME stat that classified the entry. Asking a second time
+    // needed its own `catch` — reachable only if the file vanished between the two
+    // calls — which is dead code the 100% coverage gate could only ever fail on.
+    else if (kind === "file" && size <= MAX_SKILL_FILE_BYTES) {
       out[relative(base, full)] = readFileSync(full, "utf-8");
     }
   }
   return out;
-}
-
-/** The size cap that keeps a stray binary out of the in-memory file map. */
-function fileWithinSizeCap(path: string): boolean {
-  try {
-    return statSync(path).size <= MAX_SKILL_FILE_BYTES;
-  } catch {
-    return false;
-  }
 }
 
 /**
