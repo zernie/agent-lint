@@ -80,6 +80,33 @@ const CALLS_THE_PAID_TIER =
 
 const guardTest = existsSync(EVAL) ? test : test.skip;
 
+/**
+ * Does THIS node understand `--experimental-test-isolation=none`?
+ *
+ * 🔴 PROBED, NOT ASSUMED, AND NOT A VERSION COMPARISON. The flag landed in Node
+ * 22; CI runs Node 20, where it is not "ignored" but rejected outright — `bad
+ * option`, exit 9 — so the assertion below failed on a runner that cannot reach
+ * the branch it tests. A version check would work today and rot the moment the
+ * flag is renamed or promoted out of experimental; asking the binary cannot.
+ *
+ * The skip is LOUD. A quietly-skipped test is the failure mode this whole branch
+ * exists to remove: silence that reads like a pass.
+ */
+const isolationNoneSupported = ((): boolean => {
+  const r = spawnSync(
+    process.execPath,
+    ["--experimental-test-isolation=none", "-e", ""],
+    { encoding: "utf8" },
+  );
+  return r.status === 0;
+})();
+if (!isolationNoneSupported)
+  console.warn(
+    `[eval-node-test-guard] node ${process.version} does not support ` +
+      `--experimental-test-isolation=none — skipping the execArgv half of the ` +
+      `guard. The NODE_TEST_CONTEXT half still runs.`,
+  );
+
 guardTest(
   "a legacy `*.test.mjs` collected by `node --test` cannot reach the model",
   () => {
@@ -94,7 +121,7 @@ guardTest(
   },
 );
 
-guardTest(
+(guardTest === test && isolationNoneSupported ? test : test.skip)(
   "…including --experimental-test-isolation=none, where node spawns no child",
   () => {
     // The other half of the runner: no NODE_TEST_CONTEXT is set here, so this
