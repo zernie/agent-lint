@@ -1449,7 +1449,7 @@ test("runReact: an ABSOLUTE file_path fires the react — via the root arg AND v
     tool_name: "Edit",
     tool_input: { file_path: `${MINE}/migratsiya/papers/x/main.tex` },
   };
-  assert.equal(runReact(paperNudge, abs, MINE).kind, "notice");
+  assert.equal(runReact(paperNudge, abs, {}, MINE).kind, "notice");
   assert.equal(runReact(paperNudge, { ...abs, cwd: MINE }).kind, "notice");
   // No root anywhere → silence, never a false fire.
   assert.equal(runReact(paperNudge, abs).kind, "none");
@@ -1463,6 +1463,7 @@ test("runReact: an ABSOLUTE file_path fires the react — via the root arg AND v
           file_path: "/home/user/other/migratsiya/papers/x/main.tex",
         },
       },
+      {},
       MINE,
     ).kind,
     "none",

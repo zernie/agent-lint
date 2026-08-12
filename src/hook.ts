@@ -81,6 +81,10 @@ export {
   dispatchKind,
   hookRouting,
   hookNeeds,
+  injectionOf,
+  outcomeWrites,
+  matchesTool,
+  invalidToolPatterns,
   // compile + integrity
   compileHookProgram,
   checkHookImports,
@@ -125,6 +129,28 @@ export {
   defineProvider,
   provider,
 } from "./core/hook-providers.js";
+
+// Runtime-owned named state: `state(k)` in `needs` reads a fact, `record(k)` in a
+// return value declares one. The whole design note lives in `core/hook-state.ts`.
+export {
+  state,
+  record,
+  stateFact,
+  isValidStateKey,
+  isStateNeed,
+  isStateWrite,
+  admissibleWrites,
+  durationSeconds,
+  HookStateError,
+} from "./core/hook-state.js";
+
+export type {
+  StateFact,
+  StateEntry,
+  StateNeed,
+  StateWrite,
+  Duration,
+} from "./core/hook-state.js";
 
 export type {
   ProviderName,

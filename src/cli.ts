@@ -18,6 +18,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  renameSync,
   lstatSync,
   realpathSync,
   type Dirent,
@@ -220,7 +221,9 @@ import {
   decideFileGate,
   decidePromptGate,
   decideStopGate,
-  runInject,
+  injectionOf,
+  outcomeWrites,
+  type HookProgramOutcome,
   runReact,
   dispatchKind,
   hookRouting,
@@ -262,7 +265,12 @@ import {
   type RegisteredProvider,
 } from "./core/hook-providers.js";
 import { parse as parseToml } from "@iarna/toml";
-import type { SHA256Hash } from "./core/hash.js";
+import { sha256short, type SHA256Hash } from "./core/hash.js";
+import {
+  type StateEntry,
+  type StateFact,
+  type StateWrite,
+} from "./core/hook-state.js";
 import {
   evaluatePreToolUse,
   readActiveAgent,
@@ -6405,6 +6413,97 @@ function hookStampPath(file: string): string {
   return resolve(process.cwd(), ".vigiles/hooks", basename(file) + ".json");
 }
 
+/**
+ * The directory a hook's recorded facts live in — the SCOPE of `state()`/`record()`.
+ *
+ * Derived from the hook's own location and never from anything the hook said, so
+ * a key cannot address another owner's store: hooks shipped in the same directory
+ * share their facts (the requirement — one hook records, another reads), a
+ * vendored plugin's hooks get their own. The layout MIRRORS the hook's directory
+ * rather than slugging it, which keeps it injective and lets a human debugging a
+ * hook find the fact by walking the path they already know:
+ *
+ *   .claude/hooks/calendar-sync-record.hook.ts
+ *     → .vigiles/state/.claude/hooks/calendar.synced.json
+ *
+ * A hook outside the project (an absolute path elsewhere) falls back to a hash of
+ * its directory: still stable and still isolated, just not readable — which is the
+ * right trade for a case that should not happen in a project's own harness.
+ */
+function hookStateDir(file: string): string {
+  const dir = dirname(resolve(process.cwd(), file));
+  const rel = relative(process.cwd(), dir);
+  const inside = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+  return resolve(
+    process.cwd(),
+    ".vigiles/state",
+    inside ? rel : `external-${sha256short(dir)}`,
+  );
+}
+
+/** Read one recorded fact for a hook, or `null` if it was never recorded. */
+function readHookState(file: string, key: string): StateEntry | null {
+  try {
+    const raw = readFileSync(
+      resolve(hookStateDir(file), key + ".json"),
+      "utf-8",
+    );
+    const parsed = JSON.parse(raw) as StateEntry;
+    return typeof parsed.value === "string" && typeof parsed.at === "string"
+      ? parsed
+      : null;
+  } catch {
+    // Never recorded, unreadable, or corrupt — all "no fact", which `stateFact`
+    // turns into an infinite age, so the reading hook SPEAKS. Failing toward
+    // noise is the whole point; a store problem must never look like freshness.
+    return null;
+  }
+}
+
+/**
+ * Record one fact. Atomic: written to a temp file in the same directory and
+ * `rename()`d over, so a concurrent reader sees the whole old entry or the whole
+ * new one — never one write's value with another's timestamp. Distinct keys are
+ * distinct files and never interact at all.
+ */
+function writeHookState(file: string, w: StateWrite): void {
+  const dir = hookStateDir(file);
+  const target = resolve(dir, w.name + ".json");
+  const entry: StateEntry = {
+    value: w.value,
+    at: new Date().toISOString(),
+    by: normalizeHookRef(file),
+  };
+  mkdirSync(dir, { recursive: true });
+  const tmp = `${target}.${String(process.pid)}.tmp`;
+  writeFileSync(tmp, JSON.stringify(entry, null, 2) + "\n");
+  renameSync(tmp, target);
+}
+
+/**
+ * Perform the state writes a hook declared, after its output has been emitted.
+ * A refused write (a hand-built record object with a key `record()` would have
+ * thrown on) is announced — silence here would be a hook that believes it
+ * remembered something.
+ */
+function applyHookWrites(file: string, outcome: HookProgramOutcome): void {
+  const { ok, refused } = outcomeWrites(outcome);
+  for (const name of refused) {
+    console.error(
+      `vigiles: refused to record ${name} from ${file} — not a valid state key.`,
+    );
+  }
+  for (const w of ok) {
+    try {
+      writeHookState(file, w);
+    } catch (e) {
+      console.error(
+        `vigiles: could not record ${w.name} from ${file}: ${String(e)}`,
+      );
+    }
+  }
+}
+
 /** What installing one hook did — for the `compile` summary line. */
 interface HookInstallResult {
   readonly role: DispatchKind;
@@ -6586,7 +6685,8 @@ async function installHooks(
  */
 async function gatherHookContext(
   program: AnyHook,
-): Promise<Record<string, string | boolean>> {
+  file: string,
+): Promise<Record<string, string | boolean | StateFact>> {
   const needs = hookNeeds(program);
   if (needs.length === 0) return {};
   // Only load the registered-provider registry if a provider() ref is declared.
@@ -6608,6 +6708,10 @@ async function gatherHookContext(
       cwd: process.cwd(),
       platform: process.platform,
       isCI,
+      // The namespace is bound HERE, from the hook's own path — core never sees
+      // it, so no key a hook can spell reaches another owner's store.
+      readState: (key) => readHookState(file, key),
+      now: Date.now(),
     },
     registry,
   );
@@ -6963,13 +7067,31 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
 
   switch (dispatchKind(program)) {
     case "inject": {
-      const out = runInject(program as InjectHook, { source: event.source });
-      process.stdout.write(JSON.stringify(out) + "\n");
+      const ctx = await gatherHookContext(program, file);
+      const injection = injectionOf(program as InjectHook, event, ctx);
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: program.on,
+            additionalContext: injection.context,
+          },
+        }) + "\n",
+      );
+      // Writes land AFTER the output is emitted: a hook that recorded "I spoke"
+      // must not have recorded it if emitting threw.
+      applyHookWrites(file, {
+        kind: "injection",
+        context: injection.context,
+        records: injection.records,
+      });
       return;
     }
     case "react": {
+      const ctx = await gatherHookContext(program, file);
       warnIfPathUndecidable(event, projectRoot);
-      const reaction = runReact(program as ReactHook, event, projectRoot);
+      const reaction = runReact(program as ReactHook, event, ctx, projectRoot);
+      if (reaction.kind === "notice") console.error(reaction.message);
+      applyHookWrites(file, { kind: "reaction", reaction });
       if (reaction.kind === "run") {
         const { spawnSync } =
           require("node:child_process") as typeof import("node:child_process");
@@ -6979,11 +7101,10 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
         });
         process.exit(res.status ?? 0);
       }
-      if (reaction.kind === "notice") console.error(reaction.message);
       return;
     }
     case "file-gate": {
-      const ctx = await gatherHookContext(program);
+      const ctx = await gatherHookContext(program, file);
       warnIfPathUndecidable(event, projectRoot);
       emitGate(
         decideFileGate(program as FileGateHook, event, ctx, projectRoot),
@@ -6994,7 +7115,7 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
       return;
     }
     case "bash-gate": {
-      const ctx = await gatherHookContext(program);
+      const ctx = await gatherHookContext(program, file);
       // The same `projectRoot` the file gates get: without it every
       // repo-relative prefix in a DENYLIST matcher (`touches`/`writesTo`) is
       // matched by over-blocking alone, and with it an absolute token is placed
@@ -7009,7 +7130,7 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
       return;
     }
     case "prompt-gate": {
-      const ctx = await gatherHookContext(program);
+      const ctx = await gatherHookContext(program, file);
       emitGate(
         decidePromptGate(program as PromptGateHook, event, ctx),
         program.on,
@@ -7019,7 +7140,7 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
       return;
     }
     case "stop-gate": {
-      const ctx = await gatherHookContext(program);
+      const ctx = await gatherHookContext(program, file);
       emitGate(
         decideStopGate(program as StopGateHook, event, ctx),
         program.on,
