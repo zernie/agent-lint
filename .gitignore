@@ -1,6 +1,9 @@
 node_modules
 dist/
 coverage/
+# vitest blob reports (`--reporter=blob`) — the per-shard coverage/result dumps
+# CI merges in the `coverage` job. Machine-written, regenerated every run.
+.vitest-reports/
 .DS_Store
 logo-v*.png
 .idea

@@ -146,13 +146,22 @@ CI runs **every tier except evals** — not one at a time, and not all crammed i
 one job. Each tier runs where it's cheapest, so a fast unit failure surfaces
 before the slow, privileged ones.
 
-| Tier                     | Run it with                                  | This repo's CI job           | Needs                         |
-| ------------------------ | -------------------------------------------- | ---------------------------- | ----------------------------- |
-| Unit (+ coverage gate)   | `npm test` / `npm run coverage`              | `test`                       | nothing (model-free)          |
-| Reference verification   | `vigiles lint` (+ the Action via `uses: ./`) | `check`                      | nothing                       |
-| Deterministic harness    | `vigiles test` (`*.harness.{mjs,ts}`)        | `harness`                    | the real `claude` CLI, no key |
-| e2e (allowlisted egress) | `npm run test:e2e`                           | `e2e` (privileged container) | bubblewrap + slirp4netns      |
-| **Eval** (real model)    | `npm run test:eval` (`*.eval.{mjs,ts}`)      | **manual — not in CI**       | model auth ($)                |
+| Tier                     | Run it with                                  | This repo's CI job             | Needs                         |
+| ------------------------ | -------------------------------------------- | ------------------------------ | ----------------------------- |
+| Unit (+ coverage gate)   | `npm test` / `npm run coverage`              | `test` (3 shards) → `coverage` | nothing (model-free)          |
+| Reference verification   | `vigiles lint` (+ the Action via `uses: ./`) | `check`                        | nothing                       |
+| Deterministic harness    | `vigiles test` (`*.harness.{mjs,ts}`)        | `harness`                      | the real `claude` CLI, no key |
+| e2e (allowlisted egress) | `npm run test:e2e`                           | `e2e` (privileged container)   | bubblewrap + slirp4netns      |
+| **Eval** (real model)    | `npm run test:eval` (`*.eval.{mjs,ts}`)      | **manual — not in CI**         | model auth ($)                |
+
+The unit tier is **sharded across three runners** (`vitest --shard=i/3`), which
+is why the coverage gate is a job of its own: a shard only loads the files its
+own slice of tests imports, so per-shard coverage is partial by construction and
+a gate living there would have to be relaxed to pass. Each shard instead emits a
+blob report with thresholds off; `coverage` merges the blobs
+(`vitest --merge-reports --coverage`) and applies the 100% thresholds once, over
+the union. This fails **closed** — merging a single shard's blob reports ~66% and
+errors — so a blob that never arrives reddens the gate instead of shrinking it.
 
 **Best practice** (what this maps to): keep the model-free tiers (unit /
 reference / deterministic) on every push and PR so feedback is fast and free;
