@@ -63,6 +63,7 @@
  * Pure: takes text, returns data. No filesystem, no shell, nothing is executed.
  */
 import type { Check, CheckResult } from "./check.js";
+import { fencedCodeBlocks } from "./core/markdown.js";
 
 /** One command line found in a document. */
 export interface DocCommand {
@@ -72,27 +73,28 @@ export interface DocCommand {
   readonly line: number;
 }
 
-/** Fenced code blocks, with the line number each starts on. */
+/**
+ * Fenced code blocks, with the line number each starts on.
+ *
+ * 🔴 A CLOSING FENCE IS NOT "ANY LINE STARTING WITH ```", and this used to be a
+ * toggle on exactly that. CommonMark closes a fence only on the same CHARACTER at
+ * the same-or-greater LENGTH, so a four-backtick block wrapping an ordinary ```
+ * example — the standard way to show a fence inside a document — was cut in half
+ * at the inner delimiter, and the PROSE after it became the next "block". This
+ * check then missed the commands in the tail of the real block and judged
+ * paragraphs that are not commands at all: both halves of the mistake this module
+ * exists to prevent ("a line is a command because of WHERE IT SITS"), with the
+ * position decided wrongly. `~~~` fences were not recognized at all.
+ *
+ * Delegated to {@link fencedCodeBlocks}, the repo's ONE markdown-structure helper
+ * (markdown-it / CommonMark) — the same rule the project already applies to Bash,
+ * YAML, TOML and code: structure gets a parser. Hand-rolling it a second time is
+ * how the first one got this wrong.
+ */
 function fencedBlocks(md: string): { body: string; start: number }[] {
-  const out: { body: string; start: number }[] = [];
-  const lines = md.split(/\r?\n/);
-  let open: { start: number; buf: string[] } | null = null;
-  for (const [i, raw] of lines.entries()) {
-    const line = raw ?? "";
-    if (/^\s*```/.test(line)) {
-      if (open === null) open = { start: i + 2, buf: [] };
-      else {
-        out.push({ body: open.buf.join("\n"), start: open.start });
-        open = null;
-      }
-      continue;
-    }
-    if (open !== null) open.buf.push(line);
-  }
-  // An unterminated fence is treated as a block to its end: the alternative is
-  // silently dropping every command in a file whose last fence was mistyped.
-  if (open !== null) out.push({ body: open.buf.join("\n"), start: open.start });
-  return out;
+  // Normalized before parsing so a CRLF document's `\r` does not ride along on
+  // the last word of every command, which the old line split handled explicitly.
+  return fencedCodeBlocks(md.replace(/\r\n/g, "\n"));
 }
 
 /**

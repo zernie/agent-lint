@@ -210,3 +210,45 @@ test("a repo that targets Codex is not credited for a Claude Code hook", () => {
     "the recorder must discover with the ACTIVE layout, not the default one",
   );
 });
+
+// 🔴 Reproduced 2026-08-12, the round after the layout fix above. `--harness=` is
+// a SHARED flag (`cli-flag-check.ts`) and `resolveHarnessSelection` ranks it ABOVE
+// config and auto-detection — but `resolveRecords` called `harnessLayoutFor(cwd,
+// loadConfig())` and never handed it the flag, so the one input whose whole job is
+// to override the other two was dropped exactly where the override matters. Same
+// silent empty set as before: probes matched against another layout's surfaces
+// resolve to nothing and are discarded, and nothing errors.
+test("`--harness=` overrides an auto-detected Claude Code repo for the recorder too", () => {
+  write("t.harness.mjs", harnessExercising("hooks/a.sh"));
+  vigilesTest();
+  assert.deepEqual(
+    recorded(),
+    ["hooks/a.sh"],
+    "precondition: nothing on disk says Codex — this repo auto-detects as Claude Code",
+  );
+
+  // Same repo, same run, ONE flag. Under the Codex layout a `.claude/settings.json`
+  // hook is not a surface at all, so the probe resolves to nothing and the record
+  // is withdrawn.
+  vigilesTest("--harness=codex");
+  assert.deepEqual(
+    recorded(),
+    [],
+    "the flag outranks auto-detection, so discovery must run under the Codex layout",
+  );
+});
+
+test("…and the flag is not assumed: the default and an explicit `claude-code` still record", () => {
+  // The QUIET half. Without it, the check above passes on any change that merely
+  // stops recording — a threading fix that mis-read the flag would look identical.
+  write("t.harness.mjs", harnessExercising("hooks/a.sh"));
+  vigilesTest();
+  assert.deepEqual(recorded(), ["hooks/a.sh"], "no flag: unchanged behaviour");
+
+  vigilesTest("--harness=claude-code");
+  assert.deepEqual(
+    recorded(),
+    ["hooks/a.sh"],
+    "naming the harness this repo already is must change nothing",
+  );
+});

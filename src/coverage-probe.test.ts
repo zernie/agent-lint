@@ -123,6 +123,52 @@ test("an interpreter's script gets ONE operand — the rest is that script's own
   assert.deepEqual(commandRefs("node -e 'import(\"./hooks/x.mjs\")'"), []);
 });
 
+test("an option's VALUE is not the entry script — value-taking interpreter flags are parsed", () => {
+  // 🔴 Reproduced 2026-08-12. "The first non-flag operand" is not the script when
+  // an option consumed it. `--loader tsx` selected `tsx`, which is not a script
+  // path, so the hook that DID run recorded NOTHING; `--require setup.js` selected
+  // the preload and stopped, so the entry never appeared. Both are silent — a
+  // passing test that earns no coverage reads exactly like one that ran nothing.
+  assert.deepEqual(commandRefs("node --loader tsx hooks/pre-edit.ts"), [
+    "hooks/pre-edit.ts",
+  ]);
+  assert.deepEqual(commandRefs("node --require setup.js app.js"), ["app.js"]);
+  assert.deepEqual(commandRefs("node -r ./setup.js hooks/x.mjs"), [
+    "hooks/x.mjs",
+  ]);
+  assert.deepEqual(commandRefs("node --import tsx/esm hooks/x.ts"), [
+    "hooks/x.ts",
+  ]);
+  assert.deepEqual(commandRefs("python3 -W ignore hooks/pre-edit.py"), [
+    "hooks/pre-edit.py",
+  ]);
+  assert.deepEqual(commandRefs("bash -o pipefail hooks/x.sh"), ["hooks/x.sh"]);
+  // The `=` spelling never needed the table — it is one word starting with `-`.
+  assert.deepEqual(commandRefs("node --loader=tsx hooks/pre-edit.ts"), [
+    "hooks/pre-edit.ts",
+  ]);
+});
+
+test("…and reading the option grammar does not slide a DATA operand into the script slot", () => {
+  // The QUIET half, and the property the round before this one bought: knowing
+  // more about options must not let the check name a file the command only READS.
+  //
+  // `-m` runs a MODULE, so the following path is that module's argument.
+  assert.deepEqual(commandRefs("python3 -m pytest hooks/x.py"), []);
+  // `-c`/`-e` carry the program as text; there is no file operand to name.
+  assert.deepEqual(commandRefs("python3 -c 'print(1)' hooks/x.py"), []);
+  assert.deepEqual(commandRefs("node --check app.js"), []);
+  // `ruby -S` is deliberately NOT in the value table: consuming `rake` would let
+  // rake's own argument be selected as the executed script.
+  assert.deepEqual(commandRefs("ruby -S rake hooks/x.rb"), []);
+  // A non-interpreter head is untouched by any of this.
+  assert.deepEqual(commandRefs("cat --require setup.js hooks/pre-edit.sh"), []);
+  // And the entry still takes exactly one operand.
+  assert.deepEqual(commandRefs("node --require setup.js lint.mjs hooks/x.sh"), [
+    "lint.mjs",
+  ]);
+});
+
 test("the env is EXPANDED into the command, not scanned alongside it", () => {
   // The documented idiom still works…
   assert.deepEqual(commandRefs('"$GUARD"', { GUARD: "/repo/hooks/guard.sh" }), [

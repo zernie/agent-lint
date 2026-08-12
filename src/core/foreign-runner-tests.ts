@@ -381,8 +381,9 @@ export function stripNonCode(src: string): string {
 }
 
 /**
- * A CALL of one of {@link AGENT_DRIVING_APIS} — the identifier, then optional
- * whitespace, then `(`.
+ * A CANDIDATE call of one of {@link AGENT_DRIVING_APIS} — the identifier, then
+ * optional whitespace, then `(`. Only a candidate: a DEFINITION has the same
+ * shape, so every match is put through {@link isCallSite} before it counts.
  *
  * Identifier-boundary lookbehind, NOT `\b`. The boundary needed here is "not next
  * to an identifier character", and `$` is one in JS while `\b` does not know that
@@ -393,16 +394,164 @@ export function stripNonCode(src: string): string {
  */
 const AGENT_CALL_RE = new RegExp(
   `(?<![\\p{L}\\p{N}_$])(?:${AGENT_DRIVING_APIS.join("|")})\\s*\\(`,
-  "u",
+  "gu",
 );
+
+/**
+ * Words that, immediately before the name, make `name(` a DEFINITION rather than
+ * a call — the shapes rule (b) below cannot see, because the construct carries no
+ * body: a TS overload or ambient signature (`declare function runEval(o): void;`),
+ * an `abstract` member.
+ *
+ * `async`/`get`/`set` are listed for completeness; their bodied forms are already
+ * rejected by rule (b). A preceding `.` disqualifies the word, so the (ASI-only)
+ * `const g = obj.get` + newline + `runEval(x)` stays a call.
+ *
+ * A generator's `*` is deliberately NOT listed: `a * runEval(x)` is
+ * multiplication, and telling those apart needs the value/operator rule again —
+ * while `*runEval() {}` is already a definition by rule (b).
+ */
+const DEFINITION_PREFIXES = new Set([
+  "function",
+  "declare",
+  "abstract",
+  "async",
+  "get",
+  "set",
+]);
+
+/**
+ * How far past a `):` the return-type scan looks before giving up. A bound, not a
+ * measurement: it stops a pathological file from turning one match into a scan of
+ * the whole source, and no real signature runs longer.
+ */
+const ANNOTATION_WINDOW = 200;
+
+/** The identifier word ending just before `at`, and the character before IT. */
+function wordBefore(src: string, at: number): { word: string; before: string } {
+  let k = at - 1;
+  while (k >= 0 && (src[k] ?? "").trim() === "") k--;
+  let word = "";
+  while (k >= 0 && /[A-Za-z_$]/.test(src[k] ?? ""))
+    word = (src[k--] ?? "") + word;
+  return { word, before: k >= 0 ? (src[k] ?? "") : "" };
+}
+
+/** Index of the `)` closing the `(` at `open`, or `-1` when it never closes. */
+function matchingParen(src: string, open: number): number {
+  let depth = 0;
+  for (let k = open; k < src.length; k++) {
+    const ch = src[k];
+    if (ch === "(") depth++;
+    else if (ch === ")" && --depth === 0) return k;
+  }
+  return -1;
+}
+
+/** Index of the first non-whitespace character at or after `from` (`-1` if none). */
+function significantAt(src: string, from: number): number {
+  let k = from;
+  while (k < src.length && (src[k] ?? "").trim() === "") k++;
+  return k < src.length ? k : -1;
+}
+
+/**
+ * After a `):`, whether what follows is a RETURN TYPE and then a body `{` — so
+ * `runEval(): void {}` and `runEval(): { ok: boolean } {}` are definitions, while
+ * the ternary `cond ? runEval(a) : b` (whose `:` sits in exactly the same place)
+ * is a call.
+ *
+ * Lexical and bounded: `(`/`[` nest, and the first depth-0 `{` wins over the
+ * first depth-0 `;`/`,`/`)`/`]`. Deliberately misread toward SILENCE (the cheaper
+ * direction — see {@link AGENT_DRIVING_APIS}): a ternary whose else-branch is an
+ * object literal, `c ? runEval(a) : { y: 1 }`, reads as a definition here.
+ */
+function returnTypeThenBody(src: string, from: number): boolean {
+  let depth = 0;
+  const stop = Math.min(src.length, from + ANNOTATION_WINDOW);
+  for (let k = from; k < stop; k++) {
+    const ch = src[k] ?? "";
+    if (ch === "(" || ch === "[") depth++;
+    else if ((ch === ")" || ch === "]") && depth > 0) depth--;
+    else if (depth === 0) {
+      if (ch === "{") return true;
+      if (ch === ";" || ch === "," || ch === ")" || ch === "]") return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether the `name(` at `start` (its `(` at `paren`) is a CALL EXPRESSION rather
+ * than a function/method DEFINITION — decided over the already-stripped source by
+ * three POSITIONAL signals:
+ *
+ *   (a) the word before the name defines instead of invoking
+ *       ({@link DEFINITION_PREFIXES}) — the bodiless TS signatures;
+ *   (b) the `)` matching the `(` is followed by `{` — that is a body, so this is
+ *       `function runEval() {}` / `class F { runEval() {} }` / `{ runEval() {} }`
+ *       / `*runEval() {}`;
+ *   (c) …or by `:` and then a return type and a `{` — the TS-annotated form of
+ *       the same thing ({@link returnTypeThenBody}).
+ *
+ * Sound because it reads POSITION, not spelling: a definition's parameter list is
+ * followed by its body, and a call's argument list is followed by whatever the
+ * surrounding expression continues with — `;`, `)`, `.`, a `}` closing an
+ * interpolation, an operator, or end of input. `await runEval(x)`,
+ * `obj.runEval(x)` and `` `${runEval(x)}` `` therefore stay calls, and the tests
+ * pin each one.
+ *
+ * WHAT IT DELIBERATELY MISSES, all toward silence (a missed warning costs one
+ * warning; a false one told the author to delete a working test):
+ *   • an interface/type member — `runEval(o: Opts): void;` inside `interface X`
+ *     has neither a prefix nor a body, and reads as a call;
+ *   • an unbalanced `(` (a file the stripper mis-lexed) is not called a call;
+ *   • a call statement followed by a bare block on the next line, which needs ASI
+ *     to parse at all.
+ * A real parse would decide all three and is not available here: this module is
+ * shared with the browser scan engine, whose report is compared byte-for-byte
+ * with the disk engine's, so it must stay free of native/runtime imports.
+ */
+function isCallSite(src: string, start: number, paren: number): boolean {
+  const prev = wordBefore(src, start);
+  // `.get`/`.set`/`.async` is a property read, not a definition keyword.
+  if (DEFINITION_PREFIXES.has(prev.word) && prev.before !== ".") return false;
+  const close = matchingParen(src, paren);
+  if (close === -1) return false;
+  const after = significantAt(src, close + 1);
+  if (after === -1) return true;
+  if (src[after] === "{") return false;
+  if (src[after] === ":") return !returnTypeThenBody(src, after + 1);
+  return true;
+}
 
 /**
  * The agent-driving vigiles API this source CALLS, or `undefined` when it calls
  * none. Exported for the tests; the engines reach it via {@link foreignRunnerTests}.
+ *
+ * 🔴 A DEFINITION IS NOT A CALL EITHER, and the previous version accepted one.
+ * Once {@link stripNonCode} had removed comments and strings, a bare `name\s*\(`
+ * was taken as proof of a call — so a surface-local `*.test.ts` that merely
+ * DECLARES a helper (`function runEval() {}`) or a fake (`class Fake { runEval()
+ * {} }`) was reported as driving an agent and told to rename itself. The same
+ * substitution as the round before it (a lexical shape taken for the property),
+ * one level in. Every match is now put through {@link isCallSite} and the FIRST
+ * survivor is the evidence, so a file that defines a fake AND calls the real
+ * thing is still a finding.
  */
 export function agentDrivingApi(content: string): string | undefined {
-  const hit = AGENT_CALL_RE.exec(stripNonCode(content))?.[0];
-  return hit === undefined ? undefined : hit.replace(/\s*\($/, "");
+  const src = stripNonCode(content);
+  AGENT_CALL_RE.lastIndex = 0;
+  for (
+    let m = AGENT_CALL_RE.exec(src);
+    m !== null;
+    m = AGENT_CALL_RE.exec(src)
+  ) {
+    if (isCallSite(src, m.index, m.index + m[0].length - 1)) {
+      return m[0].replace(/\s*\($/, "");
+    }
+  }
+  return undefined;
 }
 
 /**

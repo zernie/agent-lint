@@ -623,23 +623,55 @@ const PREAPPROVAL_NOTE =
   "— Claude Code docs), so however narrow it is, the skill still holds every leg.";
 
 /**
+ * Whether THIS harness understands a skill-level `disallowed-tools:` at all.
+ *
+ * Read off the dialect record that already exists — `skillFrontmatter` is exactly
+ * "which SKILL.md keys this harness understands", and `disallowed-tools` is one of
+ * the Claude-Code-only ones. No new capability flag: a second field saying the
+ * same thing is a second thing to keep true, and the compiler already branches on
+ * this one (`renderSkillFrontmatter` emits the tool keys under `"claude-code"` and
+ * omits them under `"minimal"`).
+ */
+export function dialectSupportsSkillFence(dialect: HarnessDialect): boolean {
+  return dialect.skillFrontmatter === "claude-code";
+}
+
+/**
  * The lethal-trifecta finding for a MODEL-INVOCABLE SKILL, computed from its
  * `disallowed-tools:` — the only skill frontmatter field measured to remove a
  * tool. `allowed-tools:` is not an input here, on purpose: it is a pre-approval,
  * and treating it as a bound is the defect this function exists to correct (see
  * the block comment above for the measurement).
  *
+ * 🔴 AND IT IS A CLAUDE-CODE MECHANISM, which this applied to every harness. On a
+ * Codex repo (`skillFrontmatter: "minimal"` — name + description only, and our own
+ * compiler drops the tool keys there) every skill was reported as holding all
+ * three legs, scored against Safety, and handed the remedy "add a
+ * `disallowed-tools:` line". That line is INERT in Codex: the author does the
+ * work, the harness ignores the key, the finding returns, and the score never
+ * moves. A remedy the target cannot apply is worse than no finding — it is a floor
+ * dressed up as a defect, and it teaches people that the Safety number is fake.
+ *
+ * So the detector runs only where the fence exists ({@link dialectSupportsSkillFence}).
+ * This is a claim about the MECHANISM, not about the risk: a Codex skill really
+ * does hold every leg, and bounding it is a session/config-level question that
+ * belongs to a Codex-specific detector, not to a Claude Code one applied by
+ * default. Subagent findings are unaffected — `tools:` is a different mechanism,
+ * with its own dialect handling.
+ *
  * @param disallowed `disallowed-tools:` as declared, or `null` when the line is
  *   absent — the two are NOT the same: an explicit empty list still denies nothing,
  *   but the message should not tell an author who wrote the line that they didn't.
  * @returns `null` once the fence closes at least one leg (Rule of Two satisfied,
- *   among the built-ins — see {@link FENCE_SUPPLIERS} for the stated limit).
+ *   among the built-ins — see {@link FENCE_SUPPLIERS} for the stated limit), and
+ *   `null` for any harness with no skill fence to close it with.
  */
 export function skillTrifectaIssue(
   disallowed: readonly string[] | null,
   dialect: HarnessDialect,
   ctx: TrifectaContext = {},
 ): TrifectaFinding | null {
+  if (!dialectSupportsSkillFence(dialect)) return null;
   // An unreadable block is not a fence: a strict loader reads no frontmatter at
   // all, so whatever `disallowed-tools:` it appears to contain denies nothing.
   const declared = ctx.contractUnreadable ? null : disallowed;

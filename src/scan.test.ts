@@ -7,7 +7,7 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -20,9 +20,13 @@ import {
   isManagedHookCommand,
   preferCompiledHooksMessage,
 } from "./scan.js";
+import { loadPlugin } from "./adapters/claude-code/plugin-loader.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
 import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
+import { codexLayout } from "./adapters/codex/layout.js";
+import { codexDialect } from "./adapters/codex/dialect.js";
+import { auditScore } from "./audit-score.js";
 
 function write(dir: string, rel: string, content: string): void {
   const abs = join(dir, rel);
@@ -1720,5 +1724,180 @@ test("skill-resource is FP-safe: URLs and $VAR tokens are not flagged", () => {
     0,
   );
   assert.equal(r.skillResourceIssues.length, 0);
+  cleanupTmpDir(dir);
+});
+
+// ─── the surface walk must not follow a directory symlink ─────────────────────
+//
+// 🔴 The walk `statSync`'d every entry, which FOLLOWS the link. A surface dir
+// holding a link back to an ancestor is a CYCLE, and the recursion rides it until
+// the path length or the fd limit stops it; a link to a big external tree makes an
+// advisory scan crawl outside the checkout. Both are silent while they burn.
+//
+// Both halves: the cycle TERMINATES and reports the real file, and an ordinary
+// nested dir under the same surface is still walked (a fix that simply stopped
+// descending would pass the first assertion alone).
+test("a directory symlink is not descended into, so a cycle cannot hang the scan", () => {
+  const dir = makeTmpDir("scan-symlink-cycle");
+  write(
+    dir,
+    ".claude/skills/loop/SKILL.md",
+    "---\nname: loop\ndescription: A skill whose folder links back to its own parent\n---\n# loop\n",
+  );
+  // The file the walk MUST still find — a genuine finding, so the assertion below
+  // proves the walk ran rather than bailed out.
+  write(
+    dir,
+    ".claude/skills/loop/loop.test.mjs",
+    'import { runEval } from "vigiles/testing";\nawait runEval({});\n',
+  );
+  // …and an ordinary nested dir, to pin that descent still happens at all.
+  write(
+    dir,
+    ".claude/skills/loop/nested/deep.test.mjs",
+    'import { runEval } from "vigiles/testing";\nawait runEval({});\n',
+  );
+  // `.claude/skills/loop/self` → `.claude/skills` : an ancestor, so following it
+  // re-enters `loop/` forever.
+  symlinkSync(
+    join(dir, ".claude", "skills"),
+    join(dir, ".claude", "skills", "loop", "self"),
+    "dir",
+  );
+
+  const started = Date.now();
+  // TWO walks cross this fixture and each rides the cycle on its own: the loader's
+  // `readTree` (which THREW `ELOOP` out of the entire audit) and this file's
+  // `harnessSurfaceFilesOnDisk` (which multiplies every path by every lap). The
+  // no-throw is asserted separately from the paths, so reverting EITHER fix fails
+  // on a named assertion rather than on a stray exception.
+  let report: ReturnType<typeof scanPlugin> | null = null;
+  let thrown = "";
+  try {
+    report = scanPlugin(dir);
+  } catch (e) {
+    thrown = e instanceof Error ? e.message : String(e);
+  }
+  assert.equal(
+    thrown,
+    "",
+    "scanPlugin must not throw on a cyclic surface dir (the loader used to raise ELOOP)",
+  );
+  assert.ok(report);
+  const r = report;
+  const foreign = r.warnings.filter((w) => w.includes(".test.mjs"));
+  assert.ok(
+    Date.now() - started < 20000,
+    "the scan must terminate rather than ride the cycle",
+  );
+  assert.deepEqual(
+    foreign.map((w) => w.split(" ")[0]).sort(),
+    [
+      ".claude/skills/loop/loop.test.mjs",
+      ".claude/skills/loop/nested/deep.test.mjs",
+    ],
+    "each real file is reported exactly once, and no path repeats through `self/`",
+  );
+  // …and the LOADER's own walk, separately. Catching the `ELOOP` would already
+  // stop the throw while still reading the tree once per lap — measured on this
+  // fixture: 82 file keys (40 laps of `self/loop/self/…`) instead of 3. That is
+  // the input the whole report is computed from, so it is asserted directly
+  // rather than through a symptom.
+  assert.deepEqual(
+    Object.keys(loadPlugin(dir).files).sort(),
+    [
+      ".claude/skills/loop/SKILL.md",
+      ".claude/skills/loop/loop.test.mjs",
+      ".claude/skills/loop/nested/deep.test.mjs",
+    ],
+    "the loader must read each real file once, not once per lap of the cycle",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("…but a symlink to a FILE is still collected — it cannot recurse", () => {
+  // The QUIET half of the same fix: refusing descent must not quietly drop links
+  // to files. A foreign runner really does collect one, so it is still a finding.
+  const dir = makeTmpDir("scan-symlink-file");
+  write(
+    dir,
+    "real/driver.test.mjs",
+    'import { runEval } from "vigiles/testing";\nawait runEval({});\n',
+  );
+  mkdirSync(join(dir, ".claude", "skills", "s"), { recursive: true });
+  write(
+    dir,
+    ".claude/skills/s/SKILL.md",
+    "---\nname: s\ndescription: A skill whose harness test is a symlink to a real file\n---\n# s\n",
+  );
+  symlinkSync(
+    join(dir, "real", "driver.test.mjs"),
+    join(dir, ".claude", "skills", "s", "linked.test.mjs"),
+    "file",
+  );
+  const r = scanPlugin(dir);
+  assert.equal(
+    r.warnings.filter((w) => w.startsWith(".claude/skills/s/linked.test.mjs"))
+      .length,
+    1,
+  );
+  cleanupTmpDir(dir);
+});
+
+// ─── a skill fence is only offered where the harness has one ──────────────────
+//
+// 🔴 End-to-end half of the `skillTrifectaIssue` dialect gate. The unit test pins
+// the detector; this pins what the AUDIT does with it, which is where the cost
+// was: a Codex repo's skills were reported, SCORED against Safety, and handed a
+// `disallowed-tools:` remedy that Codex does not read — so the number could not be
+// improved by doing the work.
+/** The Safety ring's score, or `null` when the report has nothing to assess. */
+function safetyScore(r: ReturnType<typeof scanPlugin>): number | null {
+  const c = auditScore(r).categories.find((x) => x.key === "Safety");
+  if (!c) throw new Error("no Safety ring");
+  return c.score;
+}
+
+test("a Codex repo is not scored against a fence its harness has no key for", () => {
+  const dir = makeTmpDir("scan-codex-fence");
+  write(dir, "AGENTS.md", "# rules\n");
+  write(dir, ".codex/config.toml", "[mcp_servers]\n");
+  write(
+    dir,
+    "skills/deploy/SKILL.md",
+    "---\nname: deploy\ndescription: Ships the built artifact to production for the team\n---\n# deploy\n",
+  );
+  const r = scanPlugin(dir, codexLayout, codexDialect);
+  assert.equal(r.skills.length, 1, "precondition: the skill IS discovered");
+  assert.equal(r.skills[0].trifecta, null);
+  assert.deepEqual(
+    r.trifectaFindings.filter((f) => f.kind === "skill"),
+    [],
+  );
+  // With no finding left, this harness has no exposed unit — the ring is a clean
+  // 100 rather than a floor the author cannot leave.
+  assert.equal(
+    safetyScore(r),
+    100,
+    "a remedy the harness cannot apply must not hold the score down",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("…while the same skill under Claude Code is still reported and still scored", () => {
+  // The QUIET half: the gate must not have deleted the headline Safety detector.
+  const dir = makeTmpDir("scan-cc-fence");
+  write(
+    dir,
+    "skills/deploy/SKILL.md",
+    "---\nname: deploy\ndescription: Ships the built artifact to production for the team\n---\n# deploy\n",
+  );
+  const r = scanPlugin(dir);
+  assert.equal(r.skills[0]?.trifecta?.fence, "none");
+  assert.equal(r.trifectaFindings.filter((f) => f.kind === "skill").length, 1);
+  assert.ok(
+    (safetyScore(r) ?? 100) < 100,
+    "an unfenced Claude Code skill still costs Safety",
+  );
   cleanupTmpDir(dir);
 });

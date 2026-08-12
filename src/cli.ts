@@ -5379,11 +5379,17 @@ function resolveEvalLockEnv(args: string[]): Record<string, string> | "skip" {
  * cheap early return on "nothing new to record" is gone: a run that now reports
  * NOTHING is exactly the case worth writing down.
  */
-/** Resolve this run's probes against the repo's discovered surfaces. */
+/**
+ * Resolve this run's probes against the repo's discovered surfaces.
+ *
+ * `harnessFlag` is the `--harness=` the user typed on THIS run — see the layout
+ * note below for why the flag has to travel this far.
+ */
 function resolveRecords(
   cwd: string,
   runs: ReturnType<typeof runsFromResults>,
   tier: CoverageTierName,
+  harnessFlag: string | undefined,
 ): CoverageRun[] {
   // 🔴 DISCOVERY MUST USE THE ACTIVE LAYOUT, or resolution silently resolves
   // nothing. This called the detector with a path alone, so a Codex repo (surfaces
@@ -5393,9 +5399,18 @@ function resolveRecords(
   // `vigiles lint`, which passes `adapter.layout` to the same function, saw the
   // surfaces perfectly well. Empty discovery does not fail; it just quietly means
   // "nothing ran".
+  //
+  // 🔴 AND THE ACTIVE LAYOUT INCLUDES THE FLAG. The first fix passed only
+  // `(cwd, loadConfig())`, so `--harness=` — which `resolveHarnessSelection` ranks
+  // ABOVE config and auto-detect, and which `cli-flag-check.ts` accepts on every
+  // verb — was dropped exactly here. `vigiles test --harness=codex` in a repo that
+  // auto-detects (or is configured) as Claude Code then discovered the Claude
+  // surfaces, matched the run's Codex probes against them, resolved none, and
+  // recorded no execution coverage: the same silent empty set as before, reached
+  // through the one input that exists to override the other two.
   const scan = findUntestedSurfaces({
     basePath: cwd,
-    layout: harnessLayoutFor(cwd, loadConfig()),
+    layout: harnessLayoutFor(cwd, loadConfig(), harnessFlag),
   });
   return recordsFrom({
     runs,
@@ -5412,11 +5427,22 @@ function resolveRecords(
   });
 }
 
+/**
+ * Merge one run's records into `.vigiles/coverage.json`, retractions included.
+ *
+ * The verb's `kind` maps to the coverage TIER here, so the one call site stays a
+ * single line. `harnessFlag` is the caller's `--harness=` — a SHARED flag (`cli-flag-check.ts`)
+ * that every verb accepts and that `resolveHarnessSelection` ranks above config
+ * and auto-detection. It has to travel all the way to discovery: see the layout
+ * note on {@link resolveRecords} for what dropping it silently did.
+ */
 function recordRunCoverage(
   cwd: string,
   results: readonly ScriptRunResult[],
-  tier: CoverageTierName,
+  kind: "test" | "eval",
+  harnessFlag: string | undefined,
 ): void {
+  const tier: CoverageTierName = kind === "test" ? "harness" : "eval";
   try {
     const previous = readCoverageArtifact(cwd);
     // `root` so an ABSOLUTE target (`vigiles test /abs/x.harness.mjs`) retracts
@@ -5427,7 +5453,8 @@ function recordRunCoverage(
     const runs = runsFromResults(results);
     // Discovery is only needed to RESOLVE new probes; a pure retraction needs
     // nothing but the artifact, so a repo scan is skipped when there are none.
-    const records = runs.length === 0 ? [] : resolveRecords(cwd, runs, tier);
+    const records =
+      runs.length === 0 ? [] : resolveRecords(cwd, runs, tier, harnessFlag);
     const merged = mergeRuns(previous?.runs ?? [], records, executed);
     // Nothing to add and nothing withdrawn — leave the file exactly as it is, so
     // a repo with no artifact still gets none (the "absent artifact = today's
@@ -5560,7 +5587,7 @@ async function handleRunScripts(
   // from execution instead of from a matching file name. Not a new verb and not
   // a flag: the run already happened, and this is the runner recording what it
   // saw — the same shape as the flight-recorder ledger it already appends to.
-  recordRunCoverage(cwd, results, kind === "test" ? "harness" : "eval");
+  recordRunCoverage(cwd, results, kind, harnessFlagFrom(args));
   console.log("\n" + formatScriptSummary(results));
 
   if (anyFailed(results)) process.exit(1);

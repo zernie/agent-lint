@@ -73,6 +73,127 @@ const INTERPRETERS = new Set([
 ]);
 
 /**
+ * Interpreter options that CONSUME THE NEXT WORD, so that word is an option
+ * value and not the entry script.
+ *
+ * 🔴 "THE FIRST NON-FLAG OPERAND" IS NOT THE SCRIPT WHEN AN OPTION ATE IT, and
+ * the previous version assumed it was. `node --loader tsx hooks/pre-edit.ts`
+ * selected `tsx`, which fails {@link SCRIPT_RE}, so the hook that DID run was
+ * recorded as nothing at all; `node --require setup.js app.js` selected the
+ * PRELOAD and stopped, so `app.js` — the file whose execution the coverage claim
+ * is about — never appeared. Both are silent: a passing test simply earns no
+ * execution coverage, which reads exactly like a test that exercised nothing.
+ *
+ * ONE table for every interpreter head rather than one per tool. Where these
+ * tools' spellings overlap they agree (`-r`/`--require` in node and ruby, `-C`
+ * in node and ruby, `-I` in ruby and perl), and where they do not, the option is
+ * simply absent from the other's grammar. Ambiguity is bounded in the SAFE
+ * direction anyway: mis-skipping a word can only move the selection off the
+ * script and onto nothing (silence), because the first operand that still fails
+ * `SCRIPT_RE` ends the search.
+ *
+ * `--opt=value` needs no entry — it is one word starting with `-`, already
+ * skipped as a flag. Only the space-separated spelling reaches this table.
+ *
+ * Deliberately NOT here: `ruby -S prog`. Its operand is a program looked up on
+ * PATH, so consuming it would let the NEXT operand — `rake`'s own argument, i.e.
+ * data — be selected as the executed script. That is the round-before's defect
+ * (activity taken for the property) and the one direction this table must not
+ * open. Left out, `ruby -S rake x.rb` selects `rake`, fails `SCRIPT_RE`, and
+ * attributes nothing.
+ */
+const OPTIONS_WITH_VALUE = new Set([
+  // node / tsx / ts-node — module hooks, preloads, resolution
+  "-r",
+  "--require",
+  "--loader",
+  "--experimental-loader",
+  "--import",
+  "-C",
+  "--conditions",
+  "--env-file",
+  "--input-type",
+  "--watch-path",
+  "--title",
+  "--test-name-pattern",
+  "--test-reporter",
+  "--test-shard",
+  "--report-dir",
+  "--report-filename",
+  // POSIX shells
+  "-o",
+  "+o",
+  "--rcfile",
+  "--init-file",
+  // python
+  "-W",
+  "-X",
+  "-Q",
+  "--check-hash-based-pycs",
+  // ruby / perl
+  "-I",
+  "-E",
+  "-F",
+]);
+
+/**
+ * Options after which THERE IS NO SCRIPT OPERAND at all: the program to run is
+ * given as source text or as a module name, so no file on this command line is
+ * the thing executed.
+ *
+ * `sh -c 'bash hooks/x.sh'` was already attributing nothing (the inner command
+ * sits inside a string the shell grammar does not open — see {@link commandRefs});
+ * this states the same rule for the rest of the family, and adds the case that
+ * matters most: `python -m pytest hooks/x.py` runs pytest, and `hooks/x.py` is
+ * pytest's ARGUMENT. Without this, skipping `-m`'s value would have selected it
+ * and minted execution coverage for a file this command line did not execute.
+ *
+ * `node -c file.js` / `--check` land here too, and correctly: they parse the file
+ * and never run it — so a command line that only syntax-checks a hook no longer
+ * claims to have executed it.
+ *
+ * ⚠️ ONE KNOWN DISAGREEMENT, stated rather than hidden: `-p` means "print the
+ * evaluated expression" in node but "loop and print" in ruby/perl, where a script
+ * operand CAN follow. So `ruby -p x.rb` attributes nothing where it used to
+ * attribute `x.rb`. That is a lost warning, not a false one — the direction this
+ * whole module errs in — and in practice ruby's `-p` is written with `-e`
+ * (`ruby -pe '…'`), which has no script operand either way.
+ */
+const OPTIONS_WITHOUT_SCRIPT = new Set([
+  "-c",
+  "--command",
+  "--check",
+  "-e",
+  "--eval",
+  "-p",
+  "--print",
+  "-m",
+]);
+
+/**
+ * The entry script an interpreter's argv names, or `undefined` when this command
+ * line executes no file operand. `argv` is the WHOLE leaf, head included.
+ *
+ * Still "the first non-flag operand", only now the option grammar is read first
+ * so an option's VALUE cannot be mistaken for it. Everything after the entry stays
+ * data (`node lint.mjs hooks/x.sh` attributes `lint.mjs` alone), which is the
+ * property the round before this one bought.
+ */
+function entryScript(argv: readonly string[]): string | undefined {
+  for (let i = 1; i < argv.length; i++) {
+    const word = argv[i] ?? "";
+    if (OPTIONS_WITHOUT_SCRIPT.has(word)) return undefined;
+    if (OPTIONS_WITH_VALUE.has(word)) {
+      i++; // its value is not the script
+      continue;
+    }
+    if (word.startsWith("-")) continue;
+    return word;
+  }
+  return undefined;
+}
+
+/**
  * Our own runtime's verb (`vigiles hook-runtime run-program <hook>`): the word
  * after it is a program vigiles is about to execute. Listed because it is OUR
  * contract, not a guess about someone's CLI — `hook-install` emits exactly this
@@ -139,9 +260,10 @@ export function commandRefs(
     const head = argv[0] ?? "";
     if (SCRIPT_RE.test(head)) out.add(head);
     else if (INTERPRETERS.has(headName(head))) {
-      // The FIRST non-flag operand is the script; the rest is that script's own
-      // argv, where a path is data again (`node lint.mjs hooks/x.sh`).
-      const script = argv.slice(1).find((w) => !w.startsWith("-"));
+      // The entry script is the first operand the option grammar has not already
+      // claimed ({@link entryScript}); the rest is that script's own argv, where a
+      // path is data again (`node lint.mjs hooks/x.sh`).
+      const script = entryScript(argv);
       if (script !== undefined && SCRIPT_RE.test(script)) out.add(script);
     }
     for (let i = 1; i < argv.length - 1; i++) {

@@ -35,6 +35,7 @@ import { parse as parseToml } from "@iarna/toml";
 
 import { assertNever } from "./core/hash.js";
 import type { PluginLayout } from "./core/layout.js";
+import { entryKind } from "./fs-walk.js";
 
 export interface LoadedPlugin {
   /** A `.claude/settings.json`-shaped object with hooks resolved. */
@@ -138,19 +139,45 @@ function readHooks(root: string, layout: PluginLayout): unknown {
   return undefined;
 }
 
-/** Recursively collect text files under `dir` as `relativePath → contents`. */
+/**
+ * Recursively collect text files under `dir` as `relativePath → contents`.
+ *
+ * 🔴 A DIRECTORY SYMLINK IS NOT DESCENDED INTO. `statSync` FOLLOWS a link, so a
+ * surface dir containing `self -> ..` (an ancestor, or any backlink inside a
+ * linked-in tree) recursed forever. Measured 2026-08-12 on a two-file fixture:
+ * `scanPlugin` did not merely slow down, it THREW —
+ * `ELOOP: too many symbolic links encountered` out of `readTree`, up through
+ * `loadPlugin`, and out of the audit. A link to a large external tree is the
+ * quieter half of the same bug: the loader reads a foreign tree into the file map
+ * that the entire report is computed from.
+ *
+ * The decision is {@link entryKind}, SHARED with `harnessSurfaceFilesOnDisk` in
+ * `scan.ts` — the other walk over the same trees, and exactly the kind of pair
+ * this repo has been bitten by fixing on only one side. That module carries the
+ * full rationale: a symlinked FILE is still read (it cannot recurse), and an
+ * unreadable entry is skipped rather than thrown, so a dangling link cannot take
+ * down an audit.
+ */
 function readTree(dir: string, base: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
-    const st = statSync(full);
-    if (st.isDirectory()) {
-      Object.assign(out, readTree(full, base));
-    } else if (st.isFile() && st.size <= MAX_SKILL_FILE_BYTES) {
+    const kind = entryKind(full);
+    if (kind === "dir") Object.assign(out, readTree(full, base));
+    else if (kind === "file" && fileWithinSizeCap(full)) {
       out[relative(base, full)] = readFileSync(full, "utf-8");
     }
   }
   return out;
+}
+
+/** The size cap that keeps a stray binary out of the in-memory file map. */
+function fileWithinSizeCap(path: string): boolean {
+  try {
+    return statSync(path).size <= MAX_SKILL_FILE_BYTES;
+  } catch {
+    return false;
+  }
 }
 
 /**

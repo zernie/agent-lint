@@ -12,8 +12,10 @@ import {
   lethalTrifectaIssues,
   skillFenceLegs,
   skillTrifectaIssue,
+  dialectSupportsSkillFence,
 } from "./lethal-trifecta.js";
 import { claudeCodeDialect } from "../adapters/claude-code/dialect.js";
+import { codexDialect } from "../adapters/codex/dialect.js";
 
 test("clean 2-of-3 (Read + WebFetch, no exfil-only leg beyond fetch) → ...", () => {
   // Read (leg A) + WebSearch (leg B only) — no exfil leg → safe.
@@ -358,4 +360,48 @@ test("the remedy names only tools THIS harness ships (no Codex `shell` in a CC m
   const f = skillTrifectaIssue(null, claudeCodeDialect);
   assert.doesNotMatch(f?.message ?? "", /shell/);
   assert.equal(f?.legs.private.includes("shell"), false);
+});
+
+// ─── the skill fence is a Claude Code MECHANISM, not a universal one ──────────
+//
+// 🔴 Applied to every harness, this reported every Codex skill as holding all
+// three legs, scored it against Safety, and told the author to add a
+// `disallowed-tools:` line — a key Codex does not read and our own compiler drops
+// under its `skillFrontmatter: "minimal"` profile. The work gets done, the finding
+// comes back, the score never moves. Both halves below: SILENT where the fence
+// does not exist, and unchanged where it does.
+
+test("a harness with no skill fence gets no skill-fence finding", () => {
+  // Every input that fires on Claude Code, on a minimal-profile dialect.
+  for (const declared of [null, [], ["WebFetch"]] as const) {
+    assert.equal(
+      skillTrifectaIssue(declared, codexDialect),
+      null,
+      JSON.stringify(declared),
+    );
+  }
+  assert.equal(
+    skillTrifectaIssue(["WebFetch"], codexDialect, {
+      contractUnreadable: true,
+    }),
+    null,
+  );
+  assert.equal(dialectSupportsSkillFence(codexDialect), false);
+});
+
+test("…and the Claude Code path is untouched by that gate", () => {
+  // The QUIET half. A gate that suppressed everything would pass the test above
+  // and silently delete the headline Safety detector.
+  assert.equal(dialectSupportsSkillFence(claudeCodeDialect), true);
+  assert.equal(skillTrifectaIssue(null, claudeCodeDialect)?.fence, "none");
+  assert.equal(skillTrifectaIssue([], claudeCodeDialect)?.fence, "ineffective");
+  assert.equal(
+    skillTrifectaIssue(["WebFetch"], claudeCodeDialect)?.fence,
+    "ineffective",
+  );
+  // …and a fence that really closes a leg is still clean, on the same dialect.
+  assert.equal(
+    skillTrifectaIssue(["WebFetch", "WebSearch", "Bash"], claudeCodeDialect),
+    null,
+  );
 });

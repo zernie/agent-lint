@@ -119,3 +119,77 @@ test("an unterminated fence still yields its commands", () => {
   const md = "```bash\ncurl -g https://x\n";
   assert.equal(commandsIn(md, /curl/).length, 1);
 });
+
+// ─── the fence grammar is CommonMark's, not "any line starting with ```" ──────
+//
+// 🔴 The old scanner toggled on any `^\s*```` line. A four-backtick block wrapping
+// an ordinary ``` example — the standard way to SHOW a fence — closed at the inner
+// delimiter, so the block was cut in half and the prose after it became the next
+// "block". Both failure directions in one document: commands in the tail go
+// unchecked, and paragraphs get judged as commands.
+
+test("a four-backtick fence is not closed by the ``` example inside it", () => {
+  const doc = [
+    "# How to fence",
+    "",
+    "````md",
+    "```sh",
+    "curl -g --cacert $CA https://a",
+    "curl --cacert $CA https://b",
+    "```",
+    "````",
+    "",
+    "Now run curl -X POST against the staging box by hand.",
+  ].join("\n");
+  const cmds = commandsIn(doc, /curl/);
+  // FIRES: the second command lives PAST the inner ``` and was invisible before.
+  assert.deepEqual(
+    cmds.map((c) => c.text),
+    ["curl -g --cacert $CA https://a", "curl --cacert $CA https://b"],
+  );
+  // …and it is judged, so the rule the document states is actually enforced.
+  assert.equal(mustInclude("-g", "params glob").eval(cmds).pass, false);
+  // QUIET: the trailing PROSE is not a command. The old split made it a block.
+  assert.ok(!cmds.some((c) => c.text.startsWith("Now run")));
+  // Line numbers still point at the real source lines.
+  assert.deepEqual(
+    cmds.map((c) => c.line),
+    [5, 6],
+  );
+});
+
+test("tilde fences are code too, and backticks inside one do not close it", () => {
+  const doc = [
+    "~~~sh",
+    "curl -g https://a",
+    "~~~",
+    "",
+    "~~~md",
+    "```",
+    "curl -g https://b",
+    "```",
+    "~~~",
+  ].join("\n");
+  assert.deepEqual(
+    commandsIn(doc, /curl/).map((c) => c.text),
+    ["curl -g https://a", "curl -g https://b"],
+  );
+});
+
+test("the shapes the old scanner already handled still behave the same", () => {
+  // The QUIET half of swapping in a parser: an unterminated final fence still
+  // yields its commands (dropping them was the documented anti-behaviour), a
+  // fence indented inside a list item is still code, and prose outside any fence
+  // is still not a command.
+  const unterminated = "```sh\ncurl -g https://a\n";
+  assert.deepEqual(
+    commandsIn(unterminated, /curl/).map((c) => c.text),
+    ["curl -g https://a"],
+  );
+  const inList = ["- step one:", "", "  ```sh", "  curl -g https://a", "  ```"];
+  assert.deepEqual(
+    commandsIn(inList.join("\n"), /curl/).map((c) => c.text),
+    ["curl -g https://a"],
+  );
+  assert.deepEqual(commandsIn("always pass `curl -g` here\n", /curl/), []);
+});

@@ -19,6 +19,7 @@ import { loadPlugin } from "./adapters/claude-code/plugin-loader.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
 import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
 import { danglingRefs } from "./plugin-loader.js";
+import { entryKind } from "./fs-walk.js";
 import { brokenSkillRefs, formatSkillRefIssue } from "./skill-refs.js";
 import type { PluginLayout } from "./core/layout.js";
 import type { HarnessDialect } from "./core/dialect.js";
@@ -510,6 +511,20 @@ function ownTestSignalOnDisk(dir: string): boolean {
  * Missing dirs and unreadable entries are skipped rather than thrown: this feeds
  * an advisory warning, and a scan must not die because one surface dir is a
  * dangling symlink.
+ *
+ * 🔴 A SYMLINKED DIRECTORY IS NOT DESCENDED INTO, and this used to `statSync`
+ * every entry — which FOLLOWS the link, so `.claude/skills/self -> ..` was a
+ * CYCLE and every real file came back once per lap. The policy is SHARED with the
+ * loader's walk over the same trees ({@link entryKind}); that module carries the
+ * measurement and states exactly what the refusal deliberately misses.
+ *
+ * A symlinked surface dir at the TOP is unaffected — those go straight to
+ * `readdirSync` and are never classified.
+ *
+ * The browser twin needs none of this: it is handed a file MAP, and whoever built
+ * the map already resolved (or did not resolve) its links. So parity is unchanged
+ * on any tree without a directory symlink, which is every fixture the byte-parity
+ * gate compares.
  */
 function harnessSurfaceFilesOnDisk(
   dir: string,
@@ -525,13 +540,10 @@ function harnessSurfaceFilesOnDisk(
     }
     for (const entry of entries) {
       const key = `${rel}/${entry}`;
-      try {
-        const st = statSync(join(abs, entry));
-        if (st.isDirectory()) walk(join(abs, entry), key);
-        else if (st.isFile()) out.push(key);
-      } catch {
-        continue;
-      }
+      const child = join(abs, entry);
+      const kind = entryKind(child);
+      if (kind === "dir") walk(child, key);
+      else if (kind === "file") out.push(key);
     }
   };
   for (const surface of harnessSurfaceDirs(layout)) {

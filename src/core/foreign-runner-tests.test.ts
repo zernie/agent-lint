@@ -314,6 +314,74 @@ test("evidence: a real CALL fires, through every spelling that is still a call",
   }
 });
 
+// ---------------------------------------------------------------------------
+// A DEFINITION IS NOT A CALL — the round after "a name is not a call". Stripping
+// comments and strings left `name(` matching a DECLARATION of the same name, so
+// a surface-local test that merely defines a helper or a fake was told to rename
+// itself. Both halves per shape: the definition stays SILENT, the call FIRES.
+// ---------------------------------------------------------------------------
+
+test("evidence: a DEFINITION of the same name is not a call — declarations stay silent", () => {
+  const definitions: Record<string, string> = {
+    "a plain function declaration":
+      "function runEval() {}\nexport default 1;\n",
+    "an exported async function declaration":
+      "export async function runEval(opts) { return opts; }\n",
+    "a class method of a local fake":
+      "class Fake { runEval() { return null; } }\nnew Fake().go();\n",
+    "a TS class method with a return type":
+      "class Fake { runEval(): void {} }\nexport const f = new Fake();\n",
+    "a TS class method returning an object type":
+      "class Fake { runEval(): { ok: boolean } { return { ok: true }; } }\n",
+    "an object-literal shorthand method":
+      "const stub = { runEval() { return 0; } };\nexport default stub;\n",
+    "a generator method, whose `*` we deliberately do not read":
+      "class Fake { *runEval() { yield 1; } }\n",
+    "a bodiless TS overload signature":
+      "declare function runEval(o: Opts): Promise<void>;\n",
+    "an abstract member, which also has no body":
+      "abstract class Base { abstract runEval(o: Opts): void; }\n",
+    "a getter that happens to carry the name":
+      "class Fake { get runEval() { return 1; } }\n",
+  };
+  for (const [why, body] of Object.entries(definitions)) {
+    assert.equal(agentDrivingApi(body), undefined, why);
+    assert.deepEqual(
+      findWith({ ".claude/skills/foo/foo.test.ts": body }),
+      [],
+      why,
+    );
+  }
+});
+
+test("evidence: a call still fires next to a definition, and through the shapes a `)`-follow could break", () => {
+  const calls: Record<string, string> = {
+    // The case that must not be over-corrected: the file defines a fake AND
+    // drives the real thing. Silence here would be the opposite regression.
+    "a fake defined and the real API called anyway":
+      'import { runEval } from "vigiles/testing";\n' +
+      "class Fake { runEval() {} }\nawait runEval({});\n",
+    "a call whose result opens a block-bodied callback":
+      "runEval({}).then((r) => {\n  console.log(r);\n});\n",
+    "a call inside a condition, so its `)` is followed by `)` then `{`":
+      "if (await runEval({})) {\n  done();\n}\n",
+    "a call in a ternary, whose `:` is not a return type":
+      "const r = flag ? runEval({}) : 0;\n",
+    "a call as the last expression in the file, with nothing after its `)`":
+      "runEval({})",
+    "a property read named `get`, which ASI puts before a real call":
+      "const g = obj.get\nrunEval({});\n",
+  };
+  for (const [why, body] of Object.entries(calls)) {
+    assert.notEqual(agentDrivingApi(body), undefined, why);
+    assert.equal(
+      findWith({ ".claude/skills/foo/foo.test.ts": body }).length,
+      1,
+      why,
+    );
+  }
+});
+
 test("stripNonCode lexes regex literals — measured, not assumed, on this repo's own sources", () => {
   // 🔴 The first draft called regex literals "too rare to bother with" and the
   // first real file checked disproved it: a `.replace(/[.`"']/g, "")` in the
