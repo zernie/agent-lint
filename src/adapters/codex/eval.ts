@@ -27,6 +27,7 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { refuseUnderForeignRunner } from "../../core/foreign-runner.js";
 import {
   existsSync,
   mkdirSync,
@@ -255,6 +256,10 @@ export function codexEvalRunner(args: {
   cwd: string;
   timeoutMs: number;
 }): { code: number; stdout: string } {
+  // The DOCUMENTED alternative to the default Claude runner, and the one the
+  // untested-skill nudge now recommends — so it is exactly as able to be
+  // collected by a stray `npx vitest run`, and exactly as expensive.
+  refuseUnderForeignRunner("driving `codex exec`");
   const r = spawnSync(
     "codex",
     [

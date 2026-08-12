@@ -7,20 +7,38 @@
  * with no test is a probabilistic-compliance gap hiding in the deterministic
  * layer: nothing measures whether it still does what it claims.
  *
- * THREE detectors decide "tested", OR'd, so a test placed ANYWHERE counts — and
- * every decision now carries WHICH one decided it (see `coverage-evidence.ts`
- * for why that provenance is load-bearing, not decoration):
- *   1. declaration — a `vigiles:covers <surface>` marker in the test file. The
- *      only detector a RUNTIME-PATH harness can reach, and the only one that
- *      cannot happen by accident.
- *   2. colocation — a `*.{harness,eval}.mjs` next to the surface (the zero-config
- *      convention the warning suggests): `skills/foo/*.eval.mjs`,
- *      `agents/bar.harness.mjs`, `hooks/pre-edit.harness.mjs`.
- *   3. content-reference — any discovered test (incl. `*.test.ts`) whose CODE
- *      names the surface by PATH (`skills/foo`, `hooks/pre-edit.sh`) or NAMESPACE
- *      (`vigiles:foo`). Not bare-name — too fuzzy. And no longer COMMENTS: a name
- *      in a comment is prose about a test, not a test. Counting it made the
- *      metric gameable by one line (measured: untested 33 → 32, from a comment).
+ * TWO detectors decide "tested", in this order — **execution, then name, then
+ * nothing** — and the report says which one answered:
+ *
+ *   1. EXECUTION — `.vigiles/coverage.json` records that a run exercised this
+ *      surface, at this version of it (`coverage-artifact.ts`).
+ *   2. COLOCATION — a `*.{harness,eval}.mjs` named after the surface, beside it
+ *      (`skills/foo/foo.eval.mjs`, `hooks/pre-edit.harness.mjs`).
+ *
+ * Colocation was the only detector until 2026-08-11, and it answers a weaker
+ * question than it appears to: it says a FILE EXISTS. `touch
+ * .claude/skills/foo/foo.eval.mjs` — empty — drops the untested count by one.
+ * No other coverage tool answers by name (`go test -cover`, coverage.py, nyc,
+ * tarpaulin all answer from execution, using names only to FIND the file); we
+ * kept the name because a skill cannot be run without a model, and a repo with
+ * no runs recorded must behave exactly as it did before.
+ *
+ * A run recorded against an OLDER version of the surface grants nothing — it is
+ * reported as `staleRuns` and the surface falls back to colocation. Silently
+ * counting it is the PIPELINE-STATUS disease: a tick against a document that was
+ * rewritten afterwards.
+ *
+ * There were three until 2026-08-11 (a `vigiles:covers` declaration, colocation,
+ * and a content-reference "mention"). They were three NAMING CONVENTIONS, not
+ * three strengths of evidence, and two of them could credit a surface no test
+ * touched — measured on vigiles's own repo, `mention` supplied 9 of 10 covered
+ * surfaces and at least three of those were false, including two hooks credited
+ * by this detector's OWN test suite naming them as fixtures. See
+ * `coverage-evidence.ts` for the full argument and the numbers.
+ *
+ * Colocation is kept because it cannot drift by construction: the test lives with
+ * the surface, so deleting or renaming the surface takes its test along, and `ls`
+ * answers "is this tested?" without running anything.
  *
  * Warning-by-default (a nudge, not a gate). EVERY skill, agent, and hook is held
  * to the requirement — invocation mode does NOT exempt anything (a command-only
@@ -31,7 +49,7 @@
  * TWO TIERS, discovered SEPARATELY — a harness and an eval are not the same thing
  * and collapsing them at discovery makes the difference unrecoverable downstream:
  *
- *   | | harness (`*.harness.mjs`, `*.test.*`) | eval (`*.eval.mjs`) |
+ *   | | harness (`*.harness.*`) | eval (`*.eval.*`) |
  *   |---|---|---|
  *   | cost    | free                          | paid model calls    |
  *   | cadence | every push                    | scheduled           |
@@ -45,20 +63,32 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { testFileExt } from "./core/test-file-ext.js";
+import { assertNever } from "./core/assert-never.js";
+import { canRunTypeScript, detectNodeCaps } from "./ts-runner-caps.js";
 import { globSync } from "glob";
 import type { PluginLayout } from "./core/layout.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
 import {
-  COVERS_MARKER,
   countEvidence,
+  declaredSurfaceName,
   evidenceFor,
   formatEvidence,
-  isStronger,
+  hookScriptRefs,
+  isEvalScript,
   prepareTest,
   type CoverageEvidence,
   type EvidenceCounts,
   type PreparedTest,
 } from "./coverage-evidence.js";
+import {
+  canonicalScript,
+  indexRuns,
+  readCoverageArtifact,
+  surfaceSha,
+  type CoverageTierName,
+  type ExecutedRecord,
+} from "./coverage-artifact.js";
 
 /**
  * The two on-disk locations a surface dir can occupy: the plugin-root form
@@ -107,6 +137,16 @@ export interface CoverageDecision {
   readonly by: string;
 }
 
+/** A surface measured by a run that no longer describes it. */
+export interface StaleRun {
+  /** Repo-relative path of the surface. */
+  readonly path: string;
+  /** The script whose run measured the older version. */
+  readonly by: string;
+  /** When that run happened (ISO-8601). */
+  readonly at: string;
+}
+
 /** One tier's split of the considered surfaces — covered by THAT tier, or not. */
 export interface CoverageTier {
   readonly covered: readonly Surface[];
@@ -125,14 +165,45 @@ export interface UntestedReport {
   /** Surfaces explicitly opted out via `vigiles:ignore-test`. */
   readonly exempt: number;
   /**
+   * Test files still carrying the RETIRED `vigiles:covers` marker.
+   *
+   * 🔴 A MIGRATION THAT WOULD OTHERWISE BE SILENT. Up to 15.0.2 this tool's own
+   * untested finding told the reader to "mark what it covers with
+   * `vigiles:covers <surface>`". That tier is gone: coverage is decided by where
+   * a test sits and what it is named. Someone who followed the instruction gets
+   * no error on upgrade — the marker simply becomes a comment, their coverage
+   * drops and the count of untested surfaces rises with nothing said about why.
+   *
+   * Reading these files does NOT feed coverage (nothing inside a test can change
+   * it any more); it exists purely so the upgrade can explain itself. Optional
+   * so a report produced before this field still parses.
+   */
+  readonly legacyCoversFiles?: readonly string[];
+  /** Extension a generated test should use — see `core/test-file-ext.ts`.
+   *  Optional so a report produced before this field still parses. */
+  readonly testExt?: string;
+  /**
    * How each covered surface was decided — the union tier's provenance, one
    * entry per `covered` element. A coverage count whose derivation is invisible
    * is what let a COMMENT confer coverage unnoticed; this is the visibility.
    */
   readonly decisions: readonly CoverageDecision[];
   /**
-   * DETERMINISTIC coverage only — `*.harness.mjs` and `*.test.*`. Free,
-   * millisecond, every-push. Answers "does this gate still catch what it claims?"
+   * Surfaces whose ONLY run record predates their current text — "measured, but
+   * not this version".
+   *
+   * They grant no coverage (they fall back to colocation like anything else),
+   * because a measurement of a file that has since been rewritten is a
+   * measurement of a different file. Reported rather than dropped, since the
+   * silent version of this is the PIPELINE-STATUS failure mode: a green tick
+   * against a document somebody edited afterwards. Optional so a report produced
+   * before this field still parses.
+   */
+  readonly staleRuns?: readonly StaleRun[];
+  /**
+   * DETERMINISTIC coverage only — `*.harness.*`, plus any custom `testGlobs`.
+   * Free, millisecond, every-push. Answers "does this gate still catch what it
+   * claims?" (`*.test.*` has NOT counted since 15.x — see DEFAULT_TEST_GLOBS.)
    */
   readonly harness: CoverageTier;
   /**
@@ -153,6 +224,21 @@ export interface TestCoverageOptions {
   readonly hooks?: boolean;
   /** Globs of test files that count as coverage. */
   readonly testGlobs?: readonly string[];
+  /**
+   * Which extension a GENERATED test gets. Detection (a tsconfig.json, a
+   * typescript dependency) decides by default; this field exists only to
+   * disagree with it. Deliberately NOT written by `init`: a value recorded at
+   * initialisation goes stale in silence when the project migrates, while
+   * detection re-runs every time.
+   *
+   * From `.vigilesrc.json` it arrives as `rules["untested-skill"][1].testExtension`
+   * (or the `-subagent` / `-hook` twin — the three share their options). The
+   * previous wording here said only "from `.vigilesrc.json`", which read as a
+   * promise the CLI did not keep: `TestCoverageConfig` had no such key and
+   * `checkUntestedSurfaces` forwarded only `testGlobs`/`exclude`, so a configured
+   * `mjs` was silently ignored on any TypeScript-shaped repo.
+   */
+  readonly testExtension?: string;
   /** Extra ignore globs (added to node_modules/dist/.git/.vigiles). */
   readonly exclude?: readonly string[];
   /**
@@ -167,18 +253,40 @@ export interface TestCoverageOptions {
 // Internals
 // ---------------------------------------------------------------------------
 
-/** The REAL-MODEL tier's suffix — the one file kind that costs money to run. */
-const EVAL_SUFFIX = ".eval.mjs";
+/** Every extension Node executes directly. `.mts`/`.cts` are real (TS 4.7+) and
+ * Node 22 strips their types with no toolchain — measured, not assumed. */
+const RUNNABLE_EXTS = "{ts,mts,cts,js,mjs,cjs}";
 
+/**
+ * 🔴 `*.test.*` USED TO BE HERE, AND REMOVING IT IS THE POINT.
+ *
+ * Those six entries matched the default patterns of vitest and jest EXACTLY
+ * (read out of the installed packages, not from memory):
+ *
+ *   vitest  **\/*.{test,spec}.?(c|m)[jt]s?(x)
+ *   jest    **\/?(*.)+(spec|test).?([mc])[jt]s?(x)
+ *           **\/__tests__\/**\/*.?([mc])[jt]s?(x)   ← everything in that dir
+ *
+ * vigiles never RAN those files, but it CREDITED them — so an author writing a
+ * skill test reasonably named it `foo.test.mjs`, and then `npx vitest` ran it.
+ * A skill test calls `runHarnessTest`/`measureTriggerRate`: it spawns a model and
+ * SPENDS MONEY, silently, on every push. Measured: a spike put
+ * `.claude/skills/foo/foo.test.mjs` in a bare project and plain `npx vitest run`
+ * executed it — the "it lives under a dot-directory so nothing else will see it"
+ * assumption is false.
+ *
+ * With those entries gone the guarantee becomes one sentence a reader can hold:
+ * NOTHING VIGILES RECOGNISES IS MATCHED BY A DEFAULT VITEST OR JEST RUN.
+ *
+ * ⚠️ BREAKING: a repo whose hook is covered by an ordinary `pre-edit.test.ts`
+ * loses that credit. The migration is a rename, and the untested finding prints
+ * the exact path. Taken deliberately over the alternative — keeping the entries
+ * for hooks/agents and dropping them for skills — because a rule with a per-kind
+ * exception is what this file just spent a day removing.
+ */
 const DEFAULT_TEST_GLOBS = [
-  "**/*.harness.mjs",
-  `**/*${EVAL_SUFFIX}`,
-  "**/*.test.ts",
-  "**/*.test.mts",
-  "**/*.test.cts",
-  "**/*.test.js",
-  "**/*.test.mjs",
-  "**/*.test.cjs",
+  `**/*.harness.${RUNNABLE_EXTS}`,
+  `**/*.eval.${RUNNABLE_EXTS}`,
 ] as const;
 
 const DEFAULT_IGNORE = [
@@ -189,8 +297,6 @@ const DEFAULT_IGNORE = [
 ] as const;
 
 const IGNORE_MARKER = "vigiles:ignore-test";
-
-const SCRIPT_RE = /[\w./${}@-]+\.(?:sh|mjs|cjs|js|ts|py|rb)/g;
 
 function read(path: string): string {
   try {
@@ -227,8 +333,14 @@ function discoverSkills(
   // vanish for exactly the single-skill target that scoping now supports.
   const rootSkill = join(basePath, "SKILL.md");
   if (existsSync(rootSkill)) {
-    const name = basename(basePath);
+    // 🔴 The DECLARED name wins here, and only here. For a nested skill the
+    // directory IS the identity (`skills/foo/SKILL.md` → `foo`), but the base of
+    // a single-skill target is wherever the thing happens to be checked out —
+    // a temp dir, `~/src/wip-2`, a CI workspace. Since colocation now requires
+    // the test to be NAMED after the surface, taking the identity from the path
+    // would ask the author to name their test after their checkout directory.
     const content = read(rootSkill);
+    const name = declaredSurfaceName(content) ?? basename(basePath);
     out.push({
       kind: "skill",
       path: "SKILL.md",
@@ -239,6 +351,17 @@ function discoverSkills(
   }
   return out;
 }
+
+/**
+ * The retired declaration marker, kept ONLY to explain its own removal.
+ *
+ * Written plainly. An earlier version split it (`` `vigiles:${"covers"}` ``) to keep
+ * this source file from matching its own search — a precaution that was never
+ * checked and is contradicted by the tree it lives in: the literal already appears
+ * in five other files under `src/`, and the detector reads only files matching
+ * `testGlobs` in the SCANNED repo, never vigiles' own sources.
+ */
+const LEGACY_COVERS = "vigiles:covers";
 
 function discoverAgents(
   basePath: string,
@@ -266,35 +389,23 @@ function discoverAgents(
   return out;
 }
 
-/** Hook-script paths referenced from a manifest's `hooks` block (file hooks only). */
+/**
+ * Hook-script paths referenced from a manifest's `hooks` block (file hooks only).
+ *
+ * The PARSING lives in `hookScriptRefs` (coverage-evidence.ts), shared with the
+ * browser twin — see its header for why. This wrapper supplies only the two
+ * disk-specific things: reading the manifest, and what "exists" means here.
+ */
 function hookScripts(
   basePath: string,
   manifest: string,
-  pluginRootToken: string,
+  layout: PluginLayout,
 ): string[] {
-  if (!existsSync(join(basePath, manifest))) return [];
-  let hooks: unknown;
-  try {
-    hooks = (JSON.parse(read(join(basePath, manifest))) as { hooks?: unknown })
-      .hooks;
-  } catch {
-    return [];
-  }
-  if (hooks === undefined) return [];
-  const text = JSON.stringify(hooks);
-  // "${CLAUDE_PLUGIN_ROOT}" → unbraced "$CLAUDE_PLUGIN_ROOT" — strip the harness's
-  // own token (both forms) so the path is checkable relative to the plugin root.
-  const unbraced = pluginRootToken.replace(/^\$\{(.+)\}$/, "$$$1");
-  const scripts = new Set<string>();
-  for (const m of text.matchAll(SCRIPT_RE)) {
-    const rel = m[0]
-      .replaceAll(pluginRootToken, "")
-      .replaceAll(unbraced, "")
-      .replace(/^\/+/, "")
-      .replace(/^\.\//, "");
-    if (existsSync(join(basePath, rel))) scripts.add(rel);
-  }
-  return [...scripts];
+  const abs = join(basePath, manifest);
+  if (!existsSync(abs)) return [];
+  return hookScriptRefs(read(abs), layout, (rel) =>
+    existsSync(join(basePath, rel)),
+  );
 }
 
 function discoverHooks(basePath: string, layout: PluginLayout): Surface[] {
@@ -306,8 +417,7 @@ function discoverHooks(basePath: string, layout: PluginLayout): Surface[] {
     ...new Set([layout.manifestPath, layout.settingsPath, localSettings]),
   ];
   for (const m of manifests) {
-    for (const s of hookScripts(basePath, m, layout.pluginRootToken))
-      scripts.add(s);
+    for (const s of hookScripts(basePath, m, layout)) scripts.add(s);
   }
   return [...scripts].sort().map((path) => ({
     kind: "hook" as const,
@@ -333,24 +443,46 @@ function discoverTests(
   const found = globSync([...globs], { cwd: basePath, ignore, dot: true });
   // Prepared ONCE per file (comment-strip + declaration parse), not once per
   // (surface × file) pair — the matching below is quadratic by nature.
-  return found.map((path) => prepareTest(path, read(join(basePath, path))));
+  return found.map((path) => prepareTest(path));
 }
 
-/** Colocated: a test inside a skill dir, or a name-prefixed sibling of an agent/hook. */
+/**
+ * Colocated: a test NAMED after the surface, SITTING BESIDE it. One rule, all
+ * three kinds — a skill used to be exempt from both halves in turn.
+ *
+ * 🔴 THE NAME. Agents and hooks always required a name-prefixed basename; for a
+ * skill the rule was "any file under the skill's directory". Those are different
+ * claims — the second answers "is there a test NEAR this skill?", not "is there
+ * a test FOR it" — and it is the substitution the removed `mention` tier made,
+ * reached by a different route. Observed live: a repo's
+ * `.claude/skills/paper-pipeline/` held six `*.eval.mjs`, exactly one about that
+ * skill; the rest measured OTHER skills and sat there because the directory had
+ * been the pipeline's home before tests moved next to their subjects. One was
+ * literally `grade-paper-writing-ablation.eval.mjs`. The orchestrator scored as
+ * covered and had no test of its own.
+ *
+ * 🔴 THE PLACE. A subdirectory (`skills/foo/tests/foo.harness.mjs`) is NOT
+ * colocated, and dropping that allowance was measured rather than assumed. Across
+ * two real repos exactly ONE nested test file exists, and it is
+ * `verify-citations/scripts/verify-cites.test.mjs` — a unit test for a script the
+ * skill BUNDLES, pinning that script's pure reducer. It is a good test of a
+ * script and not a test of a skill, which is the whole distinction; the skill
+ * carries its own two colocated files besides. So the allowance credited nothing
+ * anyone wanted and cost the property that makes colocation worth having: `ls`
+ * answers "is this tested?". With a subdirectory permitted, it takes `find`.
+ *
+ * That property is the entire argument for colocation over a parallel test tree
+ * (`test/skills/foo_test.mjs`): the filesystem enforces the convention instead of
+ * the reader having to trust it. Two permitted shapes is a choice at write time
+ * and a lookup at read time, which is what convention-over-configuration exists
+ * to remove.
+ */
 function isColocated(surface: Surface, testPath: string): boolean {
-  if (surface.kind === "skill") {
-    const dir = dirname(surface.path);
-    // A root `SKILL.md` (single-skill-dir target) lives at ".", so any TOP-LEVEL
-    // test is colocated — globSync returns those without a "./" prefix, which a
-    // bare `startsWith("./")` would miss (false "untested").
-    return dir === "."
-      ? dirname(testPath) === "."
-      : testPath.startsWith(`${dir}/`);
-  }
-  return (
-    dirname(testPath) === dirname(surface.path) &&
-    basename(testPath).startsWith(`${surface.name}.`)
-  );
+  if (!basename(testPath).startsWith(`${surface.name}.`)) return false;
+  // A root `SKILL.md` (single-skill-dir target) lives at ".", and globSync returns
+  // top-level files without a "./" prefix — so `dirname` is "." on both sides and
+  // the comparison holds without a special case.
+  return dirname(testPath) === dirname(surface.path);
 }
 
 /**
@@ -368,18 +500,19 @@ function coverageOf(
     if (t.path === surface.path) continue;
     const ev = evidenceFor(surface, t, isColocated(surface, t.path));
     if (!ev) continue;
-    if (!best || isStronger(ev, best.evidence))
-      best = { surface, evidence: ev, by: t.path };
+    if (!best) best = { surface, evidence: ev, by: t.path };
   }
   return best;
 }
 
 /**
- * Split the discovered tests into the two tiers by SUFFIX — `*.eval.mjs` is the
- * paid real-model tier, everything else (`*.harness.mjs`, `*.test.*`, and any
- * user-supplied `testGlobs`) is the free deterministic tier. Suffix, not glob set,
+ * Split the discovered tests into the two tiers — `*.eval.<runnable-ext>` is the
+ * paid real-model tier, everything else (`*.harness.*` and any user-supplied
+ * `testGlobs`) is the free deterministic tier. Decided by NAME, not by glob set,
  * so a custom `testGlobs` (a promptfoo suite, a home-grown loop) still lands in a
- * tier instead of silently disappearing from the split.
+ * tier instead of silently disappearing from the split. The rule itself is
+ * `isEvalScript` — shared with the browser twin, and see its header for the two
+ * opposite ways this has been wrong.
  */
 function partitionTests(tests: readonly PreparedTest[]): {
   harness: PreparedTest[];
@@ -388,20 +521,47 @@ function partitionTests(tests: readonly PreparedTest[]): {
   const harness: PreparedTest[] = [];
   const evals: PreparedTest[] = [];
   for (const t of tests)
-    (t.path.endsWith(EVAL_SUFFIX) ? evals : harness).push(t);
+    (isEvalScript(basename(t.path)) ? evals : harness).push(t);
   return { harness, evals };
 }
 
-/** Split the considered surfaces by whether ONE tier's tests cover them. */
+/**
+ * The FRESH run record for this surface in this tier, as a decision — or null.
+ *
+ * `tier` narrows to one runner (`vigiles test` vs `vigiles eval`) so an executed
+ * harness cannot silence "nothing has ever measured whether this fires"; the
+ * union pass passes `undefined` and takes either. Stale records are not
+ * consulted here at all: they are reported separately, never counted.
+ */
+function executedOf(
+  surface: Surface,
+  index: ReadonlyMap<string, ExecutedRecord[]>,
+  tier: CoverageTierName | undefined,
+): CoverageDecision | null {
+  for (const record of index.get(surface.path) ?? []) {
+    if (!record.fresh) continue;
+    if (tier !== undefined && record.run.tier !== tier) continue;
+    return { surface, evidence: "executed", by: record.run.by };
+  }
+  return null;
+}
+
+/**
+ * Split the considered surfaces by whether ONE tier covers them — a recorded run
+ * first, a colocated test second. Execution outranks the name because the name
+ * was only ever a stand-in for it.
+ */
 function tierOf(
   considered: readonly Surface[],
   tests: readonly PreparedTest[],
+  index: ReadonlyMap<string, ExecutedRecord[]>,
+  tier: CoverageTierName | undefined,
 ): CoverageTier {
   const covered: Surface[] = [];
   const untested: Surface[] = [];
   const decisions: CoverageDecision[] = [];
   for (const s of considered) {
-    const decision = coverageOf(s, tests);
+    const decision = executedOf(s, index, tier) ?? coverageOf(s, tests);
     if (decision) {
       covered.push(s);
       decisions.push(decision);
@@ -451,29 +611,82 @@ export function findUntestedSurfaces(
 
   const tests = discoverTests(basePath, globs, ignore);
   const split = partitionTests(tests);
-  const union = tierOf(considered, tests);
+  // The run record, if there is one. NO artifact ⇒ an empty index ⇒ every
+  // decision below falls through to colocation, byte-for-byte as before: a fresh
+  // clone and someone else's repo must not get one extra nudge from this tier.
+  const runIndex = indexRuns(
+    readCoverageArtifact(basePath),
+    (p) => {
+      const abs = join(basePath, p);
+      return existsSync(abs) ? surfaceSha(read(abs)) : null;
+    },
+    // The SCRIPT that did the exercising has to still be here too — a deleted or
+    // renamed harness can never re-enter the retraction set, so without this its
+    // record is permanent, unfalsifiable coverage. `canonicalScript` first: one
+    // file has several legitimate spellings (`x.mjs`, `./x.mjs`, absolute), and
+    // the artifact records whichever one was typed.
+    (by) => existsSync(join(basePath, canonicalScript(by, basePath))),
+  );
+  const union = tierOf(considered, tests, runIndex, undefined);
 
   return {
     total: considered.length,
     covered: union.covered,
     untested: union.untested,
     exempt,
+    staleRuns: staleRunsFor(considered, runIndex),
+    testExt: testFileExt({
+      configured: options.testExtension,
+      hasTsconfig: existsSync(join(basePath, "tsconfig.json")),
+      packageJson: existsSync(join(basePath, "package.json"))
+        ? read(join(basePath, "package.json"))
+        : undefined,
+      // Measured, not assumed: a `tsconfig.json` says the project IS TypeScript,
+      // never that anything here can RUN a `.ts` script. Without this, a Node 20
+      // repo with no local `tsx` was told to write `foo.harness.ts` and then
+      // `vigiles test` refused to execute it.
+      canRunTypeScript: canRunTypeScript(detectNodeCaps(basePath)),
+    }),
+    legacyCoversFiles: tests
+      .map((t) => t.path)
+      .filter((path) => read(join(basePath, path)).includes(LEGACY_COVERS)),
     decisions: union.decisions,
-    harness: tierOf(considered, split.harness),
-    evals: tierOf(considered, split.evals),
+    harness: tierOf(considered, split.harness, runIndex, "harness"),
+    evals: tierOf(considered, split.evals, runIndex, "eval"),
   };
 }
 
+/**
+ * Surfaces with run records but no FRESH one — measured, then edited.
+ *
+ * Only reported when nothing fresh exists for the surface: a re-run refreshes
+ * one record and leaves the old ones in the artifact, and complaining about
+ * those would make the notice permanent and therefore ignorable.
+ */
+function staleRunsFor(
+  considered: readonly Surface[],
+  index: ReadonlyMap<string, ExecutedRecord[]>,
+): StaleRun[] {
+  const out: StaleRun[] = [];
+  for (const s of considered) {
+    const records = index.get(s.path) ?? [];
+    if (records.length === 0 || records.some((r) => r.fresh)) continue;
+    const newest = records.reduce((a, b) => (a.run.at >= b.run.at ? a : b));
+    out.push({ path: s.path, by: newest.run.by, at: newest.run.at });
+  }
+  return out;
+}
+
 /** Suggested colocated test path for an untested surface (shown in the warning). */
-export function suggestedTestPath(surface: Surface): string {
+export function suggestedTestPath(surface: Surface, ext = "mjs"): string {
   // A root skill lives at ".", so drop the "./" prefix — the suggested path then
   // matches what globSync actually discovers at the top level.
   const dir = dirname(surface.path);
   const prefix = dir === "." ? "" : `${dir}/`;
   if (surface.kind === "skill") {
-    return `${prefix}${surface.name}.eval.mjs`;
+    return `${prefix}${surface.name}.eval.${ext}`;
   }
-  return `${prefix}${surface.name}.harness.mjs`;
+  return `${prefix}${surface.name}.harness.${ext}`;
 }
 
 /** Tally the union tier's coverage decisions by how each was established. */
@@ -481,7 +694,216 @@ export function coverageEvidenceCounts(report: UntestedReport): EvidenceCounts {
   return countEvidence(report.decisions);
 }
 
+/**
+ * The edit-time half of `untested-skill` — the nudge a PostToolUse hook delivers
+ * when the agent has just edited a skill/agent surface.
+ *
+ * WHY it lives next to `findUntestedSurfaces` instead of being its own detector:
+ * the rule was already stated correctly, but it only ran inside `vigiles lint`,
+ * which a human has to remember to type. A rule that fires only when invoked by
+ * hand is prose, not policy — so this reuses the SAME detector at the moment the
+ * surface changes.
+ *
+ * It deliberately does NOT say "write a test". An agent already knows that; what
+ * it did not know is **with what** — so the message's job is to hand off to the
+ * `test-harness` skill, which carries the tier→API table. A nudge that restates
+ * the obligation and withholds the vocabulary is the failure this replaces.
+ *
+ * Two distinguishable gaps, because they cost orders of magnitude apart:
+ *   - no test at all        → start at the cheapest tier
+ *   - a harness but no eval → you just changed the TRIGGER surface, and a
+ *                             deterministic harness structurally cannot tell you
+ *                             whether a description still fires
+ *
+ * Returns `null` when the edited file isn't a skill/agent surface, or when it is
+ * covered on both tiers. Never throws — a nudge must not disrupt an edit.
+ */
+export function skillTestNudge(
+  filePath: string,
+  options: TestCoverageOptions = {},
+): string | null {
+  let report: UntestedReport;
+  try {
+    report = findUntestedSurfaces({ ...options, hooks: false });
+  } catch {
+    return null; // a broken scan must never surface as a broken edit
+  }
+
+  const norm = (p: string): string => p.replaceAll("\\", "/");
+  const target = norm(filePath);
+  const isTarget = (s: Surface): boolean =>
+    norm(s.path) === target || target.endsWith(`/${norm(s.path)}`);
+
+  const untested = report.untested.find(isTarget);
+  if (untested)
+    return (
+      `vigiles: you edited ${untested.path}, and nothing measures whether it ` +
+      `still does what it claims — no test or eval covers it.\n` +
+      `Don't hand-roll a runner: the \`test-harness\` skill carries the ` +
+      `tier→API table (runHook · runHarnessTest+scriptModel · ` +
+      `measureTriggerRate · measure+judged · runEval) and picks the cheapest ` +
+      `tier that can answer your question. Start there, then add e.g. ` +
+      `${suggestedTestPath(untested, report.testExt)}.\n` +
+      `This is a reminder, not a block.`
+    );
+
+  // Covered by SOMETHING, but never evaluated. WHAT the eval tier measures is a
+  // property of the surface, not one sentence — see `evalTierQuestion`.
+  const unevaluated = report.evals.untested.find(isTarget);
+  const question = unevaluated ? evalTierQuestion(unevaluated.kind) : null;
+  if (unevaluated && question)
+    return (
+      `vigiles: you edited ${unevaluated.path}. ${question}\n` +
+      `This is a reminder, not a block.`
+    );
+
+  return null;
+}
+
+/**
+ * What the PAID eval tier measures for a surface of this kind — or `null` when
+ * it measures nothing for it.
+ *
+ * 🔴 THE REMEDY USED TO BE ONE SENTENCE, AND IT WAS THE SKILL'S. Every
+ * never-evaluated surface was told its "description must FIRE" and pointed at
+ * `measureTriggerRate`. An agent reaches that branch as readily as a skill —
+ * `skillTestNudge` disables only hooks — and for an agent the sentence is false
+ * twice over: firing is not the agent's eval-tier question, and
+ * `measureTriggerRate` cannot address an agent at all.
+ *
+ * MEASURED 2026-08-12, no model spent, against this build:
+ *
+ * ```
+ * packageSkillsDir("<repo>/agents")           → THREW: No <name>/SKILL.md skills
+ *                                                found under <repo>/agents
+ * measureTriggerRateWith({ pluginDir: <an     → rate = 0 | competitors = 0
+ *   agents-only plugin> }, fakeRunner)
+ * ```
+ *
+ * The loose-skills form throws; the plugin form returns a NUMBER for a surface
+ * it never installed. That is the same failure the driver-argument note one
+ * branch up already calls out — worse than an error, because it looks like a
+ * measurement — and following the old wording produced it.
+ *
+ * ## Why this is keyed on `kind`, and what happens to a fourth one
+ *
+ * The real predicate is a CAPABILITY — "can the trigger tier install and observe
+ * this surface?" — and today that is a total function of `kind`, because the
+ * tier's installer is `<name>/SKILL.md`-shaped and its `fired` predicate is skill
+ * SELECTION (`skillResolved`). So the capability is stated once per kind here,
+ * rather than inferred from a name at the call site.
+ *
+ * The switch is exhaustive over {@link SurfaceKind} with `assertNever`: a fourth
+ * kind does not silently inherit the skill's sentence, it fails to COMPILE until
+ * someone writes what the eval tier measures for it. If the trigger tier ever
+ * grows an agent installer, this table is the single place that changes.
+ */
+export function evalTierQuestion(kind: SurfaceKind): string | null {
+  switch (kind) {
+    case "skill":
+      // An edit to a SKILL.md is usually an edit to the description — i.e. to
+      // the trigger surface itself.
+      //
+      // 🔴 THE REMEDY NAMES THE DRIVER ARGUMENT, because a bare
+      // `measureTriggerRate` is not this repo's measurement. The nudge is
+      // layout-aware, so it reaches repos targeting a harness other than the
+      // eval tier's default — and `measureTriggerRate(spec)` falls back to that
+      // DEFAULT driver. Following the old wording there did not fail: it
+      // measured a different harness's trigger rate and reported it as a number.
+      return (
+        `A deterministic test covers it, but nothing has ever measured whether ` +
+        `its description actually FIRES — and a harness structurally cannot ` +
+        `tell you that.\n` +
+        `See the \`test-harness\` skill for which tier answers it ` +
+        `(\`measureTriggerRate\`, plus \`irrelevantPrompts\` for the precision ` +
+        `side). Pass your harness's driver — ` +
+        `\`measureTriggerRate(spec, { evalDriver })\` — because a bare call runs ` +
+        `the eval tier's DEFAULT harness, which may not be the one this repo ` +
+        `targets.`
+      );
+    case "agent":
+      // An agent is dispatched BY NAME through `Task` and carries a tool
+      // contract, so the eval-tier question is not selection — it is whether a
+      // REAL model honours the contract. The deterministic test that already
+      // covers it drove a scripted model, which cannot answer that.
+      //
+      // ⚠️ It does NOT offer `{ evalDriver }` here, and that is checked rather
+      // than assumed: `runEval`/`measure`/`measureArms` all hard-wire
+      // `spawnAgent`, and `runEvalWith` is not exported from `vigiles/testing` —
+      // `measureTriggerRate` is the only public call with that seam. Suggesting
+      // an argument the function does not take is this finding's own defect.
+      return (
+        `A deterministic test covers it, but that test drove a SCRIPTED model. ` +
+        `Nothing has measured whether a REAL model, handed this agent's prompt, ` +
+        `stays inside its tool contract and returns the result it promises.\n` +
+        `NOT \`measureTriggerRate\`: it installs \`<name>/SKILL.md\` skills and ` +
+        `decides "fired" by skill SELECTION, so it cannot address an agent — ` +
+        `pointed at an agents-only plugin it reports rate 0.0 over 0 ` +
+        `competitors instead of failing (measured).\n` +
+        `See the \`test-harness\` skill: run the real-model tier (\`runEval\` / ` +
+        `\`measure\`) and keep the assertions your deterministic test already ` +
+        `makes — \`subagent(name, [...])\` for the nested trace, \`notTool\` for ` +
+        `the tool contract, \`assertAgentOk\` for the typed result. Those two ` +
+        `calls drive Claude Code and take no \`evalDriver\`, so on another ` +
+        `harness this tier has no public dispatch yet.`
+      );
+    case "hook":
+      // Nothing. A hook is deterministic by construction: `runHook` answers
+      // "does it block event X?" at the unit tier, free, for every event type —
+      // there is no probabilistic question left for a paid tier to measure.
+      // `skillTestNudge` never asks (it scans with `hooks: false`); this arm
+      // exists so the switch is total, and so a caller that DOES ask gets
+      // silence rather than the skill's sentence.
+      return null;
+    default:
+      return assertNever(kind);
+  }
+}
+
 /** Format an untested-surface report as human-readable text. */
+/**
+ * One line for a repo that followed the OLD advice, and nothing for everyone else.
+ *
+ * The upgrade removes a tier this tool told people to use. Without this the only
+ * signal is a coverage count that went down, which reads as "I broke something"
+ * rather than "the rule changed" — and the marker still sits in the file looking
+ * load-bearing. Printed in BOTH branches (clean and dirty): a repo can lose
+ * coverage and still be at zero untested, and it would then never hear about it.
+ */
+function legacyCoversNote(report: UntestedReport): string[] {
+  const files = report.legacyCoversFiles ?? [];
+  if (files.length === 0) return [];
+  const shown = files.slice(0, 3).join(", ");
+  const more = files.length > 3 ? ` (+${String(files.length - 3)} more)` : "";
+  return [
+    `  ${String(files.length)} test file(s) still carry the retired \`vigiles:covers\` ` +
+      `marker (${shown}${more}). It has granted no coverage since 15.x — a test counts ` +
+      `when it is NAMED after the surface and sits next to it. The marker is now an ` +
+      `ordinary comment; delete it or rename the file.`,
+  ];
+}
+
+/**
+ * The "measured, but not this version" line — printed in BOTH branches, for the
+ * same reason `legacyCoversNote` is: a repo can be at zero untested and still be
+ * resting on a measurement of text that no longer exists, and it would then
+ * never hear about it.
+ */
+function staleRunNote(report: UntestedReport): string[] {
+  const stale = report.staleRuns ?? [];
+  if (stale.length === 0) return [];
+  const shown = stale
+    .slice(0, 3)
+    .map((s) => s.path)
+    .join(", ");
+  const more = stale.length > 3 ? ` (+${String(stale.length - 3)} more)` : "";
+  return [
+    `  ${String(stale.length)} surface(s) have a run record from BEFORE their current ` +
+      `text (${shown}${more}) — measured, but not this version, so it grants no ` +
+      `coverage. Re-run \`vigiles test\` / \`vigiles eval\` to refresh it.`,
+  ];
+}
+
 export function formatUntestedReport(report: UntestedReport): string {
   // Every coverage number is printed WITH its provenance. "28 covered" and
   // "28 covered, all of it a name appearing in a file" are different facts, and
@@ -489,9 +911,11 @@ export function formatUntestedReport(report: UntestedReport): string {
   const provenance = formatEvidence(coverageEvidenceCounts(report));
   if (report.untested.length === 0) {
     const tail = report.exempt > 0 ? ` (${String(report.exempt)} exempt)` : "";
+    const legacy = [...staleRunNote(report), ...legacyCoversNote(report)];
     const ok =
       `✓ all ${String(report.total)} surface(s) have a test or eval${tail}` +
-      (provenance ? `\n  ${provenance}` : "");
+      (provenance ? `\n  ${provenance}` : "") +
+      (legacy.length ? `\n${legacy.join("\n")}` : "");
     // A clean UNION can still hide a whole unanswered question: every surface may
     // have a deterministic harness and NOTHING may ever have measured that a
     // skill fires. The gate is unchanged (still the union), but the ✓ must not
@@ -506,7 +930,9 @@ export function formatUntestedReport(report: UntestedReport): string {
     `⚠ ${String(report.untested.length)} surface(s) with no test or eval:`,
   ];
   for (const s of report.untested) {
-    lines.push(`    ${s.kind} ${s.path} — add e.g. ${suggestedTestPath(s)}`);
+    lines.push(
+      `    ${s.kind} ${s.path} — add e.g. ${suggestedTestPath(s, report.testExt)}`,
+    );
   }
   // Name the two gaps SEPARATELY — they lead to different work at wildly
   // different cost. "add a test/eval" is one sentence for two prescriptions three
@@ -518,15 +944,20 @@ export function formatUntestedReport(report: UntestedReport): string {
       `${String(report.evals.untested.length)} whose firing was never measured ` +
       `(needs a real model, run on a schedule).`,
   );
-  // What the surfaces that DID pass are resting on. A repo whose coverage is
-  // entirely name-mentions should be able to see that about itself.
+  // What the surfaces that DID pass are resting on.
   if (provenance) lines.push(`  ${provenance}`);
+  lines.push(...staleRunNote(report));
+  lines.push(...legacyCoversNote(report));
   // Already testing these another way (a promptfoo suite, a home-grown evals
-  // file)? Point `testGlobs` at it so it counts toward coverage (issue #113).
+  // file)? Point `testGlobs` at it so it counts toward coverage (issue #113) —
+  // and put the file NEXT TO the surface, which is the only placement that
+  // counts now. See docs/rules/untested-skill.md.
   lines.push(
     `  Testing these another way (promptfoo / a home-grown eval loop)? Add its ` +
-      `files to \`testGlobs\` in .vigilesrc.json, and mark what it covers with ` +
-      `\`${COVERS_MARKER} <surface>\`. See docs/rules/untested-skill.md.`,
+      `files to \`testGlobs\` in .vigilesrc.json AND name each after the surface ` +
+      `it covers, next to it (\`<surface>/<surface>.eval.mjs\`) — placement says ` +
+      `where a file sits, the name says what it is about. ` +
+      `See docs/rules/untested-skill.md.`,
   );
   return lines.join("\n");
 }

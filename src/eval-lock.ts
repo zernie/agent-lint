@@ -202,8 +202,20 @@ export function readLock(dir: string, name: string): EvalLock | null {
  * opt-in-by-committing behavior that keeps a fresh `init` from going red.
  */
 export function anyLocksCommitted(dir: string): boolean {
-  if (!existsSync(dir)) return false;
-  return readdirSync(dir).some((f) => f.endsWith(".lock.json"));
+  return countLocks(dir) > 0;
+}
+
+/**
+ * How many locks are committed under `dir` — 0 when the dir does not exist.
+ *
+ * No try/catch around the read: `anyLocksCommitted` never had one, and adding a
+ * branch here that no test can reach would trade a real coverage line for a
+ * defensive case the caller already survives (an unreadable `.vigiles/` is a
+ * broken checkout, not a state this counter should paper over).
+ */
+export function countLocks(dir: string): number {
+  if (!existsSync(dir)) return 0;
+  return readdirSync(dir).filter((f) => f.endsWith(".lock.json")).length;
 }
 
 /**

@@ -105,6 +105,16 @@ const no = (message: string): CheckResult => ({
   message,
 });
 
+/**
+ * `Bash(git:*)` → `Bash`. A declaration may carry a restriction; a trace never
+ * does, so the two only meet on the base name. Same one-liner as
+ * `core/tool-contract.ts` / `core/lethal-trifecta.ts`, kept local because the
+ * testing pillar does not otherwise depend on the linting core.
+ */
+function baseTool(raw: string): string {
+  return raw.split("(")[0].trim();
+}
+
 function distinctToolNames(calls: readonly ToolCall[]): string {
   const names = [...new Set(calls.map((c) => c.name))];
   return names.length > 0 ? `[${names.join(", ")}]` : "no tools";
@@ -195,6 +205,94 @@ export function notTool(name: string, args?: ArgMatcher): Check<Trace> {
       args
         ? { kind: "notTool", name, args: serializeArgs(args) }
         : { kind: "notTool", name },
+  };
+}
+
+/**
+ * The agent used **only** tools drawn from `allowed` — the white-list, and the
+ * missing half of a symmetry the file surface already has:
+ *
+ * |       | "not this one"  | "nothing but these"    |
+ * | ----- | --------------- | ---------------------- |
+ * | files | `assertNoWrite` | `assertWroteOnly`      |
+ * | tools | {@link notTool} | **`onlyTools`** (this) |
+ *
+ * Why the asymmetry mattered: `notTool` can only forbid the calls the test
+ * author thought of, and the set of undeclared tools is unbounded — so "this
+ * skill stayed inside the tools it declares" was not expressible, which is
+ * exactly the claim a `SKILL.md` frontmatter makes in prose. See
+ * `skillContract`, which builds this check from that declaration.
+ *
+ * **Fails closed on an empty trace.** A `Trace` records tool calls only when the
+ * run captured the stream (`transcript: true` on the harness tier; always on the
+ * eval tier), so an uncaptured run is indistinguishable from a tool-free one —
+ * and passing it would assert nothing. Same discipline as `assertWroteOnly`
+ * refusing a result that never recorded writes: "we didn't look" is not "it was
+ * clean".
+ *
+ * 🔴 A `Tool(restriction)` DECLARATION IS MATCHED BY ITS BASE NAME. `allowed-tools:
+ * Bash(git:*)` is the ordinary way to write a narrow grant, and `skillContract`
+ * hands that literal string here — while a trace only ever carries the base name
+ * `Bash`, because that is the tool the harness reports. Set membership therefore
+ * missed, and every legitimate `Bash` call was reported as outside the declared
+ * surface, against a declaration that literally lists Bash (measured 2026-08-11:
+ * `agent used tool(s) outside its declared set: Bash (declared: Bash(git:*),
+ * Read, Skill)`). A check that fires on its own happy path gets deleted, not
+ * debugged — and it would fire on exactly the authors who narrowed their grant.
+ *
+ * ⚠️ AND THE RESTRICTION ITSELF IS NOT VERIFIED HERE, deliberately. A trace names
+ * the tool, not the grant it was matched against, so `Bash(git:*)` can be held to
+ * "no tool outside the declared set" and no further; whether the command really
+ * was a `git` one is a claim this layer has no evidence for. Narrowing beyond the
+ * base name is `disallowed-tools:` + `lethal-trifecta`'s job (see
+ * `skill-contract.ts`), which reads the grant instead of the run. The same
+ * `split("(")` normalization the rest of the codebase already applies to tool
+ * declarations — `core/tool-contract.ts`, `core/lethal-trifecta.ts`,
+ * `core/delegation-trifecta.ts`.
+ *
+ * ⚠️ SPANS THE WHOLE TRACE, deliberately. It answers "did this RUN stay inside
+ * these tools?", which is the right question for a harness that drives one thing.
+ * It is the wrong question when the trace has setup calls before the surface
+ * under test activated, drives several skills, or dispatches a subagent whose
+ * nested calls the parser folds into the same flat list — and reporting those as
+ * a violation is an accusation about the wrong code.
+ *
+ * `skillContract` therefore does NOT use this directly: it wraps it in a window
+ * bounded by its own `Skill` activation (see `duringSkill` in
+ * `src/skill-contract.ts`). If you are checking one skill, prefer the contract;
+ * reach for this when the claim really is about the whole run.
+ */
+export function onlyTools(allowed: readonly string[]): Check<Trace> {
+  const allow = new Set(allowed.map(baseTool));
+  // The declaration is echoed VERBATIM: an author who wrote `Bash(git:*)` must
+  // read back what they wrote, not the normalized form the matching used.
+  const declared = [...new Set(allowed)].join(", ") || "none";
+  return {
+    kind: "onlyTools",
+    eval: (t) => {
+      if (t.toolCalls.length === 0)
+        return no(
+          `onlyTools cannot run: this trace recorded no tool calls, so passing ` +
+            `it would assert nothing. Tool calls are parsed from the stream — ` +
+            `pass \`transcript: true\` on the harness tier (the eval tier always ` +
+            `captures it). If the run genuinely used no tools there is no tool ` +
+            `surface to constrain, and this check does not apply.`,
+        );
+      // Report EVERY distinct offender, not just the first: a skill reaching for
+      // three undeclared tools should not take three runs to discover that.
+      const offenders = [
+        ...new Set(
+          t.toolCalls.map((c) => c.name).filter((name) => !allow.has(name)),
+        ),
+      ];
+      if (offenders.length === 0)
+        return ok(`agent used only declared tool(s): ${declared}`);
+      return no(
+        `agent used tool(s) outside its declared set: ${offenders.join(", ")} ` +
+          `(declared: ${declared})`,
+      );
+    },
+    toJSON: () => ({ kind: "onlyTools", allowed: [...allowed] }),
   };
 }
 

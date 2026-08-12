@@ -12,7 +12,14 @@ import {
   checksRecorded,
   resetCheckCount,
   armCheckReport,
+  recordSurfaceProbe,
+  surfacesRecorded,
+  parseCheckReport,
 } from "./check-count.js";
+import { join } from "node:path";
+import { writeFileSync } from "node:fs";
+
+import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 import { runHook } from "./run-hook.js";
 import { assertHookAllows } from "./harness-assert.js";
 import { defineHook, allow, tool } from "./hook.js";
@@ -126,4 +133,99 @@ test("an in-process compiled-hook assertion counts as a check", () => {
   });
   assertHookAllows(gate, { tool_name: "Bash", tool_input: { command: "ls" } });
   assert.equal(checksRecorded(), 1);
+});
+
+// --- the channel also carries WHAT was exercised ------------------------------
+//
+// Coverage used to answer "is surface X tested?" from a FILE NAME, so an empty
+// `foo.eval.mjs` counted. The tiers now report what they went by, and this
+// channel carries it out. Both halves each time: the attribution appears when a
+// run really named something, and the wire format is UNCHANGED when it did not.
+
+test("a run with nothing to attribute writes the bare number, byte for byte", () => {
+  // The legacy branch has to stay legacy: an older runner meeting a new library
+  // must keep reading the same file it always read.
+  const f = fakes({ [CHECK_COUNT_ENV]: "/tmp/plain.count" });
+  armCheckReport(f.deps);
+  recordCheck(4);
+  f.exit();
+  assert.deepEqual(f.written, [{ path: "/tmp/plain.count", contents: "4" }]);
+});
+
+test("a run WITH an attribution writes it alongside the count", () => {
+  const f = fakes({ [CHECK_COUNT_ENV]: "/tmp/rich.count" });
+  armCheckReport(f.deps);
+  recordCheck(2);
+  recordSurfaceProbe("command", "hooks/guard.sh");
+  f.exit();
+  assert.deepEqual(parseCheckReport(f.written[0].contents), {
+    checks: 2,
+    surfaces: [{ how: "command", ref: "hooks/guard.sh" }],
+  });
+});
+
+test("the reader takes both forms — a bare number is a report with no attribution", () => {
+  assert.deepEqual(parseCheckReport("7"), { checks: 7, surfaces: [] });
+  assert.deepEqual(parseCheckReport(' {"checks":0,"surfaces":[]} '), {
+    checks: 0,
+    surfaces: [],
+  });
+});
+
+test("a torn or nonsensical file is NOT a report — corruption never becomes a verdict", () => {
+  // Same discipline as before: only a real `0` says "this file verified nothing".
+  for (const raw of [
+    '{"checks":2,"surf',
+    "-3",
+    '{"surfaces":[]}',
+    '{"checks":1.5,"surfaces":[]}',
+    "",
+    "not a number",
+  ]) {
+    assert.equal(parseCheckReport(raw), undefined, JSON.stringify(raw));
+  }
+});
+
+test("a probe with an unknown origin is dropped, the rest of the report survives", () => {
+  const parsed = parseCheckReport(
+    JSON.stringify({
+      checks: 1,
+      surfaces: [
+        { how: "declared", ref: "skills/foo" },
+        { how: "fired", ref: "p:foo" },
+      ],
+    }),
+  );
+  assert.deepEqual(parsed?.surfaces, [{ how: "fired", ref: "p:foo" }]);
+});
+
+test("runHook attributes the hook it ran, not just that it ran", () => {
+  // Derived from the command about to be executed — the author declares nothing.
+  //
+  // The guard has to be a REAL executable. It used to be `/repo/hooks/guard.sh`,
+  // a path that exists nowhere: the shell exited 127 without launching anything
+  // and the probe was recorded anyway, so this test asserted attribution over a
+  // hook that never ran. Fixed with the launch check that now suppresses it.
+  const dir = makeTmpDir("check-count-guard");
+  try {
+    const guard = join(dir, "guard.sh");
+    writeFileSync(guard, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    const r = runHook(
+      '"$GUARD"',
+      { hook_event_name: "PreToolUse" },
+      {
+        env: { GUARD: guard },
+      },
+    );
+    assert.equal(r.exitCode, 0, r.stderr);
+    assert.deepEqual(surfacesRecorded(), [{ how: "command", ref: guard }]);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("a hook command that names no program attributes nothing", () => {
+  runHook("exit 0", { hook_event_name: "PreToolUse" });
+  assert.equal(checksRecorded(), 1, "it still counts as a check");
+  assert.deepEqual(surfacesRecorded(), [], "…and invents no surface");
 });

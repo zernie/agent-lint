@@ -34,10 +34,13 @@ only). Inline shell one-liners have nowhere to colocate a test and are not scann
 
 ## What counts as "tested"
 
-Three detectors, OR'd: **declaration** (`// vigiles:covers hooks/pre-edit.sh` in
-the test file) OR **colocation** (`hooks/pre-edit.harness.mjs` next to
-`hooks/pre-edit.sh`) OR **content-reference** (any test whose _code_ names the
-hook by path, e.g. `hooks/pre-edit.sh` — comments don't count). See
+**A recorded run first** (`.vigiles/coverage.json`): `runHook` / `runScript`
+name the hook from the command line they executed, so a `vigiles test` run that
+fires this hook covers it wherever the test file happens to live — and coverage
+prints `MEASURED BY A RUN`. **Colocation second**, as the fallback:
+`hooks/pre-edit.harness.mjs` next to `hooks/pre-edit.sh`. A test elsewhere that
+merely NAMES the hook does not count (that tier was removed 2026-08-11; it was
+crediting these very hooks from the coverage detector's own fixtures). See
 [`untested-skill`](untested-skill.md#what-counts-as-tested) for the shared
 mechanics and why the three are reported separately.
 

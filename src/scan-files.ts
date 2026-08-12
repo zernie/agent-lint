@@ -59,6 +59,7 @@ import {
   makeClassifier,
   scanAgents,
   scanSkills,
+  skillRefSources,
   scanHooks,
   frontmatterIssuesFor,
   frontmatterValueIssuesFor,
@@ -74,6 +75,12 @@ import {
   detectOwnTestSignal,
   remapFindingPaths,
 } from "./scan-core.js";
+// Zero imports of its own — pure string work, safe in the browser engine.
+import { brokenSkillRefs, formatSkillRefIssue } from "./skill-refs.js";
+import {
+  conflictedHarnessConfigs,
+  mergeConflictWarning,
+} from "./core/merge-conflict.js";
 // TYPE-ONLY from ./scan.js (the report shapes) — elided at build, so the
 // node-only runtime deps of scan.ts (plugin-loader/mcp/test-coverage/node:fs)
 // never enter this browser-safe engine's graph. The runtime detectors come from
@@ -676,7 +683,11 @@ export function scanFiles(
   ): T[] => remapFindingPaths(findings, loaded.sources, BROWSER_ROOT);
   // ONE discovery pass, read three ways — the union, the free deterministic tier
   // (`Tested`), and the paid real-model tier (`Evaluated`). Mirrors scanPlugin.
-  const coverage = findUntestedSurfacesInFiles(files, lay);
+  const coverage = findUntestedSurfacesInFiles(
+    files,
+    lay,
+    repoName ?? basename(BROWSER_ROOT),
+  );
   return {
     dir: BROWSER_ROOT,
     instructions,
@@ -694,6 +705,16 @@ export function scanFiles(
       loaded.warnings.some((w) => w.includes("MCP server")) ||
       declaredServers.length > 0,
     danglingRefs: danglingRefs(files, lay, repoName ?? basename(BROWSER_ROOT)),
+    // Kept in step with `scanPlugin`: skill→skill references BY NAME, which
+    // `danglingRefs` structurally cannot see. The parity test is the only thing
+    // holding these two report builders together, and it caught this field
+    // landing in one of them and not the other.
+    skillRefIssues: brokenSkillRefs(
+      skillRefSources(loaded.files, cls, {
+        root: BROWSER_ROOT,
+        sources: loaded.sources,
+      }),
+    ).map(formatSkillRefIssue),
     hookEventIssues,
     frontmatterIssues: remap(frontmatterIssuesFor(loaded.files, cls)),
     frontmatterValueIssues: remap(frontmatterValueIssuesFor(loaded.files, cls)),
@@ -738,7 +759,13 @@ export function scanFiles(
       dialect,
     ),
     malformedFrontmatter: remap(malformedFrontmatterFor(loaded.files, cls)),
-    warnings: loaded.warnings,
+    // Same detector as `scanPlugin`, over the map instead of disk — the parity
+    // gate is byte-identical reports, so a finding that existed on only one side
+    // would fail it.
+    warnings: [
+      ...loaded.warnings,
+      ...conflictedHarnessConfigs((f) => files[f]).map(mergeConflictWarning),
+    ],
     untested: coverage.untested.length,
     untestedHarness: coverage.harness.untested.length,
     unevaluated: coverage.evals.untested.length,

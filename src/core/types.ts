@@ -99,6 +99,17 @@ export interface TestCoverageConfig {
   testGlobs?: readonly string[];
   /** Extra ignore globs. */
   exclude?: readonly string[];
+  /**
+   * Which extension the SUGGESTED test path in an untested-* finding uses
+   * (`<surface>.harness.<ext>`). Detection decides by default — a `tsconfig.json`
+   * or a `typescript` dependency means `.ts`, otherwise `.mjs` — and this exists
+   * only to disagree with it: a monorepo of mixed packages, a JS project carrying
+   * a stray `tsconfig.json`, or a deliberate choice to keep tests in JS. An
+   * unrecognised value is ignored rather than honoured, since suggesting
+   * `foo.harness.rb` would point the author at a path no runner can execute.
+   * Never written by `vigiles init` — see `core/test-file-ext.ts` for why.
+   */
+  testExtension?: string;
 }
 
 export interface RulesConfig {

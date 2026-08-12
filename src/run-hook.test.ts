@@ -25,6 +25,11 @@ import {
   type HookOutput,
 } from "./run-hook.js";
 import type { RunScriptDeps, ScriptSpawnResult } from "./run-script.js";
+import {
+  checksRecorded,
+  resetCheckCount,
+  surfacesRecorded,
+} from "./check-count.js";
 import { sandboxAvailable } from "./sandbox.js";
 
 test("propertyHook: holds for a correct guard, finds a counterexample for a buggy one", () => {
@@ -499,4 +504,197 @@ test("an unconfined run leaves filesWritten UNDEFINED — and a write assertion 
     /never recorded/i,
     "must not green-light a run whose writes were never captured",
   );
+});
+
+// --- a REFUSED run attributes nothing (the coverage probe follows the spawn) ---
+//
+// 🔴 The probe was recorded BEFORE the branch that can refuse. `runEgress` throws
+// when the allowlist sandbox is missing and `runConfinedOrDirect` throws when
+// confinement was required and bwrap is absent — so a harness asserting exactly
+// that refusal (a documented, legitimate test: "an untrusted hook must not run
+// unconfined here") caught the error, exited 0 with a check recorded, and the CLI
+// runner then wrote an execution-tier coverage record for a hook that never ran.
+// Same substitution as a `fail`/`vacuous` run writing a record, one layer down.
+
+test("a REFUSED run records no surface probe — the intent to run is not a run", () => {
+  const refusing: RunScriptDeps = {
+    available: false,
+    egressAvailable: false,
+    direct: () => {
+      throw new Error("no spawner may be reached in this test");
+    },
+    sandboxed: () => {
+      throw new Error("no spawner may be reached in this test");
+    },
+    egress: () => {
+      throw new Error("no spawner may be reached in this test");
+    },
+  };
+
+  // FIRES (a): confinement required, bwrap absent → `runConfinedOrDirect` throws.
+  resetCheckCount();
+  assert.throws(
+    () => runHookWith("sh hooks/guard.sh", {}, { trusted: false }, refusing),
+    /sandbox|bwrap/,
+  );
+  assert.deepEqual(
+    surfacesRecorded(),
+    [],
+    "a hook that was refused must not be attributed as executed",
+  );
+
+  // FIRES (b): the egress branch refuses on its own path, before any spawner.
+  resetCheckCount();
+  assert.throws(
+    () =>
+      runHookWith(
+        "sh hooks/guard.sh",
+        {},
+        { egress: { allow: ["example.com"] } },
+        refusing,
+      ),
+    /egress/,
+  );
+  assert.deepEqual(surfacesRecorded(), []);
+});
+
+test("…but a run that LAUNCHED and exited NONZERO is still an execution", () => {
+  // The QUIET half, and the one a fix tightened to "exit 0" would break: most of
+  // what the hook tier tests is a hook that ran and BLOCKED (exit 2) or failed
+  // (exit 1). The spawner returning at all is the fact being recorded.
+  const spawning = (status: number): RunScriptDeps => ({
+    available: true,
+    egressAvailable: true,
+    direct: () => spawnRes({ status }),
+    sandboxed: () => spawnRes({ status }),
+    egress: () => spawnRes({ status }),
+  });
+
+  for (const status of [0, 1, 2]) {
+    resetCheckCount();
+    const r = runHookWith("sh hooks/guard.sh", {}, {}, spawning(status));
+    assert.equal(r.exitCode, status);
+    assert.deepEqual(
+      surfacesRecorded(),
+      [{ how: "command", ref: "hooks/guard.sh" }],
+      `exit ${String(status)} still attributes the hook it ran`,
+    );
+  }
+
+  // …and the check count is unaffected in BOTH directions: a refusal is still a
+  // check (the harness asserted something), it is only not an EXECUTION. Without
+  // this the fix could quietly turn a refusal-asserting harness `vacuous`, which
+  // would retract that script's other records.
+  resetCheckCount();
+  assert.throws(() =>
+    runHookWith("sh hooks/guard.sh", {}, { trusted: false }, {
+      available: false,
+      egressAvailable: false,
+      direct: () => spawnRes(),
+      sandboxed: () => spawnRes(),
+      egress: () => spawnRes(),
+    } satisfies RunScriptDeps),
+  );
+  assert.equal(
+    checksRecorded(),
+    1,
+    "a refusal is still a check, just not a run",
+  );
+});
+
+test("a shell that never LAUNCHED the hook records no surface probe", () => {
+  // The reported gap: `spawnSync(cmd, { shell: true })` does not throw when the
+  // shell cannot start the program — it returns 126/127. A harness may
+  // legitimately assert exactly that (`the hook is not executable`), and the
+  // unconditional probe then credited a hook although only `/bin/sh` ran.
+  //
+  // 🔴 REAL SPAWN, NOT A FAKE STATUS, because the numbers are the claim. Fake
+  // deps would only assert that I typed 126 in two places.
+  const dir = mkdtempSync(join(tmpdir(), "vigiles-launch-"));
+  writeFileSync(join(dir, "noexec.sh"), "#!/bin/sh\necho ran\n", {
+    mode: 0o644,
+  });
+  writeFileSync(join(dir, "ok.sh"), "#!/bin/sh\necho ran\nexit 3\n", {
+    mode: 0o755,
+  });
+
+  // FIRES (a): the file EXISTS and would resolve as a surface — only the exec
+  // bit is missing, so the shell reports 126 and nothing of the hook ran.
+  resetCheckCount();
+  const noexec = runHook("./noexec.sh", {}, { cwd: dir });
+  assert.equal(noexec.exitCode, 126, noexec.stderr);
+  assert.equal(noexec.stdout, "", "nothing of the hook ran");
+  assert.deepEqual(
+    surfacesRecorded(),
+    [],
+    "126 = the shell never launched it; crediting it would be a false grant",
+  );
+
+  // FIRES (b): 127, the not-found family (missing file, unknown command, and a
+  // shebang naming an interpreter that does not exist — that last one is a real
+  // file with the exec bit set, which is why "does the file exist" is not the
+  // question).
+  for (const cmd of ["./missing.sh", "definitely-not-a-command-xyz"]) {
+    resetCheckCount();
+    assert.equal(runHook(cmd, {}, { cwd: dir }).exitCode, 127, cmd);
+    assert.deepEqual(surfacesRecorded(), [], cmd);
+  }
+
+  // …and the check itself still counts. A harness asserting non-executability
+  // asserted something; turning it `vacuous` would retract its OTHER records.
+  resetCheckCount();
+  runHook("./noexec.sh", {}, { cwd: dir });
+  assert.equal(checksRecorded(), 1, "a failed launch is still a check");
+
+  // QUIET (a): a hook that RAN and exited 3 attributes, on the same real spawn.
+  resetCheckCount();
+  const ran = runHook("./ok.sh", {}, { cwd: dir });
+  assert.equal(ran.exitCode, 3);
+  assert.equal(ran.stdout.trim(), "ran");
+  assert.deepEqual(surfacesRecorded(), [{ how: "command", ref: "./ok.sh" }]);
+
+  // 🔴 QUIET (b), and the one an "exit code says it failed" fix would get wrong:
+  // `sh <file>` / `bash <file>` on a NON-EXECUTABLE file exit 0 and the hook
+  // genuinely runs — the interpreter reads it as an argument, so the exec bit is
+  // irrelevant. Measured, not assumed; this is the documented idiom.
+  for (const cmd of ["sh ./noexec.sh", "bash ./noexec.sh"]) {
+    resetCheckCount();
+    const r = runHook(cmd, {}, { cwd: dir });
+    assert.equal(r.exitCode, 0, cmd);
+    assert.equal(r.stdout.trim(), "ran", cmd);
+    assert.deepEqual(
+      surfacesRecorded(),
+      [{ how: "command", ref: "./noexec.sh" }],
+      cmd,
+    );
+  }
+});
+
+test("…and 126/127 is distinguished from an ordinary failing exit code", () => {
+  // The constraint the fix is not allowed to break: a hook that runs and exits
+  // non-zero HAS executed. Every code the hook tier actually deals in — 1
+  // (failure), 2 (Claude Code's BLOCK) — must still attribute, and so must a
+  // signal death (status null), which is a process that certainly started.
+  const spawning = (status: number | null): RunScriptDeps => ({
+    available: true,
+    egressAvailable: true,
+    direct: () => spawnRes({ status, signal: status === null ? "SIGKILL" : null }), // prettier-ignore
+    sandboxed: () => spawnRes({ status }),
+    egress: () => spawnRes({ status }),
+  });
+
+  for (const status of [0, 1, 2, 3, 125, 128, 255, null]) {
+    resetCheckCount();
+    runHookWith("sh hooks/guard.sh", {}, {}, spawning(status));
+    assert.deepEqual(
+      surfacesRecorded(),
+      [{ how: "command", ref: "hooks/guard.sh" }],
+      `exit ${String(status)} is an execution`,
+    );
+  }
+  for (const status of [126, 127]) {
+    resetCheckCount();
+    runHookWith("sh hooks/guard.sh", {}, {}, spawning(status));
+    assert.deepEqual(surfacesRecorded(), [], `exit ${String(status)} is not`);
+  }
 });

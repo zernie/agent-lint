@@ -15,7 +15,11 @@ import { resolve, join } from "node:path";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { globSync } from "glob";
-import { CHECK_COUNT_ENV } from "../../check-count.js";
+import {
+  CHECK_COUNT_ENV,
+  parseCheckReport,
+  type SurfaceProbe,
+} from "../../check-count.js";
 
 /**
  * The outcome of running one script.
@@ -36,6 +40,17 @@ export interface ScriptRunResult {
    * loaded the library and used none of it.
    */
   readonly checks?: number;
+  /**
+   * The surfaces this script was seen to exercise — derived by the tiers from the
+   * command they ran and the transcripts they got back, never declared by the
+   * author (see `coverage-probe.ts`). Feeds `.vigiles/coverage.json`, which lets
+   * coverage answer "tested?" by EXECUTION instead of by file name.
+   *
+   * Absent for a script that reported nothing, and empty for one that reported a
+   * count but exercised no identifiable surface — a unit test of a pure helper,
+   * say. Neither is a finding.
+   */
+  readonly surfaces?: readonly SurfaceProbe[];
 }
 
 /**
@@ -90,19 +105,27 @@ export function scriptGlob(kind: "harness" | "eval"): string {
 
 const TS_EXT = /\.(?:m|c)?ts$/;
 
-/** Node runtime capabilities that decide how a TypeScript script is run. */
-export interface NodeCaps {
-  /** `tsx` is installed locally (the preferred, version-agnostic TS loader). */
-  readonly tsx: boolean;
-  /** Node supports `--experimental-strip-types` (>= 22.6). */
-  readonly stripTypes: boolean;
-}
+// The capability probe lives in `src/ts-runner-caps.ts` so the SUGGESTER
+// (`testFileExt`, harness-agnostic) can ask the same question this runner
+// answers. It used to recommend `.ts` from a `tsconfig.json` alone, on a Node 20
+// box with no `tsx` — a file `interpreterArgs` then refused to run. Re-exported
+// here so every existing importer of `run-scripts.js` is unchanged.
+export {
+  detectNodeCaps,
+  canRunTypeScript,
+  type NodeCaps,
+} from "../../ts-runner-caps.js";
+import { detectNodeCaps } from "../../ts-runner-caps.js";
+import type { NodeCaps } from "../../ts-runner-caps.js";
 
 /**
  * The `node` argv (after the binary) to run a single script. Plain JS runs
  * directly; a TypeScript script picks `tsx` when available, else Node's native
  * type stripping. Throws a clear, actionable error when neither is available.
  * Pure — exported for testing.
+ *
+ * 🔴 The disjunction below is `canRunTypeScript` — keep them together. When they
+ * drifted, the tool recommended a `.ts` file and then refused to run it.
  */
 export function interpreterArgs(file: string, caps: NodeCaps): string[] {
   if (!TS_EXT.test(file)) return [file];
@@ -112,17 +135,6 @@ export function interpreterArgs(file: string, caps: NodeCaps): string[] {
     `Cannot run TypeScript test script "${file}": install tsx ` +
       `(npm i -D tsx) or use Node >= 22.6, or author it as a .mjs file.`,
   );
-}
-
-/** Detect TS-running capabilities for a project root. */
-export function detectNodeCaps(cwd: string): NodeCaps {
-  const tsx =
-    existsSync(resolve(cwd, "node_modules/tsx/package.json")) ||
-    existsSync(resolve(cwd, "node_modules/.bin/tsx"));
-  const stripTypes = process.allowedNodeEnvironmentFlags.has(
-    "--experimental-strip-types",
-  );
-  return { tsx, stripTypes };
 }
 
 /**
@@ -166,21 +178,21 @@ export function discoverScripts(
 }
 
 /**
- * The count a script left behind, or `undefined` if it left none (it never
- * imported `vigiles/testing`, or died before its exit handler). Anything that
- * isn't a non-negative integer is treated as no report — a corrupt scratch file
- * must not invent a verdict.
+ * What a script left behind, or `undefined` if it left nothing (it never
+ * imported `vigiles/testing`, or died before its exit handler). The parse itself
+ * lives beside the writer in `check-count.ts` so the two cannot drift; anything
+ * malformed is treated as no report — a corrupt scratch file must not invent a
+ * verdict.
  */
-function readCheckCount(path: string): number | undefined {
+function readCheckReport(
+  path: string,
+): { checks: number; surfaces: readonly SurfaceProbe[] } | undefined {
   if (!existsSync(path)) return undefined;
-  let raw: string;
   try {
-    raw = readFileSync(path, "utf8").trim();
+    return parseCheckReport(readFileSync(path, "utf8"));
   } catch {
     return undefined;
   }
-  if (!/^\d+$/.test(raw)) return undefined;
-  return Number(raw);
 }
 
 /**
@@ -193,6 +205,10 @@ function readCheckCount(path: string): number | undefined {
  * "ran nothing" distinguishable from "ran and passed" (see check-count.ts). It
  * has to be a file: stdio is inherited so the script's report streams live,
  * which leaves no stream to parse.
+ *
+ * The same channel carries WHICH SURFACES the script exercised, so the caller can
+ * record them (`.vigiles/coverage.json`) and coverage can answer "tested?" from
+ * execution rather than from a matching file name.
  */
 export function runScripts(
   files: readonly string[],
@@ -219,8 +235,14 @@ export function runScripts(
         env: { ...process.env, ...env, [CHECK_COUNT_ENV]: countFile },
       });
       const code = res.status ?? 1;
-      const checks = readCheckCount(countFile);
-      results.push({ file, code, status: statusFor(code, checks), checks });
+      const report = readCheckReport(countFile);
+      results.push({
+        file,
+        code,
+        status: statusFor(code, report?.checks),
+        checks: report?.checks,
+        ...(report ? { surfaces: report.surfaces } : {}),
+      });
     });
   } finally {
     rmSync(countDir, { recursive: true, force: true });

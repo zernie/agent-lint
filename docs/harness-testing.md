@@ -284,6 +284,64 @@ selector model (`sonnet`). Every knob — `fixture`, `installSet`, `concurrency`
 > behavioral column of the audit report (interactive); for automation call this directly.
 > Same engine, batch front-end.
 
+### When it reports 0% on everything, suspect the wiring first
+
+A total zero looks exactly like a result — the run executed, the report is
+well-formed, every line reads `0.00` — and it is usually a setup mistake. The
+report now says so and lists the three causes, in the order they bite:
+
+1. **the id in `fired`** — `skillResolved` matches the **namespaced** id
+   (`<plugin>:<skill>`); a bare name silently never matches;
+2. **the install field** — a loose `.claude/skills` directory needs `skillsDir`,
+   not `pluginDir` (which wants a full plugin manifest);
+3. **the `fixture`** — a run starts in an **empty** cwd, so a prompt about a file
+   that does not exist is one the model is right to decline.
+
+All three were hit in one afternoon building a real suite, and two were briefly
+written up as findings about the skills before being caught. A _partial_ rate is
+left alone: it is a real measurement, and a tool that hedges on good data gets
+ignored.
+
+### Is a cheaper model a valid floor? (`compareContainment`)
+
+The obvious economy is to measure on the weakest model — if a description fires
+there it fires on a stronger one, the way you test against the oldest supported
+runtime. That holds only if
+
+```
+fires on the weak model  =>  fires on the strong one
+```
+
+and that is not obvious, because selection is **routing**, not raw capability: a
+stronger model can legitimately route elsewhere, doing the work itself or picking
+a more specific sibling.
+
+**Measured 2026-08-11 — it does not hold.** 21 skills × 4 prompts, one trial
+each, whole-harness against 37 competing skills: of 84 shared prompts, **3 fired
+on haiku and not on sonnet**, and one skill scored **haiku 1.00 against sonnet
+0.75**. That is enough to reject the argument — it needs containment to hold, not
+to usually hold — and not enough to claim it breaks often. Hence the `sonnet`
+floor. Run the same set on both and compare:
+
+```ts
+import { compareContainment, formatContainment } from "vigiles/testing";
+
+console.log(formatContainment(compareContainment(weakRuns, strongRuns)));
+```
+
+The verdict keeps the two directions apart, which is the point:
+
+- **weak-only** — fired on the weak model, not the strong one. Each is a
+  **counterexample**: the weak model is not a floor, it is a different router.
+- **strong-only** — fired on the strong model only. **Expected, not a failure** —
+  this is the under-selection the `sonnet` floor exists for.
+
+⚠️ At one trial per prompt each cell is a single observation, so one weak-only
+prompt is noise rather than a counterexample. And where firing is **inferred**
+rather than observed — Codex emits no skill-selection event, which is why its
+trigger-rate is flagged experimental — the comparison inherits that uncertainty
+and can manufacture counterexamples out of it.
+
 ## Test a change moves behaviour (`runEval`)
 
 When the question is the **lift** a change buys — does this hook/skill/rule
@@ -362,6 +420,30 @@ Two things keep it low-noise:
 inputs," not "they reflect today's model." Re-run `--update` when you want fresh
 numbers. In CI it's `command: eval-check` — a green no-op until you commit your
 first lock, and `vigiles init` scaffolds the job.
+
+### Three files, three different jobs
+
+An eval leaves up to three artifacts behind and they are easy to confuse — the
+product's own author could not tell the lock from the cache, which is what
+prompted this table.
+
+| Artifact                     | What question does it answer?                                  | Where                                  | Who writes it                        | Committed?                            |
+| ---------------------------- | -------------------------------------------------------------- | -------------------------------------- | ------------------------------------ | ------------------------------------- |
+| **Ledger** (flight recorder) | "what did my harness actually do, locally, over time?"         | `.vigiles/runs.jsonl`                  | every run, automatically             | ❌ gitignored — local only            |
+| **Cache**                    | "can I re-score this eval without paying for the model again?" | `.vigiles/eval-cache/`                 | `cache: "readwrite"` on an eval spec | ❌ gitignored — local only            |
+| **Lock**                     | "do my committed numbers still match my current inputs?"       | `.vigiles/eval-locks/<name>.lock.json` | `vigiles eval --update`              | ✅ **yes — this is the one CI reads** |
+
+**The lock is the only one that leaves your machine.** Run a hundred evals and
+commit no lock, and CI can verify nothing: the ledger and the cache are both
+gitignored by design. `vigiles audit` says so out loud when it finds eval runs in
+the ledger and no committed lock.
+
+The one design difference worth knowing: **the cache keys on the harness binary
+version and the lock deliberately does not.** The cache's key is strict because
+replaying a recorded model call under a different `claude` build would not be an
+honest replay. The lock's key is loose on purpose — CI pins one `claude` version
+and your laptop has another, so folding that in would fail `--check` on every PR
+without a single input having changed.
 
 **How the agent gets reminded** is the same on both harnesses — the hook injects the
 nudge as `additionalContext` (Claude Code and Codex both honor it). See the per-harness guides:

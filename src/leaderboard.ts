@@ -15,6 +15,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import { scanPlugin } from "./scan.js";
+import { detectAdapter } from "./adapter-registry.js";
 // The pure, node-free scoring core lives in ./score-core.js (extracted so the
 // in-browser audit's report builder can import scoring WITHOUT this module's
 // node-only scanPlugin/pluginLabel → scan.ts → @ast-grep/napi chain). Re-exported
@@ -52,10 +53,26 @@ function pluginLabel(dir: string): string {
   return basename(dir) || dir;
 }
 
-/** Scan + score each directory, ranked best-first (ties broken by name). */
+/**
+ * Scan + score each directory, ranked best-first (ties broken by name).
+ *
+ * 🔴 PER-DIRECTORY HARNESS DETECTION, because a leaderboard is a list of OTHER
+ * people's repos and they do not all target the same harness. `vigiles audit` on
+ * ONE target resolves the adapter (`resolveHarnessSelection`) and threads
+ * `adapter.layout` into `scanPlugin`; the multi-target branch of the same command
+ * called `scanPlugin(dir)` bare, so every Codex plugin in a board was scanned with
+ * the Claude Code layout — no surfaces found, nothing to deduct, and it ranked at
+ * the TOP. A silent zero reads as a perfect score.
+ *
+ * Detection only (no `--harness=`/config override): the flag and the config key
+ * describe the repo the user is standing in, not the N vendored directories being
+ * compared, so forcing one harness onto all of them would be the same bug wearing
+ * a different hat.
+ */
 export function rankPlugins(dirs: readonly string[]): PluginScore[] {
   const scored = dirs.map((dir) => {
-    const report = scanPlugin(dir);
+    const adapter = detectAdapter(dir);
+    const report = scanPlugin(dir, adapter.layout, adapter.dialect);
     const { score, issues } = scoreReport(report);
     return {
       dir,

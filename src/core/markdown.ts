@@ -43,3 +43,46 @@ export function fencedLineFlags(src: string): boolean[] {
   }
   return flags;
 }
+
+/** One fenced code block: its BODY (delimiters excluded) and where the body starts. */
+export interface FencedBlock {
+  /** The block's contents, without the opening/closing fence lines. */
+  readonly body: string;
+  /** 1-BASED line number of the body's first line, for a caller's messages. */
+  readonly start: number;
+}
+
+/**
+ * Every fenced code block in `src`, in document order — the same parser
+ * {@link fencedLineFlags} uses, for callers that want the CONTENTS rather than a
+ * per-line flag.
+ *
+ * 🔴 THE CLOSING FENCE MUST MATCH THE OPENING ONE, and every hand-rolled version
+ * of this in the repo got that wrong the same way: any line beginning with three
+ * backticks TOGGLED. CommonMark says a closing fence uses the same CHARACTER as
+ * the opener and is at least as LONG, so a four-backtick block wrapping an
+ * ordinary ``` example closes early — the block is cut in half, and the prose
+ * after it becomes "another block" whose text is then read as commands. That
+ * makes a document-rule check both MISS commands and JUDGE prose. `~~~` fences
+ * were not recognized at all.
+ *
+ * Backed by markdown-it (CommonMark), so delimiter character, delimiter length,
+ * `~~~`, indented fences inside list items and an unterminated final fence are
+ * all decided by the grammar rather than re-derived here. Measured 2026-08-12 on
+ * each of those shapes.
+ *
+ * One deliberate difference from a hand-rolled toggle, and it is the grammar's:
+ * a fence indented FOUR or more spaces at top level is an indented code block,
+ * not a fence, and is not returned. Line numbers count from the ORIGINAL source,
+ * so a caller's message points at the real line.
+ */
+export function fencedCodeBlocks(src: string): FencedBlock[] {
+  const out: FencedBlock[] = [];
+  for (const tok of md.parse(src, {})) {
+    if (tok.type !== "fence" || tok.map === null) continue;
+    // `content` is the body only; `map[0]` is the OPENING delimiter's 0-based
+    // line, so the body's first line is 1-based `map[0] + 2`.
+    out.push({ body: tok.content.replace(/\n$/, ""), start: tok.map[0] + 2 });
+  }
+  return out;
+}

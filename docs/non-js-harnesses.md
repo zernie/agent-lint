@@ -79,14 +79,18 @@ each tool's config conventions.
 ## The Tested / Evaluated metrics for a native test loop
 
 `audit`/`lint` count vigiles-native files for two advisory metrics, split by what
-they cost and what they answer: `*.harness.mjs` (plus `*.test.*`) feeds **Tested**
-— free, deterministic, every push — and `*.eval.mjs` feeds **Evaluated**, the
-paid real-model tier that is the only thing that can say whether a skill fires.
-A file matched by a custom `testGlobs` counts toward **Tested**. If you test your
-skills through a native loop instead
-(a Kotlin test suite, a Go benchmark, a promptfoo config), point `testGlobs` at
-it so those files count — see
-[the external-suite section in the untested-skill rule](rules/untested-skill.md#counting-an-external-test-suite-promptfoo-a-home-grown-eval-loop).
+they cost and what they answer: `*.harness.mjs` feeds **Tested** — free,
+deterministic, every push — and `*.eval.mjs` feeds **Evaluated**, the paid
+real-model tier that is the only thing that can say whether a skill fires.
+A file matched by a custom `testGlobs` counts toward **Tested**.
+
+> ⚠️ **Changed in 15.x:** `*.test.*` / `*.spec.*` no longer count. If you have a
+> `foo.test.mjs` beside a skill, **rename it `foo.harness.mjs`** — see
+> [the migration note](rules/untested-skill.md#migrating-a-test-named-foo-testmjs-changed-in-15x). If you test your
+> skills through a native loop instead
+> (a Kotlin test suite, a Go benchmark, a promptfoo config), point `testGlobs` at
+> it so those files count — see
+> [the external-suite section in the untested-skill rule](rules/untested-skill.md#counting-an-external-test-suite-promptfoo-a-home-grown-eval-loop).
 
 ## What still assumes JS
 

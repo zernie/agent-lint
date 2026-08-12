@@ -48,6 +48,7 @@ import {
   anyLocksCommitted,
   evalLockNudge,
   DEFAULT_LOCK_DIR,
+  countLocks,
 } from "./eval-lock.js";
 import { applyConfigFlags } from "./cli-flags.js";
 import { VERBS, type Verb } from "./cli-commands.js";
@@ -77,8 +78,12 @@ import type {
   RuleSeverity,
 } from "./core/types.js";
 import { ruleSeverity, ruleOptions } from "./core/types.js";
-import type { SurfaceKind } from "./test-coverage.js";
-import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
+import type { SurfaceKind, TestCoverageOptions } from "./test-coverage.js";
+import {
+  findUntestedSurfaces,
+  formatUntestedReport,
+  skillTestNudge,
+} from "./test-coverage.js";
 import {
   scanPlugin,
   formatScanReport,
@@ -114,6 +119,7 @@ import {
 } from "./scan-behavioral.js";
 import {
   ADAPTERS,
+  defaultAdapter,
   resolveHarnessSelection,
   resolveHarnessAdapters,
   normalizeHarnessName,
@@ -121,6 +127,7 @@ import {
   getAdapter,
   adapterForInstructionFile,
 } from "./adapter-registry.js";
+import type { PluginLayout } from "./core/layout.js";
 import type { HarnessSelection } from "./adapter-registry.js";
 import type { HarnessDialect } from "./core/dialect.js";
 import type { HarnessAdapter } from "./core/adapter.js";
@@ -230,9 +237,14 @@ import {
   type ReactHook,
   type HookProgram,
   isStampRepairEvent,
+  isLoadPathRepairEvent,
   type Decision,
   type RawHookEvent,
 } from "./core/hook-program.js";
+import {
+  hasMergeConflictMarkers,
+  HARNESS_CONFIG_FILES,
+} from "./core/merge-conflict.js";
 import {
   discoverHookFiles,
   discoverProviderFiles,
@@ -295,7 +307,19 @@ import {
   anyFailed,
   scriptGlob,
   decideRunScripts,
+  type ScriptRunResult,
 } from "./adapters/claude-code/run-scripts.js";
+import {
+  COVERAGE_ARTIFACT_VERSION,
+  executedScripts,
+  mergeRuns,
+  readCoverageArtifact,
+  recordsFrom,
+  runsFromResults,
+  writeCoverageArtifact,
+  type CoverageRun,
+  type CoverageTierName,
+} from "./coverage-artifact.js";
 import {
   checkIntegrity,
   ejectMarkdown,
@@ -3774,6 +3798,89 @@ function checkIntegrityForFiles(
 }
 
 /**
+ * The layout of the harness this repo actually targets — `--harness=`/config/
+ * auto-detect, the SAME precedence `lint`, `compile` and `audit` use.
+ *
+ * 🔴 ONE RESOLVER, BECAUSE THE OTHER CALLERS DEFAULTED. `lint` threads
+ * `adapter.layout` into `findUntestedSurfaces`; two entry points that call the very
+ * same detector passed only a path, so `test-coverage.ts` fell back to
+ * `claudeCodeLayout`. Reproduced 2026-08-12 on a `.codex/config.toml` fixture whose
+ * only surface is `.codex/skills/foo/SKILL.md`: with the layout, one surface is
+ * discovered; without it, ZERO — and a zero-surface scan is not an error, it is a
+ * silence. The edit-time nudge said nothing, and `vigiles test`'s coverage
+ * recorder threw away every probe an execution had legitimately produced, because
+ * `recordsFrom` cannot resolve a probe against a surface list that is empty.
+ *
+ * Non-throwing on purpose: an unknown `--harness=` is a hard error where the user
+ * typed it, but these callers are a hook and a post-run recorder, and neither may
+ * turn a bad config key into a failed edit or a red test run.
+ */
+function harnessLayoutFor(
+  root: string,
+  config: VigilesConfig | undefined,
+  flag?: string,
+): PluginLayout {
+  try {
+    return resolveHarnessSelection({
+      root,
+      flag,
+      configHarness: normalizeHarnessList(config?.harness),
+    }).adapter.layout;
+  } catch {
+    return defaultAdapter.layout;
+  }
+}
+
+/**
+ * The `untested-*` rules AS THE DETECTOR TAKES THEM: which kinds this repo
+ * enabled, and the discovery options merged from whichever of the three rules
+ * carries them (`testGlobs` / `exclude` / `testExtension` are shared).
+ *
+ * 🔴 ONE READER, BECAUSE THE SECOND ONE DRIFTED. `vigiles lint` read the config
+ * here; the PostToolUse nudge (`evalLockNudgeHookCommand`) called the same
+ * detector with nothing but `basePath`. Reproduced 2026-08-12 on a two-file
+ * fixture: with `"untested-skill": false` lint printed nothing and the nudge
+ * still told the agent the skill was untested; with a configured
+ * `testGlobs: ["**\/*.check.mjs"]` lint printed "all 1 surface(s) have a test"
+ * while the nudge said "no test or eval covers it". A nudge contradicting the
+ * linter of the same repo, in the same second, teaches people to ignore both.
+ */
+function untestedRules(config: VigilesConfig | undefined): {
+  /** Per-kind severities — `false` means the kind is not scanned at all. */
+  readonly severity: (kind: SurfaceKind) => RuleSeverity;
+  /** True when at least one of the three rules is on. */
+  readonly anyEnabled: boolean;
+  /** The detector options the config asks for (no basePath/layout — the caller's). */
+  readonly options: TestCoverageOptions;
+} {
+  const rules = config?.rules;
+  const skillSev = ruleSeverity(rules?.["untested-skill"]);
+  const agentSev = ruleSeverity(rules?.["untested-subagent"]);
+  const hookSev = ruleSeverity(rules?.["untested-hook"]);
+  const opts: TestCoverageConfig = {
+    ...ruleOptions<TestCoverageConfig>(rules?.["untested-skill"]),
+    ...ruleOptions<TestCoverageConfig>(rules?.["untested-subagent"]),
+    ...ruleOptions<TestCoverageConfig>(rules?.["untested-hook"]),
+  };
+  return {
+    severity: (kind) =>
+      kind === "skill" ? skillSev : kind === "agent" ? agentSev : hookSev,
+    anyEnabled: skillSev !== false || agentSev !== false || hookSev !== false,
+    options: {
+      skills: skillSev !== false,
+      agents: agentSev !== false,
+      hooks: hookSev !== false,
+      testGlobs: opts.testGlobs,
+      exclude: opts.exclude,
+      // Without this the `testExtension` documented on TestCoverageOptions was a
+      // config key nothing read: a TypeScript-shaped repo got `.ts` suggestions
+      // however the author configured it. Prose isn't policy, in our own CLI.
+      testExtension: opts.testExtension,
+    },
+  };
+}
+
+/**
  * Apply the per-kind `untested-skill` / `untested-subagent` / `untested-hook` rules:
  * find skills/agents/hooks with no test or eval (see src/test-coverage.ts). Each
  * kind is gated by its OWN rule severity — a kind set to `false` is not scanned;
@@ -3786,29 +3893,12 @@ function checkUntestedSurfaces(
   adapter: HarnessAdapter,
   scanRoot: string,
 ): { untested: number; errors: number } {
-  const rules = config?.rules;
-  const skillSev = ruleSeverity(rules?.["untested-skill"]);
-  const agentSev = ruleSeverity(rules?.["untested-subagent"]);
-  const hookSev = ruleSeverity(rules?.["untested-hook"]);
-  if (!skillSev && !agentSev && !hookSev) return { untested: 0, errors: 0 };
-  const sevFor = (kind: SurfaceKind): RuleSeverity =>
-    kind === "skill" ? skillSev : kind === "agent" ? agentSev : hookSev;
-
-  // Test-discovery options (testGlobs/exclude) are shared; merge them from
-  // whichever of the three rules carries them.
-  const opts: TestCoverageConfig = {
-    ...ruleOptions<TestCoverageConfig>(rules?.["untested-skill"]),
-    ...ruleOptions<TestCoverageConfig>(rules?.["untested-subagent"]),
-    ...ruleOptions<TestCoverageConfig>(rules?.["untested-hook"]),
-  };
+  const { severity: sevFor, anyEnabled, options } = untestedRules(config);
+  if (!anyEnabled) return { untested: 0, errors: 0 };
   const report = findUntestedSurfaces({
+    ...options,
     basePath: scanRoot,
     layout: adapter.layout,
-    skills: skillSev !== false,
-    agents: agentSev !== false,
-    hooks: hookSev !== false,
-    testGlobs: opts.testGlobs,
-    exclude: opts.exclude,
   });
 
   if (!silent) {
@@ -4257,12 +4347,19 @@ function checkDescriptionBudget(
 
 /**
  * Apply the `lethal-trifecta` rule: a unit (subagent / model-invocable skill)
- * whose declared tools hold all three legs (read-private + ingest-untrusted +
- * exfiltrate) is a prompt-injection exfil path (Meta's Rule of Two). Reuses
- * `scanPlugin`'s `trifectaFindings` (a capability SET-intersection, one detector,
- * no drift). Warning by default; "error" gates CI. Surfaces across BOTH subagents
- * and skills, so it is NOT gated on the `subagents` capability — a skill-only
- * harness still has the surface.
+ * holding all three legs (read-private + ingest-untrusted + exfiltrate) is a
+ * prompt-injection exfil path (Meta's Rule of Two). Reuses `scanPlugin`'s
+ * `trifectaFindings` (one detector, no drift). Warning by default; "error" gates
+ * CI. Surfaces across BOTH subagents and skills, so it is NOT gated on the
+ * `subagents` capability — a skill-only harness still has the surface.
+ *
+ * 🔴 The unfenced-skill group is printed ONCE and gets NO per-file GitHub
+ * annotation. A skill's `allowed-tools:` pre-approves rather than restricts
+ * (measured 2026-08-11), so every skill without a `disallowed-tools:` fence is in
+ * this state — annotating each of them would stamp the same sentence on every
+ * SKILL.md in the repo on every CI run, which is how a rule gets switched off. The
+ * COUNT is unchanged (units, not lines), so exit codes and the CI gate are
+ * unaffected by the collapse.
  */
 function checkLethalTrifecta(
   config: VigilesConfig | undefined,
@@ -4276,7 +4373,7 @@ function checkLethalTrifecta(
     path: string;
     kind: string;
     name: string;
-    finding: { message: string };
+    finding: { message: string; fence?: string };
   }[];
   try {
     found = scanPlugin(
@@ -4288,11 +4385,26 @@ function checkLethalTrifecta(
     return { issues: 0, errors: 0 };
   }
   if (found.length > 0 && !silent) {
+    const mark = sev === "error" ? "✗" : "⚠";
+    const level = sev === "error" ? "error" : "warning";
     console.log("\nLethal-trifecta check:\n");
+    const unfenced = found.filter(
+      (t) => t.kind === "skill" && t.finding.fence === "none",
+    );
     for (const t of found) {
+      if (unfenced.includes(t)) continue;
       const msg = `${t.kind} ${t.name}: ${t.finding.message}`;
-      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${t.path}: ${msg}`);
-      ghAnnotate(sev === "error" ? "error" : "warning", msg, t.path);
+      console.log(`  ${mark} ${t.path}: ${msg}`);
+      ghAnnotate(level, msg, t.path);
+    }
+    if (unfenced.length > 0) {
+      console.log(
+        `  ${mark} ${String(unfenced.length)} skill(s) declare no \`disallowed-tools:\` fence, so each ` +
+          `inherits every tool the session grants and holds all three legs. ` +
+          `\`allowed-tools:\` pre-approves, it does not restrict. ` +
+          `Add one \`disallowed-tools:\` line per skill to drop a leg: ` +
+          unfenced.map((t) => t.name).join(", "),
+      );
     }
   }
   return { issues: found.length, errors: sev === "error" ? found.length : 0 };
@@ -5252,6 +5364,174 @@ function resolveEvalLockEnv(args: string[]): Record<string, string> | "skip" {
   return env;
 }
 
+/**
+ * Turn a completed run into `.vigiles/coverage.json` — the composition root for
+ * the execution tier of coverage (`coverage-artifact.ts`).
+ *
+ * It resolves here, and nowhere earlier, because resolution needs DISCOVERY: a
+ * script reports the reference it saw (`hooks/pre-edit.sh`, `plugin:my-skill`)
+ * and only the repo can say whether that is a surface. Doing it inside the test
+ * process would mean scanning a user's repo from inside their test.
+ *
+ * Best-effort throughout: a repo that cannot be scanned or a `.vigiles/` that
+ * cannot be written must never turn a green run red.
+ *
+ * 🔴 A RUN RETRACTS AS WELL AS RECORDS. The scripts that executed are handed to
+ * `mergeRuns` so their previous records go before the new ones land — otherwise
+ * a script edited to stop exercising a surface leaves that surface permanently
+ * "measured by a run" (see the retraction note on `mergeRuns`). This is why the
+ * cheap early return on "nothing new to record" is gone: a run that now reports
+ * NOTHING is exactly the case worth writing down.
+ */
+/**
+ * Resolve this run's probes against the repo's discovered surfaces.
+ *
+ * `harnessFlag` is the `--harness=` the user typed on THIS run — see the layout
+ * note below for why the flag has to travel this far.
+ */
+function resolveRecords(
+  cwd: string,
+  runs: ReturnType<typeof runsFromResults>,
+  tier: CoverageTierName,
+  harnessFlag: string | undefined,
+): CoverageRun[] {
+  // 🔴 DISCOVERY MUST USE THE ACTIVE LAYOUT, or resolution silently resolves
+  // nothing. This called the detector with a path alone, so a Codex repo (surfaces
+  // only under `.codex/skills/`) discovered ZERO surfaces, `recordsFrom` matched
+  // every successful probe against an empty list and dropped it, and `vigiles
+  // test` / `vigiles eval` never granted execution coverage there — while
+  // `vigiles lint`, which passes `adapter.layout` to the same function, saw the
+  // surfaces perfectly well. Empty discovery does not fail; it just quietly means
+  // "nothing ran".
+  //
+  // 🔴 AND THE ACTIVE LAYOUT INCLUDES THE FLAG. The first fix passed only
+  // `(cwd, loadConfig())`, so `--harness=` — which `resolveHarnessSelection` ranks
+  // ABOVE config and auto-detect, and which `cli-flag-check.ts` accepts on every
+  // verb — was dropped exactly here. `vigiles test --harness=codex` in a repo that
+  // auto-detects (or is configured) as Claude Code then discovered the Claude
+  // surfaces, matched the run's Codex probes against them, resolved none, and
+  // recorded no execution coverage: the same silent empty set as before, reached
+  // through the one input that exists to override the other two.
+  /**
+   * The plugin namespaces that mean THIS repo, for {@link resolveProbe}.
+   *
+   * A skill activation is reported as `plugin:skill` and a subagent dispatch as
+   * `plugin:agent`, so resolving one needs to know which plugin we ARE — otherwise
+   * `other-plugin:foo` credits a local `foo` (that was the defect). Two sources,
+   * and both are needed:
+   *
+   *   1. `.claude-plugin/plugin.json#name` — the repo's own declared name, used
+   *      when the run installed the repo AS a plugin (`pluginDir`).
+   *   2. `vigiles-loose-skills` — the synthetic name OUR OWN packaging gives a
+   *      loose `.claude/skills` dir (`packageSkillsDir`, and `underTestSource`'s
+   *      fallback when a plugin manifest has no name). A repo that is not a plugin
+   *      still reports namespaced ids under it, so omitting it would drop every
+   *      trigger-rate record for the documented one-liner.
+   *
+   * An unreadable or nameless manifest contributes nothing rather than a guess.
+   */
+  function selfNamespaces(cwd: string): readonly string[] {
+    const names = new Set<string>(["vigiles-loose-skills"]);
+    try {
+      const raw = readFileSync(
+        resolve(cwd, ".claude-plugin", "plugin.json"),
+        "utf-8",
+      );
+      const name = (JSON.parse(raw) as { name?: unknown }).name;
+      if (typeof name === "string" && name.trim()) names.add(name.trim());
+    } catch {
+      /* no manifest, or unreadable → the synthetic name alone */
+    }
+    return [...names];
+  }
+
+  const scan = findUntestedSurfaces({
+    basePath: cwd,
+    layout: harnessLayoutFor(cwd, loadConfig(), harnessFlag),
+  });
+  return recordsFrom({
+    runs,
+    surfaces: [...scan.covered, ...scan.untested],
+    tier,
+    at: new Date().toISOString(),
+    selfNamespaces: selfNamespaces(cwd),
+    // The root an ABSOLUTE command ref must lie beneath to be OURS. Without it a
+    // harness that executed `/tmp/fixture/hooks/pre.sh` credited this repo's own
+    // `hooks/pre.sh`, because the tail matched. See the ladder note on
+    // `resolveProbe`; absent a root, absolute refs abstain rather than guess.
+    root: cwd,
+    readSurface: (p) => {
+      try {
+        return readFileSync(resolve(cwd, p), "utf-8");
+      } catch {
+        return null;
+      }
+    },
+  });
+}
+
+/**
+ * Merge one run's records into `.vigiles/coverage.json`, retractions included.
+ *
+ * The verb's `kind` maps to the coverage TIER here, so the one call site stays a
+ * single line. `harnessFlag` is the caller's `--harness=` — a SHARED flag (`cli-flag-check.ts`)
+ * that every verb accepts and that `resolveHarnessSelection` ranks above config
+ * and auto-detection. It has to travel all the way to discovery: see the layout
+ * note on {@link resolveRecords} for what dropping it silently did.
+ */
+function recordRunCoverage(
+  cwd: string,
+  results: readonly ScriptRunResult[],
+  kind: "test" | "eval",
+  harnessFlag: string | undefined,
+): void {
+  const tier: CoverageTierName = kind === "test" ? "harness" : "eval";
+  try {
+    const previous = readCoverageArtifact(cwd);
+    // `root` so an ABSOLUTE target (`vigiles test /abs/x.harness.mjs`) retracts
+    // what the same file recorded when the default glob found it relatively —
+    // `discoverScripts` passes an existing file's argument through verbatim, so
+    // the spelling that reaches `by` is whatever the person typed.
+    const executed = { scripts: executedScripts(results), tier, root: cwd };
+    const runs = runsFromResults(results);
+    // Discovery is only needed to RESOLVE new probes; a pure retraction needs
+    // nothing but the artifact, so a repo scan is skipped when there are none.
+    const records =
+      runs.length === 0 ? [] : resolveRecords(cwd, runs, tier, harnessFlag);
+    const merged = mergeRuns(previous?.runs ?? [], records, executed);
+    // Nothing to add and nothing withdrawn — leave the file exactly as it is, so
+    // a repo with no artifact still gets none (the "absent artifact = today's
+    // behaviour" property) and a green no-op run doesn't churn the timestamp.
+    if (records.length === 0 && merged.length === (previous?.runs.length ?? 0))
+      return;
+    const commit = gitHead(cwd);
+    writeCoverageArtifact(cwd, {
+      v: COVERAGE_ARTIFACT_VERSION,
+      generated: new Date().toISOString(),
+      ...(commit ? { commit } : {}),
+      runs: merged,
+    });
+  } catch {
+    /* recording is never allowed to fail a run */
+  }
+}
+
+/** Short HEAD of the checkout, or "" when this is not a git repo. */
+function gitHead(cwd: string): string {
+  try {
+    const { spawnSync } =
+      require("node:child_process") as typeof import("node:child_process");
+    const r = spawnSync("git", ["rev-parse", "--short", "HEAD"], {
+      cwd,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return r.status === 0 ? (r.stdout ?? "").trim() : "";
+  } catch {
+    return "";
+  }
+}
+
 async function handleRunScripts(
   kind: "test" | "eval",
   args: string[],
@@ -5346,6 +5626,11 @@ async function handleRunScripts(
 
   console.log(`Running ${String(files.length)} ${kind} file(s):\n`);
   const results = runScripts(files, cwd, env);
+  // Write down WHAT the run exercised, so `lint`/`audit` can answer "tested?"
+  // from execution instead of from a matching file name. Not a new verb and not
+  // a flag: the run already happened, and this is the runner recording what it
+  // saw — the same shape as the flight-recorder ledger it already appends to.
+  recordRunCoverage(cwd, results, kind, harnessFlagFrom(args));
   console.log("\n" + formatScriptSummary(results));
 
   if (anyFailed(results)) process.exit(1);
@@ -5915,13 +6200,20 @@ function isInstructionFile(file: string): boolean {
 }
 
 /**
- * PostToolUse-hook entrypoint: when the agent edits an eval input (a `SKILL.md`
- * trigger surface or an `*.eval.*` script), and committed eval locks exist, inject
- * a NON-BLOCKING reminder to re-run `vigiles eval --update`. Self-gating (silent
- * until a lock is committed), never blocks, never runs an eval — a reminder, not a
- * gate (the gate is `eval --check` in CI). The harness-neutral nudge lives in
- * `evalLockNudge`; both CC and Codex deliver it as `additionalContext` on
- * `PostToolUse` (confirmed — see docs/harness-testing-codex.md).
+ * PostToolUse-hook entrypoint for the two edit-time test reminders. When the agent
+ * edits a skill/agent surface or an `*.eval.*` script it injects, NON-BLOCKING:
+ *
+ *  1. `skillTestNudge` — the surface has no test/eval at all, or has a harness but
+ *     was never EVALUATED (so nothing has measured that its description fires).
+ *     Reuses the `untested-skill` detector and hands off to the `test-harness`
+ *     skill for the tier→API table — the agent knows it needs a test, not which
+ *     runner. Fires at edit time, closing the gap that `untested-skill` only ran
+ *     when someone typed `vigiles lint`.
+ *  2. `evalLockNudge` — a committed lock may now be stale; re-run `eval --update`.
+ *
+ * Never blocks, never runs an eval — reminders, not gates (the gate is
+ * `eval --check` in CI). Both CC and Codex deliver these as `additionalContext`
+ * on `PostToolUse` (confirmed — see docs/harness-testing-codex.md).
  */
 function evalLockNudgeHookCommand(): void {
   let raw = "";
@@ -5940,7 +6232,37 @@ function evalLockNudgeHookCommand(): void {
   if (!file) return;
   const cwd = process.cwd();
   const target = relative(cwd, resolve(cwd, file)) || file;
-  const msg = evalLockNudge(target, resolve(cwd, DEFAULT_LOCK_DIR));
+  // 🔴 THE SAME CONFIG `vigiles lint` READS. This used to pass `basePath` alone,
+  // so a repo that had switched `untested-skill` off, or pointed `testGlobs` at
+  // its own test names, got a nudge asserting the opposite of what its own
+  // linter said (see `untestedRules`). A rule the author DISABLED must not come
+  // back through a hook; a test the author CONFIGURED must count here too.
+  //
+  // The disable travels inside `options` — a kind whose rule is off arrives as
+  // `skills: false` / `agents: false` and is not scanned, so the detector has
+  // nothing to report. No extra "is anything enabled" guard here on purpose: a
+  // second gate saying the same thing is a branch no test can distinguish from
+  // its absence (measured — the mutation passed), i.e. the dead-fragment class
+  // this same change removed from the runner table.
+  const config = loadConfig();
+  const { options } = untestedRules(config);
+  // 🔴 THE SAME LAYOUT `vigiles lint` RESOLVES, for the same reason as the config
+  // above. This used to pass `basePath` alone, so the detector fell back to the
+  // Claude Code layout: in a Codex repo whose surfaces live at
+  // `.codex/skills/foo/SKILL.md`, it discovered NOTHING, found the edited skill in
+  // nothing, and stayed silent — while `vigiles lint`, one `adapter.layout` away,
+  // reported that very skill as untested. A hook that contradicts the linter by
+  // omission is worse than no hook: nobody is looking for the message that never
+  // came.
+  const layout = harnessLayoutFor(cwd, config);
+  // Two nudges, one entry, most-urgent first. The lock reminder is SELF-GATING:
+  // silent until a lock is committed — so a repo that has never written a test
+  // heard nothing at all, while a repo that already tests got reminded. That is
+  // backwards, and `untested-skill` already stated the missing half correctly;
+  // it just lived in `vigiles lint`, which someone has to run by hand.
+  const msg =
+    skillTestNudge(target, { ...options, basePath: cwd, layout }) ??
+    evalLockNudge(target, resolve(cwd, DEFAULT_LOCK_DIR));
   if (!msg) return;
   process.stdout.write(
     JSON.stringify({
@@ -6396,6 +6718,64 @@ function emitGate(
 }
 
 /**
+ * Every `package.json` between the hook file and the filesystem root, plus the
+ * project's `.vigilesrc.json` — the files Node and the runtime must PARSE for a
+ * compiled hook to load at all. Repo-relative-ish paths, for a message.
+ *
+ * Walking UP is not decoration: `vigiles/hook` is a bare specifier, so Node reads
+ * the nearest `package.json` (and every one above it) while resolving it. The
+ * observed wedge came from a `package.json` the author was not thinking about at
+ * the time — it had merge-conflict markers in it, nothing to do with hooks.
+ */
+function hookLoadPathFiles(hookFile: string): readonly string[] {
+  const files: string[] = [];
+  let dir = dirname(resolve(process.cwd(), hookFile));
+  for (;;) {
+    const pkg = resolve(dir, "package.json");
+    files.push(pkg);
+    // 🔴 THE WALK STOPS AT THE FIRST ONE THAT EXISTS, and this list is now also
+    // the set of writes the repair door accepts, so its length is a blast
+    // radius. Unbounded, it reached `/home/package.json` and `/package.json` —
+    // files Node never opens once a nearer one is found. MEASURED against this
+    // runtime, hook at `gp/p/repo/.claude/hooks/`, conflict markers planted at
+    // one ancestor:
+    //
+    //   repo pkg PRESENT , parent conflicted        → loads fine
+    //   repo pkg absent  , parent conflicted        → WEDGES (cause: ../package.json)
+    //   repo pkg absent  , parent absent, gp broken → WEDGES (cause: ../../package.json)
+    //   repo pkg PRESENT , parent absent, gp broken → loads fine
+    //   repo pkg absent  , parent HEALTHY, gp broken→ loads fine
+    //
+    // A missing one is still pushed before the check: `package.json` may be the
+    // file the author has to CREATE, and it is the commonest repair of all.
+    if (existsSync(pkg)) break;
+    const up = dirname(dir);
+    if (up === dir) break;
+    dir = up;
+  }
+  files.push(resolve(process.cwd(), ".vigilesrc.json"));
+  return files;
+}
+
+/**
+ * The conflicted files on this hook's load path, if any — the difference between
+ * "your hook is broken" and "your repo is mid-merge and the hook is collateral".
+ */
+function conflictedLoadPathFiles(hookFile: string): readonly string[] {
+  return hookLoadPathFiles(hookFile)
+    .filter((p) => {
+      try {
+        return (
+          existsSync(p) && hasMergeConflictMarkers(readFileSync(p, "utf-8"))
+        );
+      } catch {
+        return false; // unreadable is a different problem; don't guess about it
+      }
+    })
+    .map((p) => relative(process.cwd(), p) || p);
+}
+
+/**
  * Print the loud stderr banner that accompanies a REPAIR-only pass-through, and
  * return true — the caller allows exactly this one tool call. Shared by the two
  * refusal paths (stale stamp, unloadable program) so the wording can't drift.
@@ -6403,10 +6783,11 @@ function emitGate(
 function announceRepairEscape(file: string, why: string): boolean {
   console.error(
     `vigiles: hook ${file} ${why}.\n` +
-      `vigiles: ALLOWING this one call because it is the repair action ` +
-      `(\`vigiles compile ${file}\`, or an edit to the hook itself) — without ` +
-      `this the gate blocks the only command that can fix it.\n` +
-      `vigiles: every OTHER tool call stays BLOCKED until the hook is recompiled.`,
+      `vigiles: ALLOWING this one call because it is a repair or recovery action ` +
+      `(a write to ${file}, to ${hookStampPath(file)}, or to one of ` +
+      `${HARNESS_CONFIG_FILES.join(", ")}) ` +
+      `— without this the gate blocks the only actions that can fix it.\n` +
+      `vigiles: every OTHER tool call stays BLOCKED until the hook loads again.`,
   );
   return true;
 }
@@ -6432,13 +6813,17 @@ function verifyStampOrRefuse(file: string, event: RawHookEvent): void {
     };
     const source = readFileSync(resolve(process.cwd(), file), "utf-8");
     if (stamp && !verifyHookStamp(source, stamp as SHA256Hash)) {
-      if (isStampRepairEvent(event, file)) {
+      if (isStampRepairEvent(event, file, process.cwd())) {
         announceRepairEscape(file, "does not match its compiled stamp");
         return;
       }
       console.error(
-        `vigiles: hook ${file} does not match its compiled stamp (tampered). ` +
-          `If YOU edited it, run \`vigiles compile ${file}\` to regenerate the stamp.`,
+        `vigiles: hook ${file} does not match its compiled stamp (tampered).\n` +
+          `vigiles: if YOU edited it, the way out is a FILE WRITE, not a command — ` +
+          `this refusal blocks the recompile too. Either edit ${file} back to what ` +
+          `was compiled, or clear its stamp by writing \`{}\` into ` +
+          `${stampPath}. The hook then runs UNSTAMPED but still ENFORCES, so ` +
+          `\`vigiles compile ${file}\` goes through the normal gate.`,
       );
       process.exit(2);
     }
@@ -6453,9 +6838,10 @@ function verifyStampOrRefuse(file: string, event: RawHookEvent): void {
  * its stamp, and dispatches by role: a gate exits 2 + reason on `deny`; an
  * inject prints `additionalContext`; a react runs its effect-classified
  * command. A hook that won't load — or whose stamp is stale — fails CLOSED
- * (exit 2), never silent-allow, with ONE loudly-announced exception: the repair
- * action itself ({@link isStampRepairEvent}), or the repo wedges with no way to
- * recompile.
+ * (exit 2), never silent-allow, with two loudly-announced exceptions: the repair
+ * action itself ({@link isStampRepairEvent}), and — on a LOAD failure only — the
+ * load-path repair WRITE ({@link isLoadPathRepairEvent}), or the repo wedges
+ * with no way to fix whatever broke the load path.
  */
 async function runHookProgramCommand(file: string | undefined): Promise<void> {
   if (!file) {
@@ -6487,16 +6873,65 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
   try {
     program = await loadHookProgram(file);
   } catch {
-    // Same bootstrap escape as the stale stamp below: an edit that leaves the
-    // hook unloadable (a typo mid-edit) otherwise blocks the recompile that
-    // would fix it. A hook that can't load enforces nothing either way, so
-    // refusing the repair only wedges the repo. Everything else still fails
-    // CLOSED (exit 2), never silent-allow.
-    if (isStampRepairEvent(event, file)) {
-      announceRepairEscape(file, "cannot be loaded");
+    // A LOAD failure is a fact about the harness, not a verdict about the
+    // command that happened to arrive — so it must still fail CLOSED (a gate
+    // that cannot run must not wave traffic through), but the two things it owes
+    // the author are different from a `deny`'s: name the real cause, and leave a
+    // way back.
+    //
+    // Escapes, both announced loudly on stderr:
+    //   - the stale-stamp one (an edit to the hook itself / `vigiles compile`),
+    //     for the hook broken mid-edit;
+    //   - the RECOVERY set, for the case where the hook is fine and something
+    //     else on its load path is not (observed 2026-08-10: `package.json` left
+    //     holding merge-conflict markers → Node can't resolve `vigiles/hook` →
+    //     no compiled hook loads → the Bash gate refuses `git merge --abort`,
+    //     the one command that undoes the cause. Irreversible from inside the
+    //     session; it was fixed by hand-editing the JSON, because file tools do
+    //     not go through PreToolUse(Bash)).
+    // Everything else stays BLOCKED, and the escapes are whitelists of commands
+    // that are WRITES — see `isLoadPathRepairEvent` for why no command is one.
+    const conflicted = conflictedLoadPathFiles(file);
+    const cause =
+      conflicted.length > 0
+        ? `cannot be loaded — ${conflicted.join(", ")} contains merge-conflict ` +
+          `markers, so Node cannot resolve \`vigiles/hook\` from it (the hook itself ` +
+          `may be fine)`
+        : "cannot be loaded";
+    if (
+      isLoadPathRepairEvent(event, file, {
+        // The root the REST of this runtime already uses: `hookStampPath` and
+        // `verifyStampOrRefuse` read the hook and its sidecar via `process.cwd()`,
+        // so a repair accepted against any other root would name a file the
+        // runtime never reads. The hook's own path cannot supply it (a hook sits
+        // at any depth, and a `.git` probe would be a disk read core does not do).
+        root: process.cwd(),
+        loadPathFiles: hookLoadPathFiles(file),
+      })
+    ) {
+      announceRepairEscape(file, cause);
       return;
     }
-    console.error(`vigiles: cannot load hook program ${file}`);
+    console.error(
+      `vigiles: hook ${file} ${cause}.\n` +
+        `vigiles: this is the state of the HARNESS, not a decision about your ` +
+        `command — the gate never ran. Blocking anyway (a gate that cannot run ` +
+        `must not pass traffic).\n` +
+        `vigiles: the way out is a FILE WRITE, not a command — under a tool that ` +
+        `WRITES (Write/Edit/MultiEdit); a Read of the same path repairs nothing ` +
+        `and is refused. Fix whichever of ` +
+        `${file}, ${HARNESS_CONFIG_FILES.join(", ")} is broken — those writes are ` +
+        `allowed even while this refuses, and a Bash gate never gated file tools ` +
+        `at all. The hook then loads and the gate decides normally again.\n` +
+        `vigiles: those paths resolve under ${process.cwd()} — plus any ancestor ` +
+        `\`package.json\` Node actually reads, so whatever is named above as the ` +
+        `cause is writable. A path in a DIFFERENT checkout is refused: it cannot ` +
+        `repair this failure.\n` +
+        `vigiles: no command is allowed, deliberately. \`git merge --abort\` and ` +
+        `\`git checkout\` RUN \`.git/hooks/*\` (measured: reference-transaction, ` +
+        `post-checkout), and \`vigiles compile\` loads the hook through the same ` +
+        `resolver that just failed.`,
+    );
     process.exit(2);
     return;
   }
@@ -7394,7 +7829,10 @@ async function main(): Promise<void> {
           // The flight recorder: a compact summary of what the harness actually
           // DID in real sessions (hook/agent decisions), read off the local
           // agent-readable ledger. Empty (skipped) until something is recorded.
-          const ledgerSummary = formatLedgerSummary(ledgerRecords);
+          const ledgerSummary = formatLedgerSummary(
+            ledgerRecords,
+            countLocks(resolve(root, DEFAULT_LOCK_DIR)),
+          );
           if (ledgerSummary) console.log("\n" + ledgerSummary);
         }
         // LIVE MCP tool resolution STARTS each declared MCP server — a server is

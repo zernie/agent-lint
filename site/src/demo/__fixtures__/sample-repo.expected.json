@@ -38,8 +38,7 @@
         "weight": 1,
         "findings": [
           "2 of 3 units can read data, reach the web, and run commands — the \"lethal trifecta\", so a prompt injection could exfiltrate secrets",
-          "deploy inherits all tools — the \"lethal trifecta\" (reads data, reaches the web, runs commands) plus every other capability, so a prompt injection could exfiltrate secrets",
-          "release inherits all tools — the \"lethal trifecta\" (reads data, reaches the web, runs commands) plus every other capability, so a prompt injection could exfiltrate secrets"
+          "2 skill(s) declare no `disallowed-tools:` fence, so each inherits every tool the session grants — reads data, reaches the web, runs commands. `allowed-tools:` pre-approves, it does not restrict, so narrowing it does not reduce this; one `disallowed-tools:` line per skill drops a leg."
         ]
       },
       {
@@ -119,9 +118,8 @@
     "untestedHarness": 3,
     "unevaluated": 3,
     "coverageEvidence": {
-      "declared": 0,
-      "colocated": 0,
-      "mention": 0
+      "executed": 0,
+      "colocated": 0
     }
   },
   "brokenReferences": ["hooks/guard.sh"]

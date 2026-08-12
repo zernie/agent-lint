@@ -28,3 +28,67 @@ test("cli.ts resolves the harness through resolveHarnessSelection, never raw det
     "cli.ts must not call detectAdapterResult() directly — use resolveCommandHarness (honours --harness / config.harness / auto-detect). See dogfood A/I3.",
   );
 });
+
+/**
+ * The SAME bug class, one layer down: a command that calls a layout-taking
+ * detector and omits the layout gets `claudeCodeLayout` by default — silently, in
+ * every repo, forever.
+ *
+ * 🔴 Found three times on one PR (2026-08-12), and the third was found only by
+ * grepping for the shape of the first two:
+ *   - `skillTestNudge` (PostToolUse) — a Codex repo's edited skill matched
+ *     nothing, so the hook stayed silent while `lint` reported it untested.
+ *   - `resolveRecords` (`vigiles test`/`eval`) — discovery returned no surfaces,
+ *     so `recordsFrom` dropped every probe an execution had earned.
+ *   - `rankPlugins` (multi-target `audit`) — a Codex plugin scanned as Claude Code
+ *     shows no surfaces, nothing to deduct, and ranks at the TOP of the board.
+ *
+ * None of the three FAILED. Each returned an empty set, which reads as "clean".
+ * That is why this is a source-level gate rather than three behavioural tests: the
+ * fourth call site is the one nobody will write a test for.
+ */
+/**
+ * Every argument list passed to `name(` in `src/cli.ts`. Brace-balanced rather
+ * than a line regex: the options object spans lines and holds nested literals, so
+ * a line-wise pattern would pass a call whose `layout` sat in a NESTED object.
+ */
+function argsOfCalls(name: string): string[] {
+  const out: string[] = [];
+  const needle = `${name}(`;
+  for (
+    let i = CLI_SRC.indexOf(needle);
+    i !== -1;
+    i = CLI_SRC.indexOf(needle, i + 1)
+  ) {
+    let depth = 0;
+    let end = i + needle.length;
+    for (; end < CLI_SRC.length; end++) {
+      const c = CLI_SRC[end];
+      if (c === "(" || c === "{" || c === "[") depth++;
+      else if (c === ")" && depth === 0) break;
+      else if (c === ")" || c === "}" || c === "]") depth--;
+    }
+    out.push(CLI_SRC.slice(i + needle.length, end));
+  }
+  return out;
+}
+
+test("every layout-taking detector call in cli.ts passes a layout (2026-08-12 sweep)", () => {
+  // BOTH entry points into the same detector: `findUntestedSurfaces` directly, and
+  // `skillTestNudge`, which forwards its options straight into it. Filtered to the
+  // calls carrying `basePath`, so the import list and the doc prose are not calls.
+  for (const fn of ["findUntestedSurfaces", "skillTestNudge"]) {
+    const calls = argsOfCalls(fn).filter((a) => a.includes("basePath"));
+    assert.ok(calls.length >= 1, `${fn} call sites must exist`);
+    for (const args of calls) {
+      assert.match(
+        args,
+        /\blayout\b/,
+        `${fn}(${args.trim().slice(0, 60)}…) omits \`layout\` — it silently scans ` +
+          "every repo as Claude Code and finds nothing in a Codex one, and an empty " +
+          "scan does not fail, it just goes quiet. Pass `harnessLayoutFor(root, " +
+          "config)`, or `adapter.layout` where one is already resolved.",
+      );
+    }
+  }
+});

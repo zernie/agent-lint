@@ -80,8 +80,11 @@ legitimate authoring style):
 
 `audit` is a **local report** (like Lighthouse). For CI, use `vigiles lint` — the
 deterministic gate. The lethal-trifecta findings are summarized with a count (one
-line per unit); gate on "no NEW trifecta" via the `lethal-trifecta` lint rule
-rather than eyeballing the list.
+line per subagent; skills that declare no `disallowed-tools:` fence collapse into a
+single aggregate line, since that is the default state of nearly every skill —
+see [lethal-trifecta](rules/lethal-trifecta.md#skills-the-fence-is-disallowed-tools)).
+Gate on "no NEW trifecta" via the `lethal-trifecta` lint rule rather than eyeballing
+the list.
 
 **Scoping.** `vigiles lint` (no path) lints the whole repo — the normal CI call.
 Pass a single directory (`vigiles lint packages/foo`) to scope every surface rule

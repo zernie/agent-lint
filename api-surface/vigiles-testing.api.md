@@ -306,7 +306,13 @@ export interface CheckResult {
 export const claudeEvalDriver: EvalDriver;
 
 // @public
+export function commandsIn(md: string, matching: RegExp): DocCommand[];
+
+// @public
 export function compareArms(report: EvalReport, baseline: string, arm: string, metric: string, alpha?: number): Comparison | null;
+
+// @public
+export function compareContainment(weak: readonly ContainmentInput[], strong: readonly ContainmentInput[]): ContainmentVerdict;
 
 // @public
 export interface Comparison {
@@ -316,6 +322,26 @@ export interface Comparison {
     readonly seDelta: number;
     readonly significant: boolean;
     readonly t: number;
+}
+
+// @public
+export interface ContainmentInput {
+    // (undocumented)
+    readonly perPrompt: readonly {
+        readonly prompt: string;
+        readonly rate: number;
+    }[];
+    readonly subject: string;
+}
+
+// @public (undocumented)
+export interface ContainmentVerdict {
+    readonly both: readonly string[];
+    readonly compared: number;
+    readonly holds: boolean;
+    readonly neither: readonly string[];
+    readonly strongOnly: readonly string[];
+    readonly weakOnly: readonly string[];
 }
 
 // @public
@@ -340,6 +366,12 @@ export type DiffStatus = "regressed" | "improved" | "unchanged";
 
 // @public
 export function diffToJUnit(diff: BaselineDiff): string;
+
+// @public
+export interface DocCommand {
+    readonly line: number;
+    readonly text: string;
+}
 
 // @public
 export function egressHosts(r: HasEgress): string[];
@@ -421,6 +453,9 @@ export function formatBaselineDiff(diff: BaselineDiff): string;
 
 // @public
 export function formatCheckReport(report: CheckReport): string;
+
+// @public
+export function formatContainment(v: ContainmentVerdict): string;
 
 // @public
 export function formatEvalReport(report: EvalReport): string;
@@ -645,7 +680,16 @@ export interface ModelTurn {
 }
 
 // @public
+export function mustInclude(fragment: string, why: string): Check<readonly DocCommand[]>;
+
+// @public
+export function mustNotInclude(fragment: string, why: string): Check<readonly DocCommand[]>;
+
+// @public
 export function notTool(name: string, args?: ArgMatcher): Check<Trace>;
+
+// @public
+export function onlyTools(allowed: readonly string[]): Check<Trace>;
 
 // @public
 export function output(matcher: string | RegExp): Check<Trace>;
@@ -818,6 +862,25 @@ export function significantlyBeats(report: EvalReport, baseline: string, arm: st
 
 // @public
 export function skill(id: string): Check<Trace>;
+
+// @public (undocumented)
+export interface SkillContract {
+    readonly activation: Check<Trace>;
+    readonly declared: readonly string[];
+    readonly id: string;
+    readonly malformed: boolean;
+    readonly name: string;
+    readonly surface: readonly Check<Trace>[];
+    readonly undeclared: boolean;
+}
+
+// @public
+export function skillContract(skillDir: string, options?: SkillContractOptions): SkillContract;
+
+// @public (undocumented)
+export interface SkillContractOptions {
+    readonly plugin?: string;
+}
 
 // @public
 export function skillResolved(trace: Trace, skill: string): boolean;

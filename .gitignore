@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 dist/
 coverage/
 .DS_Store
@@ -14,6 +14,11 @@ logo-v*.png
 .vigiles/runs.jsonl
 # eval record/replay cache (recorded model runs)
 .vigiles/eval-cache/
+# what a LOCAL run exercised (the execution tier of test coverage). Never
+# committed: it describes THIS checkout at THIS moment, and a committed one would
+# credit coverage on a machine where nothing ran — the substitution it exists to
+# stop. Absent = coverage falls back to colocation, exactly as before it existed.
+.vigiles/coverage.json
 
 # API Extractor temp output (the committed contract is api-surface/*.api.md) + the
 # API Documenter reference site (a derived artifact — `npm run docs:api`).

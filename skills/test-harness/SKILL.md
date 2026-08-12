@@ -1,7 +1,7 @@
 ---
 name: test-harness
 allowed-tools: Read, Edit, Write, Glob, Grep, Bash
-description: Install vigiles and test a Claude Code harness — hooks, skills, settings, CLAUDE.md — by picking the right tier (unit / deterministic / eval) and writing a test that passes. Use when the user wants to check that a hook fires or blocks, that a skill triggers, that injected context lands, or that a harness change moves what the agent does.
+description: Install vigiles and test a Claude Code harness — hooks, skills, agents, settings, CLAUDE.md — by picking the right tier (unit / deterministic / eval) and writing a test that passes. Use to check that a hook fires or blocks, that a skill triggers, that injected context lands; or to observe a run — which tools it called, whether it stayed inside its declared allowed-tools, what files and side effects it produced, how to intercept a call without executing it.
 ---
 
 Test the Claude Code **harness** — the hooks, skills, settings, and CLAUDE.md that
@@ -23,14 +23,78 @@ Match what you're testing to the cheapest tier that can answer it:
 | "Is the hook actually **wired into** the assembled plugin and does it fire in a real session?"                                         | **Deterministic** | free, no API key (real `claude` + scripted mock) | `runHarnessTest` + `scriptModel`                                                              |
 | "Did the injected context (a SessionStart hook, a `/command`) actually **reach the model**?"                                           | **Deterministic** | free, no API key                                 | `runHarnessTest` → `trace.modelRequests` / `assertRequestContains`                            |
 | "Does this skill's **description trigger** when it should (recall) **and stay quiet** when it shouldn't (precision)?"                  | **Eval**          | **paid** (real model)                            | `measureTriggerRate` (+ `irrelevantPrompts`) → `assertTriggerRate({ min, maxFalsePositive })` |
+| "Can I measure triggering on a **cheaper model** and trust it as a floor?"                                                             | **Eval**          | **paid** (two runs)                              | `compareContainment(weak, strong)` → `formatContainment`                                      |
 | "Is this exact skill's **output any good**?" — absolute quality, no on/off baseline (the default for testing one skill)                | **Eval**          | **paid** (real model)                            | `measure({ checks: [judged(rubric)] })` → `assertRates({ min })`                              |
 | "Does this harness change **move what the agent does**, _relative_ to off?" — A/B lift, regression, signal vs noise                    | **Eval**          | **paid** (real model)                            | `runEval` (arms) + `assertSignificant`                                                        |
 
 Most harness questions — block/allow, wired-in, context-landed — never need a
 model. Only "does the model trigger / behave differently" needs the eval tier.
 
+⚠️ **A trigger-rate of 0% on EVERY prompt is a wiring bug until proven otherwise.**
+It reads like a verdict on the description, and three separate setup mistakes
+produce it: a **bare** id in `fired` where the namespaced `<plugin>:<skill>` is
+required; `pluginDir` where a loose `.claude/skills` needs **`skillsDir`**; and a
+missing **`fixture`**, since a run starts in an empty directory and a prompt about
+a file that isn't there is one the model is right to decline. Rule all three out
+before reporting it. (A partial rate is a real number — don't second-guess it.)
+
+**Don't tune against a cheaper model until you've checked it's actually a floor.**
+`compareContainment(weak, strong)` answers that: it reports prompts that fired on
+the weak model but NOT the strong one, and each one means the weak model is not a
+lower bound but a _different router_. Prompts that fired only on the strong model
+are expected and are not a failure. Measured once (21 skills, 84 prompts, haiku
+vs sonnet): **3 weak-only, and one skill higher on haiku** — so containment is
+not established, which is why the floor stays.
+
 If the unit and deterministic tiers can both answer it, **prefer unit**: it's
 faster and reaches events the deterministic mock can't drive.
+
+## Step 0.4 — Observing a run (what it CALLED, WROTE, and TOUCHED)
+
+The table above is keyed on the harness _surface_ under test. Half the real
+questions are keyed on the **observation** instead — "what did this skill
+actually do?" — and they have answers already. Reach for these before building
+anything; every one of them ships today.
+
+| The question you're actually asking                                     | Use                                                                                    |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Which tools did it call, and with what arguments?                       | `trace.toolCalls` · `tool` / `toolWith` checks · `parseToolCalls` (`vigiles/e2e`)      |
+| Did it call a tool it must not?                                         | `notTool(name)`                                                                        |
+| Did it call **only** tools from a known set?                            | `onlyTools([...])` — the white-list, symmetric to `assertWroteOnly`                    |
+| Did it stay inside the `allowed-tools` its own frontmatter declares?    | `skillContract(dir).surface` — builds that check FROM the declaration                  |
+| What files did the run write?                                           | `filesWritten` · `wrote(path)` / `didNotWrite(path)` · `r.file(path)`                  |
+| Did it write **only** where it was supposed to?                         | `assertWroteOnly([...])` / `assertNoWrite()` — needs `{ sandbox: "auto" }`             |
+| Run a tool call but **don't let it execute** — capture the args instead | the `interceptTools` option on `measure` / `runEval` (a `ToolIntercept[]`)             |
+| Did a subagent do it, and which one?                                    | `subagent(name, [...])` · `SubagentTrace`                                              |
+| Was it an MCP tool?                                                     | `mcp(server, toolName)`                                                                |
+| Assert the whole effect boundary deterministically                      | `assertChecks` + the checks above (see `examples/harness/effect-boundary.harness.mjs`) |
+
+`interceptTools` is the one worth knowing about, because it is not obvious it
+exists: it denies a tool its **real execution** via an auto-wired `PreToolUse`
+hook while still recording the call and its arguments into the trace. That is
+how you test a skill that would otherwise mutate a real external service — a
+calendar, an upload — without mocking anything yourself.
+
+**Verify a skill against its own declaration** with `skillContract` — it reads
+the `allowed-tools:` the skill already claims and hands back ready checks, so
+the claim is verified instead of restated:
+
+```ts
+import { skillContract, assertChecks } from "vigiles/testing";
+
+const c = skillContract(".claude/skills/my-skill");
+assertChecks(trace, [c.activation, ...c.surface]);
+```
+
+Two of its states are **findings**, not clean bills, and their `surface` check
+fails rather than passing on nothing: `undeclared` (no `allowed-tools:` line, so
+the skill inherits _every_ tool) and `malformed` (frontmatter that isn't valid
+YAML, so a strict loader reads no contract at all — one unquoted `: ` does it).
+
+⚠️ **What is still NOT checked.** `onlyTools` compares tool _names_, so a narrow
+allowlist entry like `Bash(node scripts/x.mjs:*)` is satisfied by any `Bash` call
+at all. Scope inside a tool is unverified — say so rather than implying the
+assertion is total.
 
 ## Step 0.5 — Set honest expectations (what's testable, and at what cost)
 
@@ -122,10 +186,12 @@ mock model, assert the hook fired (or the context landed):
 ```ts
 import {
   runHarnessTest,
-  scriptModel,
   assertHookFired,
   assertRequestContains,
 } from "vigiles/testing";
+// `scriptModel` is the Claude-Code TRANSPORT, deliberately not re-exported from
+// the harness-agnostic `vigiles/testing` — import it from the harness package:
+import { scriptModel } from "vigiles/claude-code";
 
 const r = await runHarnessTest({
   pluginDir: "./", // or { settings: { hooks: {...} } }

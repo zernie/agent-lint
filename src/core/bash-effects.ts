@@ -873,6 +873,269 @@ export function leafCommandsNormalized(command: string): NormalizedLeaf[] {
   return out;
 }
 
+/**
+ * Reconstruct a Word's SOURCE-level text: quotes unwrapped, parameter references
+ * kept verbatim (`${CLAUDE_PROJECT_DIR}` → `$CLAUDE_PROJECT_DIR`). `null` when a
+ * segment cannot be reconstructed at all (command substitution, arithmetic,
+ * process substitution).
+ *
+ * The twin of {@link normalizeParts}, and deliberately NOT the same function.
+ * `normalizeParts` answers "what OPERATION is this" and therefore collapses
+ * `$HOME` to `~` and gives up on every other parameter; a caller that needs the
+ * PATH a word names can use neither behaviour — `$CLAUDE_PROJECT_DIR/.claude/hooks/x.sh`
+ * has to survive as written, because a file resolver matches it by suffix.
+ */
+function sourceParts(parts: readonly MvdanNode[] | undefined): string | null {
+  if (!parts) return null;
+  let out = "";
+  for (const p of parts) {
+    const t = sh.syntax.NodeType(p);
+    if (t === "Lit" || t === "SglQuoted") {
+      out += p.Value ?? "";
+    } else if (t === "DblQuoted") {
+      const inner = sourceParts((p as MvdanWord).Parts);
+      if (inner === null) return null;
+      out += inner;
+    } else if (t === "ParamExp") {
+      const name = p.Param?.Value;
+      if (!name) return null;
+      out += `$${name}`;
+    } else {
+      return null; // CmdSubst / ArithmExp / ProcSubst / … → unreconstructable
+    }
+  }
+  return out;
+}
+
+/**
+ * Every simple command's argv, POSITIONALLY, each word reconstructed at source
+ * level — the primitive a caller needs to tell an EXECUTED PROGRAM from a DATA
+ * OPERAND.
+ *
+ * 🔴 WHY POSITION, AND WHY A THIRD EXTRACTOR. `leafCommands` DROPS the words it
+ * cannot reduce to a literal, so `"$GUARD" --flag` yields `["--flag"]` — a
+ * dynamic head silently promotes an argument into head position, which is worse
+ * than useless to a positional reader. `leafCommandsNormalized` skips such a leaf
+ * outright AND basenames the head, so `./hooks/x.sh` loses the path a file
+ * resolver needs. This one keeps every word in its slot (an unreconstructable
+ * word becomes `""`) and keeps the head's spelling.
+ *
+ * Wrappers are still resolved through (`env FOO=1 bash x.sh` → `bash x.sh`)
+ * using the same wrapper table as the normalized extractor, not a second copy.
+ *
+ * 🔴 ONLY THE LEAVES THAT UNCONDITIONALLY RUN, and this used to be a blanket
+ * `Walk` over every `CallExpr` in the tree. A syntactic leaf is not an executed
+ * command: `false && bash hooks/pre.sh` and `true || bash hooks/pre.sh` never run
+ * the hook, and `if false; then bash hooks/x.sh; fi` and a function BODY do not
+ * run at all where they are written — yet all four were reported as executed
+ * programs. For the one caller (coverage attribution) that is a FALSE GRANT: a
+ * hook credited with a run that never happened. Same class as attributing a data
+ * operand, one level up in the grammar.
+ *
+ * So the tree is DESCENDED, not walked, and only through positions whose children
+ * always execute: a statement list, both sides of a PIPELINE, a subshell, a
+ * block. `&&`/`||` contribute their LEFT side only — the right is conditional.
+ * Every other construct (`if`, `while`, `until`, `for`, `case`, a function
+ * declaration, `time`, …) is not entered at all: whether its body ran is a
+ * runtime fact this parse cannot have, and abstaining costs one warning while
+ * guessing costs a false claim that something was tested.
+ *
+ * ⚠️ THE MEASURED COST, stated rather than assumed: `cd /repo && bash hooks/x.sh`
+ * now yields NOTHING, because the hook sits on the right of `&&`. That idiom has
+ * a first-class replacement — `runHook(cmd, event, { cwd })` — which is how this
+ * repo's own examples already write it.
+ *
+ * Parse failure → `[]`.
+ */
+export function leafArgvSource(command: string): string[][] {
+  let file: MvdanNode;
+  try {
+    file = sh.syntax.NewParser().Parse(command, "cmd.sh");
+  } catch {
+    return [];
+  }
+  const out: string[][] = [];
+  const emit = (node: MvdanNode): void => {
+    if (!node.Args?.length) return;
+    const argv = node.Args.map((w) => sourceParts(w.Parts) ?? "");
+    // `command -v x` DESCRIBES x; it does not run it. Without this the wrapper
+    // table unwrapped both words and the operand looked executed.
+    if (inspectsOnly(argv)) return;
+    // The wrapper table keys on the BASENAME head (`/usr/bin/env` is `env`), so
+    // detection runs on a basenamed copy while the returned words stay verbatim.
+    // Wrappers only ever drop words off the FRONT, so a count maps the result
+    // back onto the original spellings.
+    const probe = [normalizeHead(argv[0] ?? ""), ...argv.slice(1)];
+    const dropped = probe.length - stripWrappers(probe).argv.length;
+    out.push(argv.slice(dropped));
+  };
+  // Both return TRUE when control provably does not continue past this node in
+  // the ENCLOSING shell — the list stops there.
+  const stmts = (list: readonly MvdanNode[] | undefined): boolean => {
+    for (const st of list ?? []) if (descend(st)) return true;
+    return false;
+  };
+  const descend = (node: MvdanNode | undefined): boolean => {
+    if (!node) return false;
+    switch (sh.syntax.NodeType(node)) {
+      case "Stmt":
+        // `cmd &` runs in a background SUBSHELL, so a terminator inside it never
+        // reaches this shell (measured: `exit 0 & ./x.sh` runs `./x.sh`).
+        return descend(node.Cmd) && node.Background !== true;
+      case "CallExpr":
+        emit(node);
+        return terminates(node);
+      case "BinaryCmd":
+        // `&&` (10) and `||` (11) short-circuit, so only X is certain; a
+        // PIPELINE (`|` 12, `|&` 13) runs both sides.
+        if (node.Op === PIPE_OP || node.Op === PIPE_ALL_OP) {
+          descend(node.X);
+          descend(node.Y);
+          // Each side of a pipeline is its own subshell — `exit 0 | cat; ./x.sh`
+          // runs `./x.sh` (measured).
+          return false;
+        }
+        return descend(node.X);
+      case "Subshell":
+        stmts(node.Stmts);
+        return false; // `( exit 0 ); ./x.sh` runs `./x.sh` (measured)
+      case "Block":
+        return stmts(node.Stmts); // `{ exit 0; }; ./x.sh` does NOT (measured)
+      case "FuncDecl":
+        // A declaration executes nothing, so it neither contributes leaves nor
+        // terminates: `f() { exit 0; }; ./x.sh` runs `./x.sh` (measured).
+        return false;
+      default:
+        // A conditional or deferred body — not entered, because whether it ran
+        // is a runtime fact this parse cannot have. But whether control REACHES
+        // the next statement is a separate question, and if the body can
+        // terminate the shell the answer is unknown, so the list stops here.
+        return mayTerminate(node);
+    }
+  };
+  stmts(file.Stmts);
+  return out;
+}
+
+/**
+ * Does this simple command end the shell, so that nothing after it in the same
+ * list runs? MEASURED against bash 5.2 and dash on 2026-08-12 — the numbers and
+ * the disagreement below are why this is not read off a POSIX table:
+ *
+ * ```
+ *                                     bash            dash
+ * exit 0; ./x.sh                      x NOT run       x NOT run
+ * return 0; ./x.sh                    x RAN (+error)  x NOT run
+ * exec ./x.sh; echo AFTER             AFTER not run   AFTER not run
+ * exec > /dev/null; ./x.sh            x RAN           x RAN
+ * ```
+ *
+ *  - `exit` — unconditional, both shells.
+ *  - `return` — the two shells DISAGREE at top level: bash prints "can only
+ *    `return' from a function or sourced script" and carries on; dash stops.
+ *    `leafArgvSource` never enters a `FuncDecl`, so every `return` it can see is
+ *    one of those top-level ones. Where the shells disagree the rule is to
+ *    abstain, and for a coverage probe abstaining means NOT crediting what
+ *    follows — so it truncates. Under bash that under-credits by one line; the
+ *    other choice would be a false grant under `/bin/sh`, which is the shell
+ *    `spawnSync(..., { shell: true })` actually uses.
+ *  - `exec` — only with a command. `exec > file` (redirections and nothing else)
+ *    just rewires the current shell and execution continues; that is the neighbour
+ *    this rule would most easily get wrong, and the measurement above is why it
+ *    does not. The exec'd program itself is emitted as a leaf like any other.
+ */
+function terminates(call: MvdanNode): boolean {
+  const head = call.Args?.[0] ? getLiteral(call.Args[0]) : null;
+  if (head === "exit" || head === "return") return true;
+  // `exec` with at least one more word. A word that is only an option
+  // (`exec -c`) counts too: mistaking it for a terminator drops later leaves,
+  // which is the silent direction.
+  return head === "exec" && (call.Args?.length ?? 0) > 1;
+}
+
+/**
+ * Could this un-entered construct end the shell? A conservative YES stops the
+ * statement list, because `if [ -z "$X" ]; then exit 1; fi; bash hooks/x.sh` does
+ * not necessarily reach the hook (measured: with the branch taken, `./x.sh` does
+ * NOT run).
+ *
+ * Deliberately conservative in the direction of SILENCE: an `exit` that could
+ * only ever run inside a nested subshell still stops the list, costing one
+ * coverage line. The common guard shape is untouched — a conditional containing
+ * no terminator answers `false`, so `if …; then echo warn; fi; bash hooks/x.sh`
+ * still attributes the hook.
+ */
+function mayTerminate(node: MvdanNode): boolean {
+  let found = false;
+  sh.syntax.Walk(node, (n) => {
+    if (found) return false;
+    // A function BODY is not executed where it is written, so a `return`/`exit`
+    // inside one says nothing about control here.
+    if (sh.syntax.NodeType(n) === "FuncDecl") return false;
+    if (sh.syntax.NodeType(n) === "CallExpr" && terminates(n)) found = true;
+    return !found;
+  });
+  return found;
+}
+
+/**
+ * Is this leaf an INSPECTION rather than an execution? Then it contributes no
+ * executed program, however script-shaped its operand.
+ *
+ * Same family as the interpreter's parse-only flags (`bash -n`, `node --check`):
+ * a word that turns "run this" into "tell me about this". Bash 5.2's own
+ * `help command`: *"Execute a simple command or display information about
+ * commands."*
+ *
+ * MEASURED, bash 5.2, with a marker file the script touches — `ran` is whether
+ * the operand actually executed:
+ *
+ * ```
+ *   command -v ./pre.sh     ran=no    prints ./pre.sh
+ *   command -V ./pre.sh     ran=no    prints "./pre.sh is ./pre.sh"
+ *   command -pv ./pre.sh    ran=no
+ *   command -vp ./pre.sh    ran=no
+ *   command -Vp ./pre.sh    ran=no
+ *   command -p ./pre.sh     ran=YES   ← -p is a PATH choice, not an inspection
+ *   command ./pre.sh        ran=YES
+ * ```
+ *
+ * ⚠️ THE REST OF THE WRAPPER TABLE WAS ASKED THE SAME QUESTION, and `command` is
+ * the only member with an inspect-only mode. Run against this build, the
+ * neighbours the finding names attribute NOTHING ALREADY — not by a rule, but
+ * because they are not wrappers at all, so their operand is never reached:
+ *
+ * ```
+ *   commandRefs("type hooks/pre.sh")   → []      (ran=no)
+ *   commandRefs("which hooks/pre.sh")  → []      (ran=no)
+ *   commandRefs("hash hooks/pre.sh")   → []      (ran=no)
+ * ```
+ *
+ * `sudo -v` (validate) and `sudo -l` (list) take no command operand, so there is
+ * nothing to attribute; `xargs -t` PRINTS what it runs and then runs it, so it
+ * is not an inspection. Deliberately left out: `env`, `nice`, `timeout`,
+ * `nohup` — none has an inspect mode (`--help`/`--version` exit without an
+ * operand, so they cannot misattribute one).
+ *
+ * ⚠️ SCOPED TO THE COVERAGE EXTRACTOR ON PURPOSE. `leafArgvSource` has exactly
+ * one caller and it is attribution; the SAFETY extractor (`leafCommands`, a
+ * blanket walk) is untouched, keeping the opposite default established when the
+ * statement-list truncation landed.
+ */
+function inspectsOnly(argv: readonly string[]): boolean {
+  if (normalizeHead(argv[0] ?? "") !== "command") return false;
+  for (const w of argv.slice(1)) {
+    if (!w.startsWith("-") || w === "-") return false; // reached the operand
+    if (w === "--") return false;
+    if (/^-[pvV]+$/.test(w) && /[vV]/.test(w)) return true;
+  }
+  return false;
+}
+
+/** `BinaryCmd.Op` for `|` and `|&` — the two that run BOTH sides. */
+const PIPE_OP = 12;
+const PIPE_ALL_OP = 13;
+
 /** Normalize a Stmt's redirections into {@link LeafRedirect}s (source order). */
 function normalizeRedirects(redirs: readonly MvdanRedirect[]): LeafRedirect[] {
   return redirs.map((r) => {

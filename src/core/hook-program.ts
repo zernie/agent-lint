@@ -41,6 +41,7 @@ import { stringify as stringifyToml } from "@iarna/toml";
 import type { HarnessDialect } from "./dialect.js";
 import type { HookProtocol } from "./hook-protocol.js";
 import { verifyHookEvents } from "./hook-events.js";
+import { HARNESS_CONFIG_FILES } from "./merge-conflict.js";
 import {
   unknownProviders,
   unsafeInlineProviders,
@@ -1028,6 +1029,40 @@ export type HookProgramOutcome =
   | { readonly kind: "reaction"; readonly reaction: Reaction };
 
 /**
+ * The file a hook program was LOADED from — the one coverage attribution in this
+ * codebase that needs no parsing at all.
+ *
+ * 🔴 BY CONSTRUCTION, NOT BEST-EFFORT, and a reader should not treat this source
+ * as equivalent to the parsed one. `commandRefs` (coverage-probe.ts) infers what
+ * executed from an arbitrary command STRING — interpreter grammars, option
+ * bundles, shell short-circuits — and has been wrong in five review rounds
+ * because that grammar is unbounded. Here the path is the argument `loadHook`
+ * was called with and resolved itself. There is nothing to guess.
+ *
+ * A `WeakMap`, not a property on the hook: the object is the USER's, it is
+ * `export default`-ed from their module, and stamping a field on it would show
+ * up in their serialization and their equality checks. The map also lets the
+ * entry die with the hook.
+ *
+ * ⚠️ REMEMBERING IS NOT RECORDING. `loadHook(file)` calls this and nothing else —
+ * loading a hook to inspect its shape is not running it, and attributing a load
+ * would be the "an empty file counts" disease the execution tier exists to cure.
+ * The probe is emitted by `harness-assert.ts` at the moment the hook is
+ * EVALUATED, which is the only place both facts are in hand.
+ */
+const HOOK_SOURCE = new WeakMap<object, string>();
+
+/** Record where a hook program was loaded from. Called by `loadHook` ONLY. */
+export function rememberHookSource(hook: AnyHook, file: string): void {
+  HOOK_SOURCE.set(hook, file);
+}
+
+/** The file a hook was loaded from, or `undefined` for one built in-process. */
+export function hookSource(hook: AnyHook): string | undefined {
+  return HOOK_SOURCE.get(hook);
+}
+
+/**
  * Evaluate a compiled hook against a raw event, in-process, dispatching by role:
  * a gate → its `Decision`, an inject → the injected context text, a react → its
  * (effect-classified) `Reaction`. Pure — no subprocess, no model. The ergonomic
@@ -1093,43 +1128,293 @@ export function runHookProgram(
 // SILENTLY, and that is unchanged.
 // ---------------------------------------------------------------------------
 
-/** Compare two path references without node:path (core stays dependency-free). */
-function samePathRef(a: string, b: string): boolean {
-  const norm = (p: string) => p.replace(/\\/g, "/").replace(/^\.\//, "");
-  const [x, y] = [norm(a), norm(b)];
-  return x === y || x.endsWith("/" + y) || y.endsWith("/" + x);
+/** A reference that already names a root — POSIX `/x` or Windows `C:/x`. */
+function isAbsoluteRef(ref: string): boolean {
+  return ref.startsWith("/") || /^[A-Za-z]:\//.test(ref);
 }
 
-/** The basename of a path token, for matching `npx vigiles` / `./bin/vigiles`. */
+/**
+ * Resolve a path reference against a root, without node:path (core stays
+ * dependency-free). Mirrors `resolve(root, ref)`: an absolute ref wins, a
+ * relative one hangs off the root, and `.` / `..` / `//` collapse.
+ *
+ * 🔴 THIS REPLACED A SUFFIX COMPARISON, and the difference is SCOPE, not
+ * spelling. The old helper accepted `a.endsWith("/" + b)`, so a write to
+ * `/home/another-project/package.json` counted as a repair of THIS repo's
+ * `package.json` — one wedged checkout handed out a write in every other
+ * checkout on the disk. The tolerance that motivated the looseness is real (the
+ * harness sends an absolute `file_path` while settings carry a relative one) and
+ * survives untouched: both sides resolve against the same root and compare
+ * whole, so `/repo/package.json` and `package.json` still match while a sibling
+ * repo's never can.
+ */
+function resolveRef(root: string, ref: string): string {
+  const slashes = (s: string) => s.replace(/\\/g, "/");
+  const r = slashes(ref);
+  const joined = isAbsoluteRef(r)
+    ? r
+    : `${slashes(root).replace(/\/+$/, "")}/${r}`;
+  const out: string[] = [];
+  for (const seg of joined.split("/")) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") {
+      out.pop();
+      continue;
+    }
+    out.push(seg);
+  }
+  return (joined.startsWith("/") ? "/" : "") + out.join("/");
+}
+
+/**
+ * The repository a wedged hook belongs to, as the runtime sees it. Supplied by
+ * the caller because core takes no `node:path` and reads no disk — and because
+ * the hook's own path does NOT determine it (see {@link isLoadPathRepairEvent}).
+ */
+export interface HookRepoPaths {
+  /**
+   * Absolute root that relative references resolve against. Must be the SAME
+   * root the runtime reads the hook and its stamp with, or the write accepted
+   * here is not the file the runtime reads.
+   */
+  readonly root: string;
+  /**
+   * The actual files whose breakage can wedge THIS hook's module resolution,
+   * already resolved by the caller: the `package.json` at every ancestor of the
+   * hook, plus the repo's `.vigilesrc.json`. Node walks that chain, so a
+   * monorepo package's own `package.json` is on it and a sibling checkout's is
+   * not.
+   */
+  readonly loadPathFiles: readonly string[];
+}
+
+/** The basename of a path token — the sidecar is keyed by the hook's basename. */
 function basenameOf(token: string): string {
   const parts = token.replace(/\\/g, "/").split("/");
   return parts[parts.length - 1] ?? token;
 }
 
 /**
- * True when this event IS the author repairing the hook — the only thing a
- * stale-stamp refusal must let through, or the repo wedges (see the note above):
+ * The tool names a repair may arrive under: the ones MEASURED to write a file
+ * and carry `file_path`. Everything else is refused, including a name this list
+ * has never heard of.
  *
- * - a Bash command that invokes `vigiles compile` (however it's launched —
- *   `npx vigiles compile`, `pnpm exec vigiles compile`, `./node_modules/.bin/vigiles compile`),
- *   which is what regenerates the stamp; or
- * - an edit/write whose target IS this hook's own source file, so a FILE gate
- *   over the repo can still be fixed by editing the hook again.
+ * 🔴 THE ESCAPE USED TO IGNORE `tool_name` ENTIRELY, so a `Read` of
+ * `package.json` was a "repair" — and if the wedged hook was registered for
+ * `Read`, that read went through while the gate was refusing everything else. A
+ * read repairs nothing, so it cannot be a repair. The door's whole justification
+ * is "a file write executes nothing"; a predicate blind to which tool is running
+ * cannot make that claim about anything.
  *
- * AST-backed (`leafCommandsNormalized`), so it sees the invocation through a
- * compound command or a wrapper, exactly like every other matcher here.
+ * ## How the list was decided, since an allow-list is the shape that has bitten
+ *
+ * Read off the LIVE harness's own tool schemas rather than from memory or a doc
+ * page (measured 2026-08-12, this Claude Code build):
+ *
+ * ```
+ * Write         file_path            → writes  → ADMITTED
+ * Edit          file_path            → writes  → ADMITTED
+ * MultiEdit     file_path            → writes  → ADMITTED (absent from this
+ *                                                build; a vendored third-party
+ *                                                plugin still matches on it, so
+ *                                                other builds ship it)
+ * Read          file_path            → reads   → refused (the reported hole)
+ * NotebookEdit  notebook_path        → writes, but cannot reach this predicate
+ * Glob / Grep   pattern, path        → no `file_path` at all
+ * Bash          command              → no `file_path` at all
+ * ```
+ *
+ * `NotebookEdit` is deliberately NOT listed. It writes, but its input field is
+ * `notebook_path` — quoted from the live schema: *"notebook_path: The absolute
+ * path to the Jupyter notebook file to edit"* — so it never carries the field
+ * this predicate reads and listing it would be a fragment that can never
+ * execute. If it ever grows `file_path`, this is a one-word change.
+ *
+ * ## What happens to an unrecognised name, and why that is not the wedge
+ *
+ * It is REFUSED. The other direction was weighed first, because "refuse
+ * everything outside cwd" was rejected two rounds ago for making a wedged repo
+ * unrecoverable — and the same objection does not land here. This list does not
+ * have to be COMPLETE; it has to be NON-EMPTY at runtime. A new writing tool
+ * appearing wedges nothing, because the author still repairs with `Write`. Only
+ * the simultaneous disappearance of every name above could strand a repo, and a
+ * release that deletes `Write` and `Edit` together has bigger problems.
+ *
+ * Admitting unknown names was the alternative, and it forfeits the one sentence
+ * this door rests on: with an unrecognised tool we cannot say the call executes
+ * nothing, so the exception would no longer be justified by the argument that
+ * created it.
+ */
+const REPAIR_TOOLS: readonly string[] = ["Write", "Edit", "MultiEdit"];
+
+/**
+ * The file a repair event targets, or `null` when this event is not a repair
+ * shape at all — wrong tool, or no `file_path`. Shared by both doors so the
+ * stamp escape and the load-path escape cannot drift apart (they already did
+ * once: the suffix-match hole was fixed on one and found on the other).
+ */
+function repairTargetOf(event: RawHookEvent): string | null {
+  const tool = event.tool_name;
+  if (typeof tool !== "string" || !REPAIR_TOOLS.includes(tool)) return null;
+  const filePath = event.tool_input?.file_path;
+  return typeof filePath === "string" ? filePath : null;
+}
+
+/**
+ * The stamp sidecar a hook's compile writes, as a repo-relative reference.
+ * Mirrors `hookStampPath` in cli.ts (`.vigiles/hooks/<basename>.json`); kept as a
+ * string here because core takes no `node:path`.
+ */
+function stampSidecarRef(hookFile: string): string {
+  return `.vigiles/hooks/${basenameOf(hookFile)}.json`;
+}
+
+/**
+ * True when this event IS the author repairing the hook — a FILE WRITE, and only
+ * a file write.
+ *
+ * 🔴 THIS USED TO ADMIT A BASH COMMAND, AND THAT WAS THE WHOLE PROBLEM. The
+ * escape accepted `vigiles compile …`, and recognising a trusted ACTION from an
+ * untrusted STRING produced five findings in a row, each fix correct and each
+ * followed by another: `.some()` over the leaves → the operand (`compile
+ * /tmp/payload.spec.ts`, which `loadSpec` imports) → the executable path
+ * (`/tmp/vigiles compile`) → the working directory (`cd /tmp/evil && vigiles
+ * compile`). The degrees of freedom in a command string are unbounded — argv,
+ * cwd, PATH, `node_modules` resolution, a hostile `.vigilesrc.json`, a shell
+ * function — so no amount of parsing closes the class. Two more constraints
+ * predict two more findings.
+ *
+ * ## Why the command was not needed at all — measured, not argued
+ *
+ * MEASURED 2026-08-12 against the real runtime, on a stale-stamp fixture:
+ * writing `{}` into the stamp sidecar (or deleting it) makes
+ * `verifyStampOrRefuse` return early, so the hook LOADS AND ENFORCES again —
+ * `ls` passed and `git push --force` was still denied with the hook's own reason.
+ * The repo is unwedged by a file write, and the gate is back on duty; the author
+ * then runs `vigiles compile` through the NORMAL gate, needing no escape at all.
+ *
+ * MEASURED the same day on the load-wedge fixture: with `package.json` holding
+ * conflict markers, `vigiles compile <hook>` exits 1 —
+ * `Cannot load hook …: Invalid package config` — because compile has to load the
+ * hook through the same broken resolver the runtime just failed on. The command
+ * the escape existed to permit CANNOT repair that wedge. It was pure liability.
+ *
+ * So the Bash escape kept only a git whitelist — and a later round measured that
+ * those run `.git/hooks/*` too and deleted them as well. NO command is an escape
+ * now; the repair is what it always should have been: a write
+ * ({@link isLoadPathRepairEvent}).
+ *
+ * ## What is accepted here
+ *
+ * A write whose target is the hook's own source, or its stamp sidecar
+ * (`.vigiles/hooks/<basename>.json`). Both are repo-owned paths derived from the
+ * file the runtime was invoked with, never from the event.
+ *
+ * 🔴 SCOPE IS NOT THE SAME QUESTION AS EXECUTION. A previous round defended a
+ * suffix comparison here on the ground that a write executes nothing — true, and
+ * beside the point: `/home/another-project/.claude/hooks/guard.hook.mjs` ends
+ * the same way as this repo's hook, so a wedge in one checkout granted a write
+ * into another. Both sides now resolve against `repoRoot` and compare whole
+ * ({@link resolveRef}); the absolute-vs-relative tolerance that suffix matching
+ * was reached for is what resolution gives you properly.
+ *
+ * This grants nothing new: a Bash gate never gated file tools in the first place
+ * (the 2026-08-10 incident was fixed by hand-editing JSON while every Bash
+ * command was refused), and a file gate already let the hook's own source be
+ * rewritten, which is strictly more powerful than clearing its stamp.
  */
 export function isStampRepairEvent(
   event: RawHookEvent,
   hookFile: string,
+  repoRoot: string,
 ): boolean {
-  const filePath = event.tool_input?.file_path;
-  if (typeof filePath === "string" && samePathRef(filePath, hookFile))
-    return true;
-  const command = event.tool_input?.command;
-  if (typeof command !== "string") return false;
-  return leafCommandsNormalized(command).some((leaf) => {
-    const i = leaf.argv.findIndex((a) => basenameOf(a) === "vigiles");
-    return i !== -1 && leaf.argv.slice(i + 1).includes("compile");
-  });
+  const filePath = repairTargetOf(event);
+  if (filePath === null) return false;
+  const target = resolveRef(repoRoot, filePath);
+  return (
+    target === resolveRef(repoRoot, hookFile) ||
+    target === resolveRef(repoRoot, stampSidecarRef(hookFile))
+  );
+}
+
+/**
+ * True when this event is a load-path REPAIR — a file write, and only a file
+ * write, to one of the files whose breakage takes the runtime down.
+ *
+ * 🔴 THE GIT ESCAPE USED TO LIVE HERE AND IT EXECUTED REPO CODE. `git merge
+ * --abort` · `git rebase --abort` · `git checkout -- <path>` were admitted on the
+ * reasoning that they "only move the tree to states git already holds; none
+ * executes a line of repo code". MEASURED against git 2.43.0 with hooks installed
+ * in `.git/hooks/`, and the reasoning is false for ALL THREE:
+ *
+ *   git checkout -- f.txt   → post-checkout          (args `<sha> <sha> 0`)
+ *   git merge --abort       → reference-transaction  (prepared, committed)
+ *   git rebase --abort      → reference-transaction  (×4) + post-checkout
+ *
+ * `reference-transaction` fires on ANY ref update, and every one of these updates
+ * a ref. `.git/hooks/*` is writable by exactly the actor this door assumes —
+ * whoever could wedge the repo in the first place — so the whitelist was an
+ * arbitrary-execution path standing open precisely while the gate enforced
+ * nothing. Same shape as the `vigiles compile` escape one layer down: a command
+ * believed inert because of what it MEANS rather than what it DOES.
+ *
+ * ## Why the replacement is a write, not a safer command
+ *
+ * `git -c core.hooksPath=/nonexistent …` does suppress all three (measured: no
+ * hook ran for any of them). It was rejected anyway. It puts free-form structure
+ * back into the accepted string — the exact thing five findings on the compile
+ * door came from — and it buys nothing, because MEASURED on the load-wedge
+ * fixture a plain file write already restores the gate to ENFORCING:
+ *
+ *   wedged     : `ls` refused
+ *   after Edit : `ls` allowed, `git push --force` DENIED by the hook's own reason
+ *
+ * You do not need to finish recovering, only to stop being wedged. Once the hook
+ * loads, the gate decides normally and `git merge --abort` is an ordinary allowed
+ * command — through the gate, not around it.
+ *
+ * ## What is accepted
+ *
+ * A write to the hook's own source, its stamp sidecar, or one of
+ * {@link HARNESS_CONFIG_FILES}. That set is COMPLETE for a compiled hook rather
+ * than a guess: `checkHookImports` rejects every import but `vigiles/hook`, so the
+ * load path is the hook file plus the config that resolves that specifier —
+ * nothing else can break it.
+ *
+ * A file write executes nothing, which is the property no command on this door
+ * ever had.
+ *
+ * ## …IN THIS REPOSITORY, which is a separate question
+ *
+ * "A write executes nothing" answers the EXECUTION objection and says nothing
+ * about SCOPE. Under the suffix comparison this used to do, a write to
+ * `/home/another-project/package.json` was accepted while THIS repo was wedged —
+ * a file that cannot repair the failure, in a checkout the wedged session has no
+ * business touching. Every candidate is now resolved against
+ * {@link HookRepoPaths.root} and compared whole against the paths the runtime
+ * itself derived ({@link HookRepoPaths.loadPathFiles}, plus this root's
+ * {@link HARNESS_CONFIG_FILES} so the floor case can never be argued away).
+ *
+ * ⚠️ THE HOOK'S OWN PATH DOES NOT GIVE THE ROOT, so the caller passes it. A hook
+ * lives at `.claude/hooks/…`, `.vigiles/hooks/…`, a plugin subdirectory or the
+ * repo root itself; there is no fixed depth to walk up, and finding a `.git`
+ * marker would mean reading disk, which core does not do. Nor would a
+ * git-derived root be RIGHT: `verifyStampOrRefuse` reads the hook and its stamp
+ * sidecar via `process.cwd()`, so any other root would accept writes to files
+ * the runtime does not read — repairs that do not repair. The root is therefore
+ * the one the rest of the runtime already uses, and it is passed in rather than
+ * invented here.
+ */
+export function isLoadPathRepairEvent(
+  event: RawHookEvent,
+  hookFile: string,
+  repo: HookRepoPaths,
+): boolean {
+  if (isStampRepairEvent(event, hookFile, repo.root)) return true;
+  const filePath = repairTargetOf(event);
+  if (filePath === null) return false;
+  const target = resolveRef(repo.root, filePath);
+  return [...HARNESS_CONFIG_FILES, ...repo.loadPathFiles].some(
+    (f) => target === resolveRef(repo.root, f),
+  );
 }

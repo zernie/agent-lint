@@ -116,6 +116,38 @@ describe("observe ledger", () => {
     }).not.toThrow();
   });
 
+  it("says what the eval numbers can REACH — the lock, not the ledger", () => {
+    // 🔴 The product's own author could not tell the lock from the cache, which
+    // is the strongest evidence a discoverability defect can have. Measured on
+    // his repo: 105 eval entries in a gitignored ledger, ZERO committed locks,
+    // and not one line anywhere saying so. The summary already printed
+    // `105 eval` — a number with no meaning attached, which is how it stayed
+    // invisible. The CONSEQUENCE is the sentence; the counts are its evidence.
+    const evals: ObservationRecord[] = [
+      { v: 1, ts: "t", kind: "eval", name: "trigger", metric: "recall", value: 0.9 }, // prettier-ignore
+      { v: 1, ts: "t", kind: "eval", name: "trigger", metric: "recall", value: 0.8 }, // prettier-ignore
+    ];
+    const hooksOnly: ObservationRecord[] = [
+      { v: 1, ts: "t", kind: "hook", event: "PreToolUse", decision: "allow" },
+    ];
+
+    // FIRES: evals recorded, no lock committed.
+    const fired = formatLedgerSummary(evals, 0);
+    expect(fired).toMatch(/CI cannot verify any eval result/);
+    expect(fired).toMatch(/2 eval run\(s\)/);
+    expect(fired).toMatch(/eval-locks/);
+
+    // QUIET: no evals at all — nothing to say.
+    expect(formatLedgerSummary(hooksOnly, 0)).not.toMatch(/CI cannot verify/);
+    // QUIET: a lock exists — the fix is done, so it must stop nagging.
+    expect(formatLedgerSummary(evals, 2)).not.toMatch(/CI cannot verify/);
+    // QUIET: a caller that did not look for locks says nothing rather than
+    // accusing a repo of a state it never checked.
+    expect(formatLedgerSummary(evals)).not.toMatch(/CI cannot verify/);
+    // …and the rest of the summary is unchanged in every case.
+    expect(formatLedgerSummary(evals, 2)).toMatch(/by kind: 2 eval/);
+  });
+
   it("formatLedgerSummary is empty for no records, and summarizes otherwise", () => {
     expect(formatLedgerSummary([])).toBe("");
     const records: ObservationRecord[] = [

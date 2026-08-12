@@ -7,7 +7,7 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -20,9 +20,13 @@ import {
   isManagedHookCommand,
   preferCompiledHooksMessage,
 } from "./scan.js";
+import { loadPlugin } from "./adapters/claude-code/plugin-loader.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
 import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
+import { codexLayout } from "./adapters/codex/layout.js";
+import { codexDialect } from "./adapters/codex/dialect.js";
+import { auditScore } from "./audit-score.js";
 
 function write(dir: string, rel: string, content: string): void {
   const abs = join(dir, rel);
@@ -1397,14 +1401,27 @@ test("scanPlugin reports an inherits-all subagent trifecta as ADVISORY", () => {
   cleanupTmpDir(dir);
 });
 
-test("scanPlugin flags a model-invocable skill's allowed-tools trifecta; excludes user-invoked", () => {
+// ---------------------------------------------------------------------------
+// A SKILL's trifecta is read off `disallowed-tools:`, NOT `allowed-tools:`
+//
+// 🔴 The defect these exist for (measured 2026-08-11). `allowed-tools:` is a
+// PRE-APPROVAL — Claude Code's docs: "It does not restrict which tools are
+// available: every tool remains callable" — confirmed by anthropics/claude-code
+// #18837 and #37683 (both closed not-planned; #37683 reproduces it interactively
+// on a live model). Reading it as a bound made the finding UNDERSTATE risk (18 of
+// 38 units reported exposed on a corpus where all 38 were) and CREDIT a narrow
+// list with a reduction it does not produce. `disallowed-tools:` WAS measured — 9
+// runs — and does remove the tool, in subagents as well.
+// ---------------------------------------------------------------------------
+
+test("a skill with NO disallowed-tools fence holds all three legs; user-invoked excluded", () => {
   const dir = makeTmpDir("scan-trifecta-skill");
   write(
     dir,
     "skills/leaky/SKILL.md",
     "---\nname: leaky\ndescription: A model-invocable skill that does many things here\nallowed-tools: Read, WebFetch\n---\n# leaky\n",
   );
-  // Same dangerous contract but user-invoked → cannot be hijacked → excluded.
+  // Same shape but user-invoked → cannot be hijacked by attacker content → excluded.
   write(
     dir,
     "skills/manual/SKILL.md",
@@ -1413,12 +1430,99 @@ test("scanPlugin flags a model-invocable skill's allowed-tools trifecta; exclude
   const r = scanPlugin(dir);
   const leaky = r.skills.find((s) => s.name === "leaky");
   const manual = r.skills.find((s) => s.name === "manual");
-  assert.equal(leaky?.trifecta?.severity, "hard");
+  assert.equal(leaky?.trifecta?.severity, "advisory");
+  assert.equal(leaky?.trifecta?.fence, "none");
+  assert.match(leaky?.trifecta?.message ?? "", /No `disallowed-tools:` line/);
   assert.equal(manual?.trifecta, null, "user-invoked skill is excluded");
   assert.ok(
     r.trifectaFindings.some((t) => t.name === "leaky" && t.kind === "skill"),
   );
   assert.ok(!r.trifectaFindings.some((t) => t.name === "manual"));
+  cleanupTmpDir(dir);
+});
+
+test("🔴 a NARROW allowed-tools does not reduce the finding (pre-approval, not a fence)", () => {
+  // The whole point of the retarget, pinned. `Read, Grep` names no untrusted-intake
+  // and no exfil tool at all — under the old reading that scored CLEAN. It must not,
+  // because the session still grants WebFetch/Bash and the skill can still call them.
+  // If this ever goes back to `null`, the pre-approval misreading has returned.
+  const dir = makeTmpDir("scan-trifecta-narrow-allowed");
+  write(
+    dir,
+    "skills/narrow/SKILL.md",
+    "---\nname: narrow\ndescription: A model-invocable skill declaring a very narrow tool list\nallowed-tools: Read, Grep\n---\n# narrow\n",
+  );
+  // …and the WIDEST possible `allowed-tools` scores identically, because the field
+  // is not an input at all: same severity, same fence state, same legs.
+  write(
+    dir,
+    "skills/wide/SKILL.md",
+    "---\nname: wide\ndescription: A model-invocable skill declaring every tool it could ever want\nallowed-tools: Read, Grep, Glob, Bash, WebFetch, WebSearch\n---\n# wide\n",
+  );
+  const r = scanPlugin(dir);
+  const narrow = r.skills.find((s) => s.name === "narrow")?.trifecta;
+  const wide = r.skills.find((s) => s.name === "wide")?.trifecta;
+  assert.notEqual(narrow, null, "a narrow allowed-tools is NOT a fence");
+  assert.equal(narrow?.severity, wide?.severity);
+  assert.equal(narrow?.fence, wide?.fence);
+  assert.deepEqual(narrow?.legs, wide?.legs);
+  assert.equal(r.trifectaFindings.filter((t) => t.kind === "skill").length, 2);
+  cleanupTmpDir(dir);
+});
+
+test("a disallowed-tools that CLOSES a leg clears the finding", () => {
+  const dir = makeTmpDir("scan-trifecta-fenced");
+  // Denying every built-in supplier of untrusted-intake AND exfiltration leaves only
+  // private-data read standing → Rule of Two holds → no finding.
+  write(
+    dir,
+    "skills/fenced/SKILL.md",
+    "---\nname: fenced\ndescription: A model-invocable skill that fences off the network entirely\ndisallowed-tools: WebFetch, WebSearch, Bash\n---\n# fenced\n",
+  );
+  const r = scanPlugin(dir);
+  assert.equal(r.skills.find((s) => s.name === "fenced")?.trifecta, null);
+  assert.equal(r.trifectaFindings.length, 0);
+  cleanupTmpDir(dir);
+});
+
+test("a PARTIAL disallowed-tools closes no leg and names the suppliers still standing", () => {
+  const dir = makeTmpDir("scan-trifecta-partial-fence");
+  // Denying `Read` alone leaves Grep/Glob/Bash on the private-data leg — an author
+  // who believed they had fenced and had not. Per-skill, keeps its own line.
+  write(
+    dir,
+    "skills/half/SKILL.md",
+    "---\nname: half\ndescription: A model-invocable skill that denies exactly one read tool\ndisallowed-tools: Read\n---\n# half\n",
+  );
+  const r = scanPlugin(dir);
+  const f = r.skills.find((s) => s.name === "half")?.trifecta;
+  assert.equal(f?.fence, "ineffective");
+  assert.equal(f?.severity, "advisory", "never LOUDER than declaring no fence");
+  assert.match(f?.message ?? "", /closes no lethal-trifecta leg/);
+  assert.deepEqual(f?.legs.private, ["Grep", "Glob", "Bash"]);
+  cleanupTmpDir(dir);
+});
+
+test("the report AGGREGATES unfenced skills into one line but still counts every unit", () => {
+  // A per-skill line for the ecosystem DEFAULT would print on ~100% of harnesses,
+  // and a section that always fires gets muted — taking the hard findings with it.
+  const dir = makeTmpDir("scan-trifecta-aggregate");
+  for (const n of ["alpha", "beta", "gamma"]) {
+    write(
+      dir,
+      `skills/${n}/SKILL.md`,
+      `---\nname: ${n}\ndescription: A model-invocable skill with no tool fence declared at all\n---\n# ${n}\n`,
+    );
+  }
+  const r = scanPlugin(dir);
+  const text = formatScanReport(r);
+  assert.equal(r.trifectaFindings.length, 3, "every unit is still a finding");
+  // The header counts UNITS (3), not the lines the aggregate collapsed them into.
+  assert.match(text, /Lethal trifecta \(prompt-injection exfil risk\) \(3\)/);
+  assert.match(text, /3 of 3 model-invocable skill\(s\) declare no/);
+  assert.match(text, /alpha, beta, gamma/);
+  // …and it says WHY narrowing `allowed-tools` is not the fix.
+  assert.match(text, /`allowed-tools:` does NOT fence a skill/);
   cleanupTmpDir(dir);
 });
 
@@ -1478,25 +1582,30 @@ test("trifecta detector is dialect-injected — works under a non-CC layout", ()
 // strict loader yields nothing at all, which is inherits-all: all three legs.
 const UNCLOSED_TOOLS = "[Read, Bash";
 
-test("a skill whose allowed-tools is MALFORMED scores as inherits-all, not as the salvage", () => {
+test("a skill whose FENCE is in a malformed block is not credited with it", () => {
   const dir = makeTmpDir("scan-malformed-contract-skill");
+  // The same defect, retargeted: `disallowed-tools: [WebFetch, WebSearch, Bash` is
+  // an unclosed flow array. The lenient salvage yields exactly those three names,
+  // which would close two whole legs and score CLEAN — but a strict loader reads no
+  // frontmatter at all, so the fence denies nothing. A fence that does not parse is
+  // not a fence.
   write(
     dir,
     "skills/broken/SKILL.md",
-    `---\nname: broken\ndescription: A model-invocable skill whose frontmatter does not parse\nallowed-tools: ${UNCLOSED_TOOLS}\n---\n# broken\n`,
+    `---\nname: broken\ndescription: A model-invocable skill whose frontmatter does not parse\ndisallowed-tools: [WebFetch, WebSearch, Bash\n---\n# broken\n`,
   );
   const r = scanPlugin(dir);
   const skill = r.skills.find((s) => s.name === "broken");
-  assert.equal(
-    skill?.trifecta?.severity,
-    "advisory",
-    "an unreadable contract is scored as inherits-all, which holds every leg",
+  assert.equal(skill?.trifecta?.severity, "advisory");
+  assert.equal(skill?.trifecta?.fence, "none", "a salvaged fence is no fence");
+  // …and the finding SAYS why, so the author doesn't read "no disallowed-tools
+  // line" on a file that plainly has one.
+  assert.match(skill?.trifecta?.message ?? "", /not valid YAML/);
+  assert.doesNotMatch(
+    skill?.trifecta?.message ?? "",
+    /No `disallowed-tools:` line/,
   );
-  // …and the finding SAYS why the grade moved, so the author doesn't read
-  // "no explicit tools" on a file that plainly declares them.
-  assert.match(skill.trifecta?.message ?? "", /not valid YAML/);
-  assert.match(skill.trifecta?.message ?? "", /INHERITS-ALL/);
-  // The two paths now agree: the same file is reported by frontmatter-valid.
+  // The two paths agree: the same file is reported by frontmatter-valid.
   assert.ok(
     r.malformedFrontmatter.some((i) => i.path.includes("skills/broken")),
     "frontmatter-valid reports the same block the scorer refused to trust",
@@ -1547,13 +1656,14 @@ test("a SALVAGED all-three contract still convicts — the refusal is one-direct
 });
 
 test("a VALID narrow contract is unaffected — the refusal is scoped to unparseable blocks", () => {
-  // Control. The same two tools, in a block that parses, must still score clean:
-  // Read + Bash is private + exfil with no untrusted leg (Rule of Two).
+  // Control. The same declarations in a block that PARSES must score clean: for the
+  // subagent, Read + Bash is private + exfil with no untrusted leg (Rule of Two);
+  // for the skill, a fence that really denies the whole network leg.
   const dir = makeTmpDir("scan-valid-contract-control");
   write(
     dir,
     "skills/fine/SKILL.md",
-    "---\nname: fine\ndescription: A model-invocable skill whose frontmatter parses cleanly\nallowed-tools: [Read, Bash]\n---\n# fine\n",
+    "---\nname: fine\ndescription: A model-invocable skill whose frontmatter parses cleanly\ndisallowed-tools: [WebFetch, WebSearch, Bash]\n---\n# fine\n",
   );
   write(
     dir,
@@ -1614,5 +1724,264 @@ test("skill-resource is FP-safe: URLs and $VAR tokens are not flagged", () => {
     0,
   );
   assert.equal(r.skillResourceIssues.length, 0);
+  cleanupTmpDir(dir);
+});
+
+// ─── the surface walk must not follow a directory symlink ─────────────────────
+//
+// 🔴 The walk `statSync`'d every entry, which FOLLOWS the link. A surface dir
+// holding a link back to an ancestor is a CYCLE, and the recursion rides it until
+// the path length or the fd limit stops it; a link to a big external tree makes an
+// advisory scan crawl outside the checkout. Both are silent while they burn.
+//
+// Both halves: the cycle TERMINATES and reports the real file, and an ordinary
+// nested dir under the same surface is still walked (a fix that simply stopped
+// descending would pass the first assertion alone).
+test("a directory symlink is not descended into, so a cycle cannot hang the scan", () => {
+  const dir = makeTmpDir("scan-symlink-cycle");
+  write(
+    dir,
+    ".claude/skills/loop/SKILL.md",
+    "---\nname: loop\ndescription: A skill whose folder links back to its own parent\n---\n# loop\n",
+  );
+  // The file the walk MUST still find — a genuine finding, so the assertion below
+  // proves the walk ran rather than bailed out.
+  write(
+    dir,
+    ".claude/skills/loop/loop.test.mjs",
+    'import { runEval } from "vigiles/testing";\nawait runEval({});\n',
+  );
+  // …and an ordinary nested dir, to pin that descent still happens at all.
+  write(
+    dir,
+    ".claude/skills/loop/nested/deep.test.mjs",
+    'import { runEval } from "vigiles/testing";\nawait runEval({});\n',
+  );
+  // `.claude/skills/loop/self` → `.claude/skills` : an ancestor, so following it
+  // re-enters `loop/` forever.
+  symlinkSync(
+    join(dir, ".claude", "skills"),
+    join(dir, ".claude", "skills", "loop", "self"),
+    "dir",
+  );
+
+  const started = Date.now();
+  // TWO walks used to cross this fixture and each rode the cycle on its own: the
+  // loader's `readTree` (which THREW `ELOOP` out of the entire audit) and
+  // `harnessSurfaceFilesOnDisk` (which multiplied every path by every lap). The
+  // second walk was deleted 2026-08-12 with the foreign-runner warning it fed
+  // (tombstone in `core/foreign-runner.ts`), so only the loader crosses it now —
+  // and the loader's copy of the property is asserted directly at the bottom of
+  // this test. The no-throw stays separate from the paths, so reverting the fix
+  // fails on a named assertion rather than on a stray exception.
+  let report: ReturnType<typeof scanPlugin> | null = null;
+  let thrown = "";
+  try {
+    report = scanPlugin(dir);
+  } catch (e) {
+    thrown = e instanceof Error ? e.message : String(e);
+  }
+  assert.equal(
+    thrown,
+    "",
+    "scanPlugin must not throw on a cyclic surface dir (the loader used to raise ELOOP)",
+  );
+  assert.ok(report);
+  assert.ok(
+    Date.now() - started < 20000,
+    "the scan must terminate rather than ride the cycle",
+  );
+  // ⚠️ A "no path repeats through `self/`" assertion stood here, observed through
+  // the foreign-runner warnings. Those are gone, and it is removed rather than
+  // rewritten because the LOADER assertion below pins the identical property over
+  // the identical three files — keeping a second copy against a deleted feature
+  // would have meant asserting on an observable that can no longer change.
+  //
+  // …the LOADER's own walk. Catching the `ELOOP` would already
+  // stop the throw while still reading the tree once per lap — measured on this
+  // fixture: 82 file keys (40 laps of `self/loop/self/…`) instead of 3. That is
+  // the input the whole report is computed from, so it is asserted directly
+  // rather than through a symptom.
+  assert.deepEqual(
+    Object.keys(loadPlugin(dir).files).sort(),
+    [
+      ".claude/skills/loop/SKILL.md",
+      ".claude/skills/loop/loop.test.mjs",
+      ".claude/skills/loop/nested/deep.test.mjs",
+    ],
+    "the loader must read each real file once, not once per lap of the cycle",
+  );
+  cleanupTmpDir(dir);
+});
+
+// ─── …and the walk's ENTRY POINT is classified too ────────────────────────────
+//
+// 🔴 The policy above was applied to every entry INSIDE a walk and to no walk's
+// root. Both walks hand a top-level surface dir straight to `readdirSync`, which
+// FOLLOWS a link — so `.claude/skills -> <repo>` re-entered the whole checkout
+// through a door the layout never opened, and the containment both walks promise
+// ("only the surface dirs are walked, so the rest of the repo and any
+// node_modules beside it is never entered") held everywhere except at the top.
+//
+// A root is judged by a DIFFERENT rule from an inner entry, on purpose: refusing
+// every symlinked root would report zero skills for the ordinary layout in the
+// second test below. See `walkableRoot` in src/fs-walk.ts.
+test("a surface ROOT that links back over the repo is refused, so the walk stays inside", () => {
+  const dir = makeTmpDir("scan-symlink-root");
+  // The tree the walk must NOT swallow: a foreign-runner finding and a file the
+  // loader would otherwise read into the map the whole report is computed from.
+  write(
+    dir,
+    "node_modules/junk/planted.test.mjs",
+    'import { runEval } from "vigiles/testing";\nawait runEval({});\n',
+  );
+  write(dir, "unrelated/notes.md", "# not a surface\n");
+  mkdirSync(join(dir, ".claude"), { recursive: true });
+  // BOTH root shapes point back at the repo: the user form (`.claude/skills`) and
+  // the plugin form (`skills`). Between them they are the entry point of every
+  // walk in the codebase — `harnessSurfaceFilesOnDisk`, the loader's root-surface
+  // pass, its user-surface pass, and `executableSources` (which feeds
+  // `danglingRefs`) — and each was reached through `readdirSync` unclassified.
+  symlinkSync(join(dir), join(dir, ".claude", "skills"), "dir");
+  symlinkSync(join(dir), join(dir, "skills"), "dir");
+
+  const r = scanPlugin(dir);
+  assert.deepEqual(
+    r.warnings.filter((w) => w.includes("planted.test.mjs")),
+    [],
+    "a file under node_modules is not harness surface, whatever a root link says",
+  );
+  assert.deepEqual(
+    Object.keys(loadPlugin(dir).files).filter(
+      (k) => k.includes("node_modules") || k.includes("unrelated"),
+    ),
+    [],
+    "the loader must not read the whole checkout in through a symlinked root",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("…but a shared skills directory linked in from OUTSIDE is still read", () => {
+  // The QUIET half, and the reason the root rule is not the entry rule. One
+  // skills folder linked into several checkouts is an ordinary setup; a blanket
+  // refusal would pass the test above while silently reporting ZERO skills here,
+  // which is a worse failure than the one being fixed.
+  const dir = makeTmpDir("scan-symlink-root-ok");
+  const repo = join(dir, "repo");
+  mkdirSync(join(repo, ".claude"), { recursive: true });
+  write(
+    dir,
+    "shared/linked/SKILL.md",
+    "---\nname: linked\ndescription: A shared skill linked into several checkouts at once\n---\n# linked\n",
+  );
+  symlinkSync(join(dir, "shared"), join(repo, ".claude", "skills"), "dir");
+
+  const r = scanPlugin(repo);
+  assert.deepEqual(
+    r.skills.map((s) => s.name),
+    ["linked"],
+    "a symlinked surface root is the layout naming where the skills live",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("…but a symlink to a FILE is still collected — it cannot recurse", () => {
+  // The QUIET half of the same fix: refusing DESCENT must not quietly drop links
+  // to files. A directory link can loop; a file link cannot, so it is read.
+  //
+  // ⚠️ THIS USED TO ASSERT ON THE FOREIGN-RUNNER WARNING, which was deleted
+  // 2026-08-12 (tombstone in `core/foreign-runner.ts`). The property it pins is
+  // NOT the warning though — it is `entryOf`'s rule in `fs-walk.ts`, which the
+  // loader still uses to build the file map the whole report is computed from.
+  // So the assertion moves to the loader rather than the test being dropped:
+  // deleting a feature must not silently take a live invariant's only test with
+  // it.
+  const dir = makeTmpDir("scan-symlink-file");
+  write(
+    dir,
+    "real/driver.test.mjs",
+    'import { runEval } from "vigiles/testing";\nawait runEval({});\n',
+  );
+  mkdirSync(join(dir, ".claude", "skills", "s"), { recursive: true });
+  write(
+    dir,
+    ".claude/skills/s/SKILL.md",
+    "---\nname: s\ndescription: A skill whose harness test is a symlink to a real file\n---\n# s\n",
+  );
+  symlinkSync(
+    join(dir, "real", "driver.test.mjs"),
+    join(dir, ".claude", "skills", "s", "linked.test.mjs"),
+    "file",
+  );
+  assert.ok(
+    Object.prototype.hasOwnProperty.call(
+      loadPlugin(dir).files,
+      ".claude/skills/s/linked.test.mjs",
+    ),
+    "a symlinked FILE under a surface dir is still read into the file map",
+  );
+  // And the skill beside it is still found, so the walk did not bail at the link.
+  assert.deepEqual(
+    scanPlugin(dir).skills.map((x) => x.name),
+    ["s"],
+  );
+  cleanupTmpDir(dir);
+});
+
+// ─── a skill fence is only offered where the harness has one ──────────────────
+//
+// 🔴 End-to-end half of the `skillTrifectaIssue` dialect gate. The unit test pins
+// the detector; this pins what the AUDIT does with it, which is where the cost
+// was: a Codex repo's skills were reported, SCORED against Safety, and handed a
+// `disallowed-tools:` remedy that Codex does not read — so the number could not be
+// improved by doing the work.
+/** The Safety ring's score, or `null` when the report has nothing to assess. */
+function safetyScore(r: ReturnType<typeof scanPlugin>): number | null {
+  const c = auditScore(r).categories.find((x) => x.key === "Safety");
+  if (!c) throw new Error("no Safety ring");
+  return c.score;
+}
+
+test("a Codex repo is not scored against a fence its harness has no key for", () => {
+  const dir = makeTmpDir("scan-codex-fence");
+  write(dir, "AGENTS.md", "# rules\n");
+  write(dir, ".codex/config.toml", "[mcp_servers]\n");
+  write(
+    dir,
+    "skills/deploy/SKILL.md",
+    "---\nname: deploy\ndescription: Ships the built artifact to production for the team\n---\n# deploy\n",
+  );
+  const r = scanPlugin(dir, codexLayout, codexDialect);
+  assert.equal(r.skills.length, 1, "precondition: the skill IS discovered");
+  assert.equal(r.skills[0].trifecta, null);
+  assert.deepEqual(
+    r.trifectaFindings.filter((f) => f.kind === "skill"),
+    [],
+  );
+  // With no finding left, this harness has no exposed unit — the ring is a clean
+  // 100 rather than a floor the author cannot leave.
+  assert.equal(
+    safetyScore(r),
+    100,
+    "a remedy the harness cannot apply must not hold the score down",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("…while the same skill under Claude Code is still reported and still scored", () => {
+  // The QUIET half: the gate must not have deleted the headline Safety detector.
+  const dir = makeTmpDir("scan-cc-fence");
+  write(
+    dir,
+    "skills/deploy/SKILL.md",
+    "---\nname: deploy\ndescription: Ships the built artifact to production for the team\n---\n# deploy\n",
+  );
+  const r = scanPlugin(dir);
+  assert.equal(r.skills[0]?.trifecta?.fence, "none");
+  assert.equal(r.trifectaFindings.filter((f) => f.kind === "skill").length, 1);
+  assert.ok(
+    (safetyScore(r) ?? 100) < 100,
+    "an unfenced Claude Code skill still costs Safety",
+  );
   cleanupTmpDir(dir);
 });

@@ -35,6 +35,7 @@ import { parse as parseToml } from "@iarna/toml";
 
 import { assertNever } from "./core/hash.js";
 import type { PluginLayout } from "./core/layout.js";
+import { entryOf, walkableRoot } from "./fs-walk.js";
 
 export interface LoadedPlugin {
   /** A `.claude/settings.json`-shaped object with hooks resolved. */
@@ -138,15 +139,43 @@ function readHooks(root: string, layout: PluginLayout): unknown {
   return undefined;
 }
 
-/** Recursively collect text files under `dir` as `relativePath → contents`. */
+/**
+ * Recursively collect text files under `dir` as `relativePath → contents`.
+ *
+ * 🔴 A DIRECTORY SYMLINK IS NOT DESCENDED INTO. `statSync` FOLLOWS a link, so a
+ * surface dir containing `self -> ..` (an ancestor, or any backlink inside a
+ * linked-in tree) recursed forever. Measured 2026-08-12 on a two-file fixture:
+ * `scanPlugin` did not merely slow down, it THREW —
+ * `ELOOP: too many symbolic links encountered` out of `readTree`, up through
+ * `loadPlugin`, and out of the audit. A link to a large external tree is the
+ * quieter half of the same bug: the loader reads a foreign tree into the file map
+ * that the entire report is computed from.
+ *
+ * The decision is {@link entryOf}, which lives in `fs-walk.ts` rather than here.
+ * It was shared with `harnessSurfaceFilesOnDisk` in `scan.ts` — the other walk
+ * over the same trees, and exactly the kind of pair this repo has been bitten by
+ * fixing on only one side — until that walk was deleted with the foreign-runner
+ * warning it fed (tombstone in `core/foreign-runner.ts`). That module carries the
+ * full rationale: a symlinked FILE is still read (it cannot recurse), and an
+ * unreadable entry is skipped rather than thrown, so a dangling link cannot take
+ * down an audit.
+ *
+ * The walk's own ENTRY POINTS are classified by `walkableRoot` at each call site,
+ * not here: this function is also the recursion step, and re-checking a directory
+ * `entryOf` has already cleared would cost a syscall per directory to answer a
+ * question that cannot come out differently.
+ */
 function readTree(dir: string, base: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
-    const st = statSync(full);
-    if (st.isDirectory()) {
-      Object.assign(out, readTree(full, base));
-    } else if (st.isFile() && st.size <= MAX_SKILL_FILE_BYTES) {
+    const { kind, size } = entryOf(full);
+    if (kind === "dir") Object.assign(out, readTree(full, base));
+    // The cap keeps a stray binary out of the in-memory file map, and the size
+    // comes from the SAME stat that classified the entry. Asking a second time
+    // needed its own `catch` — reachable only if the file vanished between the two
+    // calls — which is dead code the 100% coverage gate could only ever fail on.
+    else if (kind === "file" && size <= MAX_SKILL_FILE_BYTES) {
       out[relative(base, full)] = readFileSync(full, "utf-8");
     }
   }
@@ -279,12 +308,21 @@ function materializeSurfaces(
   const counts: Record<string, number> = {};
   const isDir = (p: string): boolean =>
     existsSync(p) && statSync(p).isDirectory();
+  /**
+   * One surface dir's tree, or `{}` when there is nothing to read.
+   *
+   * `walkableRoot` classifies the walk's ENTRY POINT — `isDir` follows a symlink,
+   * so a `skills -> ..` link handed the whole repo (node_modules included) to the
+   * file map the entire report is computed from. It is a DIFFERENT rule from the
+   * per-entry one and that function says why; a shared skills dir linked in from
+   * outside is still read.
+   */
+  const surfaceTree = (dir: string): Record<string, string> =>
+    isDir(dir) && walkableRoot(dir, root) ? readTree(dir, dir) : {};
   // Read each ROOT-level surface tree once (keys relative to the surface dir).
   const rootTrees = new Map<string, Record<string, string>>();
-  for (const surface of layout.surfaceDirs) {
-    const dir = join(root, surface);
-    if (isDir(dir)) rootTrees.set(surface, readTree(dir, dir));
-  }
+  for (const surface of layout.surfaceDirs)
+    rootTrees.set(surface, surfaceTree(join(root, surface)));
   const add = (key: string, content: string, onDisk: string): void => {
     files[key] = content;
     sources[key] = onDisk;
@@ -295,6 +333,9 @@ function materializeSurfaces(
     case "single-skill": {
       // Materialize the WHOLE skill dir under the canonical skills key, so its
       // bundled resources (scripts/references/assets) ship too, not just SKILL.md.
+      // No `walkableRoot` here on purpose: `root` is the directory the CALLER
+      // named (`vigiles audit <dir>`), not one this walk discovered, and refusing
+      // to read the path someone explicitly pointed at is not a containment rule.
       const tree = readTree(root, root);
       for (const [rel, content] of Object.entries(tree)) {
         add(
@@ -315,9 +356,7 @@ function materializeSurfaces(
         const tree =
           source.kind === "root"
             ? (rootTrees.get(surface) ?? {})
-            : isDir(dir)
-              ? readTree(dir, dir)
-              : {};
+            : surfaceTree(dir);
         for (const [rel, content] of Object.entries(tree)) {
           add(
             join(layout.materializeRoot, surface, rel),
@@ -516,6 +555,7 @@ function executableSources(
   for (const surface of layout.intraRefDirs) {
     const dir = join(root, surface);
     if (!existsSync(dir) || !statSync(dir).isDirectory()) continue;
+    if (!walkableRoot(dir, root)) continue; // the walk's entry point, see fs-walk
     for (const [path, content] of Object.entries(readTree(dir, root))) {
       if (DOC_SOURCE_RE.test(path)) continue; // skip prose
       sources[path] = SCRIPT_COMMENT_RE.test(path)

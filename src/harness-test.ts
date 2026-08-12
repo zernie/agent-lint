@@ -53,6 +53,7 @@ import type {
 } from "./core/harness-driver.js";
 import { assertHarnessTestable } from "./adapter-conformance.js";
 import { recordCheck } from "./check-count.js";
+import { probeTrace } from "./coverage-probe.js";
 
 import { claudeCodeRuntime } from "./adapters/claude-code/runtime.js";
 
@@ -490,6 +491,8 @@ export function parseClaudeRun(stdout: string): ParsedRun {
 export function claudeAvailable(): boolean {
   try {
     return (
+      // vigiles:free-tier — `--version` asks the binary to print and exit; it
+      // never reaches a model backend, so it spends nothing.
       spawnSync(claudeCodeRuntime.agentBinary, ["--version"], {
         stdio: "ignore",
       }).status === 0
@@ -539,6 +542,10 @@ function spawnAgent(
 ): Promise<RunOut> {
   const wired = runtime.wireMock(baseUrl);
   return new Promise((resolvePromise) => {
+    // vigiles:free-tier — the deterministic harness tier. `runtime.wireMock`
+    // points the binary at the LOCAL scripted mock (base-URL env + dummy key),
+    // so no real model is reached and nothing is billed. That is the whole
+    // reason this tier is free and runs on every push.
     const child = spawn(runtime.agentBinary, [...args], {
       cwd,
       // Any key works — the mock ignores auth. wireMock supplies the overlay
@@ -594,6 +601,10 @@ function makeResult(
   turns: number,
   modelRequests: readonly ModelRequest[],
 ): HarnessTestResult {
+  // WHAT this run exercised, read off the transcript rather than the fixture: a
+  // harness test installs a whole plugin, and what was INSTALLED is a set while
+  // what RAN is one thing. See coverage-probe.ts.
+  probeTrace({ toolCalls: parsed.toolCalls, hooks: parsed.hooks });
   return {
     exitCode: out.code,
     stdout: out.stdout,

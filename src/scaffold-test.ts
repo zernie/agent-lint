@@ -43,6 +43,9 @@ export interface ScaffoldInput {
   readonly kind: SurfaceKind;
   /** Skill dir name / agent name / hook-script basename. */
   readonly name: string;
+  /** Extension to write, from `core/test-file-ext.ts`. Defaults to `mjs`, so a
+   *  caller written before TypeScript support keeps its behaviour byte for byte. */
+  readonly ext?: string;
   /** Repo-relative path to the surface (SKILL.md / agent .md / hook script). */
   readonly path: string;
   /** Plugin name for the namespaced skill id; a placeholder TODO when unknown. */
@@ -79,14 +82,19 @@ const PLUGIN_TODO = "<plugin>";
 
 /**
  * The suggested test path for a surface — mirrors `suggestedTestPath` in
- * `test-coverage.ts` (a skill gets an `.eval.mjs`, agent/hook a `.harness.mjs`),
- * so a generated file is colocated where the untested-surface detector looks for it
- * and the surface stops being reported untested.
+ * `test-coverage.ts` (a skill gets an `.eval.*`, agent/hook a `.harness.*`), so a
+ * generated file is colocated where the untested-surface detector looks for it and
+ * the surface stops being reported untested.
+ *
+ * The EXTENSION comes from `core/test-file-ext.ts`: a project that looks like
+ * TypeScript gets a `.ts` test without being asked. Both places must agree — a
+ * generator that writes `foo.harness.ts` while the finding tells the reader to add
+ * `foo.harness.mjs` teaches them the tool contradicts itself.
  */
 function suggestedPath(input: ScaffoldInput): string {
   const dir = dirname(input.path);
-  const ext = input.kind === "skill" ? "eval.mjs" : "harness.mjs";
-  return `${dir}/${input.name}.${ext}`;
+  const tier = input.kind === "skill" ? "eval" : "harness";
+  return `${dir}/${input.name}.${tier}.${input.ext ?? "mjs"}`;
 }
 
 function header(title: string, run: string): string {

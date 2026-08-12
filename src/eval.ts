@@ -21,6 +21,7 @@
  * Real model → real cost + statistical, not deterministic. For fast, free,
  * deterministic checks of hook *logic*, see `harness-test.ts`.
  */
+import { refuseUnderForeignRunner } from "./core/foreign-runner.js";
 import { spawn, execSync } from "node:child_process";
 import {
   mkdtempSync,
@@ -79,6 +80,7 @@ import {
 import type { Check, CheckJSON } from "./check.js";
 import { welchTTest, type Comparison } from "./stats.js";
 import { recordCheck } from "./check-count.js";
+import { probeTrace } from "./coverage-probe.js";
 import {
   type ToolIntercept,
   buildInterceptSettings,
@@ -373,6 +375,7 @@ export function resolveSpawnEnv(
 /** The real `claude`-spawning runner (composition root). Exported so other
  *  real-model entries (e.g. the `audit` trigger tier) bind the same runner. */
 export function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
+  refuseUnderForeignRunner("spawning `claude`");
   return new Promise((resolvePromise) => {
     const args = [
       "-p",
@@ -952,6 +955,12 @@ function makeContext(
   parse: ModelOutputParser = parseClaudeRun,
 ): RunContext {
   const p = parse(out);
+  // The one place every real-model trial's trace is assembled — `runEval`,
+  // `measureTriggerRate` and the selection runs all pass through here — so the
+  // attribution is derived once, from what FIRED. A trigger-rate run installs
+  // competing skills on purpose (`installSet`); crediting the install set would
+  // credit a skill for LOSING selection. See coverage-probe.ts.
+  probeTrace({ toolCalls: p.toolCalls, hooks: p.hooks });
   return {
     cwd,
     exitCode: out.code,
@@ -2798,5 +2807,26 @@ export function formatTriggerRateReport(report: TriggerRateReport): string {
       ? `whole-harness: measured against ${String(report.competitors)} competing skill(s)`
       : "isolated: no competing skills — recall is an upper bound, false-positive a lower bound (populate `installSet` for a release-gate measurement)",
   );
+  // A TOTAL zero is far more often a wiring mistake than a finding, and it does
+  // not look like one: the report is well-formed, the runs executed, and every
+  // line reads 0.00 — which parses as "this description never fires". Measured
+  // the hard way while building a consumer's trigger suite (2026-08-11): three
+  // separate setup errors each produced a confident, plausible 0%, and two of
+  // them were briefly written up as findings about the skills before being
+  // caught. So when nothing fired at all, say what usually causes that.
+  //
+  // Deliberately only on the TOTAL zero. A partial rate is a real measurement and
+  // must not be second-guessed; a checker that hedges on good data gets ignored.
+  if (report.n > 0 && report.rate === 0)
+    lines.push(
+      "⚠ nothing fired on ANY prompt. That is usually SETUP, not the description — check, in order:\n" +
+        "  1. the id in `fired` — `skillResolved` matches the NAMESPACED id " +
+        "(`<plugin>:<skill>`); a bare name silently never matches;\n" +
+        "  2. the install field — a loose `.claude/skills` dir needs `skillsDir`, " +
+        "not `pluginDir` (which wants a full plugin manifest);\n" +
+        "  3. the `fixture` — a run starts in an EMPTY cwd, so a prompt about a " +
+        "file that does not exist is one the model is right to decline.\n" +
+        "  Rule out all three before recording this as a fact about the skill.",
+    );
   return lines.join("\n");
 }
