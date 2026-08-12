@@ -58,6 +58,67 @@
  * Pure string work over names that are already in the scan — zero runtime
  * imports, so `scanFiles` (browser engine) and `scanPlugin` (disk) run the
  * identical predicate and their reports stay byte-identical.
+ *
+ * ---------------------------------------------------------------------------
+ * DOES THIS GATE EARN ITS KEEP? Asked properly 2026-08-12, after SIX rounds of
+ * findings against this one file — which is data about the design, not about six
+ * bugs. Verdict: KEEP, TUNED TO ABSTAIN. The reasoning is measured, so it can be
+ * re-run and overturned.
+ *
+ * ## What it does on real input: nothing, and only twice does it come close
+ *
+ * `foreignRunnerTests` over three real corpora — this repo, a 43-harness consumer
+ * repo, and five vendored third-party plugin repos — 3 613 js/ts files:
+ *
+ *   findings                                                        0
+ *   files under a surface dir AND collected by a default glob       2
+ *   …of those, files with agent evidence                            0
+ *
+ * The two near-misses are `examples/harness/dogfood/.../code-reviewer.md.spec.ts`
+ * here and `.claude/skills/verify-citations/scripts/verify-cites.test.mjs` in the
+ * consumer repo. The second is the exact file `untested-skill.md` already cites
+ * as "a good test of a bundled script, not a test of a skill" — and the EVIDENCE
+ * rule is the only thing standing between its author and "rename it". That is the
+ * gate's one demonstrated effect on a real repository, and it is an effect of
+ * NOT firing.
+ *
+ * ## The asymmetry, which the old tuning ignored
+ *
+ * A missed warning costs one accidental paid run — except it does not, because
+ * `refuseUnderForeignRunner` refuses at all four spawn doors, so the miss costs
+ * only an earlier and friendlier notice. A false warning costs someone a working
+ * test, because the remedy printed is "rename this file". Those are not
+ * symmetric, and every finding this file has produced has been the second kind.
+ *
+ * ## So the rule is: narrow on evidence, never widen on a shape
+ *
+ * Two classes were removed this round, each at a MEASURED cost of zero on the
+ * corpora above: a name the file BINDS itself ({@link locallyBound}), and a name
+ * reached through a `.` (`mock.runEval()`). The dotted allowance existed for
+ * `import * as v from "vigiles/testing"; v.runEval()`; that shape occurs in
+ * exactly two places across every corpus, and both are this gate's own comment
+ * and its own test.
+ *
+ * Residual false-positive surface, probed rather than estimated — three shapes
+ * still fire, and the first two are the honest remainder:
+ *
+ *   import { runEval } from "./my-own-helper.js"; runEval({})   → fires
+ *   function f(runEval) { runEval({}) }                          → fires
+ *   export function t() { runEval({}) }                          → fires (this is
+ *                                                                  also the TRUE
+ *                                                                  positive shape)
+ *
+ * It reduces to "the file calls a bare name it did not declare", which is as tight
+ * as a lexical rule gets here: requiring an import from a vigiles specifier was
+ * MEASURED in round 14 and scored 0/4 on this repo's own agent-driving examples,
+ * which import from relative `../../dist/*` paths.
+ *
+ * 🔴 THE FALSIFIABLE PART. A seventh false positive is not another bug to fix —
+ * it is the measurement saying the lexical rule cannot be made tight enough, and
+ * the answer then is to DELETE the gate and let the money guard be the whole
+ * defence. Fix the next finding by narrowing or by deleting; adding a shape rule
+ * that widens has been wrong six times.
+ * ---------------------------------------------------------------------------
  */
 
 import type { PluginLayout } from "./layout.js";
@@ -562,9 +623,56 @@ function blankBodies(src: string, out: string[], from: number): number {
  * the harness lint already tracks.
  */
 const AGENT_CALL_RE = new RegExp(
-  `(?<![\\p{L}\\p{N}_$])(?:${AGENT_DRIVING_APIS.join("|")})\\s*\\(`,
+  `(?<![\\p{L}\\p{N}_$.])(?:${AGENT_DRIVING_APIS.join("|")})\\s*\\(`,
   "gu",
 );
+
+/**
+ * Does this source BIND one of these names itself? If it does, a call of that
+ * name is a call of the file's own thing, whatever else the file imports.
+ *
+ * 🔴 THE REPORTED FALSE POSITIVE, and the sixth from this file: `const runEval =
+ * vi.fn(); runEval();` was read as a real-model invocation, and the author was
+ * told to rename a working unit test out of their vitest run. It is the dual of
+ * the import rule — and unlike that rule it costs nothing, because it needs no
+ * module graph: a declaration is right there in the text.
+ *
+ * ⚠️ EVERY ERROR THIS FUNCTION MAKES IS TOWARD SILENCE, which is why it is
+ * deliberately GENEROUS. Over-matching suppresses a warning; under-matching
+ * accuses a working test. `export { x as runEval }` is a re-export rather than a
+ * local binding and is matched anyway, for that reason.
+ *
+ * Shapes, in order: a `const`/`let`/`var`/`function`/`function*`/`class`
+ * declaration of the name; a destructuring or array binding pattern that mentions
+ * it before the pattern's `=`; an `as NAME` alias (`import { x as runEval }`,
+ * `import * as runEval`); and a default import (`import runEval from …`).
+ *
+ * A plain `import { runEval } from "vigiles/testing"` is NOT a local binding —
+ * that binds OUR name to OUR export, which is the case the gate exists for, and
+ * none of the patterns match it.
+ *
+ * WHAT IT DELIBERATELY MISSES — run, not asserted (each input through the built
+ * module, `agentDrivingApi` still returns the name):
+ *
+ *     "function f(runEval) { runEval({}); }"       → "runEval"   (parameter)
+ *     "const { runEval } = await import('./x.js'); runEval({})"
+ *                                                  → undefined   (suppressed —
+ *                                                    a dynamic import of the REAL
+ *                                                    API is silenced too)
+ *
+ * The first costs one warning and needs a scope analysis this module cannot have;
+ * the second is the generosity above, paid in the same coin.
+ */
+function locallyBound(src: string, name: string): boolean {
+  const tail = "(?![\\p{L}\\p{N}_$])";
+  const head = "(?<![\\p{L}\\p{N}_$.])";
+  return [
+    `(?:const|let|var|function|class)\\s+(?:\\*\\s*)?${name}${tail}`,
+    `(?:const|let|var)\\s*[{\\[][^=;]{0,400}?${head}${name}${tail}`,
+    `${head}as\\s+${name}${tail}`,
+    `${head}import\\s+${name}${tail}`,
+  ].some((p) => new RegExp(p, "u").test(src));
+}
 
 /**
  * Words that, immediately before the name, make `name(` a DEFINITION rather than
@@ -716,7 +824,9 @@ export function agentDrivingApi(content: string): string | undefined {
     m = AGENT_CALL_RE.exec(src)
   ) {
     if (isCallSite(src, m.index, m.index + m[0].length - 1)) {
-      return m[0].replace(/\s*\($/, "");
+      const name = m[0].replace(/\s*\($/, "");
+      // A name this file binds ITSELF is not our API — see `locallyBound`.
+      if (!locallyBound(src, name)) return name;
     }
   }
   return undefined;

@@ -223,7 +223,15 @@ test("evidence: only the AGENT-driving tiers count, and the message quotes the o
   // Identifier boundaries: a longer name that merely CONTAINS one is not a call.
   assert.equal(agentDrivingApi("const myRunEvaluator = 1;"), undefined);
   assert.equal(agentDrivingApi("$runEval"), undefined);
-  assert.equal(agentDrivingApi("obj.runEval();"), "runEval");
+  // 🔴 A DOTTED name is somebody's PROPERTY, and this used to be a finding. The
+  // allowance existed for `v.runEval()` after `import * as v from
+  // "vigiles/testing"` — MEASURED across this repo, a 43-harness consumer repo and
+  // five vendored third-party plugin repos, that shape occurs in exactly two
+  // places: this gate's own comment and this gate's own test. Nothing real uses
+  // it, while `mock.runEval()` / `deps.runEval()` / `this.runEval()` are ordinary.
+  // Cost of dropping it: a genuine namespace-import user loses ONE warning, and
+  // the money guard still refuses the spawn at runtime.
+  assert.equal(agentDrivingApi("obj.runEval();"), undefined);
   // The finding carries WHICH api it saw, and the message quotes it back — the
   // claim is now about this file, not about the class.
   const found = findWith({
@@ -231,6 +239,46 @@ test("evidence: only the AGENT-driving tiers count, and the message quotes the o
   });
   assert.equal(found[0].evidence, "measureTriggerRate");
   assert.match(foreignRunnerTestWarning(found[0]), /measureTriggerRate/);
+});
+
+test("evidence: a name the file BINDS ITSELF is not our API", () => {
+  // 🔴 The sixth finding from this file, and the dual of the import rule the
+  // round-14 measurement rejected: a declaration needs no module graph, it is
+  // right there in the text. `const runEval = vi.fn(); runEval();` was read as a
+  // real-model invocation and its author told to rename a working unit test.
+  const bound: Record<string, string> = {
+    "the reported shape": "const runEval = vi.fn();\nrunEval();",
+    let: "let measureArms = jest.fn();\nmeasureArms({});",
+    "function declaration": "function runEval() { return 1; }\nrunEval();",
+    class: "class runEval {}\nnew runEval();",
+    "aliased import": 'import { fake as runEval } from "./f.js";\nrunEval({});',
+    "default import": 'import runEval from "./f.js";\nrunEval({});',
+    destructured: "const { runEval } = deps;\nrunEval({});",
+  };
+  for (const [why, body] of Object.entries(bound)) {
+    assert.equal(agentDrivingApi(body), undefined, why);
+    assert.deepEqual(findWith({ ".claude/skills/foo/foo.test.mjs": body }), [], why); // prettier-ignore
+  }
+
+  // QUIET — a fix that suppressed on any MENTION would pass every line above and
+  // silence the gate entirely. `import { runEval } from "vigiles/testing"` binds
+  // OUR name to OUR export and is exactly the case this gate exists for.
+  assert.equal(
+    agentDrivingApi('import { runEval } from "vigiles/testing";\nawait runEval({});'), // prettier-ignore
+    "runEval",
+  );
+  assert.equal(
+    agentDrivingApi('import { runHarnessTest } from "vigiles/testing";\nrunHarnessTest({});'), // prettier-ignore
+    "runHarnessTest",
+  );
+  // …and a file that declares a FAKE under another name and calls the real thing
+  // is still a finding — binding `Fake` is not binding `runEval`.
+  assert.equal(agentDrivingApi("class Fake { runEval() {} }\nrunEval({});"), "runEval"); // prettier-ignore
+
+  // ⚠️ WHAT IT MISSES, run rather than asserted: a PARAMETER is a binding this
+  // module cannot see without scope analysis, so the name still reads as ours.
+  // One warning, against six rounds of telling authors to break their tests.
+  assert.equal(agentDrivingApi("function f(runEval) { runEval({}); }"), "runEval"); // prettier-ignore
 });
 
 test("evidence: `scriptModel` is not a spawn — building a scripted model is not driving an agent", () => {
@@ -317,8 +365,11 @@ test("evidence: a bodiless TYPE MEMBER is not a call — `):` abstains", () => {
   );
   assert.equal(agentDrivingApi("function runEval(o: O): void {}"), undefined);
   assert.equal(agentDrivingApi("await runEval({});"), "runEval");
+  // A dotted call is a property read — see the namespace measurement above.
+  assert.equal(agentDrivingApi("await v.measureTriggerRate({});"), undefined);
+  // …and the undotted call it was standing in for still fires.
   assert.equal(
-    agentDrivingApi("await v.measureTriggerRate({});"),
+    agentDrivingApi("await measureTriggerRate({});"),
     "measureTriggerRate",
   );
   assert.equal(
@@ -522,8 +573,6 @@ test("evidence: a real CALL fires, through every spelling that is still a call",
   const calls: Record<string, string> = {
     "a plain awaited call":
       'import { runEval } from "vigiles/testing";\nawait runEval({});\n',
-    "a namespace call, which is the same function":
-      'import * as v from "vigiles/testing";\nv.runEval({});\n',
     "whitespace before the paren": "runEval ({});\n",
     "inside a template INTERPOLATION, which is code":
       "const s = `${runEval({})}`;\n",
