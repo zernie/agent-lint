@@ -392,6 +392,11 @@ test("matchesTool follows the SAME regex semantics as the matcher the compiler e
   assert.equal(matchesTool(["mcp__.*"], "not_mcp__x"), false);
   // A literal name containing metacharacters still matches itself (includes-first).
   assert.equal(matchesTool(["a(b"], "a(b"), true);
+  // An EMPTY declaration matches nothing — including the empty tool name a
+  // tool-less event carries. `^()$` matches "", so without an explicit guard
+  // `tools()` becomes a catch-all on precisely the events with no tool.
+  assert.equal(matchesTool([], ""), false);
+  assert.equal(matchesTool([], "Edit"), false);
 });
 
 test("a tool pattern that is not a valid regex does NOT compile", () => {

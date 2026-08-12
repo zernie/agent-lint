@@ -95,6 +95,13 @@ type RawCtx = Record<string, string | boolean | StateFact>;
  * hand-constructed one degrades to exact matching rather than throwing mid-event.
  */
 export function matchesTool(tools: readonly string[], name: string): boolean {
+  // An EMPTY list matches NOTHING. Found by a mutation that was meant to disable
+  // tool-less reacts and didn't: with no tools the joined pattern is `^()$`,
+  // which matches the EMPTY STRING — and a tool-less event's name is the empty
+  // string. Without this line `tools()` would quietly be a catch-all on exactly
+  // the events where a react has no tool to check. Declaring nothing must mean
+  // nothing, not everything.
+  if (tools.length === 0) return false;
   if (tools.includes(name)) return true;
   try {
     return new RegExp(`^(${tools.join("|")})$`).test(name);
