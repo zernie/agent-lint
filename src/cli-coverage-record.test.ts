@@ -174,3 +174,39 @@ test("a repo whose run exercises nothing still gets NO artifact", () => {
   vigilesTest();
   assert.equal(recorded(), null);
 });
+
+// ─── discovery must use the harness this repo actually targets ─────────────────
+//
+// 🔴 Reproduced 2026-08-12. `resolveRecords` called `findUntestedSurfaces` with a
+// path alone, so discovery fell back to the Claude Code layout whatever the repo
+// was. Since resolution matches each probe against the DISCOVERED surfaces, the
+// wrong layout does not error — it discovers a different set, and every probe that
+// fails to match is silently dropped. `vigiles lint` never had the bug: it threads
+// `adapter.layout` into the same function.
+//
+// The direction demonstrated here is the observable one in the free tier: a repo
+// that targets Codex must stop being credited for a `.claude/settings.json` hook,
+// which is not a surface of its harness at all. (The mirror direction — a Codex
+// skill earning execution coverage — is only reachable through a transcript, i.e.
+// the model tier, since a skill probe comes from what FIRED, not from a command
+// line. Hook discovery under the Codex layout is JSON-only and does not read
+// `config.toml`: a separate, documented layout-port gap, not this fix.)
+test("a repo that targets Codex is not credited for a Claude Code hook", () => {
+  write("t.harness.mjs", harnessExercising("hooks/a.sh"));
+  vigilesTest();
+  assert.deepEqual(
+    recorded(),
+    ["hooks/a.sh"],
+    "precondition: as a Claude Code repo, the run records the hook",
+  );
+
+  // One file turns it into a Codex repo. Nothing else changes.
+  write(".codex/config.toml", "[mcp_servers]\n");
+  write("t.harness.mjs", harnessExercising("hooks/a.sh"));
+  vigilesTest();
+  assert.deepEqual(
+    recorded(),
+    [],
+    "the recorder must discover with the ACTIVE layout, not the default one",
+  );
+});

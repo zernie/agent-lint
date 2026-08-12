@@ -118,6 +118,7 @@ import {
 } from "./scan-behavioral.js";
 import {
   ADAPTERS,
+  defaultAdapter,
   resolveHarnessSelection,
   resolveHarnessAdapters,
   normalizeHarnessName,
@@ -125,6 +126,7 @@ import {
   getAdapter,
   adapterForInstructionFile,
 } from "./adapter-registry.js";
+import type { PluginLayout } from "./core/layout.js";
 import type { HarnessSelection } from "./adapter-registry.js";
 import type { HarnessDialect } from "./core/dialect.js";
 import type { HarnessAdapter } from "./core/adapter.js";
@@ -3792,6 +3794,40 @@ function checkIntegrityForFiles(
 }
 
 /**
+ * The layout of the harness this repo actually targets — `--harness=`/config/
+ * auto-detect, the SAME precedence `lint`, `compile` and `audit` use.
+ *
+ * 🔴 ONE RESOLVER, BECAUSE THE OTHER CALLERS DEFAULTED. `lint` threads
+ * `adapter.layout` into `findUntestedSurfaces`; two entry points that call the very
+ * same detector passed only a path, so `test-coverage.ts` fell back to
+ * `claudeCodeLayout`. Reproduced 2026-08-12 on a `.codex/config.toml` fixture whose
+ * only surface is `.codex/skills/foo/SKILL.md`: with the layout, one surface is
+ * discovered; without it, ZERO — and a zero-surface scan is not an error, it is a
+ * silence. The edit-time nudge said nothing, and `vigiles test`'s coverage
+ * recorder threw away every probe an execution had legitimately produced, because
+ * `recordsFrom` cannot resolve a probe against a surface list that is empty.
+ *
+ * Non-throwing on purpose: an unknown `--harness=` is a hard error where the user
+ * typed it, but these callers are a hook and a post-run recorder, and neither may
+ * turn a bad config key into a failed edit or a red test run.
+ */
+function harnessLayoutFor(
+  root: string,
+  config: VigilesConfig | undefined,
+  flag?: string,
+): PluginLayout {
+  try {
+    return resolveHarnessSelection({
+      root,
+      flag,
+      configHarness: normalizeHarnessList(config?.harness),
+    }).adapter.layout;
+  } catch {
+    return defaultAdapter.layout;
+  }
+}
+
+/**
  * The `untested-*` rules AS THE DETECTOR TAKES THEM: which kinds this repo
  * enabled, and the discovery options merged from whichever of the three rules
  * carries them (`testGlobs` / `exclude` / `testExtension` are shared).
@@ -5349,7 +5385,18 @@ function resolveRecords(
   runs: ReturnType<typeof runsFromResults>,
   tier: CoverageTierName,
 ): CoverageRun[] {
-  const scan = findUntestedSurfaces({ basePath: cwd });
+  // 🔴 DISCOVERY MUST USE THE ACTIVE LAYOUT, or resolution silently resolves
+  // nothing. This called the detector with a path alone, so a Codex repo (surfaces
+  // only under `.codex/skills/`) discovered ZERO surfaces, `recordsFrom` matched
+  // every successful probe against an empty list and dropped it, and `vigiles
+  // test` / `vigiles eval` never granted execution coverage there — while
+  // `vigiles lint`, which passes `adapter.layout` to the same function, saw the
+  // surfaces perfectly well. Empty discovery does not fail; it just quietly means
+  // "nothing ran".
+  const scan = findUntestedSurfaces({
+    basePath: cwd,
+    layout: harnessLayoutFor(cwd, loadConfig()),
+  });
   return recordsFrom({
     runs,
     surfaces: [...scan.covered, ...scan.untested],
@@ -6127,14 +6174,24 @@ function evalLockNudgeHookCommand(): void {
   // second gate saying the same thing is a branch no test can distinguish from
   // its absence (measured — the mutation passed), i.e. the dead-fragment class
   // this same change removed from the runner table.
-  const { options } = untestedRules(loadConfig());
+  const config = loadConfig();
+  const { options } = untestedRules(config);
+  // 🔴 THE SAME LAYOUT `vigiles lint` RESOLVES, for the same reason as the config
+  // above. This used to pass `basePath` alone, so the detector fell back to the
+  // Claude Code layout: in a Codex repo whose surfaces live at
+  // `.codex/skills/foo/SKILL.md`, it discovered NOTHING, found the edited skill in
+  // nothing, and stayed silent — while `vigiles lint`, one `adapter.layout` away,
+  // reported that very skill as untested. A hook that contradicts the linter by
+  // omission is worse than no hook: nobody is looking for the message that never
+  // came.
+  const layout = harnessLayoutFor(cwd, config);
   // Two nudges, one entry, most-urgent first. The lock reminder is SELF-GATING:
   // silent until a lock is committed — so a repo that has never written a test
   // heard nothing at all, while a repo that already tests got reminded. That is
   // backwards, and `untested-skill` already stated the missing half correctly;
   // it just lived in `vigiles lint`, which someone has to run by hand.
   const msg =
-    skillTestNudge(target, { ...options, basePath: cwd }) ??
+    skillTestNudge(target, { ...options, basePath: cwd, layout }) ??
     evalLockNudge(target, resolve(cwd, DEFAULT_LOCK_DIR));
   if (!msg) return;
   process.stdout.write(

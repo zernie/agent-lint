@@ -170,3 +170,46 @@ test("…and an `exclude` that hides the covering test is honoured too", () => {
   assert.match(lint(), UNTESTED_IN_LINT);
   assert.match(nudge(), /no test or eval covers it/);
 });
+
+// ─── …and the same detector must see the repo's OWN harness layout ─────────────
+//
+// 🔴 Reproduced 2026-08-12. `skillTestNudge` was called with `basePath` alone, so
+// `test-coverage.ts` fell back to `claudeCodeLayout`. In a Codex repo whose only
+// surface is `.codex/skills/demo/SKILL.md`, discovery returned ZERO surfaces, the
+// edited skill matched nothing, and the hook said nothing at all — while `vigiles
+// lint`, which threads `adapter.layout` into the very same function, reported that
+// skill as untested. Silence is the worst failure mode a nudge has: nobody goes
+// looking for a message that never arrives.
+const CODEX_SKILL = ".codex/skills/demo/SKILL.md";
+
+test("a CODEX repo gets the nudge its own linter gives — the layout is not assumed", () => {
+  write(".codex/config.toml", "[mcp_servers]\n");
+  write(
+    CODEX_SKILL,
+    "---\nname: demo\ndescription: demo skill\n---\n\nBody.\n",
+  );
+  assert.match(
+    lint(),
+    /skill \.codex\/skills\/demo\/SKILL\.md — add e\.g\./,
+    "precondition: lint resolves the Codex adapter and sees the surface",
+  );
+  assert.match(
+    nudge(CODEX_SKILL),
+    /no test or eval covers it/,
+    "the hook must not fall back to the Claude Code layout and go quiet",
+  );
+});
+
+test("…and the Claude Code repo it used to assume is completely unaffected", () => {
+  // The quiet half on the shape that already worked: resolving the layout must
+  // not change the answer where the fallback happened to be correct.
+  assert.match(lint(), UNTESTED_IN_LINT);
+  assert.match(nudge(), /no test or eval covers it/);
+  // A repo carrying BOTH markers still resolves to one harness and still speaks.
+  write(".codex/config.toml", "[mcp_servers]\n");
+  write(
+    CODEX_SKILL,
+    "---\nname: demo\ndescription: demo skill\n---\n\nBody.\n",
+  );
+  assert.notEqual(nudge(CODEX_SKILL), "");
+});

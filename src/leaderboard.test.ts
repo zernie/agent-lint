@@ -17,7 +17,9 @@ import {
   computeIntegrityScore,
 } from "./leaderboard.js";
 import { auditScore } from "./audit-score.js";
-import type { ScanReport } from "./scan.js";
+import { scanPlugin, type ScanReport } from "./scan.js";
+import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
+import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 function report(over: Partial<ScanReport> = {}): ScanReport {
@@ -481,4 +483,51 @@ test("rankPlugins labels a plugin by its manifest name, not the dir basename", (
   const ranked = rankPlugins([sub]);
   assert.equal(ranked[0].name, "cool-plugin"); // not "plugin@abc123"
   cleanupTmpDir(dir);
+});
+
+// ─── a board is a list of OTHER people's repos, and they are not all the same ───
+//
+// 🔴 Found by sweeping for the shape of two sibling bugs (2026-08-12). `vigiles
+// audit` on ONE target resolves the adapter and threads `adapter.layout` into
+// `scanPlugin`; the MULTI-target branch of the same command called `scanPlugin(dir)`
+// bare. A Codex plugin scanned with the Claude Code layout has fewer discoverable
+// surfaces — nothing to describe badly, nothing to leave untested, nothing to
+// deduct — so it does not score badly. It scores BETTER, and sorts UP the board.
+// An empty scan reads as a clean one.
+test("rankPlugins detects the harness PER DIRECTORY, so a Codex plugin is really scanned", () => {
+  const codex = makeTmpDir("lb-codex");
+  mkdirSync(join(codex, ".codex"), { recursive: true });
+  mkdirSync(join(codex, "prompts"), { recursive: true });
+  writeFileSync(join(codex, ".codex", "config.toml"), "[mcp_servers]\n");
+  // Codex keeps its slash-commands in `prompts/`; Claude Code looks in `commands/`
+  // and finds nothing there. One surface, visible under exactly one layout.
+  writeFileSync(join(codex, "prompts", "go.md"), "# do a thing\n");
+
+  const [scored] = rankPlugins([codex]);
+  assert.equal(
+    scored.report.commands,
+    1,
+    "the Codex command surface must be discovered — the Claude Code layout sees 0",
+  );
+  cleanupTmpDir(codex);
+});
+
+test("…and a real Claude Code plugin is scored exactly as it was before", () => {
+  // The quiet half on real input: the SHA-pinned vendored plugins. Detection has
+  // to resolve them to Claude Code and reproduce, number for number, the score a
+  // direct Claude-Code scan gives — otherwise this fix moved a published board.
+  const vendor = join(__dirname, "..", "test/dogfood");
+  for (const name of [
+    "oh-my-claudecode@deee3a4",
+    "wshobson-accessibility@cf6059d",
+  ]) {
+    const dir = join(vendor, name);
+    const [ranked] = rankPlugins([dir]);
+    const direct = scoreReport(
+      scanPlugin(dir, claudeCodeLayout, claudeCodeDialect),
+    );
+    assert.equal(ranked.score, direct.score, name);
+    assert.deepEqual(ranked.issues, direct.issues, name);
+    assert.ok(ranked.report.skills.length > 0, `${name} still has its skills`);
+  }
 });
