@@ -5,7 +5,13 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { brokenSkillRefs, formatSkillRefIssue } from "./skill-refs.js";
+import { scanPlugin } from "./scan.js";
+import { scanFiles } from "./scan-files.js";
+import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 const s = (name: string, content: string) => ({
   name,
@@ -80,4 +86,61 @@ test("the near-miss is measured against OTHER skills, not the referrer itself", 
   // It must match the other skill, or nothing.
   const issues = brokenSkillRefs([s("draft-paper", "see `draft-papers`")]);
   assert.deepEqual(issues, []);
+});
+
+// ---------------------------------------------------------------------------
+// WIRING — the rule above was correct and reached nothing.
+//
+// `loaded.files` is keyed by the CANONICAL materialized key: a plugin shipping
+// `skills/foo/SKILL.md` is loaded under `.claude/skills/foo/SKILL.md`. The
+// report looked contents up by `ScanSkill.path`, which is the REAL on-disk path
+// — so in the ordinary published-plugin layout every lookup missed and every
+// skill was dropped. Measured 2026-08-11 on this exact pair of files: 2 findings
+// under `.claude/skills/`, 0 under `skills/`, byte-identical content.
+// ---------------------------------------------------------------------------
+const REF_A = `---
+name: find-venue
+description: Discover and rank real venues for a paper, scored by visa weight.
+---
+Run \`verify-citation\` first, then rank what is left.
+`;
+const REF_B = `---
+name: verify-citations
+description: Confirm each citation is real and state its one-line delta.
+---
+Compose with \`find-venues\` when the venue is still open.
+`;
+
+test("skill→skill refs are found in a `skills/` plugin, not just under `.claude/`", () => {
+  for (const root of ["skills", ".claude/skills"]) {
+    // The disk scanner.
+    const dir = makeTmpDir("skill-refs");
+    try {
+      mkdirSync(join(dir, root, "find-venue"), { recursive: true });
+      mkdirSync(join(dir, root, "verify-citations"), { recursive: true });
+      writeFileSync(join(dir, root, "find-venue", "SKILL.md"), REF_A);
+      writeFileSync(join(dir, root, "verify-citations", "SKILL.md"), REF_B);
+      const issues = scanPlugin(dir).skillRefIssues ?? [];
+      assert.equal(issues.length, 2, `${root}: expected both refs reported`);
+      // The message names a file the reader can open — the REAL path, not the
+      // synthetic key the lookup is done by.
+      assert.ok(
+        issues.every((i) => i.startsWith(`${root}/`)),
+        `${root}: ${JSON.stringify(issues)}`,
+      );
+    } finally {
+      cleanupTmpDir(dir);
+    }
+    // The browser twin, which reads the same map and had the same defect.
+    assert.equal(
+      (
+        scanFiles({
+          [`${root}/find-venue/SKILL.md`]: REF_A,
+          [`${root}/verify-citations/SKILL.md`]: REF_B,
+        }).skillRefIssues ?? []
+      ).length,
+      2,
+      `${root}: scanFiles`,
+    );
+  }
 });

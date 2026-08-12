@@ -75,6 +75,7 @@ import {
   makeClassifier,
   scanAgents,
   scanSkills,
+  skillRefSources,
   scanHooks,
   frontmatterIssuesFor,
   frontmatterValueIssuesFor,
@@ -630,13 +631,12 @@ export function scanPlugin(
     // Skill→skill references BY NAME, which `danglingRefs` structurally cannot
     // see: it matches PATHS in EXECUTABLE sources and skips prose by design, and
     // this reference lives in prose. Contents come from the already-loaded file
-    // map, so it costs no extra I/O.
+    // map by its CANONICAL key — keying by `ScanSkill.path` (the real on-disk
+    // path) missed every skill in a `skills/` plugin. See `skillRefSources`.
     skillRefIssues: brokenSkillRefs(
-      skills.flatMap((s) => {
-        const content = loaded.files[s.path];
-        return content === undefined
-          ? []
-          : [{ name: s.name, path: s.path, content }];
+      skillRefSources(loaded.files, cls, {
+        root: resolve(dir),
+        sources: loaded.sources,
       }),
     ).map(formatSkillRefIssue),
     hookEventIssues,

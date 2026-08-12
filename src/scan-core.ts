@@ -45,6 +45,7 @@ import {
 } from "./core/lethal-trifecta.js";
 import { skillResourceIssues } from "./core/skill-resources.js";
 import { skillMissingFence } from "./core/skill-missing-fence.js";
+import type { SkillRefSource } from "./skill-refs.js";
 import {
   delegationTrifectaIssues,
   type CapabilityNode,
@@ -427,6 +428,40 @@ export function scanSkills(
       // as plain body → the skill is invisible. Inspect the RAW md (not the
       // frontmatter-stripped body) so the unfenced keys are visible.
       fenceIssue: skillMissingFence(md),
+    });
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * The `(name, reported path, content)` triples `brokenSkillRefs` reads.
+ *
+ * 🔴 Built from the loaded file map's CANONICAL keys, NOT from `ScanSkill.path`.
+ * That field is the REAL on-disk path (the E1 remap), and in the ordinary
+ * published-plugin layout — `skills/foo/SKILL.md` — it is not a key of `files`
+ * at all: the loader materializes those under `.claude/skills/foo/SKILL.md`.
+ * Reading `files[skill.path]` therefore returned `undefined` for EVERY skill and
+ * dropped it, so the check reported nothing on the layout plugins actually ship
+ * in — including this repo's own. Measured 2026-08-11 on a two-skill fixture:
+ * byte-identical content found 2 broken refs under `.claude/skills/` and 0 under
+ * `skills/`. A silent no-op, which is the failure class this tool exists to
+ * catch in other people's harnesses.
+ *
+ * The path is still remapped for the MESSAGE — a finding must name a file the
+ * reader can open.
+ */
+export function skillRefSources(
+  files: Record<string, string>,
+  cls: SurfaceClassifier,
+  ctx: { readonly root: string; readonly sources?: Record<string, string> },
+): SkillRefSource[] {
+  const out: SkillRefSource[] = [];
+  for (const [path, content] of Object.entries(files)) {
+    if (!cls.isSkill(path)) continue;
+    out.push({
+      name: frontmatter(content).name ?? skillName(path),
+      path: reportedSurfacePath(path, ctx.sources?.[path], ctx.root),
+      content,
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));

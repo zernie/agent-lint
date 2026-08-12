@@ -59,6 +59,7 @@ import {
   makeClassifier,
   scanAgents,
   scanSkills,
+  skillRefSources,
   scanHooks,
   frontmatterIssuesFor,
   frontmatterValueIssuesFor,
@@ -709,11 +710,9 @@ export function scanFiles(
     // holding these two report builders together, and it caught this field
     // landing in one of them and not the other.
     skillRefIssues: brokenSkillRefs(
-      skills.flatMap((s) => {
-        const content = loaded.files[s.path];
-        return content === undefined
-          ? []
-          : [{ name: s.name, path: s.path, content }];
+      skillRefSources(loaded.files, cls, {
+        root: BROWSER_ROOT,
+        sources: loaded.sources,
       }),
     ).map(formatSkillRefIssue),
     hookEventIssues,
