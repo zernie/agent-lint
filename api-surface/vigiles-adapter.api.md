@@ -132,6 +132,7 @@ export interface PluginLayout {
     readonly mcpManifestKey: string;
     readonly name: string;
     readonly pluginRootToken: string;
+    readonly projectRootTokens?: readonly string[];
     readonly settingsFormat: "json" | "toml";
     readonly settingsPath: string;
     readonly skillDir: string;

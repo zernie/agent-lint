@@ -199,6 +199,86 @@ test("agent is covered by a name-prefixed sibling, flagged otherwise", () => {
   cleanupTmpDir(dir);
 });
 
+test("a hook rooted at the PROJECT var is discovered — not just the PLUGIN var", () => {
+  // 🔴 A WHOLE SURFACE KIND WAS INVISIBLE. Only `${CLAUDE_PLUGIN_ROOT}` was
+  // stripped, so `"$CLAUDE_PROJECT_DIR/.claude/hooks/x.sh"` — Claude Code's
+  // DOCUMENTED spelling for a project hook, used because hooks do not run with a
+  // stable cwd — kept its literal prefix, failed `existsSync`, and was dropped
+  // without a word.
+  //
+  // MEASURED on a real consumer repo, four numbers for the same thing:
+  //   19 hook ENTRIES in settings · 16 inventoried by `audit` (every one printed
+  //   "unresolved var — can't check") · 17 FILES in `.claude/hooks/` (two are not
+  //   hooks) · 0 hook SURFACES. After the fix: 14, which is exactly the
+  //   registered scripts under `.claude/hooks/`.
+  const dir = makeTmpDir("cov-hooks-projvar");
+  const hook = (n: string) => write(dir, `.claude/hooks/${n}`, "#!/bin/sh\n");
+  for (const n of ["a.sh", "b.mjs", "c.hook.ts", "d.sh"]) hook(n);
+  write(dir, "node_modules/vigiles/dist/cli.js", "// the runtime\n");
+  const cmd = (c: string) => ({
+    matcher: "Bash",
+    hooks: [{ type: "command", command: c }],
+  });
+  write(
+    dir,
+    ".claude/settings.json",
+    JSON.stringify({
+      hooks: {
+        PreToolUse: [
+          cmd('"$CLAUDE_PROJECT_DIR/.claude/hooks/a.sh"'),
+          cmd('node "${CLAUDE_PROJECT_DIR}/.claude/hooks/b.mjs" post'),
+          // The compiled-hook shape: the RUNTIME is a dependency, the operand is
+          // the surface. Both are extracted from this one command.
+          cmd(
+            'node "$CLAUDE_PROJECT_DIR/node_modules/vigiles/dist/cli.js" ' +
+              'hook-runtime run-program "$CLAUDE_PROJECT_DIR/.claude/hooks/c.hook.ts"',
+          ),
+          // No variable at all still works, and so does the plugin root.
+          cmd(".claude/hooks/d.sh"),
+        ],
+      },
+    }),
+  );
+  const names = findUntestedSurfaces({ basePath: dir })
+    .untested.filter((x) => x.kind === "hook")
+    .map((x) => x.path)
+    .sort();
+  assert.deepEqual(names, [
+    ".claude/hooks/a.sh",
+    ".claude/hooks/b.mjs",
+    ".claude/hooks/c.hook.ts",
+    ".claude/hooks/d.sh",
+  ]);
+  // ⚠️ A DEPENDENCY IS NOT A SURFACE. The same settings name the runtime that
+  // runs the compiled hooks; holding `node_modules/vigiles/dist/cli.js` to
+  // `untested-hook` would ask the author to test their package manager.
+  assert.ok(
+    !names.some((n) => n.includes("node_modules")),
+    "a node_modules path must never be a surface",
+  );
+
+  // QUIET: a path that does not exist is still not a surface — stripping a token
+  // must not turn a typo into a discovery.
+  const dir2 = makeTmpDir("cov-hooks-projvar-missing");
+  write(
+    dir2,
+    ".claude/settings.json",
+    JSON.stringify({
+      hooks: {
+        PreToolUse: [cmd('"$CLAUDE_PROJECT_DIR/.claude/hooks/nope.sh"')],
+      },
+    }),
+  );
+  assert.deepEqual(
+    findUntestedSurfaces({ basePath: dir2 }).untested.filter(
+      (x) => x.kind === "hook",
+    ),
+    [],
+  );
+  cleanupTmpDir(dir);
+  cleanupTmpDir(dir2);
+});
+
 test("hook scripts are discovered from plugin.json and matched by path", () => {
   const dir = makeTmpDir("tc-hooks");
   write(dir, "hooks/pre-edit.sh", "#!/usr/bin/env bash\n");

@@ -57,6 +57,19 @@ export interface PluginLayout {
   readonly materializeRoot: string;
   /** Env token expanded to the plugin's absolute root in hook commands. */
   readonly pluginRootToken: string;
+  /**
+   * Tokens that root a path at the PROJECT being scanned, braced form
+   * (`${CLAUDE_PROJECT_DIR}`); the unbraced spelling is derived. Optional — a
+   * harness with no such variable omits it.
+   *
+   * 🔴 SEPARATE FROM {@link pluginRootToken}, and its absence made a whole
+   * surface kind invisible. `hookScripts` stripped only the plugin token, so a
+   * project's own `"$CLAUDE_PROJECT_DIR/.claude/hooks/x.sh"` — Claude Code's
+   * DOCUMENTED spelling for a project hook, because hooks do not run with a
+   * stable cwd — failed `existsSync` and was dropped. MEASURED on a real
+   * consumer repo: `audit` listed sixteen hooks and the SURFACE list held zero.
+   */
+  readonly projectRootTokens?: readonly string[];
   /** Standalone MCP config file, e.g. `.mcp.json`. */
   readonly mcpConfigFile: string;
   /** Manifest key declaring MCP servers, e.g. `mcpServers`. */

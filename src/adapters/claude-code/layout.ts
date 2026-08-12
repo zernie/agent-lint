@@ -22,6 +22,9 @@ export const claudeCodeLayout: PluginLayout = {
   commandDir: "commands",
   materializeRoot: ".claude",
   pluginRootToken: "${CLAUDE_PLUGIN_ROOT}",
+  // Both names Claude Code uses for the project root (mirrors the
+  // `NON_PLUGIN_VARS` set in plugin-loader.ts / scan-files.ts).
+  projectRootTokens: ["${CLAUDE_PROJECT_DIR}", "${CLAUDE_PROJECT}"],
   mcpConfigFile: ".mcp.json",
   mcpManifestKey: "mcpServers",
   intraRefDirs: ["hooks", "skills", "agents", "commands"],

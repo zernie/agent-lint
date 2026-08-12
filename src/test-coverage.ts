@@ -406,6 +406,7 @@ function hookScripts(
   basePath: string,
   manifest: string,
   pluginRootToken: string,
+  projectRootTokens: readonly string[] | undefined,
 ): string[] {
   if (!existsSync(join(basePath, manifest))) return [];
   let hooks: unknown;
@@ -418,15 +419,43 @@ function hookScripts(
   if (hooks === undefined) return [];
   const text = JSON.stringify(hooks);
   // "${CLAUDE_PLUGIN_ROOT}" → unbraced "$CLAUDE_PLUGIN_ROOT" — strip the harness's
-  // own token (both forms) so the path is checkable relative to the plugin root.
-  const unbraced = pluginRootToken.replace(/^\$\{(.+)\}$/, "$$$1");
+  // own tokens (both forms) so the path is checkable relative to the root.
+  //
+  // 🔴 THE PROJECT TOKEN WAS MISSING, AND IT MADE A WHOLE SURFACE KIND INVISIBLE.
+  // Only the PLUGIN root was stripped, so `"$CLAUDE_PROJECT_DIR/.claude/hooks/
+  // kb-lint.mjs"` — Claude Code's DOCUMENTED spelling for a project hook, used
+  // because hooks do not run with a stable cwd — kept the literal `$CLAUDE_...`
+  // prefix, failed `existsSync`, and was dropped without a word.
+  //
+  // MEASURED on a real consumer repo, four numbers for the same thing:
+  //
+  //   19  hook ENTRIES in .claude/settings.json (one inline, several sharing a
+  //       script with different argv)
+  //   16  what `audit` inventories — 15 distinct scripts + 1 inline — every one
+  //       of them printed as "unresolved var — can't check"
+  //   17  FILES in .claude/hooks/ (two are not hooks: the harness test, and a
+  //       library the hooks import)
+  //    0  hook SURFACES ← this list
+  //
+  // The audit already knew the variable and declined to check; this reader did
+  // not know it and silently dropped. Two readers of one settings file, one of
+  // them wrong.
+  const tokens = [pluginRootToken, ...(projectRootTokens ?? [])].flatMap(
+    (t) => [t, t.replace(/^\$\{(.+)\}$/, "$$$1")],
+  );
   const scripts = new Set<string>();
   for (const m of text.matchAll(SCRIPT_RE)) {
-    const rel = m[0]
-      .replaceAll(pluginRootToken, "")
-      .replaceAll(unbraced, "")
-      .replace(/^\/+/, "")
-      .replace(/^\.\//, "");
+    let rel = m[0];
+    for (const t of tokens) rel = rel.replaceAll(t, "");
+    rel = rel.replace(/^\/+/, "").replace(/^\.\//, "");
+    // A DEPENDENCY is not a surface of this repo. The same settings that name a
+    // repo hook also name the runtime that runs the compiled ones
+    // (`node_modules/vigiles/dist/cli.js`); holding that to `untested-hook` would
+    // be asking the author to test their package manager. The compiled
+    // `.hook.ts` it is pointed AT is extracted from the same command and is the
+    // real surface.
+    if (rel.startsWith("node_modules/") || rel.includes("/node_modules/"))
+      continue;
     if (existsSync(join(basePath, rel))) scripts.add(rel);
   }
   return [...scripts];
@@ -441,7 +470,12 @@ function discoverHooks(basePath: string, layout: PluginLayout): Surface[] {
     ...new Set([layout.manifestPath, layout.settingsPath, localSettings]),
   ];
   for (const m of manifests) {
-    for (const s of hookScripts(basePath, m, layout.pluginRootToken))
+    for (const s of hookScripts(
+      basePath,
+      m,
+      layout.pluginRootToken,
+      layout.projectRootTokens,
+    ))
       scripts.add(s);
   }
   return [...scripts].sort().map((path) => ({
