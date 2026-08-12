@@ -162,9 +162,21 @@ up by your ordinary test command, on every push, and can spend model budget
 nobody asked it to spend. `*.harness.mjs` and `*.eval.mjs` match **no**
 third-party default, which is the whole reason those names were chosen.
 
-`vigiles audit`/`lint` reports such a file under its own finding
-(`foreign-runner-test`) when it can prove the file drives an agent, so you do not
-have to go looking for them.
+`vigiles audit`/`lint` used to report such a file under its own finding
+(`foreign-runner-test`), and **no longer does** — that check was removed on
+2026-08-12. It tried to decide from a file's TEXT whether it drives an agent, and
+over three corpora (4 554 js/ts files) it never once found a real one while
+producing seven distinct false-positive shapes — each of which told an author to
+rename a working test. The last was an ordinary offline test that injects a fake:
+`function testDriver(runEval) { runEval(fake); }`.
+
+Nothing is at risk, because the protection was never the warning. `vigiles`
+refuses to spawn an agent at all when it detects it is running inside a foreign
+test runner — see `refuseUnderForeignRunner`, which guards every spawn door. A
+misnamed harness test cannot spend model budget under `npx vitest`/`npx jest`; it
+simply refuses. What you lose is the early heads-up in the report, not the
+safety. The reasoning and the measurements are recorded in
+`src/core/foreign-runner.ts`.
 
 If the file really is an ordinary offline unit test of a bundled script — no
 agent, no model — it is not a harness test at all, and it never counted toward

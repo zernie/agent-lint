@@ -1766,11 +1766,14 @@ test("a directory symlink is not descended into, so a cycle cannot hang the scan
   );
 
   const started = Date.now();
-  // TWO walks cross this fixture and each rides the cycle on its own: the loader's
-  // `readTree` (which THREW `ELOOP` out of the entire audit) and this file's
-  // `harnessSurfaceFilesOnDisk` (which multiplies every path by every lap). The
-  // no-throw is asserted separately from the paths, so reverting EITHER fix fails
-  // on a named assertion rather than on a stray exception.
+  // TWO walks used to cross this fixture and each rode the cycle on its own: the
+  // loader's `readTree` (which THREW `ELOOP` out of the entire audit) and
+  // `harnessSurfaceFilesOnDisk` (which multiplied every path by every lap). The
+  // second walk was deleted 2026-08-12 with the foreign-runner warning it fed
+  // (tombstone in `core/foreign-runner.ts`), so only the loader crosses it now —
+  // and the loader's copy of the property is asserted directly at the bottom of
+  // this test. The no-throw stays separate from the paths, so reverting the fix
+  // fails on a named assertion rather than on a stray exception.
   let report: ReturnType<typeof scanPlugin> | null = null;
   let thrown = "";
   try {
@@ -1784,21 +1787,17 @@ test("a directory symlink is not descended into, so a cycle cannot hang the scan
     "scanPlugin must not throw on a cyclic surface dir (the loader used to raise ELOOP)",
   );
   assert.ok(report);
-  const r = report;
-  const foreign = r.warnings.filter((w) => w.includes(".test.mjs"));
   assert.ok(
     Date.now() - started < 20000,
     "the scan must terminate rather than ride the cycle",
   );
-  assert.deepEqual(
-    foreign.map((w) => w.split(" ")[0]).sort(),
-    [
-      ".claude/skills/loop/loop.test.mjs",
-      ".claude/skills/loop/nested/deep.test.mjs",
-    ],
-    "each real file is reported exactly once, and no path repeats through `self/`",
-  );
-  // …and the LOADER's own walk, separately. Catching the `ELOOP` would already
+  // ⚠️ A "no path repeats through `self/`" assertion stood here, observed through
+  // the foreign-runner warnings. Those are gone, and it is removed rather than
+  // rewritten because the LOADER assertion below pins the identical property over
+  // the identical three files — keeping a second copy against a deleted feature
+  // would have meant asserting on an observable that can no longer change.
+  //
+  // …the LOADER's own walk. Catching the `ELOOP` would already
   // stop the throw while still reading the tree once per lap — measured on this
   // fixture: 82 file keys (40 laps of `self/loop/self/…`) instead of 3. That is
   // the input the whole report is computed from, so it is asserted directly
@@ -1887,8 +1886,16 @@ test("…but a shared skills directory linked in from OUTSIDE is still read", ()
 });
 
 test("…but a symlink to a FILE is still collected — it cannot recurse", () => {
-  // The QUIET half of the same fix: refusing descent must not quietly drop links
-  // to files. A foreign runner really does collect one, so it is still a finding.
+  // The QUIET half of the same fix: refusing DESCENT must not quietly drop links
+  // to files. A directory link can loop; a file link cannot, so it is read.
+  //
+  // ⚠️ THIS USED TO ASSERT ON THE FOREIGN-RUNNER WARNING, which was deleted
+  // 2026-08-12 (tombstone in `core/foreign-runner.ts`). The property it pins is
+  // NOT the warning though — it is `entryOf`'s rule in `fs-walk.ts`, which the
+  // loader still uses to build the file map the whole report is computed from.
+  // So the assertion moves to the loader rather than the test being dropped:
+  // deleting a feature must not silently take a live invariant's only test with
+  // it.
   const dir = makeTmpDir("scan-symlink-file");
   write(
     dir,
@@ -1906,11 +1913,17 @@ test("…but a symlink to a FILE is still collected — it cannot recurse", () =
     join(dir, ".claude", "skills", "s", "linked.test.mjs"),
     "file",
   );
-  const r = scanPlugin(dir);
-  assert.equal(
-    r.warnings.filter((w) => w.startsWith(".claude/skills/s/linked.test.mjs"))
-      .length,
-    1,
+  assert.ok(
+    Object.prototype.hasOwnProperty.call(
+      loadPlugin(dir).files,
+      ".claude/skills/s/linked.test.mjs",
+    ),
+    "a symlinked FILE under a surface dir is still read into the file map",
+  );
+  // And the skill beside it is still found, so the walk did not bail at the link.
+  assert.deepEqual(
+    scanPlugin(dir).skills.map((x) => x.name),
+    ["s"],
   );
   cleanupTmpDir(dir);
 });

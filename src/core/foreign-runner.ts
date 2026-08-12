@@ -21,6 +21,58 @@
  * part that does not depend on anybody obeying a convention: the money cannot be
  * spent from inside a foreign runner, whatever the file is called.
  *
+ * ## 🪦 THE STATIC HALF WAS DELETED 2026-08-12, AND THIS IS NOW THE WHOLE DEFENCE
+ *
+ * There used to be a companion, `core/foreign-runner-tests.ts`: a lexical gate
+ * that read every file under a harness surface dir, decided FROM THE TEXT whether
+ * it drives an agent (`runEval(`, `runHarnessTest(`, …), and warned in the audit
+ * report when a default vitest/jest glob would collect it. It is gone, with its
+ * test file and the disk walker in `scan.ts` that fed it.
+ *
+ * It was deleted under a rule that file pre-registered, not on a whim:
+ *
+ * > A seventh false positive is not another bug to fix — it is the measurement
+ * > saying the lexical rule cannot be made tight enough, and the answer then is
+ * > to DELETE the gate and let the money guard be the whole defence.
+ *
+ * THE SEVENTH ARRIVED: `function testDriver(runEval) { runEval(fake); }`. The
+ * binding check looked at declarations and import aliases but never at PARAMETER
+ * lists, so an ordinary offline unit test injecting a fake was reported as
+ * spawning a real agent. Run, not argued — the gate over one file of that shape
+ * returned one finding, whose warning read *"It calls `runEval`, which spawns an
+ * agent"* and told the author to rename the file. That sentence was false about
+ * that file.
+ *
+ * Six shapes had already been narrowed away one at a time, and this one had been
+ * SELF-DISCLOSED in the file as a known residual ("costs one warning and needs a
+ * scope analysis this module cannot have"). Pre-disclosure is not a defence: a
+ * pre-registered stopping rule exists precisely to stop "we know, it is
+ * acceptable" from running forever, so the count was honoured rather than
+ * reasoned around.
+ *
+ * The measurement agreed independently. Across three corpora (this repo, a
+ * 43-harness consumer repo, five vendored third-party plugin repos — 3 613 js/ts
+ * files), and re-measured at deletion time over this repo's 941 files:
+ *
+ *   true positives, ever                                            0
+ *   distinct false-positive shapes reported                         7
+ *
+ * Its only demonstrated effect on a real repository was an effect of NOT firing.
+ * Every error it made was the expensive kind: the remedy it printed is "rename
+ * this file", so a false warning costs someone a working test, while a missed
+ * warning costs nothing — the refusal below already fires at all four spawn doors
+ * (`judge.ts`, `eval.ts`, `scan-behavioral.ts`, `adapters/codex/eval.ts`), so a
+ * miss is at most a less friendly notice, never a bill.
+ *
+ * ⚠️ WHAT IS GENUINELY LOST: the early, report-time heads-up. An author who names
+ * a harness test `foo.test.mjs` now learns it at the refusal below rather than in
+ * the audit. That is the trade, made knowingly — an advisory that has never once
+ * been right is not worth a warning that has been wrong seven times.
+ *
+ * The removal is PINNED, not merely done: `scan-vendor.test.ts` still asserts that
+ * no `COLLECTS AND EXECUTES` warning appears on the vendored corpus, so bringing
+ * the gate back fails a test instead of passing silently.
+ *
  * ## Why not an environment variable
  *
  * The obvious version is `process.env.VITEST`. It was proposed and rejected: that

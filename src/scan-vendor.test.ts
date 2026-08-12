@@ -125,8 +125,14 @@ test("calibration: davila7 PostToolUse exit-2 hook is NOT flagged (feedback, not
 //    under a surface dir and tell its author to rename it. Measured on the
 //    author's own repo, that hit an offline test of a pure reducer
 //    (`skills/verify-citations/scripts/verify-cites.test.mjs`) — a working test
-//    the advice would have dropped out of vitest's run. Nothing in these vendored
-//    plugins drives an agent, so the warning must be absent here.
+//    the advice would have dropped out of vitest's run.
+//
+//    🪦 THE RULE ITSELF WAS DELETED 2026-08-12, on the seventh false positive,
+//    under a stopping rule its own header pre-registered — the tombstone in
+//    `core/foreign-runner.ts` has the count and the measurement (0 true positives
+//    across 4 554 files, ever). This assertion is now what PINS the removal: it
+//    passes vacuously today, and fails the moment anybody reintroduces a warning
+//    that tells these plugins to rename a file they run no model from.
 // 2. EMPTY FENCE. `disallowed-tools: []` now reports as `"ineffective"` instead of
 //    `"none"`. No real plugin here writes that, so the aggregate must not move —
 //    a change to how one state is ROUTED must not silently re-bucket the corpus.

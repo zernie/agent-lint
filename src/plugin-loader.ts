@@ -151,9 +151,11 @@ function readHooks(root: string, layout: PluginLayout): unknown {
  * quieter half of the same bug: the loader reads a foreign tree into the file map
  * that the entire report is computed from.
  *
- * The decision is {@link entryOf}, SHARED with `harnessSurfaceFilesOnDisk` in
- * `scan.ts` — the other walk over the same trees, and exactly the kind of pair
- * this repo has been bitten by fixing on only one side. That module carries the
+ * The decision is {@link entryOf}, which lives in `fs-walk.ts` rather than here.
+ * It was shared with `harnessSurfaceFilesOnDisk` in `scan.ts` — the other walk
+ * over the same trees, and exactly the kind of pair this repo has been bitten by
+ * fixing on only one side — until that walk was deleted with the foreign-runner
+ * warning it fed (tombstone in `core/foreign-runner.ts`). That module carries the
  * full rationale: a symlinked FILE is still read (it cannot recurse), and an
  * unreadable entry is skipped rather than thrown, so a dangling link cannot take
  * down an audit.

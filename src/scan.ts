@@ -12,14 +12,13 @@
  * stack on top later; this core stays pure so it runs anywhere in CI for free.
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
 import { loadPlugin } from "./adapters/claude-code/plugin-loader.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
 import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
 import { danglingRefs } from "./plugin-loader.js";
-import { entryOf, walkableRoot } from "./fs-walk.js";
 import { brokenSkillRefs, formatSkillRefIssue } from "./skill-refs.js";
 import type { PluginLayout } from "./core/layout.js";
 import type { HarnessDialect } from "./core/dialect.js";
@@ -45,11 +44,6 @@ import {
   conflictedHarnessConfigs,
   mergeConflictWarning,
 } from "./core/merge-conflict.js";
-import {
-  foreignRunnerTests,
-  foreignRunnerTestWarning,
-  harnessSurfaceDirs,
-} from "./core/foreign-runner-tests.js";
 import type { TrifectaFinding } from "./core/lethal-trifecta.js";
 import type { SkillResourceFinding } from "./core/skill-resources.js";
 import type { SkillFenceFinding } from "./core/skill-missing-fence.js";
@@ -499,63 +493,6 @@ function ownTestSignalOnDisk(dir: string): boolean {
   });
 }
 
-/**
- * Repo-relative POSIX paths of every file under the harness surface dirs — the
- * disk half of {@link foreignRunnerTests}'s injected enumerator.
- *
- * Only those dirs are walked, so the rest of the repo (and any `node_modules`
- * beside it) is never entered. The browser twin passes its whole map and the
- * SHARED predicate filters it down to the same dirs, so the two engines reach an
- * identical list — the parity gate compares the reports byte for byte.
- *
- * Missing dirs and unreadable entries are skipped rather than thrown: this feeds
- * an advisory warning, and a scan must not die because one surface dir is a
- * dangling symlink.
- *
- * 🔴 A SYMLINKED DIRECTORY IS NOT DESCENDED INTO, and this used to `statSync`
- * every entry — which FOLLOWS the link, so `.claude/skills/self -> ..` was a
- * CYCLE and every real file came back once per lap. The policy is SHARED with the
- * loader's walk over the same trees ({@link entryOf}); that module carries the
- * measurement and states exactly what the refusal deliberately misses.
- *
- * A symlinked surface dir at the TOP gets {@link walkableRoot} instead, which is a
- * DIFFERENT rule on purpose (a linked-in shared skills dir is a real layout, and
- * refusing it would empty the surface list) — that function states why. Before it,
- * the root went straight to `readdirSync`, which follows the link, so this
- * function's own promise above held everywhere except at its entry point.
- *
- * The browser twin needs none of this: it is handed a file MAP, and whoever built
- * the map already resolved (or did not resolve) its links. So parity is unchanged
- * on any tree without a directory symlink, which is every fixture the byte-parity
- * gate compares.
- */
-function harnessSurfaceFilesOnDisk(
-  dir: string,
-  layout: PluginLayout,
-): readonly string[] {
-  const out: string[] = [];
-  const walk = (abs: string, rel: string): void => {
-    let entries: readonly string[];
-    try {
-      entries = readdirSync(abs);
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      const key = `${rel}/${entry}`;
-      const child = join(abs, entry);
-      const { kind } = entryOf(child);
-      if (kind === "dir") walk(child, key);
-      else if (kind === "file") out.push(key);
-    }
-  };
-  for (const surface of harnessSurfaceDirs(layout)) {
-    const abs = join(dir, surface);
-    if (walkableRoot(abs, dir)) walk(abs, surface);
-  }
-  return out;
-}
-
 /** Scan a plugin/repo directory and report its surfaces + structural issues. */
 export function scanPlugin(
   dir: string,
@@ -714,24 +651,6 @@ export function scanPlugin(
         const p = join(dir, f);
         return existsSync(p) ? nodeReadFile(p) : undefined;
       }).map(mergeConflictWarning),
-      // A harness test named `*.test.*` (or parked in `__tests__/`) is collected
-      // by a DEFAULT vitest/jest run — measured, not assumed. Same call as the
-      // merge conflict: a warning, never scored. The grade must not move because
-      // of what someone named a file next to a hook; this is a hazard in how the
-      // repo meets OTHER tools, not a fact about how the harness was designed.
-      // …and only when the file is measured to DRIVE AN AGENT: the same rule
-      // reported a skill's ordinary offline unit test and told its author to
-      // rename it, which would have dropped a working test from that repo's
-      // vitest run. Reads only the name/location candidates; an unreadable one
-      // yields `undefined` = no evidence = no finding.
-      ...foreignRunnerTests(
-        () => harnessSurfaceFilesOnDisk(dir, lay),
-        lay,
-        (f) => {
-          const p = join(dir, f);
-          return existsSync(p) ? nodeReadFile(p) : undefined;
-        },
-      ).map(foreignRunnerTestWarning),
     ],
     untested: coverage.untested.length,
     untestedHarness: coverage.harness.untested.length,
