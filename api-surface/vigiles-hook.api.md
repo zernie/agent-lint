@@ -78,7 +78,8 @@ export function decideFileGate<N extends readonly NeedSpec[]>(hook: FileGateHook
     tool_input?: {
         file_path?: unknown;
     };
-}, ctx?: Record<string, string | boolean>): Decision;
+    cwd?: unknown;
+}, ctx?: Record<string, string | boolean>, root?: string | undefined): Decision;
 
 // @public
 export function decideProgram<N extends readonly NeedSpec[]>(program: HookProgram<N>, rawEvent: {
@@ -309,11 +310,12 @@ export const notice: (message: string) => Reaction;
 export interface PathView {
     // (undocumented)
     readonly raw: string;
+    readonly rel: string | undefined;
     under(prefixes: readonly string[]): boolean;
 }
 
-// @public (undocumented)
-export function pathView(raw: string): PathView;
+// @public
+export function pathView(raw: string, root?: string): PathView;
 
 // @public
 export interface PromptEvent<N extends readonly NeedSpec[] = readonly ProviderName[]> {
@@ -357,6 +359,7 @@ export interface ProviderResults {
 
 // @public
 export interface RawHookEvent {
+    readonly cwd?: string;
     readonly prompt?: string;
     readonly source?: string;
     readonly stop_hook_active?: boolean;
@@ -436,7 +439,7 @@ export function responseView(raw: unknown): ResponseView;
 export const run: (command: string) => RunReaction;
 
 // @public
-export function runHookProgram(hook: AnyHook, event: RawHookEvent, ctx?: Record<string, string | boolean>): HookProgramOutcome;
+export function runHookProgram(hook: AnyHook, event: RawHookEvent, ctx?: Record<string, string | boolean>, root?: string | undefined): HookProgramOutcome;
 
 // @public
 export function runInject(hook: InjectHook, raw: {
@@ -455,7 +458,8 @@ export function runReact(hook: ReactHook, raw: {
         file_path?: unknown;
     };
     tool_response?: unknown;
-}): Reaction;
+    cwd?: unknown;
+}, root?: string | undefined): Reaction;
 
 // @public (undocumented)
 export interface RunReaction {

@@ -46,6 +46,9 @@ import {
   responseView,
   isStampRepairEvent,
   isLoadPathRepairEvent,
+  pathView,
+  projectRootOf,
+  undecidablePathWarning,
 } from "./hook-program.js";
 import { provide, dangerously, provider } from "./hook-providers.js";
 import { codexDialect } from "../adapters/codex/dialect.js";
@@ -1071,4 +1074,247 @@ test("isLoadPathRepairEvent: NO Bash command is a repair — the git escape is g
     assert.equal(isLoadPathRepairEvent(bashEvent(cmd), hook, REPO), false, cmd);
   }
   assert.equal(isLoadPathRepairEvent({}, hook, REPO), false);
+});
+
+// ===========================================================================
+// pathView + the PROJECT MINE — the defect that made every file-tool hook dead
+// for the only spelling the real harness ever sends.
+//
+// MEASURED 2026-08-12 on the live runtime, one compiled react hook, two
+// spellings of the same file:
+//
+//   /home/user/mine/migratsiya/papers/x/main.tex  → SILENT
+//   migratsiya/papers/x/main.tex                  → FIRES
+//
+// Claude Code's Edit/Write/MultiEdit always send the ABSOLUTE one. Every test
+// that existed built the relative one, so the tests reproduced the author's
+// assumption instead of the runtime's behaviour and stayed green for both.
+//
+// Each test below states which spelling it pins; a test that only pins the
+// relative one is exactly the hole this section closes.
+// ===========================================================================
+
+const MINE = "/home/user/mine";
+
+test("pathView: an ABSOLUTE path under the root matches a repo-relative prefix", () => {
+  const p = pathView(`${MINE}/migratsiya/papers/x/main.tex`, MINE);
+  assert.equal(p.under(["migratsiya/papers/"]), true);
+  assert.equal(p.rel, "migratsiya/papers/x/main.tex");
+  // The pre-fix behaviour, kept visible: with NO root the same path is a miss.
+  assert.equal(
+    pathView(`${MINE}/migratsiya/papers/x/main.tex`).under([
+      "migratsiya/papers/",
+    ]),
+    false,
+  );
+});
+
+test("pathView: the RELATIVE spelling keeps matching, root or no root", () => {
+  for (const root of [MINE, undefined]) {
+    const p = pathView("migratsiya/papers/x/main.tex", root);
+    assert.equal(p.under(["migratsiya/papers/"]), true, `root=${String(root)}`);
+    assert.equal(p.under(["./migratsiya/papers"]), false); // a prefix is not a path
+    assert.equal(p.under(["health"]), false);
+  }
+  // `./` on the PATH is stripped in both modes.
+  assert.equal(pathView("./src/x.ts").under(["src"]), true);
+  assert.equal(pathView("./src/x.ts", MINE).under(["src"]), true);
+});
+
+test("pathView: a SIBLING checkout never matches — the resolveRef lesson, again", () => {
+  // Same tail, different repo. A suffix comparison would hand this a grant
+  // meant for THIS repo; `resolveRef` already paid for that hole once.
+  const other = pathView("/home/user/other/migratsiya/papers/x/main.tex", MINE);
+  assert.equal(other.under(["migratsiya/papers/"]), false);
+  assert.equal(other.rel, undefined);
+  // And a path outside the root entirely.
+  const outside = pathView("/etc/passwd", MINE);
+  assert.equal(outside.under(["etc"]), false);
+  assert.equal(outside.rel, undefined);
+});
+
+test("pathView: an ABSOLUTE prefix matches the absolute path — in BOTH spellings", () => {
+  assert.equal(pathView("/etc/passwd").under(["/etc"]), true); // no root needed
+  assert.equal(pathView("/etc/passwd", MINE).under(["/etc"]), true);
+  // With a root, a relative PATH resolves and can match an absolute PREFIX.
+  assert.equal(
+    pathView("migratsiya/x.md", MINE).under([`${MINE}/migratsiya`]),
+    true,
+  );
+  assert.equal(
+    pathView("migratsiya/x.md").under([`${MINE}/migratsiya`]),
+    false,
+  );
+});
+
+test("pathView: prefix spellings — trailing slash, glob tail, catch-all", () => {
+  const p = pathView(`${MINE}/src/x.ts`, MINE);
+  for (const prefix of ["src", "src/", "src/**", "src/*"]) {
+    assert.equal(p.under([prefix]), true, prefix);
+  }
+  assert.equal(p.under(["srcery"]), false); // boundary-aware, not startsWith
+  assert.equal(p.under(["/"]), true); // the catch-all
+  assert.equal(p.under(["**"]), true);
+  assert.equal(p.under([]), false);
+});
+
+test("pathView: dot segments and a root with a trailing slash normalize", () => {
+  assert.equal(
+    pathView(`${MINE}/migratsiya/./papers/x.tex`, `${MINE}/`).under([
+      "migratsiya/papers",
+    ]),
+    true,
+  );
+  assert.equal(
+    pathView(`${MINE}/migratsiya/../health/x.md`, MINE).under(["migratsiya"]),
+    false,
+  );
+  // The root itself is `""` relative — under a catch-all, under nothing named.
+  assert.equal(pathView(MINE, MINE).rel, "");
+});
+
+test("pathView: a RELATIVE root is no root — it must not turn /etc/passwd into etc/passwd", () => {
+  // `resolveRef(".", ".")` collapses to `""`, so a naive implementation strips
+  // the leading slash and reports an absolute system path as repo-relative — a
+  // FALSE GRANT for a confinement gate, on an input Claude Code never sends but
+  // a test or a hand-rolled runner easily can.
+  for (const root of [".", "", "repo", "./repo"]) {
+    const p = pathView("/etc/passwd", root);
+    assert.equal(p.rel, undefined, `root=${JSON.stringify(root)}`);
+    assert.equal(p.under(["etc"]), false, `root=${JSON.stringify(root)}`);
+    assert.equal(p.under(["/etc"]), true); // the absolute prefix still works
+  }
+  // A relative PATH with a relative root keeps behaving as if there were none.
+  assert.equal(pathView("src/x.ts", ".").under(["src"]), true);
+});
+
+test("pathView: a Windows drive root relates the two spellings the same way", () => {
+  const p = pathView("C:/repo/src/x.ts", "C:/repo");
+  assert.equal(p.rel, "src/x.ts");
+  assert.equal(p.under(["src"]), true);
+  assert.equal(pathView("C:\\repo\\src\\x.ts", "C:/repo").under(["src"]), true);
+  assert.equal(pathView("C:/other/src/x.ts", "C:/repo").under(["src"]), false);
+});
+
+test("projectRootOf: $CLAUDE_PROJECT_DIR wins, the event's cwd is the fallback, cwd() is never asked", () => {
+  assert.equal(
+    projectRootOf({ cwd: "/from/event" }, { CLAUDE_PROJECT_DIR: "/from/env" }),
+    "/from/env",
+  );
+  assert.equal(projectRootOf({ cwd: "/from/event" }, {}), "/from/event");
+  assert.equal(projectRootOf({}, {}), undefined);
+  // Blank is not a root — an unset var that expanded to "" must not win.
+  assert.equal(
+    projectRootOf({ cwd: "/from/event" }, { CLAUDE_PROJECT_DIR: "  " }),
+    "/from/event",
+  );
+  assert.equal(projectRootOf({ cwd: 42 }, {}), undefined); // not a string
+  // The default env is EMPTY, not process.env — core reads no environment.
+  assert.equal(projectRootOf({}), undefined);
+});
+
+test("undecidablePathWarning: loud for the one case that decides on nothing, silent otherwise", () => {
+  assert.match(
+    undecidablePathWarning("/home/user/mine/x.md", undefined) ?? "",
+    /no project root/,
+  );
+  assert.equal(undecidablePathWarning("/home/user/mine/x.md", MINE), undefined);
+  // A RELATIVE path is decidable without a root — warning here would read as a
+  // react hook's notice (both go to stderr) and make every silent hook look live.
+  assert.equal(undecidablePathWarning("migratsiya/x.md", undefined), undefined);
+  assert.equal(undecidablePathWarning(undefined, undefined), undefined);
+});
+
+// --- the two decode doors, each with the absolute spelling ------------------
+
+const paperNudge = defineReact({
+  on: "PostToolUse",
+  match: tools("Edit", "Write"),
+  react: (e) =>
+    e.path.under(["migratsiya/papers/"]) ? notice("checklist") : nothing(),
+});
+
+const confineToSrc = defineFileGate({
+  on: "PreToolUse",
+  match: tools("Edit", "Write"),
+  decide: (e) => (e.path.under(["src"]) ? allow() : deny("confined to src/")),
+});
+
+test("runReact: an ABSOLUTE file_path fires the react — via the root arg AND via the payload's cwd", () => {
+  const abs = {
+    tool_name: "Edit",
+    tool_input: { file_path: `${MINE}/migratsiya/papers/x/main.tex` },
+  };
+  assert.equal(runReact(paperNudge, abs, MINE).kind, "notice");
+  assert.equal(runReact(paperNudge, { ...abs, cwd: MINE }).kind, "notice");
+  // No root anywhere → silence, never a false fire.
+  assert.equal(runReact(paperNudge, abs).kind, "none");
+  // A sibling checkout is not this repo, however alike the tail looks.
+  assert.equal(
+    runReact(
+      paperNudge,
+      {
+        ...abs,
+        tool_input: {
+          file_path: "/home/user/other/migratsiya/papers/x/main.tex",
+        },
+      },
+      MINE,
+    ).kind,
+    "none",
+  );
+});
+
+test("decideFileGate: an ABSOLUTE file_path inside the confinement is ALLOWED (it used to be denied)", () => {
+  const inside = {
+    tool_name: "Write",
+    tool_input: { file_path: `${MINE}/src/x.ts` },
+  };
+  assert.equal(decideFileGate(confineToSrc, inside, {}, MINE).kind, "allow");
+  assert.equal(
+    decideFileGate(confineToSrc, { ...inside, cwd: MINE }).kind,
+    "allow",
+  );
+  // …and everything outside still denies, which is the direction a miss must
+  // take for an allowlist gate: unprovable → deny, never a false grant.
+  for (const fp of [
+    `${MINE}/dist/x.js`,
+    "/etc/passwd",
+    "/home/user/other/src/x.ts",
+  ]) {
+    assert.equal(
+      decideFileGate(
+        confineToSrc,
+        { tool_name: "Write", tool_input: { file_path: fp } },
+        {},
+        MINE,
+      ).kind,
+      "deny",
+      fp,
+    );
+  }
+});
+
+test("runHookProgram: the dispatcher threads the root to both file roles", () => {
+  const abs = `${MINE}/migratsiya/papers/x/main.tex`;
+  const viaArg = runHookProgram(
+    paperNudge,
+    { tool_name: "Edit", tool_input: { file_path: abs } },
+    {},
+    MINE,
+  );
+  assert.equal(viaArg.kind === "reaction" && viaArg.reaction.kind, "notice");
+  const viaCwd = runHookProgram(paperNudge, {
+    tool_name: "Edit",
+    tool_input: { file_path: abs },
+    cwd: MINE,
+  });
+  assert.equal(viaCwd.kind === "reaction" && viaCwd.reaction.kind, "notice");
+  const gate = runHookProgram(
+    confineToSrc,
+    { tool_name: "Write", tool_input: { file_path: `${MINE}/src/x.ts` } },
+    {},
+    MINE,
+  );
+  assert.equal(gate.kind === "decision" && gate.decision.kind, "allow");
 });

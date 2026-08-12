@@ -136,6 +136,70 @@ export interface HookInput {
   readonly [k: string]: unknown;
 }
 
+/** Options for {@link fileToolEvents}. */
+export interface FileToolEventOptions {
+  /** The hook event. Default `"PostToolUse"` (the react tier's event). */
+  readonly event?: string;
+  /** The tool. Default `"Edit"`. */
+  readonly tool?: string;
+  /**
+   * The project root the absolute spelling is built from, and the value put in
+   * each event's `cwd`. Defaults to `$CLAUDE_PROJECT_DIR`, then `process.cwd()`
+   * — a TEST may read its own cwd, the RUNTIME may not (see `projectRootOf`).
+   */
+  readonly root?: string;
+  /** Extra `tool_input` fields (`old_string`, `content`, …). */
+  readonly input?: Readonly<Record<string, unknown>>;
+  /** Extra top-level event fields. */
+  readonly extra?: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * BOTH spellings of one file-tool event — `[relative, absolute]` — so a hook
+ * test cannot pin only the spelling its author had in mind.
+ *
+ * 🔴 THIS EXISTS BECAUSE THE MISSING HALF HID A DEAD HOOK. Every hook test in
+ * reach built `{ tool_input: { file_path: "migratsiya/papers/x.tex" } }` by
+ * hand — repo-relative, because that is how the hook's own prefixes are written.
+ * Claude Code's Edit/Write/MultiEdit tools send an ABSOLUTE `file_path`,
+ * `PathView.under` had no project root to reconcile the two, and so three
+ * shipped react hooks matched nothing in a real session while their tests stayed
+ * green. The tests were not weak; they reproduced the author's assumption
+ * instead of the runtime's behaviour.
+ *
+ * Iterating is the point — there is deliberately no singular builder here:
+ *
+ *     for (const e of fileToolEvents("migratsiya/papers/x.tex"))
+ *       assert.ok(hookFired(runHook(cmd, e)));
+ *
+ * Each event also carries `cwd`, so a hook run WITHOUT `$CLAUDE_PROJECT_DIR` in
+ * its environment still resolves a root — the same fallback the live runtime uses.
+ *
+ * @param path - the file, as a repo-relative path.
+ */
+export function fileToolEvents(
+  path: string,
+  opts: FileToolEventOptions = {},
+): readonly [HookInput, HookInput] {
+  const root = (
+    opts.root ??
+    process.env.CLAUDE_PROJECT_DIR ??
+    process.cwd()
+  ).replace(/[/\\]+$/, "");
+  const rel = path.replace(/\\/g, "/").replace(/^\.\//, "");
+  const base = {
+    hook_event_name: opts.event ?? "PostToolUse",
+    tool_name: opts.tool ?? "Edit",
+    cwd: root,
+    ...opts.extra,
+  };
+  const build = (file_path: string): HookInput => ({
+    ...base,
+    tool_input: { file_path, ...opts.input },
+  });
+  return [build(rel), build(`${root}/${rel}`)];
+}
+
 /** The JSON a hook may print on stdout (all fields optional). */
 export interface HookOutput {
   readonly decision?: "approve" | "block";

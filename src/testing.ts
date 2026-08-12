@@ -30,13 +30,14 @@ export { recordCheck } from "./check-count.js";
 // its result carries no `decision`, because a script does not have one.
 export { runScript } from "./run-script.js";
 export type { RunScriptOptions, ScriptRunResult } from "./run-script.js";
-export { runHook, propertyHook } from "./run-hook.js";
+export { runHook, propertyHook, fileToolEvents } from "./run-hook.js";
 export type {
   HookRunResult,
   RunHookOptions,
   HookInput,
   HookOutput,
   HookPropertyResult,
+  FileToolEventOptions,
 } from "./run-hook.js";
 
 // --- eval tier: runEval / measure / trigger-rate ---

@@ -653,20 +653,199 @@ export function verifyHookStamp(source: string, stamp: SHA256Hash): boolean {
 /** An AST-free view of a file path — the matching primitive for file tools. */
 export interface PathView {
   readonly raw: string;
-  /** True iff the path sits under at least one allowed prefix (e.g. "src/**"). */
+  /**
+   * True iff the path sits under at least one allowed prefix (e.g. "src/**").
+   *
+   * A prefix is matched in ITS OWN spelling: a repo-relative prefix (`"src"`,
+   * `"migratsiya/papers/"`) is compared against the path made repo-relative, an
+   * absolute prefix (`"/etc"`) against the path made absolute. Which of those is
+   * available depends on the project root — see {@link pathView}.
+   */
   under(prefixes: readonly string[]): boolean;
+  /**
+   * The path as a repo-relative reference, or `undefined` when this view cannot
+   * produce one — an absolute path with no known root, or a path that resolves
+   * OUTSIDE the root (`/etc/passwd`, a sibling checkout). Exposed because a hook
+   * that wants to report or re-match the path needs the same answer `under`
+   * used, and `raw` alone does not carry it.
+   */
+  readonly rel: string | undefined;
 }
 
-export function pathView(raw: string): PathView {
-  const norm = raw.replace(/^\.\//, "");
+/**
+ * A view of a file path, matched against prefixes by {@link PathView.under}.
+ *
+ * 🔴 `root` IS NOT OPTIONAL IN PRACTICE — WITHOUT IT THIS IS DEAD FOR EVERY REAL
+ * EVENT. Claude Code's Edit/Write/MultiEdit tools always send an ABSOLUTE
+ * `file_path`, and every hook in the wild writes repo-relative prefixes
+ * (`under(["migratsiya/papers/"])`). Before the root existed, the two could
+ * never meet: the comparison ran `"/home/u/repo/migratsiya/papers/x.tex"`
+ * against `"migratsiya/papers"` and returned `false` for all input, forever.
+ * MEASURED 2026-08-12 on the live runtime with one compiled react hook and two
+ * spellings of the same file — the relative one printed its checklist, the
+ * absolute one exited 0 in silence. Three shipped hooks in a consumer repo were
+ * dead by it, all three compiled *specifically to replace hooks that were dead*,
+ * and none of the tests noticed because the harness helper built relative paths.
+ *
+ * ## Which way a miss errs, and why it is not the same answer as `touches`
+ *
+ * `under` is the ALLOWLIST/COVERAGE primitive: its callers spell
+ * `under(P) ? allow() : deny()` (confinement) and `under(P) ? notice() : nothing()`
+ * (a nudge). For both, an unprovable answer must be `false` — a confinement gate
+ * denies (fails closed) and a nudge stays quiet. So:
+ *
+ * - path resolves OUTSIDE the root → `false` for every relative prefix. Not a
+ *   bias, the truth: a repo-relative prefix names nothing in another checkout.
+ *   This is the {@link resolveRef} lesson — the suffix match it replaced handed
+ *   `/home/other-project/package.json` a grant meant for this repo's.
+ * - NO root known and the path is absolute → `false` for every relative prefix.
+ *   Here we genuinely cannot tell, and `false` is the choice: silence, never a
+ *   false grant. It is also the pre-fix behaviour, so nothing regresses.
+ *
+ * ⚠️ THE ASYMMETRY INVERTS FOR A DENYLIST, AND `under` DOES NOT SERVE THAT CASE.
+ * A gate written `under(["secrets"]) ? deny() : allow()` reads an unprovable
+ * `false` as ALLOW — a false grant. The Bash-side counterpart {@link
+ * CommandView.touches} exists precisely for that direction and is deliberately
+ * over-inclusive (it suffix-matches). `PathView` has no such counterpart; a
+ * file-side denylist inherits the allowlist bias. Reported, not papered over.
+ *
+ * @param raw - the `file_path` the tool event carried, any spelling.
+ * @param root - the project root relative prefixes resolve against. Comes from
+ *   the runtime (`$CLAUDE_PROJECT_DIR`, else the event's own `cwd`), never from
+ *   `process.cwd()` — under a git worktree the process's cwd is a DIFFERENT
+ *   checkout from the one the harness resolved the hook out of, and that exact
+ *   mismatch already wedged a repo once.
+ */
+export function pathView(raw: string, root?: string): PathView {
+  const slashed = raw.replace(/\\/g, "/");
+  // The two candidate spellings. Each is `undefined` when this view cannot
+  // produce it, and `under` matches a prefix only against its OWN spelling — so
+  // a missing candidate is a miss, never a silent fallback to the other one.
+  const absolute = absoluteSpelling(slashed, root);
+  const rel = relativeSpelling(slashed, root);
   return {
     raw,
+    rel,
     under: (prefixes) =>
       prefixes.some((p) => {
-        const base = p.replace(/\/?\*+$/, "").replace(/\/$/, "");
-        return base === "" || norm === base || norm.startsWith(base + "/");
+        const base = p
+          .replace(/\\/g, "/")
+          .replace(/\/?\*+$/, "")
+          .replace(/\/$/, "");
+        if (base === "") return true; // `"/"`, `"**"` — everything is under it
+        const candidate = isAbsoluteRef(base) ? absolute : rel;
+        if (candidate === undefined) return false;
+        return candidate === base || candidate.startsWith(base + "/");
       }),
   };
+}
+
+/** The path as an absolute reference, or `undefined` when it cannot be one. */
+/**
+ * A root only relates the two spellings if it is itself ABSOLUTE. A relative one
+ * — `"."`, `"repo"` — is treated as no root at all, and the reason is a wrong
+ * ANSWER rather than tidiness: `resolveRef(".", ".")` collapses to `""`, so
+ * `/etc/passwd` would come back as the repo-relative `etc/passwd` and satisfy
+ * `under(["etc"])` inside a repo that has no such directory. Claude Code always
+ * sends an absolute `cwd` and sets an absolute `$CLAUDE_PROJECT_DIR`, so this
+ * costs nothing real and closes the one input that produced a false grant.
+ */
+const usableRoot = (root?: string): string | undefined =>
+  root !== undefined && isAbsoluteRef(root.replace(/\\/g, "/"))
+    ? root
+    : undefined;
+
+/** The path as an absolute reference, or `undefined` when it cannot be one. */
+function absoluteSpelling(path: string, root?: string): string | undefined {
+  const r = usableRoot(root);
+  if (r !== undefined) return resolveRef(r, path);
+  // No usable root: an already-absolute path just needs its dot segments
+  // collapsed; a relative one has nothing to hang off, so there is no absolute
+  // spelling of it.
+  return isAbsoluteRef(path) ? resolveRef("/", path) : undefined;
+}
+
+/** The path as a repo-relative reference, or `undefined` when it cannot be one. */
+function relativeSpelling(path: string, root?: string): string | undefined {
+  const r = usableRoot(root);
+  if (r !== undefined) return relativeToRoot(r, path);
+  // No usable root: an absolute path is UNKNOWABLE — this is the case that used
+  // to be every real event, and the miss is chosen to cost silence (see
+  // `pathView`).
+  return isAbsoluteRef(path) ? undefined : path.replace(/^\.\//, "");
+}
+
+/**
+ * `raw` expressed relative to `root`, or `undefined` when it resolves outside it.
+ * Both sides are resolved and compared WHOLE (never by suffix) — see
+ * {@link resolveRef} for the hole that cost.
+ */
+function relativeToRoot(root: string, raw: string): string | undefined {
+  const base = resolveRef(root.replace(/\\/g, "/"), ".");
+  const full = resolveRef(root.replace(/\\/g, "/"), raw);
+  if (full === base) return "";
+  if (base === "/") return full.slice(1);
+  return full.startsWith(base + "/") ? full.slice(base.length + 1) : undefined;
+}
+
+/**
+ * The project root a compiled hook's repo-relative prefixes resolve against.
+ *
+ * Two sources, in order, and `process.cwd()` is deliberately NOT one of them:
+ *
+ * 1. **`$CLAUDE_PROJECT_DIR`** — what the harness itself resolved the hook's own
+ *    path against (`.claude/settings.json` spells the command
+ *    `"$CLAUDE_PROJECT_DIR/.claude/hooks/x.hook.ts"`), so it is the same root the
+ *    hook was loaded from by construction.
+ * 2. **the event's `cwd`** — Claude Code puts the session's working directory in
+ *    every hook payload. A fallback, not a peer: it is where the session is, and
+ *    the two coincide in the ordinary case.
+ *
+ * `process.cwd()` is excluded because under a git worktree it can be a different
+ * checkout than the one the harness is driving, and a root from the wrong
+ * checkout turns every repo-relative prefix into a non-match — the same silent
+ * death this whole function exists to end. When NEITHER source is present the
+ * answer is `undefined` and the miss errs toward silence (see {@link pathView}).
+ */
+export function projectRootOf(
+  event: { readonly cwd?: unknown },
+  env: Readonly<Record<string, string | undefined>> = {},
+): string | undefined {
+  const fromEnv = env.CLAUDE_PROJECT_DIR;
+  if (typeof fromEnv === "string" && fromEnv.trim() !== "") return fromEnv;
+  const fromEvent = event.cwd;
+  if (typeof fromEvent === "string" && fromEvent.trim() !== "")
+    return fromEvent;
+  return undefined;
+}
+
+/**
+ * The one case {@link pathView} cannot answer and must not answer silently: an
+ * ABSOLUTE `file_path` with no project root in sight. Every repo-relative prefix
+ * in the hook returns `false`, so a gate waves everything through and a nudge
+ * never fires — indistinguishable, from the outside, from a hook with nothing to
+ * say. Returns the warning line, or `undefined` when there is nothing wrong.
+ *
+ * Narrow on purpose: a RELATIVE `file_path` is decidable without a root, so it
+ * warns about nothing. That matters because a react hook's `notice` also goes to
+ * stderr, and a warning on every event would read as the hook firing.
+ */
+export function undecidablePathWarning(
+  filePath: unknown,
+  root: string | undefined,
+): string | undefined {
+  if (root !== undefined) return undefined;
+  if (
+    typeof filePath !== "string" ||
+    !isAbsoluteRef(filePath.replace(/\\/g, "/"))
+  )
+    return undefined;
+  return (
+    `vigiles: no project root — neither $CLAUDE_PROJECT_DIR nor the event's ` +
+    `\`cwd\` was set, and the event carries an ABSOLUTE file_path (${filePath}). ` +
+    `Repo-relative prefixes in this hook cannot match it, so the hook is ` +
+    `deciding on less than it looks like it is. Set CLAUDE_PROJECT_DIR.`
+  );
 }
 
 /** The event a file-tool gate decides over (Edit/Write/Read carry `file_path`). */
@@ -702,11 +881,24 @@ export function defineFileGate<
   return { role: "gate", ...p };
 }
 
-/** Run a file-tool gate against a raw PreToolUse event (reads `file_path`). */
+/**
+ * Run a file-tool gate against a raw PreToolUse event (reads `file_path`).
+ *
+ * `root` is the project root repo-relative prefixes resolve against; omitted, it
+ * falls back to the event's OWN `cwd` (a payload field — this stays pure and
+ * reads no environment). The CLI passes {@link projectRootOf} instead, which
+ * prefers `$CLAUDE_PROJECT_DIR`. Without either, an absolute `file_path` matches
+ * no relative prefix — see {@link pathView} for why that direction was chosen.
+ */
 export function decideFileGate<N extends readonly NeedSpec[]>(
   hook: FileGateHook<N>,
-  raw: { tool_name?: string; tool_input?: { file_path?: unknown } },
+  raw: {
+    tool_name?: string;
+    tool_input?: { file_path?: unknown };
+    cwd?: unknown;
+  },
   ctx: Record<string, string | boolean> = {},
+  root: string | undefined = typeof raw.cwd === "string" ? raw.cwd : undefined,
 ): Decision {
   const t = raw.tool_name ?? "";
   if (!hook.match.tools.includes(t)) return allow();
@@ -717,7 +909,7 @@ export function decideFileGate<N extends readonly NeedSpec[]>(
   return hook.decide({
     event: hook.on,
     tool: t,
-    path: pathView(fp),
+    path: pathView(fp, root),
     ctx: ctx as unknown as HookCtx<N>,
   });
 }
@@ -973,14 +1165,21 @@ export const defineReact = (p: Omit<ReactHook, "role">): ReactHook => ({
   ...p,
 });
 
-/** Run a react hook against a raw PostToolUse event → the (classified) Reaction. */
+/**
+ * Run a react hook against a raw PostToolUse event → the (classified) Reaction.
+ *
+ * `root` behaves exactly as in {@link decideFileGate}: the event's own `cwd` by
+ * default, the CLI's {@link projectRootOf} when the runtime supplies one.
+ */
 export function runReact(
   hook: ReactHook,
   raw: {
     tool_name?: string;
     tool_input?: { file_path?: unknown };
     tool_response?: unknown;
+    cwd?: unknown;
   },
+  root: string | undefined = typeof raw.cwd === "string" ? raw.cwd : undefined,
 ): Reaction {
   const t = raw.tool_name ?? "";
   if (!hook.match.tools.includes(t)) return nothing();
@@ -991,7 +1190,7 @@ export function runReact(
   return hook.react({
     event: hook.on,
     tool: t,
-    path: pathView(fp),
+    path: pathView(fp, root),
     response: responseView(raw.tool_response),
   });
 }
@@ -1020,6 +1219,12 @@ export interface RawHookEvent {
   readonly prompt?: string;
   /** Stop / SubagentStop (stop-gate) — the prior-block loop guard. */
   readonly stop_hook_active?: boolean;
+  /**
+   * The session's working directory, which Claude Code puts in EVERY hook
+   * payload. The fallback project root repo-relative path prefixes resolve
+   * against when the runtime does not pass one — see {@link projectRootOf}.
+   */
+  readonly cwd?: string;
 }
 
 /** The normalized outcome of running a hook program — discriminated by role. */
@@ -1072,6 +1277,7 @@ export function runHookProgram(
   hook: AnyHook,
   event: RawHookEvent,
   ctx: Record<string, string | boolean> = {},
+  root: string | undefined = event.cwd,
 ): HookProgramOutcome {
   const kind = dispatchKind(hook);
   switch (kind) {
@@ -1083,7 +1289,7 @@ export function runHookProgram(
     case "file-gate":
       return {
         kind: "decision",
-        decision: decideFileGate(hook as FileGateHook, event, ctx),
+        decision: decideFileGate(hook as FileGateHook, event, ctx, root),
       };
     case "prompt-gate":
       return {
@@ -1102,7 +1308,10 @@ export function runHookProgram(
           .additionalContext,
       };
     case "react":
-      return { kind: "reaction", reaction: runReact(hook as ReactHook, event) };
+      return {
+        kind: "reaction",
+        reaction: runReact(hook as ReactHook, event, root),
+      };
     default:
       return assertNever(kind);
   }

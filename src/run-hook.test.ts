@@ -22,6 +22,7 @@ import {
   parseHookOutput,
   decideHook,
   propertyHook,
+  fileToolEvents,
   type HookOutput,
 } from "./run-hook.js";
 import type { RunScriptDeps, ScriptSpawnResult } from "./run-script.js";
@@ -696,5 +697,74 @@ test("…and 126/127 is distinguished from an ordinary failing exit code", () =>
     resetCheckCount();
     runHookWith("sh hooks/guard.sh", {}, {}, spawning(status));
     assert.deepEqual(surfacesRecorded(), [], `exit ${String(status)} is not`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// fileToolEvents — the helper that exists because its absence hid a dead hook.
+// Hand-built events carried the RELATIVE spelling; the harness sends the
+// ABSOLUTE one; `PathView.under` matched only the first. Returning BOTH is the
+// point, so the singular convenience is deliberately not offered.
+// ---------------------------------------------------------------------------
+
+test("fileToolEvents: returns BOTH spellings of the same file, relative first", () => {
+  const [rel, abs] = fileToolEvents("migratsiya/papers/x/main.tex", {
+    root: "/home/user/mine",
+  });
+  assert.equal(
+    (rel.tool_input as { file_path: string }).file_path,
+    "migratsiya/papers/x/main.tex",
+  );
+  assert.equal(
+    (abs.tool_input as { file_path: string }).file_path,
+    "/home/user/mine/migratsiya/papers/x/main.tex",
+  );
+  // The two differ ONLY in the path — same event, same tool, same extras.
+  assert.notEqual(
+    (rel.tool_input as { file_path: string }).file_path,
+    (abs.tool_input as { file_path: string }).file_path,
+  );
+  for (const e of [rel, abs]) {
+    assert.equal(e.hook_event_name, "PostToolUse");
+    assert.equal(e.tool_name, "Edit");
+    // `cwd` rides along so a hook spawned WITHOUT $CLAUDE_PROJECT_DIR still
+    // resolves a root — the same fallback the live runtime uses.
+    assert.equal(e.cwd, "/home/user/mine");
+  }
+});
+
+test("fileToolEvents: event/tool/input/extra are overridable; root and path spellings normalize", () => {
+  const [rel, abs] = fileToolEvents("./src/x.ts", {
+    root: "/repo/",
+    event: "PreToolUse",
+    tool: "Write",
+    input: { content: "x" },
+    extra: { session_id: "s1" },
+  });
+  assert.equal(rel.hook_event_name, "PreToolUse");
+  assert.equal(rel.tool_name, "Write");
+  assert.equal(rel.session_id, "s1");
+  assert.equal(rel.cwd, "/repo"); // trailing slash trimmed, no `//` in the join
+  assert.deepEqual(rel.tool_input, { file_path: "src/x.ts", content: "x" });
+  assert.deepEqual(abs.tool_input, {
+    file_path: "/repo/src/x.ts",
+    content: "x",
+  });
+});
+
+test("fileToolEvents: with no explicit root it uses $CLAUDE_PROJECT_DIR, then the test's cwd", () => {
+  const saved = process.env.CLAUDE_PROJECT_DIR;
+  try {
+    process.env.CLAUDE_PROJECT_DIR = "/from/env";
+    assert.equal(fileToolEvents("a.md")[1].cwd, "/from/env");
+    assert.equal(
+      (fileToolEvents("a.md")[1].tool_input as { file_path: string }).file_path,
+      "/from/env/a.md",
+    );
+    delete process.env.CLAUDE_PROJECT_DIR;
+    assert.equal(fileToolEvents("a.md")[1].cwd, process.cwd());
+  } finally {
+    if (saved === undefined) delete process.env.CLAUDE_PROJECT_DIR;
+    else process.env.CLAUDE_PROJECT_DIR = saved;
   }
 });

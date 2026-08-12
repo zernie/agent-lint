@@ -238,6 +238,8 @@ import {
   type HookProgram,
   isStampRepairEvent,
   isLoadPathRepairEvent,
+  projectRootOf,
+  undecidablePathWarning,
   type Decision,
   type RawHookEvent,
 } from "./core/hook-program.js";
@@ -6833,6 +6835,21 @@ function verifyStampOrRefuse(file: string, event: RawHookEvent): void {
 }
 
 /**
+ * Say so, ON STDERR, when this event's path cannot be matched against a
+ * repo-relative prefix — an absolute `file_path` and no project root anywhere.
+ * The failure it announces is otherwise invisible: the hook runs, exits 0, and
+ * decides on nothing. Deliberately silent for a relative `file_path` (decidable
+ * without a root) so it cannot be mistaken for a react hook's `notice`.
+ */
+function warnIfPathUndecidable(
+  event: { tool_input?: Record<string, unknown> },
+  root: string | undefined,
+): void {
+  const warning = undecidablePathWarning(event.tool_input?.file_path, root);
+  if (warning !== undefined) console.error(warning);
+}
+
+/**
  * `vigiles hook-runtime run-program <file>` — the runtime the compiled hooks block
  * points at. Reads the live event on stdin, loads the typed program, verifies
  * its stamp, and dispatches by role: a gate exits 2 + reason on `deny`; an
@@ -6862,12 +6879,19 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
     source?: string;
     prompt?: string;
     stop_hook_active?: boolean;
+    /** The session's cwd — Claude Code sends it on every hook payload. */
+    cwd?: string;
   } = {};
   try {
     event = JSON.parse(raw) as typeof event;
   } catch {
     /* malformed → empty event */
   }
+  // The root repo-relative path prefixes resolve against. `$CLAUDE_PROJECT_DIR`
+  // first (the same root the harness resolved THIS hook's own path against),
+  // then the payload's `cwd`; never `process.cwd()`, which under a git worktree
+  // can be a different checkout. See `projectRootOf`.
+  const projectRoot = projectRootOf(event, process.env);
 
   let program: AnyHook;
   try {
@@ -6944,7 +6968,8 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
       return;
     }
     case "react": {
-      const reaction = runReact(program as ReactHook, event);
+      warnIfPathUndecidable(event, projectRoot);
+      const reaction = runReact(program as ReactHook, event, projectRoot);
       if (reaction.kind === "run") {
         const { spawnSync } =
           require("node:child_process") as typeof import("node:child_process");
@@ -6959,8 +6984,9 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
     }
     case "file-gate": {
       const ctx = await gatherHookContext(program);
+      warnIfPathUndecidable(event, projectRoot);
       emitGate(
-        decideFileGate(program as FileGateHook, event, ctx),
+        decideFileGate(program as FileGateHook, event, ctx, projectRoot),
         program.on,
         hookMode(program),
         file,
