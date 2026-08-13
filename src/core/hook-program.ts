@@ -285,8 +285,25 @@ export function trimTrailingSeparators(path: string): string {
  * against `"papers//"` and match NOTHING, a trap a shipped guard's own header
  * records having fallen into.
  */
-const normalizePrefix = (prefix: string): string =>
-  trimTrailingSeparators(prefix.replace(/\\/g, "/").replace(/\/?\*+$/, ""));
+const normalizePrefix = (prefix: string): string => {
+  const stripped = prefix.replace(/\\/g, "/").replace(/\/?\*+$/, "");
+  // 🔴 THE CATCH-ALL IS A SENTINEL, NOT A ROOT — and conflating them is a
+  // regression I shipped in the previous commit. `"**"`, `"*"` and `"/"` all
+  // reduce to an EMPTY base, which `prefixVerdict` answers `"under"` for
+  // outright, no root required. Handing that empty string to
+  // `trimTrailingSeparators` turned it into `"/"` — a genuine POSIX root — so a
+  // catch-all suddenly demanded an absolute spelling and `under(["**"])` went
+  // FALSE for every relative path with no root. A catch-all that denies
+  // everything is the loudest possible version of this bug and it still
+  // type-checked and passed the drive-root test beside it, because that test
+  // supplied a root.
+  //
+  // The drive-letter carve-out below is the opposite case: `"C:"` is not a
+  // catch-all, it is a real absolute root that must keep its separator to stay
+  // absolute. Same helper, and only the empty case differs.
+  if (/^[/\\]*$/.test(stripped)) return "";
+  return trimTrailingSeparators(stripped);
+};
 
 /** Is `candidate` the prefix itself, or something below it? Boundary-aware. */
 const isAtOrUnder = (candidate: string, base: string): boolean =>

@@ -200,7 +200,14 @@ export function fileToolEvents(
   };
   const build = (file_path: string): HookInput => ({
     ...base,
-    tool_input: { file_path, ...opts.input },
+    // `opts.input` spreads FIRST. Spread last, a caller reusing a real
+    // `tool_input` fixture — the most natural way to use this — would have its
+    // own `file_path` overwrite the generated one in BOTH tuple entries, so the
+    // helper would hand back the same spelling twice while looking like it
+    // returned two. That defeats its single reason to exist, and it defeats it
+    // silently: both events still run, both still pass, and the absolute
+    // spelling nobody tested is the one the runtime actually sends.
+    tool_input: { ...opts.input, file_path },
   });
   // A root that IS a separator keeps it (see `trimTrailingSeparators`), so joining must
   // not add a second one — `//x` is a UNC path, not a file at the POSIX root.

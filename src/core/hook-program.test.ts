@@ -1546,3 +1546,37 @@ test("under: an ordinary trailing slash is still trimmed", () => {
   assert.equal(pathView("/repo/src/a.ts", "/repo").under(["src"]), true);
   assert.equal(pathView("/repo/srcx/a.ts", "/repo").under(["src"]), false);
 });
+
+// ---------------------------------------------------------------------------
+// Round 30: the catch-all is a SENTINEL, not a root. Round 29's carve-out
+// turned `normalizePrefix("**")` from `""` into `"/"`, so a catch-all started
+// demanding an absolute spelling and denied every relative path with no root.
+// The drive-root test written in the same commit did not catch it — it supplied
+// a root. These cases supply none, which is the whole point.
+// ---------------------------------------------------------------------------
+test("under: a catch-all matches a RELATIVE path with no root", () => {
+  for (const prefix of ["**", "*", "/"]) {
+    assert.equal(
+      pathView("src/x.ts").under([prefix]),
+      true,
+      `${prefix} must match a relative path with no root`,
+    );
+    assert.equal(
+      pathView("anything/at/all.md").under([prefix]),
+      true,
+      `${prefix} must match ANY relative path with no root`,
+    );
+  }
+  // A non-catch-all prefix is unaffected: still matched on its own terms.
+  assert.equal(pathView("src/x.ts").under(["src/**"]), true);
+  assert.equal(pathView("other/x.ts").under(["src/**"]), false);
+});
+
+test("under: a catch-all still matches when a root IS known", () => {
+  assert.equal(pathView("/repo/src/x.ts", "/repo").under(["**"]), true);
+  assert.equal(pathView("C:/repo/x", "C:/repo").under(["**"]), true);
+});
+
+test("under: a drive root is NOT a catch-all — a different drive stays outside", () => {
+  assert.equal(pathView("D:/repo/x", "D:/repo").under(["C:/"]), false);
+});

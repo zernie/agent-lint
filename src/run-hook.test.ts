@@ -829,3 +829,22 @@ test("fileToolEvents: an EMPTY root is not a root — it falls through, it does 
     else process.env.CLAUDE_PROJECT_DIR = saved;
   }
 });
+
+// Round 30: a caller reusing a real `tool_input` fixture must not lose the pair.
+// Spread last, `opts.input.file_path` overwrote the generated one in BOTH
+// entries — two events, one spelling, and the helper's only guarantee gone
+// without a single failure to show for it.
+test("fileToolEvents: an input fixture cannot overwrite the generated path", () => {
+  const events = fileToolEvents("src/x.ts", {
+    root: "/repo",
+    input: { file_path: "/somewhere/else.ts", old_string: "a" },
+  });
+  const [rel, abs] = events;
+  const inputOf = (e: (typeof events)[number]): Record<string, unknown> =>
+    (e.tool_input ?? {}) as Record<string, unknown>;
+  assert.equal(inputOf(rel).file_path, "src/x.ts");
+  assert.equal(inputOf(abs).file_path, "/repo/src/x.ts");
+  // the other extras still land
+  assert.equal(inputOf(rel).old_string, "a");
+  assert.notEqual(inputOf(rel).file_path, inputOf(abs).file_path);
+});
