@@ -1842,3 +1842,176 @@ test("projectRootOf: an ABSOLUTE env root still wins, and unusable pairs give no
     undefined,
   );
 });
+
+// ---------------------------------------------------------------------------
+// Round 39: `..` CLAMPED AT THE ROOT INSTEAD OF EATING IT. `resolveRef`
+// collapsed dot segments with an unconditional `out.pop()`, so a `..` sitting at
+// the top of a Windows path popped the ROOT out of the segment list —
+// `C:/../repo/src/x.ts` lost its drive letter and came back as the
+// relative-looking `repo/src/x.ts`, which no longer resolved against `C:/repo`.
+// A UNC share went one worse: two `..` ate `share` and then `server`.
+//
+// POSIX was already right BY ACCIDENT, not by design: its leader `/` is held
+// outside the segment list, so popping an empty array is already the clamp. The
+// Windows forms broke precisely because their root lives INSIDE that list.
+// ---------------------------------------------------------------------------
+test("`..` clamps at a DRIVE root — the drive letter is not poppable", () => {
+  // `C:/../repo/src/x.ts` IS `C:/repo/src/x.ts`: on Windows `..` at a drive root
+  // stays at the drive root. Both spellings of the prefix must see it, because
+  // each takes a different arm of `prefixVerdict`.
+  assert.equal(pathView("C:/../repo/src/x.ts", "C:/repo").under(["src"]), true);
+  assert.equal(
+    pathView("C:/../repo/src/x.ts", "C:/repo").under(["C:/repo/src"]),
+    true,
+  );
+  // Two of them, and a `.` in the way, still land on the same place.
+  assert.equal(
+    pathView("C:/../../repo/./src/x.ts", "C:/repo").under(["src"]),
+    true,
+  );
+  // Clamping is not "everything absolute is inside": a path that really is
+  // elsewhere on the same drive stays outside.
+  assert.equal(
+    pathView("C:/../other/src/x.ts", "C:/repo").under(["C:/repo/src"]),
+    false,
+  );
+  // The ROOT is resolved by the same helper (`relativeToRoot` resolves it
+  // against `"."` to get the comparison base), so a `..` in the ROOT ate the
+  // drive too — leaving the base `repo`, which nothing absolute starts with.
+  assert.equal(pathView("C:/repo/src/x.ts", "C:/../repo").under(["src"]), true);
+  assert.equal(
+    pathView("//server/share/repo/src/x.ts", "//server/share/../repo").under([
+      "src",
+    ]),
+    true,
+  );
+});
+
+test("`..` clamps at a UNC SHARE — it eats neither the share nor the server", () => {
+  const root = "//server/share/repo";
+  assert.equal(
+    pathView("//server/share/../repo/src/x.ts", root).under(["src"]),
+    true,
+  );
+  // The second `..` is the one that used to eat `server`, leaving `//repo/…`.
+  assert.equal(
+    pathView("//server/share/../../repo/src/x.ts", root).under(["src"]),
+    true,
+  );
+  assert.equal(
+    pathView("//server/share/../../repo/src/x.ts", root).under([
+      "//server/share/repo/src",
+    ]),
+    true,
+  );
+  // Backslashes are a spelling of the same path, and the root's own spelling
+  // must not change the answer.
+  assert.equal(
+    pathView(String.raw`\\server\share\..\repo\src\x.ts`, String.raw`\\server\share\repo`).under(["src"]), // prettier-ignore
+    true,
+  );
+  // Still not a licence: a DIFFERENT share on the same server is outside.
+  assert.equal(
+    pathView("//server/other/../other/repo/src/x.ts", root).under(["src"]),
+    false,
+  );
+});
+
+test("the clamp leaves ORDINARY `..` collapsing, on every root", () => {
+  // The quiet half, and the one a too-large floor would break: `..` in the
+  // middle of a path is not a root `..` and must still remove a segment.
+  assert.equal(
+    pathView("C:/repo/a/b/../c/x.ts", "C:/repo").under(["a/c"]),
+    true,
+  );
+  assert.equal(pathView("C:/repo/a/b/../c/x.ts", "C:/repo").under(["a/b"]), false); // prettier-ignore
+  assert.equal(
+    pathView("//server/share/repo/a/b/../c/x.ts", "//server/share/repo").under([
+      "a/c",
+    ]),
+    true,
+  );
+  assert.equal(pathView("/repo/a/b/../c/x.ts", "/repo").under(["a/c"]), true);
+  // POSIX `/..` behaves as it always did — the leader lives outside the segment
+  // list, so there was never anything there to pop.
+  assert.equal(pathView("/../repo/src/x.ts", "/repo").under(["src"]), true);
+  assert.equal(pathView("/../../repo/src/x.ts", "/repo").under(["src"]), true);
+});
+
+test("whether a `//` leader is a SHARE is the ROOT's answer, not the path's", () => {
+  // 🔴 THE ROUND-37 LESSON, AT A THIRD SITE. Read off the operand,
+  // `//repo/a/../src/x.ts` looks share-rooted (`//repo/a`), so a floor taken
+  // from the string would refuse to pop `a` and resolve to `/repo/a/src/x.ts`.
+  // Under a POSIX root that doubled slash is a stutter: the `..` must collapse.
+  assert.equal(pathView("//repo/a/../src/x.ts", "/repo").under(["src"]), true);
+  assert.equal(pathView("//repo/a/../src/x.ts", "/repo").under(["a"]), false);
+  // And the converse arm: a POSIX-absolute ref under a WINDOWS root has no
+  // Windows root of its own to clamp at, and is simply not in the repo.
+  assert.equal(pathView("/etc/passwd", "C:/repo").under(["etc"]), false);
+  assert.equal(pathView("/../etc/passwd", "C:/repo").under(["etc"]), false);
+});
+
+test("a DRIVE clamps with NO root at all — the sibling call site", () => {
+  // 🔴 THE CALL SITE A FIX WRITTEN ONLY AT THE DEFECT WOULD HAVE MISSED.
+  // `absoluteSpelling` resolves a ROOTLESS absolute path against the literal
+  // `"/"`, so a floor gated on the root would read POSIX there and eat `C:`
+  // anyway. A drive letter names its filesystem by itself — `C:/x` has no POSIX
+  // reading — which is why `isAtOrUnder` already folds case on a drive-rooted
+  // BASE with no root in hand.
+  assert.equal(pathView("C:/../repo/src/x.ts").under(["C:/repo/src"]), true);
+  assert.equal(pathView("C:/../other/x.ts").under(["C:/repo/src"]), false);
+  // The `//` half stays gated, because `//a/b` DOES have a POSIX reading and
+  // only a root settles it (round 37). Rootless it resolves as POSIX, which is
+  // a quiet miss for an allowlist — never a grant.
+  assert.equal(
+    pathView("//server/share/../repo/src/x.ts").under([
+      "//server/share/repo/src",
+    ]),
+    false,
+  );
+});
+
+test("a UNC path with no `..` resolves exactly as it did before", () => {
+  assert.equal(
+    pathView("//server/share/repo/src/x.ts", "//server/share/repo").under([
+      "src",
+    ]),
+    true,
+  );
+  assert.equal(
+    pathView("//server/share/repo/other/x.ts", "//server/share/repo").under([
+      "src",
+    ]),
+    false,
+  );
+});
+
+test("the clamp reaches BOTH repair doors, and grants nothing new", () => {
+  // The sibling call sites. `C:/../repo/a.hook.mjs` names this repo's own hook;
+  // with the drive letter eaten it resolved to `repo/a.hook.mjs`, matched
+  // nothing, and the door refused the write that unwedges the repo.
+  const hook = "a.hook.mjs";
+  const repo = { root: "C:/repo", loadPathFiles: ["C:/repo/package.json"] };
+  assert.equal(
+    isLoadPathRepairEvent(writeEvent("C:/../repo/package.json"), hook, repo),
+    true,
+  );
+  assert.equal(
+    isLoadPathRepairEvent(writeEvent("C:/other/package.json"), hook, repo),
+    false,
+  );
+  assert.equal(
+    isStampRepairEvent(writeEvent("C:/../repo/a.hook.mjs"), hook, "C:/repo"),
+    true,
+  );
+  // …and the clamp grants nothing new: climbing out of the repo is still refused,
+  // it just stops at the drive instead of falling off it.
+  assert.equal(
+    isStampRepairEvent(
+      writeEvent("C:/repo/a.hook.mjs/../../../elsewhere/a.hook.mjs"),
+      hook,
+      "C:/repo",
+    ),
+    false,
+  );
+});

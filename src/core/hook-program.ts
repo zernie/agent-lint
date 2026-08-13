@@ -1900,6 +1900,49 @@ function isAbsoluteRef(ref: string): boolean {
 }
 
 /**
+ * Does this ROOT name a Windows filesystem? One predicate, because the two
+ * questions that ask it — how many segments `..` may not pop through, and
+ * whether a `//` leader is a share or a stutter — must never disagree about the
+ * same root. `//x` is caught by the second arm: too short to be a share, but
+ * still not something to read as POSIX.
+ */
+const namesWindowsFs = (root: string): boolean =>
+  WINDOWS_ROOT.test(root) || root.startsWith("//");
+
+/**
+ * How many leading segments of a resolved path ARE its root — the floor a `..`
+ * must not pop through. `0` on POSIX, `1` for a drive (`C:`), `2` for a UNC
+ * share (`//server/share`), and 2/4 for the `//?/` spellings of those two.
+ *
+ * 🔴 A `//` LEADER IS THE ROOT'S ANSWER, NEVER THE OPERAND'S — the round-37
+ * lesson at a third site (after the case fold in {@link caseInsensitiveFs} and
+ * the UNC leader in {@link resolveRef}). Read from the string alone,
+ * `//repo/a/../src/x.ts` looks share-rooted, so a count taken off the operand
+ * would guard `repo/a` and stop `..` collapsing at all — under a POSIX root that
+ * doubled slash is a stutter, not a share. The `//` forms are therefore gated on
+ * the root, exactly as the leader is.
+ *
+ * ⚠️ A DRIVE LETTER IS THE ONE THING THAT NAMES A WINDOWS FILESYSTEM BY ITSELF,
+ * and that is not a second rule — {@link isAtOrUnder} already says it about a
+ * base (`WINDOWS_ROOT.test(rawBase)`), because `C:/x` has no POSIX reading the
+ * way `//x` does. It earns its place at a real call site rather than in the
+ * abstract: {@link absoluteSpelling} resolves a ROOTLESS absolute path against
+ * the literal `"/"`, so gating the drive on the root too would leave
+ * `C:/../repo/x` still losing its drive right there — the sibling call site a
+ * fix written only where the defect was found would have missed.
+ *
+ * The count itself is read off {@link WINDOWS_ROOT} rather than re-derived,
+ * because that regex already IS this file's single answer to "what is a Windows
+ * root"; the two forms and the `//?/` spelling are enumerated there, once.
+ */
+const rootSegmentCount = (joined: string, root: string): number => {
+  const matched = WINDOWS_ROOT.exec(joined)?.[0];
+  if (matched === undefined) return 0; // POSIX, or relative: no root inside `out`
+  if (/^[/\\]/.test(matched) && !namesWindowsFs(root)) return 0; // stutter, not share
+  return matched.split(/[/\\]+/).filter((s) => s !== "").length;
+};
+
+/**
  * Resolve a path reference against a root, without node:path (core stays
  * dependency-free). Mirrors `resolve(root, ref)`: an absolute ref wins, a
  * relative one hangs off the root, and `.` / `..` / `//` collapse.
@@ -1920,11 +1963,25 @@ function resolveRef(root: string, ref: string): string {
   const joined = isAbsoluteRef(r)
     ? r
     : `${slashes(root).replace(/\/+$/, "")}/${r}`;
+  // 🔴 `..` CLAMPS AT THE ROOT, IT DOES NOT EAT IT. A real filesystem holds
+  // still at the top: on Windows `C:/..` is `C:/`, on POSIX `/..` is `/`. An
+  // unconditional `out.pop()` popped the DRIVE LETTER out of `C:/../repo/src/x`,
+  // leaving the relative-looking `repo/src/x` — which then failed to resolve
+  // against `C:/repo`, so a gate stopped recognising a path naming its own
+  // repository. A UNC share went one worse: two `..` ate `share` and then
+  // `server`.
+  //
+  // ⚠️ POSIX WAS ALREADY CORRECT BY ACCIDENT, and the accident is worth naming
+  // so nobody "simplifies" it back: its leader `/` is held OUTSIDE `out` (see
+  // the leader below), so popping an empty array is already the clamp. The
+  // Windows forms broke precisely because their root lives INSIDE `out` —
+  // exactly the segments the loop treats as ordinary directories.
+  const floor = rootSegmentCount(joined, root);
   const out: string[] = [];
   for (const seg of joined.split("/")) {
     if (seg === "" || seg === ".") continue;
     if (seg === "..") {
-      out.pop();
+      if (out.length > floor) out.pop();
       continue;
     }
     out.push(seg);
@@ -1942,9 +1999,7 @@ function resolveRef(root: string, ref: string): string {
   // stutter, so preserving the pair unconditionally made it stop resolving
   // against a POSIX root and an allowlist gate denied a valid edit. Semantics
   // belong to the filesystem, and only the root knows which one that is.
-  const unc =
-    joined.startsWith("//") &&
-    (WINDOWS_ROOT.test(root) || root.startsWith("//"));
+  const unc = joined.startsWith("//") && namesWindowsFs(root);
   const leader = unc ? "//" : joined.startsWith("/") ? "/" : "";
   return leader + out.join("/");
 }
