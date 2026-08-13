@@ -186,9 +186,17 @@ export function fileToolEvents(
   // second door, since `projectRootOf` skips an empty `cwd` exactly as it skips
   // an empty `$CLAUDE_PROJECT_DIR`. An unset-looking root falls through to the
   // next source rather than becoming an event nothing can decide.
+  // 🔴 AND A RELATIVE ROOT IS SKIPPED THE SAME WAY AN EMPTY ONE IS — the sibling
+  // of the same fix in `projectRootOf`, and it had to be made twice because the
+  // first one was made in only one of the two places. Picking `.` here produced
+  // `./src/x.ts` as the "absolute" entry and set `cwd: "."`, which the runtime
+  // then rejects as unusable — so the helper handed back TWO relative spellings
+  // and the absolute behaviour it exists to exercise went untested again. That
+  // is precisely the hole this helper was written to close, reopened by its own
+  // root selection.
   const root = trimTrailingSeparators(
     [opts.root, process.env.CLAUDE_PROJECT_DIR, process.cwd()].find(
-      (r) => typeof r === "string" && r.trim() !== "",
+      (r) => typeof r === "string" && r.trim() !== "" && isAbsolutePath(r),
     ) ?? process.cwd(),
   );
   const rel = path.replace(/\\/g, "/").replace(/^\.\//, "");
@@ -220,6 +228,9 @@ export function fileToolEvents(
   const sep = /[/\\]$/.test(root) ? "" : "/";
   return [build(rel), build(`${root}${sep}${rel}`)];
 }
+
+/** Absolute in the POSIX, drive-rooted, or UNC sense — the three the runtime accepts. */
+const isAbsolutePath = (p: string): boolean => /^([/\\]|[A-Za-z]:)/.test(p);
 
 /**
  * A project root with ordinary trailing separators trimmed — but never trimmed

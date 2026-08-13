@@ -863,3 +863,32 @@ test("fileToolEvents: extras cannot override the selected root", () => {
   // the other extras still land
   assert.equal((rel as unknown as Record<string, unknown>).session_id, "s1");
 });
+
+// Round 39, and the sibling of round 38's fix — made twice because the first was
+// made in only one of the two places. A relative `root` masked the absolute
+// `process.cwd()` fallback, so the "absolute" entry came out as `./src/x.ts` and
+// `cwd` as `.`, which the runtime rejects. The helper then returned TWO relative
+// spellings, leaving untested exactly the behaviour it exists to exercise.
+test("fileToolEvents: a RELATIVE root is skipped, not used", () => {
+  const abs = (opts: Parameters<typeof fileToolEvents>[1]) => {
+    const [, a] = fileToolEvents("src/x.ts", opts);
+    return String((a.tool_input as Record<string, unknown>).file_path);
+  };
+  for (const root of [".", "../up", "relative/dir"]) {
+    const got = abs({ root });
+    assert.ok(
+      got.startsWith("/"),
+      `root ${root} must fall through to an absolute one, got ${got}`,
+    );
+  }
+  assert.equal(abs({ root: "/repo" }), "/repo/src/x.ts");
+});
+
+test("fileToolEvents: the two spellings are never the same string", () => {
+  for (const root of [".", "/repo", undefined]) {
+    const [rel, a] = fileToolEvents("src/x.ts", root ? { root } : {});
+    const p = (e: typeof rel) =>
+      String((e.tool_input as Record<string, unknown>).file_path);
+    assert.notEqual(p(rel), p(a), `root ${String(root)} collapsed the pair`);
+  }
+});
