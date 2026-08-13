@@ -1783,10 +1783,12 @@ test("folding under a UNC root does not invent a match", () => {
 // on the same string and a UNC path never matched a UNC prefix — an allowlist
 // gate denying every valid edit on a network share. Both spellings now resolve.
 test("a UNC path RESOLVES, so the allowlist can match it", () => {
-  assert.equal(
-    pathView("//server/share/repo/src/x.ts").under(["//server/share/repo/src"]),
-    true,
-  );
+  // ⚠️ WITH A ROOT. Absent one, `//a/b/c` is genuinely ambiguous — a UNC share on
+  // Windows, a harmless double slash on Linux — and no amount of string-reading
+  // settles it. The tie is broken toward POSIX because that is the platform this
+  // runs on, and because a real hook payload always carries `cwd`. Both readings
+  // fail toward SILENCE for an allowlist, so the cost of guessing wrong is a
+  // quiet miss, never a grant. The next case pins the POSIX half.
   assert.equal(
     pathView("//server/share/repo/src/x.ts", "//server/share/repo").under([
       "//server/share/repo/src",
@@ -1805,4 +1807,9 @@ test("preserving the UNC leader leaves POSIX resolution untouched", () => {
   assert.equal(pathView("/repo/src/x", "/repo").under(["src"]), true);
   assert.equal(pathView("/repo/src/x", "/repo").under(["/repo/src"]), true);
   assert.equal(pathView("/repo/other/x", "/repo").under(["/repo/src"]), false);
+  // Round 37: keeping the pair unconditionally broke exactly this — on Linux a
+  // doubled slash is a stutter, not a share, and the path stopped resolving
+  // against a POSIX root. The ROOT decides, as it does for the case fold.
+  assert.equal(pathView("//repo/src/x.ts", "/repo").under(["src"]), true);
+  assert.equal(pathView("//repo/src/x.ts").under(["/repo/src"]), true);
 });

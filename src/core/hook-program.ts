@@ -1721,11 +1721,16 @@ function resolveRef(root: string, ref: string): string {
   // Windows network share while a react hook stayed silent. Two functions
   // normalising the SAME string differently is the defect class this PR keeps
   // finding; here it is inside one call.
-  const leader = joined.startsWith("//")
-    ? "//"
-    : joined.startsWith("/")
-      ? "/"
-      : "";
+  // ⚠️ AND THE PAIR IS KEPT ONLY WHEN THE ROOT SAYS THIS IS WINDOWS — the same
+  // lesson as the case fold, relearned one commit later. Judged from the STRING,
+  // `//repo/src/x.ts` looks like UNC; on Linux it is just `/repo/src/x.ts` with a
+  // stutter, so preserving the pair unconditionally made it stop resolving
+  // against a POSIX root and an allowlist gate denied a valid edit. Semantics
+  // belong to the filesystem, and only the root knows which one that is.
+  const unc =
+    joined.startsWith("//") &&
+    (WINDOWS_ROOT.test(root) || root.startsWith("//"));
+  const leader = unc ? "//" : joined.startsWith("/") ? "/" : "";
   return leader + out.join("/");
 }
 
