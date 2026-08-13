@@ -1813,3 +1813,31 @@ test("preserving the UNC leader leaves POSIX resolution untouched", () => {
   assert.equal(pathView("//repo/src/x.ts", "/repo").under(["src"]), true);
   assert.equal(pathView("//repo/src/x.ts").under(["/repo/src"]), true);
 });
+
+// ---------------------------------------------------------------------------
+// Round 38: a relative `$CLAUDE_PROJECT_DIR` is not a root, so it must not
+// consume the slot. Returning it anyway masked a usable absolute `cwd` from the
+// payload — absolute paths stopped matching repo-relative prefixes AND the
+// diagnostic went quiet, because a root was "defined". Platform-neutral: this
+// bites on Linux exactly as hard.
+// ---------------------------------------------------------------------------
+test("projectRootOf: a RELATIVE env root falls through to the payload cwd", () => {
+  const ev = { cwd: "/home/u/repo" };
+  assert.equal(projectRootOf(ev, { CLAUDE_PROJECT_DIR: "." }), "/home/u/repo");
+  assert.equal(
+    projectRootOf(ev, { CLAUDE_PROJECT_DIR: "../up" }),
+    "/home/u/repo",
+  );
+  assert.equal(projectRootOf(ev, { CLAUDE_PROJECT_DIR: "" }), "/home/u/repo");
+});
+
+test("projectRootOf: an ABSOLUTE env root still wins, and unusable pairs give none", () => {
+  assert.equal(
+    projectRootOf({ cwd: "/payload" }, { CLAUDE_PROJECT_DIR: "/env" }),
+    "/env",
+  );
+  assert.equal(
+    projectRootOf({ cwd: "also/relative" }, { CLAUDE_PROJECT_DIR: "." }),
+    undefined,
+  );
+});

@@ -1153,11 +1153,18 @@ export function projectRootOf(
   event: { readonly cwd?: unknown },
   env: Readonly<Record<string, string | undefined>> = {},
 ): string | undefined {
-  const fromEnv = env.CLAUDE_PROJECT_DIR;
-  if (typeof fromEnv === "string" && fromEnv.trim() !== "") return fromEnv;
-  const fromEvent = event.cwd;
-  if (typeof fromEvent === "string" && fromEvent.trim() !== "")
-    return fromEvent;
+  // 🔴 THE FIRST *USABLE* ROOT, NOT THE FIRST NON-EMPTY STRING. A relative
+  // `$CLAUDE_PROJECT_DIR` — `.` is the obvious one — is not a root: `usableRoot`
+  // rejects it downstream, precisely so a relative value cannot turn
+  // `/etc/passwd` into the repo-relative `etc/passwd`. Returning it anyway
+  // MASKED a perfectly good absolute `cwd` from the payload, so absolute paths
+  // stopped matching repo-relative prefixes — and worse, `undecidablePathWarning`
+  // saw a defined root and stayed quiet, removing the one signal that says why.
+  // A source that cannot serve as a root must not consume the slot.
+  for (const candidate of [env.CLAUDE_PROJECT_DIR, event.cwd]) {
+    if (typeof candidate !== "string" || candidate.trim() === "") continue;
+    if (usableRoot(candidate) !== undefined) return candidate;
+  }
   return undefined;
 }
 
