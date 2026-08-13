@@ -16,10 +16,10 @@ import {
   writeFileSync,
   mkdirSync,
   readdirSync,
-  statSync,
 } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 
+import { entryOf } from "../fs-walk.js";
 import { sha256short } from "./hash.js";
 
 const SIDECAR_ROOT = ".vigiles";
@@ -86,6 +86,22 @@ export function computePerFileHashes(
  * Recurses so that nested targets (e.g. `.github/copilot-instructions.md`,
  * which lives at `.vigiles/.github/copilot-instructions.md.inputs.json`)
  * are not silently skipped.
+ *
+ * 🔴 A DIRECTORY SYMLINK IS NOT DESCENDED INTO — this walk classified entries
+ * with a bare `statSync().isDirectory()`, which FOLLOWS a link, so a link inside
+ * `.vigiles/` pointing at a directory OUTSIDE it was walked (manifests from a
+ * foreign tree entering the audit under reconstructed target names), and a cycle
+ * — `.vigiles/loop -> .vigiles`, or a link to any ancestor — re-walked the same
+ * tree once per lap. Measured 2026-08-13 by reverting this call: ONE manifest was
+ * reported FORTY-ONE times, as `Real.md`, `loop/Real.md`, `loop/loop/Real.md` …
+ * until the kernel's link limit stopped it. Unlike the loader's walk it did not
+ * throw, and that is not a mitigation: the `catch` below swallowed the `ELOOP` and
+ * turned a crash into a silently multiplied audit. Third instance of the class in
+ * this repo; the decision is {@link entryOf} in `fs-walk.ts`, which carries the
+ * full rationale: a symlinked FILE is still read (it cannot recurse, and a
+ * manifest reached through one is a real manifest), termination is by
+ * construction rather than a visited-set, and an unreadable entry is `"skip"`
+ * rather than a throw — which is exactly what the `try`/`continue` here did.
  */
 export function iterateSidecars(
   basePath: string,
@@ -111,17 +127,15 @@ function walk(
 
   for (const entry of entries) {
     const fullPath = resolve(dir, entry);
-    let isDir: boolean;
-    try {
-      isDir = statSync(fullPath).isDirectory();
-    } catch {
-      continue;
-    }
+    const { kind } = entryOf(fullPath);
 
-    if (isDir) {
+    if (kind === "dir") {
       walk(fullPath, root, basePath, fn);
       continue;
     }
+    // "skip" covers what the old bare `statSync` handled by throwing (a dangling
+    // link, an unreadable entry) AND the symlinked directory it silently followed.
+    if (kind === "skip") continue;
     if (!entry.endsWith(MANIFEST_SUFFIX)) continue;
 
     // Reconstruct the target name from the path relative to .vigiles/
