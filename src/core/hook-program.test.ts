@@ -1737,3 +1737,52 @@ test("folding never invents a match under a Windows root", () => {
     false,
   );
 });
+
+// ---------------------------------------------------------------------------
+// P1, round 35: a UNC share (`//server/share/repo`) is a Windows root and is
+// case-insensitive, but the predicate recognised only drive letters — so under
+// a UNC project root, `//server/share/repo/SECRETS/x` compared exactly against
+// `secrets` and a denylist allowed the protected write.
+//
+// ⚠️ WHAT THIS DOES *NOT* CLAIM, measured while writing it: `relativeToRoot`
+// still cannot RESOLVE a UNC path, so the allowlist side (`under`) answers false
+// rather than resolving the remainder. For an allowlist that is silence — the
+// safe direction — and it is asserted below so the limit is visible instead of
+// being mistaken for support.
+// ---------------------------------------------------------------------------
+test("a UNC root folds case for the DENYLIST side", () => {
+  const unc = "//Server/Share/Repo";
+  const cmd = "sed -i s/a/b/ //server/share/repo/SECRETS/x";
+  assert.equal(commandView(cmd, unc).writesTo(["secrets"]), true);
+  assert.equal(commandView(cmd, unc).touches(["secrets"]), true);
+  assert.equal(
+    commandView(
+      String.raw`sed -i s/a/b/ \\SERVER\SHARE\repo\SECRETS\x`,
+      String.raw`\\server\share\repo`,
+    ).writesTo(["secrets"]),
+    true,
+  );
+});
+
+test("folding under a UNC root does not invent a match", () => {
+  const unc = "//Server/Share/Repo";
+  assert.equal(
+    commandView("sed -i s/a/b/ //server/share/repo/other/x", unc).writesTo([
+      "secrets",
+    ]),
+    false,
+  );
+  assert.equal(
+    commandView("sed -i s/a/b/ /repo/SECRETS/x", "/repo").writesTo(["secrets"]),
+    false,
+  );
+});
+
+test("KNOWN LIMIT: a UNC path is not RESOLVED, so the allowlist stays quiet", () => {
+  assert.equal(
+    pathView("//server/share/repo/secrets/x", "//Server/Share/Repo").under([
+      "secrets",
+    ]),
+    false,
+  );
+});

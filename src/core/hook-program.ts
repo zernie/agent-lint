@@ -324,8 +324,29 @@ const normalizePrefix = (prefix: string): string => {
  * With no root known, nothing is folded: an unprovable answer must not be turned
  * into a match by a guess about someone else's filesystem.
  */
+const WINDOWS_ROOT =
+  // Drive: `C:/x`, `C:\x`. UNC share: `//server/share`, `\\server\share`.
+  // Extended-length prefixes `//?/C:/x` and `//?/UNC/server/share` reduce to the
+  // two above once `//?/` (and its `UNC/` marker) is consumed — which is why
+  // they are alternatives here rather than separate cases.
+  /^(?:[A-Za-z]:|[/\\]{2}(?:\?[/\\]+(?:UNC[/\\]+)?)?(?:[A-Za-z]:|[^/\\]+[/\\]+[^/\\]+))/;
+
+/**
+ * HOW THIS LIST IS DECIDED, because a table without that note is how the last
+ * three rounds happened: Windows absolute paths have exactly two root forms —
+ * a drive (`C:`) and a UNC share (`//server/share`) — plus the extended-length
+ * `//?/` prefix, which is a spelling OF those two, not a third. Anything else
+ * (a relative path, a POSIX absolute path) is not a Windows root.
+ *
+ * ⚠️ The miss direction is stated rather than implied: an unrecognised root means
+ * NO folding, so a denylist can miss on casing alone. That is the wrong
+ * direction, and it is accepted only because the alternative — folding whenever
+ * we are unsure — is a false GRANT on Linux, where `/repo/Secrets` and
+ * `/repo/secrets` are two different files. If a genuine third root form turns
+ * up, it belongs in the regex above, not in a caller.
+ */
 const caseInsensitiveFs = (root: string | undefined): boolean =>
-  root !== undefined && /^[A-Za-z]:/.test(root);
+  root !== undefined && WINDOWS_ROOT.test(root);
 
 const foldWhen = (value: string, insensitive: boolean): string =>
   insensitive ? value.toLowerCase() : value;
@@ -338,7 +359,7 @@ const isAtOrUnder = (
 ): boolean => {
   // An absolute drive-rooted BASE names a Windows filesystem by itself, even when
   // the caller could not say so (`under(["C:/x"])` with no root).
-  const fold = insensitive || /^[A-Za-z]:/.test(rawBase);
+  const fold = insensitive || WINDOWS_ROOT.test(rawBase);
   const base = foldWhen(rawBase, fold);
   const candidate = foldWhen(rawCandidate, fold);
   return (
@@ -390,7 +411,7 @@ const mightBeUnder = (
   // Same fold, same rule: keyed on the BASE, which is what decides whether a
   // Windows filesystem is in play. Left case-sensitive here, the denylist's
   // "could this be under it?" fallback misses on casing alone.
-  const fold = insensitive || /^[A-Za-z]:/.test(base);
+  const fold = insensitive || WINDOWS_ROOT.test(base);
   const p = foldWhen(raw, fold);
   const n = foldWhen(needle, fold);
   return (
