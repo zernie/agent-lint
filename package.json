@@ -1,7 +1,7 @@
 {
   "name": "vigiles",
   "version": "0.0.0-semantically-released",
-  "description": "Lint & test the harness your AI agent runs on — verify the references in your CLAUDE.md / AGENTS.md and test that your hooks and skills actually work.",
+  "description": "Audit, test and measure the harness your AI agent runs on — grade your CLAUDE.md / AGENTS.md, skills, subagents and hooks, run them against a scripted model, and measure whether they actually fire.",
   "keywords": [
     "claude-code",
     "codex",

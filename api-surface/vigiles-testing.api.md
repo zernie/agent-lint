@@ -449,6 +449,18 @@ export interface EvalUsage {
 }
 
 // @public
+export interface FileToolEventOptions {
+    readonly event?: string;
+    readonly extra?: Readonly<Record<string, unknown>>;
+    readonly input?: Readonly<Record<string, unknown>>;
+    readonly root?: string;
+    readonly tool?: string;
+}
+
+// @public
+export function fileToolEvents(path: string, opts?: FileToolEventOptions): readonly [HookInput, HookInput];
+
+// @public
 export function formatBaselineDiff(diff: BaselineDiff): string;
 
 // @public
@@ -669,6 +681,7 @@ export interface ModelRequest {
         readonly role: string;
         readonly text: string;
     }[];
+    readonly sideChannel?: boolean;
     readonly system: string;
 }
 

@@ -11,10 +11,30 @@ import {
   startMock,
   scriptModel,
   extractRequest,
+  isMainLoopRequest,
+  scriptUnconsumedWarning,
+  splitRequestCounts,
   type TurnInfo,
 } from "./mock-model.js";
 
-const post = (url: string, body: unknown): Promise<Response> =>
+/**
+ * POST an AGENT-LOOP request — one that declares tools, which is how the mock
+ * tells the agent's own turn from the CLI's side-channel calls (see
+ * `isMainLoopRequest`). MEASURED on Claude Code 2.1.228: every main-loop request
+ * carries ~40 tool definitions and every side-channel one carries none, and
+ * `--allowedTools` does not shrink that array (it is a permission allowlist, not
+ * a tool-definition filter). A hand-built request with NO tools is not what the
+ * agent sends — pretending otherwise is the fixture-realism gap that let the
+ * side channel eat script entries unnoticed.
+ */
+const post = (url: string, body: object): Promise<Response> =>
+  fetch(`${url}/v1/messages`, {
+    method: "POST",
+    body: JSON.stringify({ tools: [{ name: "Bash" }], ...body }),
+  });
+
+/** POST a SIDE-CHANNEL request — the CLI's own bookkeeping call: no tools. */
+const postSideChannel = (url: string, body: object): Promise<Response> =>
   fetch(`${url}/v1/messages`, { method: "POST", body: JSON.stringify(body) });
 
 interface MsgBlock {
@@ -226,4 +246,97 @@ test("startMock: repeats the last turn and defaults an empty script", async () =
   } finally {
     empty.close();
   }
+});
+
+// ---------------------------------------------------------------------------
+// The side channel must NOT eat the script.
+//
+// 🔴 MEASURED 2026-08-12, Claude Code 2.1.228, one `runHarnessTest` with a
+// THREE-entry script: the mock served 27 requests — 9 main-loop and 18
+// side-channel (two per turn, the second a retry because our text answer was not
+// the JSON the CLI's notification classifier wanted). The mock handed the next
+// script entry to whichever request arrived first, so entry #2 went to the
+// classifier and the agent never saw it. `a blocking Stop hook forces the agent
+// to keep working` failed locally as a direct result: the agent was never given
+// the turn that creates DONE. After routing: 5 requests, 3 main-loop + 2
+// side-channel, `turns` 27 → 3, and the test passes.
+//
+// This test is the pin. It fails if a side-channel request ever consumes a
+// script entry again — the entries are ordered, so a stolen one shifts every
+// answer after it.
+// ---------------------------------------------------------------------------
+test("startMock: a side-channel request never consumes a script entry", async () => {
+  const mock = await startMock(scriptModel([{ text: "A" }, { text: "B" }]));
+  try {
+    // The side channel arrives FIRST — the ordering that stole entry #1.
+    const side1 = await readMsg(
+      await postSideChannel(mock.url, { messages: [{ content: "classify" }] }),
+    );
+    assert.notEqual(side1.content?.[0]?.text, "A", "the script was raided");
+    assert.equal(side1.content?.[0]?.text, "{}"); // valid JSON, from outside the script
+
+    // The agent's first turn still gets the FIRST entry.
+    const main1 = await readMsg(
+      await post(mock.url, { messages: [{ content: "go" }] }),
+    );
+    assert.equal(main1.content?.[0]?.text, "A");
+
+    await postSideChannel(mock.url, { messages: [{ content: "classify" }] });
+
+    // …and its second turn gets the SECOND, not a shifted one.
+    const main2 = await readMsg(
+      await post(mock.url, { messages: [{ content: "go on" }] }),
+    );
+    assert.equal(main2.content?.[0]?.text, "B");
+
+    // `count` is the agent's turn count, not the CLI's HTTP-call count.
+    assert.equal(mock.count, 2);
+    assert.equal(mock.sideChannelCount, 2);
+    // Every request is still RECORDED — routed, not hidden — and tagged, so a
+    // future side channel shows up as a number instead of a shifted script.
+    assert.equal(mock.requests.length, 4);
+    assert.deepEqual(
+      mock.requests.map((r) => r.sideChannel === true),
+      [true, false, true, false],
+    );
+  } finally {
+    mock.close();
+  }
+});
+
+test("isMainLoopRequest: keys on the tool declarations, not on prompt text", () => {
+  // Structural, so a reworded system prompt cannot silently reclassify a turn.
+  assert.equal(isMainLoopRequest({ tools: [{ name: "Bash" }] }), true);
+  assert.equal(isMainLoopRequest({}), false);
+  assert.equal(isMainLoopRequest({ tools: [] }), false);
+  assert.equal(isMainLoopRequest({ tools: "Bash" }), false);
+});
+
+test("scriptUnconsumedWarning: says so when the classifier swallowed the run", () => {
+  // The stated residual risk of keying on `tools`: if a future main-loop request
+  // ever arrives WITHOUT tool declarations, it is misrouted and the script is
+  // never consumed — the agent would loop on `{}` forever. That failure is
+  // otherwise silent, so it gets a line on stderr rather than a guess.
+  assert.match(scriptUnconsumedWarning(0, 4) ?? "", /side-channel/);
+  assert.equal(scriptUnconsumedWarning(3, 2), undefined); // the normal case
+  assert.equal(scriptUnconsumedWarning(0, 0), undefined); // nothing ran at all
+});
+
+test("splitRequestCounts: recovers the handle's split from the tags alone", () => {
+  // A sandboxed run leaves the mock in another process, so `count` /
+  // `sideChannelCount` have to be rebuilt from the tagged request log. Same
+  // numbers, or `Trace.turns` means one thing direct and another sandboxed.
+  const main = { system: "", messages: [] };
+  const side = { ...main, sideChannel: true };
+  assert.deepEqual(splitRequestCounts([]), { count: 0, sideChannelCount: 0 });
+  assert.deepEqual(splitRequestCounts([side, main, side, main]), {
+    count: 2,
+    sideChannelCount: 2,
+  });
+  // Nothing BUT side channel — the shape `scriptUnconsumedWarning` names, which
+  // the sandbox path can only reach through this split.
+  assert.deepEqual(splitRequestCounts([side, side]), {
+    count: 0,
+    sideChannelCount: 2,
+  });
 });

@@ -39,6 +39,7 @@
 import type { HookProtocol } from "./core/hook-protocol.js";
 import { claudeCodeHookProtocol } from "./adapters/claude-code/hook-protocol.js";
 import { propertyTest } from "./core/proofs.js";
+import { trimTrailingSeparators } from "./core/hook-program.js";
 import {
   runScriptWith,
   REAL_DEPS,
@@ -135,6 +136,119 @@ export interface HookInput {
   /** Any other event-specific fields. */
   readonly [k: string]: unknown;
 }
+
+/** Options for {@link fileToolEvents}. */
+export interface FileToolEventOptions {
+  /** The hook event. Default `"PostToolUse"` (the react tier's event). */
+  readonly event?: string;
+  /** The tool. Default `"Edit"`. */
+  readonly tool?: string;
+  /**
+   * The project root the absolute spelling is built from, and the value put in
+   * each event's `cwd`. Defaults to `$CLAUDE_PROJECT_DIR`, then `process.cwd()`
+   * — a TEST may read its own cwd, the RUNTIME may not (see `projectRootOf`).
+   */
+  readonly root?: string;
+  /** Extra `tool_input` fields (`old_string`, `content`, …). */
+  readonly input?: Readonly<Record<string, unknown>>;
+  /** Extra top-level event fields. */
+  readonly extra?: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * BOTH spellings of one file-tool event — `[relative, absolute]` — so a hook
+ * test cannot pin only the spelling its author had in mind.
+ *
+ * 🔴 THIS EXISTS BECAUSE THE MISSING HALF HID A DEAD HOOK. Every hook test in
+ * reach built `{ tool_input: { file_path: "migratsiya/papers/x.tex" } }` by
+ * hand — repo-relative, because that is how the hook's own prefixes are written.
+ * Claude Code's Edit/Write/MultiEdit tools send an ABSOLUTE `file_path`,
+ * `PathView.under` had no project root to reconcile the two, and so three
+ * shipped react hooks matched nothing in a real session while their tests stayed
+ * green. The tests were not weak; they reproduced the author's assumption
+ * instead of the runtime's behaviour.
+ *
+ * Iterating is the point — there is deliberately no singular builder here:
+ *
+ *     for (const e of fileToolEvents("migratsiya/papers/x.tex"))
+ *       assert.ok(hookFired(runHook(cmd, e)));
+ *
+ * Each event also carries `cwd`, so a hook run WITHOUT `$CLAUDE_PROJECT_DIR` in
+ * its environment still resolves a root — the same fallback the live runtime uses.
+ *
+ * @param path - the file, as a repo-relative path.
+ */
+export function fileToolEvents(
+  path: string,
+  opts: FileToolEventOptions = {},
+): readonly [HookInput, HookInput] {
+  // `??` alone would let an EMPTY string through — the same silent failure by a
+  // second door, since `projectRootOf` skips an empty `cwd` exactly as it skips
+  // an empty `$CLAUDE_PROJECT_DIR`. An unset-looking root falls through to the
+  // next source rather than becoming an event nothing can decide.
+  // 🔴 AND A RELATIVE ROOT IS SKIPPED THE SAME WAY AN EMPTY ONE IS — the sibling
+  // of the same fix in `projectRootOf`, and it had to be made twice because the
+  // first one was made in only one of the two places. Picking `.` here produced
+  // `./src/x.ts` as the "absolute" entry and set `cwd: "."`, which the runtime
+  // then rejects as unusable — so the helper handed back TWO relative spellings
+  // and the absolute behaviour it exists to exercise went untested again. That
+  // is precisely the hole this helper was written to close, reopened by its own
+  // root selection.
+  const root = trimTrailingSeparators(
+    [opts.root, process.env.CLAUDE_PROJECT_DIR, process.cwd()].find(
+      (r) => typeof r === "string" && r.trim() !== "" && isAbsolutePath(r),
+    ) ?? process.cwd(),
+  );
+  const rel = path.replace(/\\/g, "/").replace(/^\.\//, "");
+  const base = {
+    // `opts.extra` spreads FIRST, for the same reason `opts.input` does below:
+    // extras copied from a real hook event carry a `cwd`, and spread last it
+    // would replace the root this helper just selected. The absolute entry would
+    // still be BUILT from `opts.root` but EVALUATED against someone else's cwd —
+    // so the helper would hand back a pair that no longer tests the spelling it
+    // promises, and nothing would fail to say so.
+    ...opts.extra,
+    hook_event_name: opts.event ?? "PostToolUse",
+    tool_name: opts.tool ?? "Edit",
+    cwd: root,
+  };
+  const build = (file_path: string): HookInput => ({
+    ...base,
+    // `opts.input` spreads FIRST. Spread last, a caller reusing a real
+    // `tool_input` fixture — the most natural way to use this — would have its
+    // own `file_path` overwrite the generated one in BOTH tuple entries, so the
+    // helper would hand back the same spelling twice while looking like it
+    // returned two. That defeats its single reason to exist, and it defeats it
+    // silently: both events still run, both still pass, and the absolute
+    // spelling nobody tested is the one the runtime actually sends.
+    tool_input: { ...opts.input, file_path },
+  });
+  // A root that IS a separator keeps it (see `trimTrailingSeparators`), so joining must
+  // not add a second one — `//x` is a UNC path, not a file at the POSIX root.
+  const sep = /[/\\]$/.test(root) ? "" : "/";
+  return [build(rel), build(`${root}${sep}${rel}`)];
+}
+
+/** Absolute in the POSIX, drive-rooted, or UNC sense — the three the runtime accepts. */
+const isAbsolutePath = (p: string): boolean => /^([/\\]|[A-Za-z]:)/.test(p);
+
+/**
+ * A project root with ordinary trailing separators trimmed — but never trimmed
+ * down to something that is no longer a root.
+ *
+ * 🔴 THE CARVE-OUT IS THE WHOLE POINT, AND ITS FAILURE IS SILENT. Stripping
+ * every trailing separator turns the POSIX root `"/"` into `""` and the Windows
+ * drive root `"C:\"` into `"C:"`. The runtime accepts neither: `projectRootOf`
+ * skips an empty `cwd`, and `usableRoot` requires an ABSOLUTE ref, which is `/x`
+ * or `C:/x` — a bare drive letter is not one. So the event is still built and
+ * the hook still runs; its ABSOLUTE spelling merely stops resolving, every
+ * repo-relative prefix misses, and a negative assertion passes while pinning
+ * nothing. That is precisely the dead-hook-behind-a-green-test shape this
+ * helper's second spelling exists to prevent — reintroduced by the helper.
+ *
+ * A bare `"C:"` with no separator at all gets one for the same reason: what
+ * comes back is always a root the runtime can use.
+ */
 
 /** The JSON a hook may print on stdout (all fields optional). */
 export interface HookOutput {

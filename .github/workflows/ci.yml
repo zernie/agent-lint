@@ -148,36 +148,74 @@ jobs:
       - name: Build
         run: npm run build
 
+      # This is the whole job now, and it used to be about half of it. Measured
+      # on run 31631013102 (ubuntu-latest), `test` was CI's SOLE long pole at
+      # 554 s while check/site/e2e/harness each finished inside 2 min on their
+      # own runners and idled. Two of the four items in that 554 s were waste:
+      #
+      #   100 s  setup (python/ruby/java/go linters, claude+codex+bubblewrap, ci, build)
+      #   208 s  this step
+      #   182 s  `npx vitest run && npx jest` — a SECOND full pass over the very
+      #          suite this step had just run. `vitest run` runs all four vitest
+      #          projects, `runners` (the matcher constraint) among them, so the
+      #          coverage run above already covered it. Only jest was unique, and
+      #          jest takes 1.4 s. Deleted; jest moved to `check`.
+      #    63 s  3× typecheck · lint · prettier — none of which need a single one
+      #          of the language toolchains installed above. Moved to `check`,
+      #          which finishes in ~90 s and then sits idle.
+      #
+      # Expect ~4.9 min here instead of 9.2, on the same one runner.
       - name: Run tests + 100% coverage gate (harness-testing pillar)
         run: npm run coverage
 
-      - name: Cross-runner matcher tests (vitest + jest)
-        run: npx vitest run && npx jest
-
-      - name: Matcher type augmentation compiles (vitest + jest)
-        run: npx tsc --noEmit -p test/types/tsconfig.json
-
-      - name: Type check
-        run: npx tsc --noEmit
-
-      # 🔴 site/ and packages/report-view have their OWN tsconfig and were never typechecked here.
-      # A field added to the engine's inventory and not to the view's mirror therefore compiled
-      # clean through all three steps above and failed only for whoever ran
-      # `tsc -p site/tsconfig.json` by hand. That is precisely what happened to `untestedHarness`
-      # and `unevaluated` earlier in this PR: three green typecheck steps, none covering the project
-      # that broke. A check that passes without covering the thing that broke is the defect this
-      # whole PR is about, so it gets a step rather than a note.
-      - name: Type check (site + report-view)
-        run: npx tsc --noEmit -p site/tsconfig.json
-
-      - name: Check generated types compile
-        run: node dist/cli.js generate types && npx tsc --noEmit
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Check formatting
-        run: npm run fmt:check
+      # ── Sharding: measured, and NOT worth it (2026-08-12) ───────────────────
+      # The obvious next move is `vitest --shard=i/3` across three runners. It
+      # was built and measured on this checkout before being dropped, so nobody
+      # has to re-derive it:
+      #
+      # WHY IT WAS DROPPED — it buys 10–20 s. Local wall (4 cores): unsharded
+      # 177 s; three shards 123 s / 76 s / 45 s. The long pole stays at 123 s
+      # because vitest shards by SHA-1 of the spec PATH — deterministic but
+      # duration-blind — so the split was 1.5× the ideal 81 s. Add the ~100 s
+      # toolchain setup, which no shard can skip (the gated linter-binary tests
+      # live in the unit project and must not silently skip), and a ~40 s serial
+      # merge job, and the lane lands at ~4.7 min against the ~4.9 min above.
+      # Cost: 9.2 → ~13 runner-minutes, and the required status check renames
+      # from `test` to `test (shard 1/3)` + a new job, which can silently block
+      # every PR on a branch-protection rule.
+      #
+      # HOW IT WOULD HAVE TO WORK, if the suite ever grows enough to revisit.
+      # The gate is the hard part: a shard only loads the files its own slice of
+      # tests imports, so per-shard coverage is partial BY CONSTRUCTION, and a
+      # gate left inside a shard has to be relaxed to pass — a relaxed gate that
+      # still prints green is the exact failure class this repo exists to catch.
+      # The shape that works: shards run
+      #   vitest run --shard=i/3 --reporter=blob --coverage --coverage.reporter=none
+      #   --coverage.thresholds.{lines,functions,statements,branches}=0
+      # and upload `.vitest-reports/*` (a DOTDIR — needs upload-artifact's
+      # `include-hidden-files: true` or the artifact is silently empty); a
+      # dependent job downloads them and runs `vitest --merge-reports --coverage`,
+      # where the thresholds in vitest.config.mjs apply once, over the union.
+      #
+      # THE THREE PROOFS IT STAYS HONEST, all run locally on this checkout:
+      #   · FAITHFUL — merged 3 shards vs the unsharded run: same 19 files, 3509
+      #     coverage hit-bits (statements, per-path branches, functions) compared
+      #     element-by-element, 0 mismatches, identical summary. Compare hit BITS,
+      #     not counts: counts legitimately differ, since each side sums over a
+      #     different set of tests.
+      #   · STILL BITES — with src/share-link.test.ts removed, all three shards
+      #     exit 0 while the MERGED report shows share-link.ts at 0% and fails
+      #     with three threshold errors. Untested files survive the split because
+      #     each shard records the whole include-list, zero-filling what it never
+      #     loaded (`generateCoverage` gets allTestsRun=true even under --shard).
+      #   · FAILS CLOSED — merging a single blob reports 66.53% against the same
+      #     1775-statement denominator and errors, so a lost or empty artifact
+      #     reddens the gate rather than shrinking it. That property, not a
+      #     blob-count assertion, is what makes the design safe.
+      # Also measured: the merge job needs no `npm run build` (the v8 remap reads
+      # the TS sources, not dist/), and `--coverage.reporter=none` on a shard
+      # loses nothing from the blob — it only suppresses a partial table that
+      # reads like a coverage figure.
 
   check:
     runs-on: ubuntu-latest
@@ -274,6 +312,47 @@ jobs:
         run: |
           npm ci --prefix rule-enforcer
           node rule-enforcer/gate.js
+
+      # ── Moved here from `test` (2026-08-12) ─────────────────────────────────
+      # Not one of these needs python/ruby/java/go, bubblewrap, or the
+      # claude/codex CLIs — they were simply queued behind ~96 s of toolchain
+      # install and ~6 min of tests in the job that was CI's long pole, while
+      # this job finished in ~90 s and idled. 63 s measured, moved wholesale.
+      # Relative ORDER is preserved: `generate types` writes
+      # .vigiles/generated.d.ts before lint and prettier see the tree, exactly
+      # as it did in `test`. dist/ comes from the Build step above.
+
+      # Jest is the half of the old "cross-runner matcher tests (vitest + jest)"
+      # step that was worth keeping — a genuinely different runner, 1.4 s. The
+      # vitest half was deleted rather than moved: it re-ran the whole suite the
+      # coverage gate had just run (see the note in `test`).
+      - name: Cross-runner matcher tests (jest)
+        run: npx jest
+
+      - name: Matcher type augmentation compiles (vitest + jest)
+        run: npx tsc --noEmit -p test/types/tsconfig.json
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      # 🔴 site/ and packages/report-view have their OWN tsconfig and were never typechecked here.
+      # A field added to the engine's inventory and not to the view's mirror therefore compiled
+      # clean through all three steps above and failed only for whoever ran
+      # `tsc -p site/tsconfig.json` by hand. That is precisely what happened to `untestedHarness`
+      # and `unevaluated` earlier in this PR: three green typecheck steps, none covering the project
+      # that broke. A check that passes without covering the thing that broke is the defect this
+      # whole PR is about, so it gets a step rather than a note.
+      - name: Type check (site + report-view)
+        run: npx tsc --noEmit -p site/tsconfig.json
+
+      - name: Check generated types compile
+        run: node dist/cli.js generate types && npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run fmt:check
 
   harness:
     # Dogfood the harness-testing pillar on the in-repo build: the deterministic

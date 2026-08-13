@@ -22,6 +22,7 @@ import {
   parseHookOutput,
   decideHook,
   propertyHook,
+  fileToolEvents,
   type HookOutput,
 } from "./run-hook.js";
 import type { RunScriptDeps, ScriptSpawnResult } from "./run-script.js";
@@ -31,6 +32,7 @@ import {
   surfacesRecorded,
 } from "./check-count.js";
 import { sandboxAvailable } from "./sandbox.js";
+import { pathView, projectRootOf } from "./core/hook-program.js";
 
 test("propertyHook: holds for a correct guard, finds a counterexample for a buggy one", () => {
   const CMDS = ["ls", "rm -rf /", "rm -rf foo", "git status", "cat x"];
@@ -696,5 +698,197 @@ test("…and 126/127 is distinguished from an ordinary failing exit code", () =>
     resetCheckCount();
     runHookWith("sh hooks/guard.sh", {}, {}, spawning(status));
     assert.deepEqual(surfacesRecorded(), [], `exit ${String(status)} is not`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// fileToolEvents — the helper that exists because its absence hid a dead hook.
+// Hand-built events carried the RELATIVE spelling; the harness sends the
+// ABSOLUTE one; `PathView.under` matched only the first. Returning BOTH is the
+// point, so the singular convenience is deliberately not offered.
+// ---------------------------------------------------------------------------
+
+test("fileToolEvents: returns BOTH spellings of the same file, relative first", () => {
+  const [rel, abs] = fileToolEvents("migratsiya/papers/x/main.tex", {
+    root: "/home/user/mine",
+  });
+  assert.equal(
+    (rel.tool_input as { file_path: string }).file_path,
+    "migratsiya/papers/x/main.tex",
+  );
+  assert.equal(
+    (abs.tool_input as { file_path: string }).file_path,
+    "/home/user/mine/migratsiya/papers/x/main.tex",
+  );
+  // The two differ ONLY in the path — same event, same tool, same extras.
+  assert.notEqual(
+    (rel.tool_input as { file_path: string }).file_path,
+    (abs.tool_input as { file_path: string }).file_path,
+  );
+  for (const e of [rel, abs]) {
+    assert.equal(e.hook_event_name, "PostToolUse");
+    assert.equal(e.tool_name, "Edit");
+    // `cwd` rides along so a hook spawned WITHOUT $CLAUDE_PROJECT_DIR still
+    // resolves a root — the same fallback the live runtime uses.
+    assert.equal(e.cwd, "/home/user/mine");
+  }
+});
+
+test("fileToolEvents: event/tool/input/extra are overridable; root and path spellings normalize", () => {
+  const [rel, abs] = fileToolEvents("./src/x.ts", {
+    root: "/repo/",
+    event: "PreToolUse",
+    tool: "Write",
+    input: { content: "x" },
+    extra: { session_id: "s1" },
+  });
+  assert.equal(rel.hook_event_name, "PreToolUse");
+  assert.equal(rel.tool_name, "Write");
+  assert.equal(rel.session_id, "s1");
+  assert.equal(rel.cwd, "/repo"); // trailing slash trimmed, no `//` in the join
+  assert.deepEqual(rel.tool_input, { file_path: "src/x.ts", content: "x" });
+  assert.deepEqual(abs.tool_input, {
+    file_path: "/repo/src/x.ts",
+    content: "x",
+  });
+});
+
+test("fileToolEvents: with no explicit root it uses $CLAUDE_PROJECT_DIR, then the test's cwd", () => {
+  const saved = process.env.CLAUDE_PROJECT_DIR;
+  try {
+    process.env.CLAUDE_PROJECT_DIR = "/from/env";
+    assert.equal(fileToolEvents("a.md")[1].cwd, "/from/env");
+    assert.equal(
+      (fileToolEvents("a.md")[1].tool_input as { file_path: string }).file_path,
+      "/from/env/a.md",
+    );
+    delete process.env.CLAUDE_PROJECT_DIR;
+    assert.equal(fileToolEvents("a.md")[1].cwd, process.cwd());
+  } finally {
+    if (saved === undefined) delete process.env.CLAUDE_PROJECT_DIR;
+    else process.env.CLAUDE_PROJECT_DIR = saved;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// A FILESYSTEM ROOT is still a root.
+//
+// 🔴 Trimming every trailing separator turned `"/"` into `""` and `"C:\"` into
+// `"C:"`, and the damage is downstream and SILENT: `projectRootOf` skips an
+// empty `cwd`, `usableRoot` rejects a bare drive letter, so the ABSOLUTE-spelling
+// event became undecidable and every repo-relative prefix missed. The event still
+// existed and the hook still ran — a test asserting a hook does NOT fire would
+// pass on an event that could never have made it fire.
+//
+// So this asserts the RUNTIME's own verdict (`pathView` + `projectRootOf`, the
+// pair a compiled hook uses), not the string shape — the string is what looked
+// fine while the verdict was wrong.
+// ---------------------------------------------------------------------------
+test("fileToolEvents: a filesystem root stays usable — BOTH spellings still decide", () => {
+  const decides = (root: string): [boolean, boolean] => {
+    const events = fileToolEvents("docs/x.md", { root });
+    return events.map((e) => {
+      const fp = (e.tool_input as { file_path: string }).file_path;
+      return pathView(fp, projectRootOf({ cwd: e.cwd })).under(["docs"]);
+    }) as [boolean, boolean];
+  };
+  for (const root of ["/", "C:\\", "C:/", "C:", "//"]) {
+    assert.deepEqual(
+      decides(root),
+      [true, true],
+      `root ${root} went undecidable`,
+    );
+  }
+  // The ordinary case is unchanged: trailing separators still get trimmed.
+  assert.equal(fileToolEvents("a.md", { root: "/repo//" })[0].cwd, "/repo");
+  assert.deepEqual(decides("/repo/"), [true, true]);
+  // And the absolute spelling never grows a doubled separator at the root.
+  const [, abs] = fileToolEvents("docs/x.md", { root: "/" });
+  assert.equal(
+    (abs.tool_input as { file_path: string }).file_path,
+    "/docs/x.md",
+  );
+});
+
+test("fileToolEvents: an EMPTY root is not a root — it falls through, it does not become `/`", () => {
+  // The same undecidable-event failure by a second door: `??` skips only
+  // null/undefined, so `root: ""` used to land in `cwd` verbatim, and
+  // `projectRootOf` skips an empty `cwd` exactly as it skips an empty
+  // `$CLAUDE_PROJECT_DIR`. Treating it as the filesystem root instead would be
+  // worse — `under(["docs"])` would then be TRUE for anything, the wrong error
+  // direction for an allowlist.
+  const saved = process.env.CLAUDE_PROJECT_DIR;
+  try {
+    process.env.CLAUDE_PROJECT_DIR = "/from/env";
+    assert.equal(fileToolEvents("a.md", { root: "" })[0].cwd, "/from/env");
+    assert.equal(fileToolEvents("a.md", { root: "   " })[0].cwd, "/from/env");
+    process.env.CLAUDE_PROJECT_DIR = "";
+    assert.equal(fileToolEvents("a.md")[0].cwd, process.cwd());
+  } finally {
+    if (saved === undefined) delete process.env.CLAUDE_PROJECT_DIR;
+    else process.env.CLAUDE_PROJECT_DIR = saved;
+  }
+});
+
+// Round 30: a caller reusing a real `tool_input` fixture must not lose the pair.
+// Spread last, `opts.input.file_path` overwrote the generated one in BOTH
+// entries — two events, one spelling, and the helper's only guarantee gone
+// without a single failure to show for it.
+test("fileToolEvents: an input fixture cannot overwrite the generated path", () => {
+  const events = fileToolEvents("src/x.ts", {
+    root: "/repo",
+    input: { file_path: "/somewhere/else.ts", old_string: "a" },
+  });
+  const [rel, abs] = events;
+  const inputOf = (e: (typeof events)[number]): Record<string, unknown> =>
+    (e.tool_input ?? {}) as Record<string, unknown>;
+  assert.equal(inputOf(rel).file_path, "src/x.ts");
+  assert.equal(inputOf(abs).file_path, "/repo/src/x.ts");
+  // the other extras still land
+  assert.equal(inputOf(rel).old_string, "a");
+  assert.notEqual(inputOf(rel).file_path, inputOf(abs).file_path);
+});
+
+// Round 31: the sibling of the `file_path` case, two lines up in the same
+// object. Extras copied from a real event carry a `cwd`; spread last it replaced
+// the root the helper had just chosen, so the absolute entry was built from one
+// root and evaluated against another.
+test("fileToolEvents: extras cannot override the selected root", () => {
+  const [rel, abs] = fileToolEvents("src/x.ts", {
+    root: "/repo",
+    extra: { cwd: "/somewhere/else", session_id: "s1" },
+  });
+  assert.equal(rel.cwd, "/repo");
+  assert.equal(abs.cwd, "/repo");
+  // the other extras still land
+  assert.equal((rel as unknown as Record<string, unknown>).session_id, "s1");
+});
+
+// Round 39, and the sibling of round 38's fix — made twice because the first was
+// made in only one of the two places. A relative `root` masked the absolute
+// `process.cwd()` fallback, so the "absolute" entry came out as `./src/x.ts` and
+// `cwd` as `.`, which the runtime rejects. The helper then returned TWO relative
+// spellings, leaving untested exactly the behaviour it exists to exercise.
+test("fileToolEvents: a RELATIVE root is skipped, not used", () => {
+  const abs = (opts: Parameters<typeof fileToolEvents>[1]) => {
+    const [, a] = fileToolEvents("src/x.ts", opts);
+    return String((a.tool_input as Record<string, unknown>).file_path);
+  };
+  for (const root of [".", "../up", "relative/dir"]) {
+    const got = abs({ root });
+    assert.ok(
+      got.startsWith("/"),
+      `root ${root} must fall through to an absolute one, got ${got}`,
+    );
+  }
+  assert.equal(abs({ root: "/repo" }), "/repo/src/x.ts");
+});
+
+test("fileToolEvents: the two spellings are never the same string", () => {
+  for (const root of [".", "/repo", undefined]) {
+    const [rel, a] = fileToolEvents("src/x.ts", root ? { root } : {});
+    const p = (e: typeof rel) =>
+      String((e.tool_input as Record<string, unknown>).file_path);
+    assert.notEqual(p(rel), p(a), `root ${String(root)} collapsed the pair`);
   }
 });

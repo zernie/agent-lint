@@ -11,6 +11,7 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 import { join } from "node:path";
+import { readFileSync } from "node:fs";
 
 test("parseSubagents recovers a subagent's nested tool calls by parent_tool_use_id", () => {
   // Verified against real claude output: the dispatch tool is named "Agent"
@@ -71,6 +72,40 @@ test("parseSubagents recovers a subagent's nested tool calls by parent_tool_use_
   assert.equal(subs[0].toolCalls[0].resultText, "file body");
   // No subagents in a plain stream.
   assert.deepEqual(parseSubagents('{"type":"result"}'), []);
+});
+
+/**
+ * Prevention gate for the "`turns` means two things" regression, in the shape
+ * the `cli-harness-resolution` gates use — because the buggy line is in the
+ * SANDBOX branch, which needs bwrap and therefore never runs in this suite. A
+ * behavioural test would have stayed green through the whole bug's life; the
+ * boundary itself is pinned in `sandbox.test.ts`, and this pins the call site.
+ *
+ * The direct path reports `mock.count` (the agent's turns). The sandbox path had
+ * `out.requests.length`, which counts the CLI's side-channel calls too — 27
+ * requests for 9 turns, measured on Claude Code 2.1.228. Recovering the split
+ * from the tags (`splitRequestCounts`) is the only allowed derivation here.
+ *
+ * Audited at the same time and deliberately NOT covered: `adapters/codex/driver.ts`
+ * also returns `mock.requests.length` as its count, and that is correct there —
+ * the Codex mock has no side-channel routing at all, so its script counter and
+ * its request count are the same number by construction.
+ */
+test("harness-test.ts never derives turns from requests.length (both paths, one meaning)", () => {
+  const src = readFileSync(join(__dirname, "harness-test.ts"), "utf-8");
+  const code = src
+    .split("\n")
+    .map((l) => l.replace(/\/\/.*$/, ""))
+    .filter((l) => !l.trimStart().startsWith("*"))
+    .join("\n");
+  assert.ok(
+    !/\.requests\.length/.test(code),
+    "harness-test.ts must not count request-log lines as model turns — the CLI's side-channel calls are in that log. Use splitRequestCounts(out.requests).count, which matches mock.count on the direct path.",
+  );
+  assert.ok(
+    /splitRequestCounts/.test(code),
+    "the sandbox path must recover the main-loop/side-channel split from the tagged request log",
+  );
 });
 
 test("runHarness steers a real-model run to measure() (no claude needed)", async () => {

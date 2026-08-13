@@ -401,6 +401,112 @@ export interface TrifectaContext {
   readonly contractUnreadable?: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// The remedy sentence — split by CAUSE, because one sentence for every unit is a
+// finding nobody can act on
+//
+// 🔴 MEASURED. After `allowed-tools:` stopped being read as a bound, a real
+// 38-skill repo went from 18 of 38 exposed units to 38 of 38 and Safety 86 → 70.
+// The classification is right and stays; what broke is the READING. A check that
+// fires on every unit carries no information unless it says why THIS unit fired,
+// and the sentence it carried — "Drop at least one leg (Meta's Rule of Two)" —
+// was identical for three situations that need three different actions:
+//
+//   Read, WebFetch, Bash                  nothing was attempted
+//   Read, WebFetch, Bash(node ./x.mjs:*)  an attempt was made and did not count
+//   Read, WebFetch                        the shell is not involved at all
+//
+// ⚠️ AND THE ADVICE ITSELF HAS GONE STALE. "Narrow your `Bash(...)`" used to be
+// the headline remedy; a grant now counts as bounded ONLY when it pins a program
+// from `EFFECT_FREE`, which is fourteen entries long and will stay that way by
+// design (see its header: the list may be short precisely because a miss costs a
+// false "you are exposed", never a false "you are safe"). So narrowing to
+// anything an author actually runs — their own script, `node`, `jq`, `git` —
+// does not drop the leg and never will. Printing the old advice sends the author
+// to do work that cannot move the finding, which is how a Safety number gets a
+// reputation for being fake. The middle case is the worst of the three: the
+// author already did it, and the unchanged message tells them nothing.
+//
+// Text only. Which units are found, and how they are graded, is untouched.
+// ---------------------------------------------------------------------------
+
+/**
+ * The shell grants in this contract that ASKED FOR LESS THAN THE WHOLE SHELL and
+ * still supply both legs — `Bash(node ./x.mjs:*)`, not bare `Bash`.
+ *
+ * These are the surprising ones, and the only ones whose author has already tried
+ * the remedy. A grant with no restriction at all, and one that pins an
+ * {@link EFFECT_FREE} program (which supplies no leg and cannot reach here), are
+ * both excluded.
+ */
+function opaqueShellGrants(tools: readonly string[]): string[] {
+  return tools.filter(
+    (raw) =>
+      LEG_BASH_DUAL.has(baseTool(raw)) &&
+      bashGrantIsUnbounded(raw) &&
+      restriction(raw) !== null,
+  );
+}
+
+/**
+ * The remedy for a `"hard"` (explicit-contract) trifecta, chosen by WHY this
+ * unit still holds all three legs. See the block above for the measurement.
+ */
+function hardTrifectaRemedy(
+  tools: readonly string[],
+  dialect: HarnessDialect,
+): string {
+  const shell = dialect.builtinAgentTools.find((t) => LEG_BASH_DUAL.has(t));
+  const opaque = opaqueShellGrants(tools);
+
+  // (b) A RESTRICTED shell grant that still counts. The author narrowed and the
+  // finding did not move; say why, and do not re-recommend narrowing.
+  if (opaque.length > 0) {
+    return (
+      `\`${opaque.join("`, `")}\` is narrowed but still counts: a restricted shell grant ` +
+      "drops the read+exfiltrate legs ONLY when it pins a program whose effects are " +
+      `enumerable (${[...EFFECT_FREE].slice(0, 4).join(", ")}, … — ${String(EFFECT_FREE.size)} in all). ` +
+      "Nothing here has read the script or binary you pinned, and an interpreter runs " +
+      "whatever it is handed, so narrowing further will not move this finding. What does: " +
+      `remove ${shell ?? "the shell"} from the contract, or drop the read or the ` +
+      "untrusted-intake leg instead (Meta's Rule of Two: allow at most two)."
+    );
+  }
+
+  // (a) An UNRESTRICTED shell grant — the shell supplies two of the three legs on
+  // its own, so it is the single highest-value tool to remove.
+  //
+  // 🔴 The test is "does the shell actually supply a leg", NOT "is a shell named".
+  // `Bash(echo ready:*)` is named and bounded: it contributes nothing, the trifecta
+  // is carried entirely by the other tools, and telling that author to remove Bash
+  // would send them to undo the one narrowing that worked. Caught by running the
+  // branch over a real contract rather than reasoning about it.
+  const unboundedShell = tools.some(
+    (t) => LEG_BASH_DUAL.has(baseTool(t)) && bashGrantIsUnbounded(t),
+  );
+  if (shell !== undefined && unboundedShell) {
+    return (
+      `${shell} alone supplies two of the three legs (it reads private files AND ships them out), ` +
+      `so removing ${shell} from the contract closes the path in one edit. ` +
+      "Restricting it instead — `" +
+      `${shell}(<program>:*)` +
+      "` — only helps for a program whose effects are enumerable " +
+      `(${[...EFFECT_FREE].slice(0, 4).join(", ")}, … — ${String(EFFECT_FREE.size)} in all); ` +
+      "your own script or an interpreter does not qualify. Otherwise drop the read or the " +
+      "untrusted-intake leg (Meta's Rule of Two: allow at most two)."
+    );
+  }
+
+  // (c) NO shell involved: the three legs are carried by named tools, so the only
+  // remedy is removing one of them — there is no grant to narrow here at all.
+  return (
+    "No shell grant supplies a leg here, so there is nothing to narrow — the three legs " +
+    "are carried by the named tools above (and any shell grant in this contract is " +
+    "already bounded). Remove one of those tools; the untrusted-intake leg is usually " +
+    "the cheapest to give up (Meta's Rule of Two: allow at most two)."
+  );
+}
+
 /**
  * Returns a {@link TrifectaFinding} ONLY when a unit holds all three legs, else
  * `null` (≤ 2 legs = safe by the Rule of Two).
@@ -464,7 +570,7 @@ export function lethalTrifectaIssues(
         `(${legs.private.join(", ")}), ingest untrusted content ` +
         `(${legs.untrusted.join(", ")}), AND exfiltrate ` +
         `(${legs.exfil.join(", ")}) — a prompt-injection exfil path with no exploit code. ` +
-        "Drop at least one leg (Meta's Rule of Two: allow at most two)." +
+        hardTrifectaRemedy(tools, dialect) +
         (ctx.contractUnreadable
           ? " (Those tool names were SALVAGED: the frontmatter is not valid YAML, so a strict" +
             " loader reads no contract here at all and the real grant may be wider still." +
@@ -732,15 +838,34 @@ export function skillTrifectaIssue(
         fenceFix(dialect),
     };
   }
+  // The same split as the subagent side, for the same reason: "closes no leg" is
+  // one sentence covering two causes that need two different edits.
+  //
+  // A RESTRICTED deny (`disallowed-tools: Bash(curl:*)`) is not weighed and found
+  // wanting — it is DISCARDED, because denying one invocation of the shell says
+  // nothing about the rest of it. An author who wrote that line and read "a leg is
+  // closed only when EVERY built-in that supplies it is denied" would reasonably
+  // add more restricted denies and watch nothing happen. Naming the discard is the
+  // difference between a diagnosis and a wild goose chase.
+  const ignored = declared.filter((raw) => restriction(raw) !== null);
+  const preamble =
+    ignored.length > 0
+      ? `\`${ignored.join("`, `")}\` denies nothing: a RESTRICTED deny is discarded, not ` +
+        "weighed — denying one invocation of a tool leaves the tool. Only an " +
+        "unrestricted name (`Bash`, not `Bash(curl:*)`) removes it from the pool. " +
+        (ignored.length === declared.length
+          ? "Every entry in this fence is restricted, so it closes nothing at all. "
+          : "The unrestricted entries that remain still close no whole leg. ")
+      : `\`disallowed-tools: ${declared.join(", ")}\` closes no lethal-trifecta leg — ` +
+        "a leg is closed only when EVERY built-in that supplies it is denied. ";
   return {
     severity: "advisory",
     legs,
     fence: "ineffective",
     message:
-      `\`disallowed-tools: ${declared.join(", ")}\` closes no lethal-trifecta leg — ` +
-      `private-data read is still supplied by ${legs.private.join(", ")}, untrusted ` +
+      preamble +
+      `Private-data read is still supplied by ${legs.private.join(", ")}, untrusted ` +
       `intake by ${legs.untrusted.join(", ")}, exfiltration by ${legs.exfil.join(", ")}. ` +
-      "A leg is closed only when EVERY built-in that supplies it is denied. " +
       fenceFix(dialect),
   };
 }

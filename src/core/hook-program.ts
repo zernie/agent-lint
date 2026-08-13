@@ -130,6 +130,14 @@ export interface CommandView {
    * line happens to be side-effecting for an unrelated reason (`grep -c x
    * notes/S.md 2>/dev/null`) matches both and gets blocked. To gate WRITES to a
    * directory, use {@link writesTo}; conflating the two is the trap.
+   *
+   * OVER-INCLUSIVE ON PURPOSE, AND THE OPPOSITE WAY ROUND FROM {@link
+   * PathView.under}. This is a DENYLIST primitive — every caller spells
+   * `touches(secret) ? deny() : allow()` — so a miss is an ALLOW, not silence. An
+   * unprovable answer is therefore reported as a MATCH: a token that could name
+   * something under the prefix under some root or some `cd` matches, and the gate
+   * blocks. See {@link prefixVerdict} for the three answers and {@link
+   * matchesPrefix} for the two biases.
    */
   touches(prefixes: readonly string[]): boolean;
   /**
@@ -180,10 +188,268 @@ function runsSeq(argv: readonly string[], tokens: readonly string[]): boolean {
   return i === tokens.length;
 }
 
-/** Does a single token name a path at/under `prefix` (boundary-aware)? */
-function tokenUnder(token: string, prefix: string): boolean {
-  const t = token.replace(/^\.\//, "");
-  return t === prefix || t.startsWith(prefix + "/") || t.endsWith("/" + prefix);
+// ---------------------------------------------------------------------------
+// Prefix matching — ONE rule, THREE answers, and the bias named at every call
+//
+// 🔴 THE TWO PRIMITIVES BUILT ON THIS WANT OPPOSITE DEFAULTS, AND ONE OF THEM
+// FAILS OPEN WHEN IT GUESSES WRONG. `PathView.under` is an ALLOWLIST (confinement,
+// coverage): an unprovable answer must be a MISS, so a gate fails closed and a
+// nudge stays quiet. `CommandView.touches` / `CommandView.writesTo` are DENYLISTS:
+// an unprovable answer must be a MATCH, or the gate waves the command through.
+//
+// MEASURED 2026-08-12, the reason this exists. `touches` compared a repo-relative
+// prefix against a raw bash token, with no project root anywhere in `decideProgram`
+// — exactly the root-blindness `pathView` had just been fixed for, except a miss
+// here is an ALLOW. Against a real shipped guard (`paper-edit-guard.hook.ts` in a
+// consumer repo, `CLAUDE_PROJECT_DIR` set, exit 2 = blocked):
+//
+//   sed -i s/a/b/ migratsiya/papers/x/paper.tex                  → 2  blocked
+//   sed -i s/a/b/ /home/user/mine/migratsiya/papers/x/paper.tex  → 0  ALLOWED
+//   cp /tmp/a     migratsiya/papers/x/paper.tex                  → 2  blocked
+//   cp /tmp/a     /home/user/mine/migratsiya/papers/x/paper.tex  → 0  ALLOWED
+//
+// Spelling the path absolutely walked straight through the gate. (Redirects still
+// blocked — that guard decodes its own redirect targets with a hand-written
+// `includes("/" + p + "/")`, which is this bias, hand-rolled, by an author who
+// happened to think of it. `dna-privacy-guard.hook.ts` is the other hand-patch:
+// it declares `needs: ["git.root"]` purely to build `${root}/${DNA}` itself. Every
+// gate whose author did not think of that was exposed.)
+//
+// The fix is one shared rule that cannot be resolved to a boolean without NAMING
+// the bias: `matchesPrefix` takes `onUndecidable` with NO DEFAULT, so a future
+// caller cannot inherit the wrong one silently — picking it is a `tsc` error away
+// from being skipped. That is deliberate: the previous shape (a single boolean
+// helper, `tokenUnder`, shared by an allowlist and two denylists) is precisely
+// what let one bias serve three callers that do not agree on it.
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a path sits relative to a prefix — with an explicit third answer for the
+ * case the two spellings cannot be reconciled.
+ *
+ * - `"under"` — the path was PLACED (made comparable to the prefix in the
+ *   prefix's own spelling) and is at/under it. A fact, biased neither way.
+ * - `"outside"` — either placed and not under it, or not placeable AND the
+ *   prefix's segments appear nowhere in the path. Also a fact: no root and no
+ *   `cd` could make this path be under this prefix.
+ * - `"undecidable"` — not placeable, but the prefix's segments DO occur as a
+ *   whole run in the path, so SOME project root or working directory would make
+ *   it true. The answer callers must break with their own bias.
+ */
+type PrefixVerdict = "under" | "outside" | "undecidable";
+
+/**
+ * Collapse a {@link PrefixVerdict} to the boolean a matcher returns.
+ *
+ * `onUndecidable` HAS NO DEFAULT ON PURPOSE. The two callers need opposite
+ * values, and the one that guesses wrong (`"miss"` for a denylist) fails OPEN —
+ * the failure mode that made this refactor necessary. A default here would make
+ * that bug reachable by omission, which is how it was reachable before.
+ */
+const matchesPrefix = (
+  verdict: PrefixVerdict,
+  onUndecidable: "match" | "miss",
+): boolean =>
+  verdict === "under" ||
+  (verdict === "undecidable" && onUndecidable === "match");
+
+/**
+ * Trailing separators removed — EXCEPT the one that is the path itself.
+ *
+ * 🔴 THE CARVE-OUT IS THE RULE, NOT AN EDGE CASE, and skipping it fails
+ * SILENTLY. Strip every trailing separator and the POSIX root `"/"` becomes
+ * `""`, the Windows drive root `"C:/"` becomes `"C:"` — and `isAbsoluteRef`
+ * reads a bare drive letter as RELATIVE. Nothing throws: an allowlist prefix of
+ * `"C:/"` simply stops matching, so a confinement gate denies every path and a
+ * react hook goes quiet, both looking like a correct decision.
+ *
+ * This lives here, in one place, because the same normalisation is applied to
+ * two different things — the PREFIX being matched against, and the project ROOT
+ * a path is resolved against (`run-hook.ts` imports it for the latter). Round 28
+ * fixed the root and left the prefix; round 29 found the prefix. Two copies of a
+ * rule is how the second one survives the fix to the first.
+ */
+export function trimTrailingSeparators(path: string): string {
+  const sep = /[/\\]+$/.exec(path)?.[0];
+  const trimmed = sep === undefined ? path : path.slice(0, -sep.length);
+  return trimmed === "" || /^[A-Za-z]:$/.test(trimmed)
+    ? trimmed + (sep?.[0] ?? "/")
+    : trimmed;
+}
+
+/**
+ * A prefix with its glob tail and trailing slash removed — `"src/**"`, `"src/"`
+ * and `"src"` all mean the same directory.
+ *
+ * The trailing slash is not cosmetic: a prefix of `"papers/"` used to compare
+ * against `"papers//"` and match NOTHING, a trap a shipped guard's own header
+ * records having fallen into.
+ */
+const normalizePrefix = (prefix: string): string => {
+  const stripped = prefix.replace(/\\/g, "/").replace(/\/?\*+$/, "");
+  // 🔴 THE CATCH-ALL IS A SENTINEL, NOT A ROOT — and conflating them is a
+  // regression I shipped in the previous commit. `"**"`, `"*"` and `"/"` all
+  // reduce to an EMPTY base, which `prefixVerdict` answers `"under"` for
+  // outright, no root required. Handing that empty string to
+  // `trimTrailingSeparators` turned it into `"/"` — a genuine POSIX root — so a
+  // catch-all suddenly demanded an absolute spelling and `under(["**"])` went
+  // FALSE for every relative path with no root. A catch-all that denies
+  // everything is the loudest possible version of this bug and it still
+  // type-checked and passed the drive-root test beside it, because that test
+  // supplied a root.
+  //
+  // The drive-letter carve-out below is the opposite case: `"C:"` is not a
+  // catch-all, it is a real absolute root that must keep its separator to stay
+  // absolute. Same helper, and only the empty case differs.
+  if (/^[/\\]*$/.test(stripped)) return "";
+  return trimTrailingSeparators(stripped);
+};
+
+/**
+ * Case-insensitivity is a property of the FILESYSTEM, so it is decided by the
+ * root — never by the operand being compared.
+ *
+ * 🔴 KEYING IT ON THE OPERAND COST A P1, and the shape is worth keeping in view.
+ * The first version asked "does this string look drive-rooted?", which is true of
+ * a root (`C:/repo`) and of an absolute prefix (`C:/repo/secrets`) but FALSE of a
+ * repo-relative prefix (`secrets`). So under a Windows root, `C:/REPO/SECRETS/x`
+ * resolved to the remainder `SECRETS/x`, was compared against `secrets`
+ * case-sensitively, and `writesTo(["secrets"])` returned false — a denylist
+ * allowing the protected write. The drive letter was known; it just never reached
+ * the comparison that needed it.
+ *
+ * The asymmetry is unchanged and load-bearing: fold only when the ROOT is
+ * drive-rooted. POSIX is case-sensitive, so folding there would judge a path from
+ * `/REPO` to be inside `/repo` — a silent FALSE GRANT, the direction never taken.
+ * With no root known, nothing is folded: an unprovable answer must not be turned
+ * into a match by a guess about someone else's filesystem.
+ */
+const WINDOWS_ROOT =
+  // Drive: `C:/x`, `C:\x`. UNC share: `//server/share`, `\\server\share`.
+  // Extended-length prefixes `//?/C:/x` and `//?/UNC/server/share` reduce to the
+  // two above once `//?/` (and its `UNC/` marker) is consumed — which is why
+  // they are alternatives here rather than separate cases.
+  /^(?:[A-Za-z]:|[/\\]{2}(?:\?[/\\]+(?:UNC[/\\]+)?)?(?:[A-Za-z]:|[^/\\]+[/\\]+[^/\\]+))/;
+
+/**
+ * HOW THIS LIST IS DECIDED, because a table without that note is how the last
+ * three rounds happened: Windows absolute paths have exactly two root forms —
+ * a drive (`C:`) and a UNC share (`//server/share`) — plus the extended-length
+ * `//?/` prefix, which is a spelling OF those two, not a third. Anything else
+ * (a relative path, a POSIX absolute path) is not a Windows root.
+ *
+ * ⚠️ The miss direction is stated rather than implied: an unrecognised root means
+ * NO folding, so a denylist can miss on casing alone. That is the wrong
+ * direction, and it is accepted only because the alternative — folding whenever
+ * we are unsure — is a false GRANT on Linux, where `/repo/Secrets` and
+ * `/repo/secrets` are two different files. If a genuine third root form turns
+ * up, it belongs in the regex above, not in a caller.
+ */
+const caseInsensitiveFs = (root: string | undefined): boolean =>
+  root !== undefined && WINDOWS_ROOT.test(root);
+
+const foldWhen = (value: string, insensitive: boolean): string =>
+  insensitive ? value.toLowerCase() : value;
+
+/** Is `candidate` the prefix itself, or something below it? Boundary-aware. */
+const isAtOrUnder = (
+  rawCandidate: string,
+  rawBase: string,
+  insensitive = false,
+): boolean => {
+  // An absolute drive-rooted BASE names a Windows filesystem by itself, even when
+  // the caller could not say so (`under(["C:/x"])` with no root).
+  const fold = insensitive || WINDOWS_ROOT.test(rawBase);
+  const base = foldWhen(rawBase, fold);
+  const candidate = foldWhen(rawCandidate, fold);
+  return (
+    candidate === base ||
+    // A base that IS a separator (`"/"`, `"C:/"` — see `trimTrailingSeparators`)
+    // already carries the boundary, so appending another looks for `"C://"` and
+    // matches nothing. Keeping the carve-out without this line trades one silent
+    // never-match for another.
+    candidate.startsWith(/[/\\]$/.test(base) ? base : base + "/")
+  );
+};
+
+/**
+ * Could this path be under this prefix under SOME root or working directory?
+ *
+ * The tractable stand-in for "unprovable": the prefix's segments occur as a whole
+ * contiguous run somewhere in the path. `/home/u/mine/migratsiya/papers/x.tex`
+ * could be `migratsiya/papers/x.tex` in a repo rooted at `/home/u/mine`; the
+ * leading directories are exactly what we cannot rule out without a root.
+ *
+ * A leading `/` is stripped from the prefix first, so an ABSOLUTE prefix can
+ * still be recognized inside a relative token (`/etc` vs `etc/passwd` under an
+ * unknown `cd`).
+ *
+ * ⚠️ WHAT THIS STILL MISSES, stated rather than implied — in both cases the
+ * verdict is `"outside"`, so the denylist misses too:
+ *
+ * 1. The segments must be PRESENT. `cd migratsiya && sed -i s/a/b/ papers/x.tex`
+ *    names only `papers/x.tex`, so a prefix of `migratsiya/papers` finds nothing.
+ *    Resolving a leaf's argument against a preceding `cd` is a parser change, not
+ *    a matcher one; it is the blind spot both shipped guards already document.
+ * 2. An ABSOLUTE prefix against a RELATIVE token with NO root — `touches(["/r/
+ *    health/data/dna"])` vs the token `health/data/dna/g.txt`. The needle is the
+ *    longer string, so containment cannot see it. Deliberately not chased: the
+ *    runtime always supplies a root ({@link projectRootOf} falls back to the
+ *    event's `cwd`, which Claude Code sends on every payload), and a gate that
+ *    builds absolute prefixes at all builds them FROM a root, so by construction
+ *    it has one. Widening this arm would also cost precision in the case that
+ *    matters — a token that IS placeable would start matching on segments alone.
+ */
+const mightBeUnder = (
+  path: string,
+  base: string,
+  insensitive = false,
+): boolean => {
+  const needle = base.replace(/^\/+/, "").replace(/^[A-Za-z]:\//, "");
+  if (needle === "") return true;
+  const raw = path.replace(/\\/g, "/").replace(/^\.\//, "");
+  // Same fold, same rule: keyed on the BASE, which is what decides whether a
+  // Windows filesystem is in play. Left case-sensitive here, the denylist's
+  // "could this be under it?" fallback misses on casing alone.
+  const fold = insensitive || WINDOWS_ROOT.test(base);
+  const p = foldWhen(raw, fold);
+  const n = foldWhen(needle, fold);
+  return (
+    isAtOrUnder(p, n, fold) || p.endsWith("/" + n) || p.includes("/" + n + "/")
+  );
+};
+
+/**
+ * The verdict for ONE path against ONE prefix, given the project root.
+ *
+ * A prefix is matched in ITS OWN spelling — a repo-relative prefix against the
+ * path made repo-relative, an absolute prefix against the path made absolute —
+ * because those are the only two comparisons that mean anything. When the needed
+ * spelling cannot be produced (an absolute path with no root, a path resolving
+ * outside the root, a relative path with no root to absolutize it), the path was
+ * not PLACED, and the answer falls to {@link mightBeUnder}.
+ *
+ * Note what does NOT happen: a placed path that is not under the prefix comes
+ * back `"under"`-less but is still offered to `mightBeUnder`, so a denylist
+ * over-blocks a sibling checkout's `…/migratsiya/papers/…` rather than silently
+ * allowing it. That over-block is the chosen error direction, not an oversight —
+ * `under` never sees it, because `under` accepts `"under"` only.
+ */
+function prefixVerdict(
+  path: string,
+  prefix: string,
+  root: string | undefined,
+): PrefixVerdict {
+  const base = normalizePrefix(prefix);
+  if (base === "") return "under"; // `"/"`, `"**"` — everything is under it
+  const slashed = path.replace(/\\/g, "/");
+  const placed = isAbsoluteRef(base)
+    ? absoluteSpelling(slashed, root)
+    : relativeSpelling(slashed, root);
+  const insensitive = caseInsensitiveFs(root);
+  if (placed !== undefined && isAtOrUnder(placed, base, insensitive))
+    return "under";
+  return mightBeUnder(slashed, base, insensitive) ? "undecidable" : "outside";
 }
 
 /** A leaf whose head is a shell reading stdin (no script-file argument). */
@@ -266,7 +532,19 @@ function writeTargetsOf(leaf: NormalizedLeaf): string[] {
   }
 }
 
-export function commandView(raw: string): CommandView {
+/**
+ * An AST-backed view of a Bash command.
+ *
+ * @param raw - the command line as the tool event carried it.
+ * @param root - the project root repo-relative prefixes resolve against, from
+ *   the runtime ({@link projectRootOf}: `$CLAUDE_PROJECT_DIR`, else the event's
+ *   own `cwd`, never `process.cwd()`). Omitting it does NOT disarm the denylist
+ *   matchers — without a root an absolute token is `"undecidable"` rather than
+ *   placeable, and {@link CommandView.touches} treats that as a match. It does
+ *   cost precision: with a root, `/somewhere-else/notes/x` is provably not this
+ *   repo's `notes`; without one it can only be over-blocked.
+ */
+export function commandView(raw: string, root?: string): CommandView {
   const leaves = leafCommands(raw);
   // The operation-normalized leaves carry the redirections (and quote-unwrapped,
   // wrapper-resolved argv) that `writesTo` needs; `leafCommands` cannot see them.
@@ -287,12 +565,49 @@ export function commandView(raw: string): CommandView {
       );
     },
     isSideEffecting: () => classifyBashCommand(raw) === "side-effecting",
+    // Both of these are DENYLIST matchers, so both break an undecidable verdict
+    // toward "match" — see the block above `PrefixVerdict` for the measurement
+    // that made the opposite default a security hole.
+    // 🔴 READS THE NORMALIZED ARGV, NOT THE RAW ONE, AND THAT IS THE FIX FOR A
+    // REAL BYPASS. `leafCommands` keeps a word exactly as written, quotes and
+    // all, so a token arrived as `"papers/x.tex"` — with the quote characters —
+    // and matched no prefix at all. MEASURED end-to-end on a shipped guard:
+    // `sed -i s/a/b/ migratsiya/papers/x/paper.tex` exited 2 (blocked) while
+    // `sed -i s/a/b/ "migratsiya/papers/x/paper.tex"` exited 0. Quoting a path
+    // is not an exotic evasion — it is what anyone writes for a path with a
+    // space in it, so every denylist built on `touches` was one quote from open.
+    // `writesTo` was already correct precisely because it reads `normalized`;
+    // this is the same class as the other siblings this PR keeps finding, so
+    // both denylists now read the SAME argv.
     touches: (prefixes) =>
-      leaves.some((argv) =>
-        argv.slice(1).some((tok) => prefixes.some((p) => tokenUnder(tok, p))),
-      ),
+      // 🔴 THE UNION IS THE FIX, AND EACH HALF COVERS THE OTHER'S BLIND SPOT.
+      // Raw argv keeps a word exactly as written, so a QUOTED path arrives as
+      // `"papers/x.tex"` and matches nothing — measured end-to-end on a shipped
+      // guard: unquoted exited 2, quoted exited 0. Normalized argv unwraps the
+      // quotes, but `stripWrappers` also CONSUMES wrapper options, so
+      // `env -C secrets cat key` loses `secrets` entirely and a denylist on it
+      // fails open. Reading only one of the two trades one bypass for the other;
+      // that is exactly what the previous commit did, and it earned a P1.
+      // A denylist over-matching costs an argument. Missing costs the write.
+      [...leaves.map((argv) => argv.slice(1)), ...normalized.map((l) => l.args)]
+        .flat()
+        // `--chdir=secrets` is ONE token, so the path is invisible to a whole-token
+        // comparison. Only the tail of an `--opt=value` word can be a path, so the
+        // extra candidate is added rather than replacing the token.
+        .flatMap((tok) =>
+          /^-{1,2}[^=]+=/.test(tok)
+            ? [tok, tok.slice(tok.indexOf("=") + 1)]
+            : [tok],
+        )
+        .some((tok) =>
+          prefixes.some((p) =>
+            matchesPrefix(prefixVerdict(tok, p, root), "match"),
+          ),
+        ),
     writesTo: (prefixes) =>
-      writeTargets.some((t) => prefixes.some((p) => tokenUnder(t, p))),
+      writeTargets.some((t) =>
+        prefixes.some((p) => matchesPrefix(prefixVerdict(t, p, root), "match")),
+      ),
     pipesToShell: () => leaves.some(isBareShellLeaf),
   };
 }
@@ -337,11 +652,28 @@ export function defineHook<const N extends readonly NeedSpec[] = readonly []>(
 // Run the program against a raw PreToolUse event (the runtime half)
 // ---------------------------------------------------------------------------
 
-/** Build the typed event from a raw PreToolUse event, then decide. */
+/**
+ * Build the typed event from a raw PreToolUse event, then decide.
+ *
+ * `root` is the project root repo-relative prefixes in the hook resolve against,
+ * threaded exactly as {@link decideFileGate} threads it: omitted, it falls back
+ * to the event's OWN `cwd` (a payload field, so this stays pure and reads no
+ * environment); the CLI passes {@link projectRootOf}, which prefers
+ * `$CLAUDE_PROJECT_DIR`. Until 2026-08-12 no root reached here at all, and the
+ * denylist matchers on {@link CommandView} were bypassable by spelling a path
+ * absolutely — see the block above {@link PrefixVerdict} for the measurement.
+ */
 export function decideProgram<N extends readonly NeedSpec[]>(
   program: HookProgram<N>,
-  rawEvent: { tool_name?: string; tool_input?: { command?: unknown } },
+  rawEvent: {
+    tool_name?: string;
+    tool_input?: { command?: unknown };
+    cwd?: unknown;
+  },
   ctx: Record<string, string | boolean> = {},
+  root: string | undefined = typeof rawEvent.cwd === "string"
+    ? rawEvent.cwd
+    : undefined,
 ): Decision {
   if (rawEvent.tool_name !== program.match.tool) return allow();
   const command =
@@ -351,7 +683,7 @@ export function decideProgram<N extends readonly NeedSpec[]>(
   return program.decide({
     event: program.on,
     tool: "Bash",
-    command: commandView(command),
+    command: commandView(command, root),
     ctx: ctx as unknown as HookCtx<N>,
   });
 }
@@ -653,20 +985,216 @@ export function verifyHookStamp(source: string, stamp: SHA256Hash): boolean {
 /** An AST-free view of a file path — the matching primitive for file tools. */
 export interface PathView {
   readonly raw: string;
-  /** True iff the path sits under at least one allowed prefix (e.g. "src/**"). */
+  /**
+   * True iff the path sits under at least one allowed prefix (e.g. "src/**").
+   *
+   * A prefix is matched in ITS OWN spelling: a repo-relative prefix (`"src"`,
+   * `"migratsiya/papers/"`) is compared against the path made repo-relative, an
+   * absolute prefix (`"/etc"`) against the path made absolute. Which of those is
+   * available depends on the project root — see {@link pathView}.
+   */
   under(prefixes: readonly string[]): boolean;
+  /**
+   * The path as a repo-relative reference, or `undefined` when this view cannot
+   * produce one — an absolute path with no known root, or a path that resolves
+   * OUTSIDE the root (`/etc/passwd`, a sibling checkout). Exposed because a hook
+   * that wants to report or re-match the path needs the same answer `under`
+   * used, and `raw` alone does not carry it.
+   */
+  readonly rel: string | undefined;
 }
 
-export function pathView(raw: string): PathView {
-  const norm = raw.replace(/^\.\//, "");
+/**
+ * A view of a file path, matched against prefixes by {@link PathView.under}.
+ *
+ * 🔴 `root` IS NOT OPTIONAL IN PRACTICE — WITHOUT IT THIS IS DEAD FOR EVERY REAL
+ * EVENT. Claude Code's Edit/Write/MultiEdit tools always send an ABSOLUTE
+ * `file_path`, and every hook in the wild writes repo-relative prefixes
+ * (`under(["migratsiya/papers/"])`). Before the root existed, the two could
+ * never meet: the comparison ran `"/home/u/repo/migratsiya/papers/x.tex"`
+ * against `"migratsiya/papers"` and returned `false` for all input, forever.
+ * MEASURED 2026-08-12 on the live runtime with one compiled react hook and two
+ * spellings of the same file — the relative one printed its checklist, the
+ * absolute one exited 0 in silence. Three shipped hooks in a consumer repo were
+ * dead by it, all three compiled *specifically to replace hooks that were dead*,
+ * and none of the tests noticed because the harness helper built relative paths.
+ *
+ * ## Which way a miss errs, and why it is not the same answer as `touches`
+ *
+ * `under` is the ALLOWLIST/COVERAGE primitive: its callers spell
+ * `under(P) ? allow() : deny()` (confinement) and `under(P) ? notice() : nothing()`
+ * (a nudge). For both, an unprovable answer must be `false` — a confinement gate
+ * denies (fails closed) and a nudge stays quiet. So:
+ *
+ * - path resolves OUTSIDE the root → `false` for every relative prefix. Not a
+ *   bias, the truth: a repo-relative prefix names nothing in another checkout.
+ *   This is the {@link resolveRef} lesson — the suffix match it replaced handed
+ *   `/home/other-project/package.json` a grant meant for this repo's.
+ * - NO root known and the path is absolute → `false` for every relative prefix.
+ *   Here we genuinely cannot tell, and `false` is the choice: silence, never a
+ *   false grant. It is also the pre-fix behaviour, so nothing regresses.
+ *
+ * ⚠️ THE ASYMMETRY INVERTS FOR A DENYLIST, AND `under` DOES NOT SERVE THAT CASE.
+ * A gate written `under(["secrets"]) ? deny() : allow()` reads an unprovable
+ * `false` as ALLOW — a false grant. The Bash-side counterpart {@link
+ * CommandView.touches} exists precisely for that direction and takes the
+ * opposite bias from the SAME rule ({@link prefixVerdict}), which is why the
+ * resolver {@link matchesPrefix} makes each caller name its own. `PathView` has
+ * no such counterpart; a file-side denylist inherits the allowlist bias.
+ * Reported, not papered over.
+ *
+ * @param raw - the `file_path` the tool event carried, any spelling.
+ * @param root - the project root relative prefixes resolve against. Comes from
+ *   the runtime (`$CLAUDE_PROJECT_DIR`, else the event's own `cwd`), never from
+ *   `process.cwd()` — under a git worktree the process's cwd is a DIFFERENT
+ *   checkout from the one the harness resolved the hook out of, and that exact
+ *   mismatch already wedged a repo once.
+ */
+export function pathView(raw: string, root?: string): PathView {
+  const slashed = raw.replace(/\\/g, "/");
   return {
     raw,
+    rel: relativeSpelling(slashed, root),
+    // A prefix is matched only against its OWN spelling, and a path that cannot
+    // be produced in that spelling is a miss — never a silent fallback to the
+    // other one. `"miss"` is the ALLOWLIST bias, named here rather than
+    // inherited: `matchesPrefix` has no default, so the denylist matchers on
+    // `CommandView` cannot pick this one up by accident (and did not, for the
+    // whole time they shared a single boolean helper with it).
     under: (prefixes) =>
-      prefixes.some((p) => {
-        const base = p.replace(/\/?\*+$/, "").replace(/\/$/, "");
-        return base === "" || norm === base || norm.startsWith(base + "/");
-      }),
+      prefixes.some((p) =>
+        matchesPrefix(prefixVerdict(slashed, p, root), "miss"),
+      ),
   };
+}
+
+/** The path as an absolute reference, or `undefined` when it cannot be one. */
+/**
+ * A root only relates the two spellings if it is itself ABSOLUTE. A relative one
+ * — `"."`, `"repo"` — is treated as no root at all, and the reason is a wrong
+ * ANSWER rather than tidiness: `resolveRef(".", ".")` collapses to `""`, so
+ * `/etc/passwd` would come back as the repo-relative `etc/passwd` and satisfy
+ * `under(["etc"])` inside a repo that has no such directory. Claude Code always
+ * sends an absolute `cwd` and sets an absolute `$CLAUDE_PROJECT_DIR`, so this
+ * costs nothing real and closes the one input that produced a false grant.
+ */
+const usableRoot = (root?: string): string | undefined =>
+  root !== undefined && isAbsoluteRef(root.replace(/\\/g, "/"))
+    ? root
+    : undefined;
+
+/** The path as an absolute reference, or `undefined` when it cannot be one. */
+function absoluteSpelling(path: string, root?: string): string | undefined {
+  const r = usableRoot(root);
+  if (r !== undefined) return resolveRef(r, path);
+  // No usable root: an already-absolute path just needs its dot segments
+  // collapsed; a relative one has nothing to hang off, so there is no absolute
+  // spelling of it.
+  return isAbsoluteRef(path) ? resolveRef("/", path) : undefined;
+}
+
+/** The path as a repo-relative reference, or `undefined` when it cannot be one. */
+function relativeSpelling(path: string, root?: string): string | undefined {
+  const r = usableRoot(root);
+  if (r !== undefined) return relativeToRoot(r, path);
+  // No usable root: an absolute path is UNKNOWABLE — this is the case that used
+  // to be every real event, and the miss is chosen to cost silence (see
+  // `pathView`).
+  return isAbsoluteRef(path) ? undefined : path.replace(/^\.\//, "");
+}
+
+/**
+ * `raw` expressed relative to `root`, or `undefined` when it resolves outside it.
+ * Both sides are resolved and compared WHOLE (never by suffix) — see
+ * {@link resolveRef} for the hole that cost.
+ */
+function relativeToRoot(root: string, raw: string): string | undefined {
+  const base = resolveRef(root.replace(/\\/g, "/"), ".");
+  const full = resolveRef(root.replace(/\\/g, "/"), raw);
+  // 🔴 CASE FOLDING IS DRIVE-ROOTED-ONLY, AND THE ASYMMETRY IS THE POINT.
+  // Windows filesystems are case-insensitive by default, so `C:/Repo` and
+  // `c:/repo/src/x.ts` name the same place — compared exactly, the second reads
+  // as OUTSIDE the first and the gate silently denies a same-repo edit. POSIX is
+  // case-SENSITIVE: `/repo/Secrets` and `/repo/secrets` are two different files,
+  // and folding there would invent a match that does not exist — turning a
+  // silent miss into a silent false grant, which is the worse direction. So the
+  // fold is applied only when the root is drive-rooted, and only for the
+  // comparison; the returned remainder keeps the path's own casing.
+  const insensitive = caseInsensitiveFs(base);
+  const foldedBase = foldWhen(base, insensitive);
+  const foldedFull = foldWhen(full, insensitive);
+  if (foldedFull === foldedBase) return "";
+  if (foldedBase === "/") return full.slice(1);
+  return foldedFull.startsWith(foldedBase + "/")
+    ? full.slice(base.length + 1)
+    : undefined;
+}
+
+/**
+ * The project root a compiled hook's repo-relative prefixes resolve against.
+ *
+ * Two sources, in order, and `process.cwd()` is deliberately NOT one of them:
+ *
+ * 1. **`$CLAUDE_PROJECT_DIR`** — what the harness itself resolved the hook's own
+ *    path against (`.claude/settings.json` spells the command
+ *    `"$CLAUDE_PROJECT_DIR/.claude/hooks/x.hook.ts"`), so it is the same root the
+ *    hook was loaded from by construction.
+ * 2. **the event's `cwd`** — Claude Code puts the session's working directory in
+ *    every hook payload. A fallback, not a peer: it is where the session is, and
+ *    the two coincide in the ordinary case.
+ *
+ * `process.cwd()` is excluded because under a git worktree it can be a different
+ * checkout than the one the harness is driving, and a root from the wrong
+ * checkout turns every repo-relative prefix into a non-match — the same silent
+ * death this whole function exists to end. When NEITHER source is present the
+ * answer is `undefined` and the miss errs toward silence (see {@link pathView}).
+ */
+export function projectRootOf(
+  event: { readonly cwd?: unknown },
+  env: Readonly<Record<string, string | undefined>> = {},
+): string | undefined {
+  // 🔴 THE FIRST *USABLE* ROOT, NOT THE FIRST NON-EMPTY STRING. A relative
+  // `$CLAUDE_PROJECT_DIR` — `.` is the obvious one — is not a root: `usableRoot`
+  // rejects it downstream, precisely so a relative value cannot turn
+  // `/etc/passwd` into the repo-relative `etc/passwd`. Returning it anyway
+  // MASKED a perfectly good absolute `cwd` from the payload, so absolute paths
+  // stopped matching repo-relative prefixes — and worse, `undecidablePathWarning`
+  // saw a defined root and stayed quiet, removing the one signal that says why.
+  // A source that cannot serve as a root must not consume the slot.
+  for (const candidate of [env.CLAUDE_PROJECT_DIR, event.cwd]) {
+    if (typeof candidate !== "string" || candidate.trim() === "") continue;
+    if (usableRoot(candidate) !== undefined) return candidate;
+  }
+  return undefined;
+}
+
+/**
+ * The one case {@link pathView} cannot answer and must not answer silently: an
+ * ABSOLUTE `file_path` with no project root in sight. Every repo-relative prefix
+ * in the hook returns `false`, so a gate waves everything through and a nudge
+ * never fires — indistinguishable, from the outside, from a hook with nothing to
+ * say. Returns the warning line, or `undefined` when there is nothing wrong.
+ *
+ * Narrow on purpose: a RELATIVE `file_path` is decidable without a root, so it
+ * warns about nothing. That matters because a react hook's `notice` also goes to
+ * stderr, and a warning on every event would read as the hook firing.
+ */
+export function undecidablePathWarning(
+  filePath: unknown,
+  root: string | undefined,
+): string | undefined {
+  if (root !== undefined) return undefined;
+  if (
+    typeof filePath !== "string" ||
+    !isAbsoluteRef(filePath.replace(/\\/g, "/"))
+  )
+    return undefined;
+  return (
+    `vigiles: no project root — neither $CLAUDE_PROJECT_DIR nor the event's ` +
+    `\`cwd\` was set, and the event carries an ABSOLUTE file_path (${filePath}). ` +
+    `Repo-relative prefixes in this hook cannot match it, so the hook is ` +
+    `deciding on less than it looks like it is. Set CLAUDE_PROJECT_DIR.`
+  );
 }
 
 /** The event a file-tool gate decides over (Edit/Write/Read carry `file_path`). */
@@ -702,11 +1230,24 @@ export function defineFileGate<
   return { role: "gate", ...p };
 }
 
-/** Run a file-tool gate against a raw PreToolUse event (reads `file_path`). */
+/**
+ * Run a file-tool gate against a raw PreToolUse event (reads `file_path`).
+ *
+ * `root` is the project root repo-relative prefixes resolve against; omitted, it
+ * falls back to the event's OWN `cwd` (a payload field — this stays pure and
+ * reads no environment). The CLI passes {@link projectRootOf} instead, which
+ * prefers `$CLAUDE_PROJECT_DIR`. Without either, an absolute `file_path` matches
+ * no relative prefix — see {@link pathView} for why that direction was chosen.
+ */
 export function decideFileGate<N extends readonly NeedSpec[]>(
   hook: FileGateHook<N>,
-  raw: { tool_name?: string; tool_input?: { file_path?: unknown } },
+  raw: {
+    tool_name?: string;
+    tool_input?: { file_path?: unknown };
+    cwd?: unknown;
+  },
   ctx: Record<string, string | boolean> = {},
+  root: string | undefined = typeof raw.cwd === "string" ? raw.cwd : undefined,
 ): Decision {
   const t = raw.tool_name ?? "";
   if (!hook.match.tools.includes(t)) return allow();
@@ -717,7 +1258,7 @@ export function decideFileGate<N extends readonly NeedSpec[]>(
   return hook.decide({
     event: hook.on,
     tool: t,
-    path: pathView(fp),
+    path: pathView(fp, root),
     ctx: ctx as unknown as HookCtx<N>,
   });
 }
@@ -973,14 +1514,21 @@ export const defineReact = (p: Omit<ReactHook, "role">): ReactHook => ({
   ...p,
 });
 
-/** Run a react hook against a raw PostToolUse event → the (classified) Reaction. */
+/**
+ * Run a react hook against a raw PostToolUse event → the (classified) Reaction.
+ *
+ * `root` behaves exactly as in {@link decideFileGate}: the event's own `cwd` by
+ * default, the CLI's {@link projectRootOf} when the runtime supplies one.
+ */
 export function runReact(
   hook: ReactHook,
   raw: {
     tool_name?: string;
     tool_input?: { file_path?: unknown };
     tool_response?: unknown;
+    cwd?: unknown;
   },
+  root: string | undefined = typeof raw.cwd === "string" ? raw.cwd : undefined,
 ): Reaction {
   const t = raw.tool_name ?? "";
   if (!hook.match.tools.includes(t)) return nothing();
@@ -991,7 +1539,7 @@ export function runReact(
   return hook.react({
     event: hook.on,
     tool: t,
-    path: pathView(fp),
+    path: pathView(fp, root),
     response: responseView(raw.tool_response),
   });
 }
@@ -1020,6 +1568,12 @@ export interface RawHookEvent {
   readonly prompt?: string;
   /** Stop / SubagentStop (stop-gate) — the prior-block loop guard. */
   readonly stop_hook_active?: boolean;
+  /**
+   * The session's working directory, which Claude Code puts in EVERY hook
+   * payload. The fallback project root repo-relative path prefixes resolve
+   * against when the runtime does not pass one — see {@link projectRootOf}.
+   */
+  readonly cwd?: string;
 }
 
 /** The normalized outcome of running a hook program — discriminated by role. */
@@ -1072,18 +1626,19 @@ export function runHookProgram(
   hook: AnyHook,
   event: RawHookEvent,
   ctx: Record<string, string | boolean> = {},
+  root: string | undefined = event.cwd,
 ): HookProgramOutcome {
   const kind = dispatchKind(hook);
   switch (kind) {
     case "bash-gate":
       return {
         kind: "decision",
-        decision: decideProgram(hook as HookProgram, event, ctx),
+        decision: decideProgram(hook as HookProgram, event, ctx, root),
       };
     case "file-gate":
       return {
         kind: "decision",
-        decision: decideFileGate(hook as FileGateHook, event, ctx),
+        decision: decideFileGate(hook as FileGateHook, event, ctx, root),
       };
     case "prompt-gate":
       return {
@@ -1102,7 +1657,10 @@ export function runHookProgram(
           .additionalContext,
       };
     case "react":
-      return { kind: "reaction", reaction: runReact(hook as ReactHook, event) };
+      return {
+        kind: "reaction",
+        reaction: runReact(hook as ReactHook, event, root),
+      };
     default:
       return assertNever(kind);
   }
@@ -1163,7 +1721,24 @@ function resolveRef(root: string, ref: string): string {
     }
     out.push(seg);
   }
-  return (joined.startsWith("/") ? "/" : "") + out.join("/");
+  // 🔴 A UNC LEADER IS TWO SLASHES AND BOTH ARE LOAD-BEARING. Collapsing
+  // `//server/share/x` to `/server/share/x` makes this function disagree with
+  // `normalizePrefix`, which keeps the pair — so a UNC path and a UNC prefix
+  // never compared equal, and an allowlist gate denied every valid edit on a
+  // Windows network share while a react hook stayed silent. Two functions
+  // normalising the SAME string differently is the defect class this PR keeps
+  // finding; here it is inside one call.
+  // ⚠️ AND THE PAIR IS KEPT ONLY WHEN THE ROOT SAYS THIS IS WINDOWS — the same
+  // lesson as the case fold, relearned one commit later. Judged from the STRING,
+  // `//repo/src/x.ts` looks like UNC; on Linux it is just `/repo/src/x.ts` with a
+  // stutter, so preserving the pair unconditionally made it stop resolving
+  // against a POSIX root and an allowlist gate denied a valid edit. Semantics
+  // belong to the filesystem, and only the root knows which one that is.
+  const unc =
+    joined.startsWith("//") &&
+    (WINDOWS_ROOT.test(root) || root.startsWith("//"));
+  const leader = unc ? "//" : joined.startsWith("/") ? "/" : "";
+  return leader + out.join("/");
 }
 
 /**

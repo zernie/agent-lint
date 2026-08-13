@@ -647,6 +647,170 @@ export default defineReact({
   }
 });
 
+// E2E dogfood — the SPELLING OF `file_path`. The runtime, the compiled hook and
+// the real payload, end to end, with the path written the way Claude Code
+// actually writes it: ABSOLUTE.
+//
+// MEASURED 2026-08-12 before the fix, same hook, two spellings:
+//   /tmp/<dir>/migratsiya/papers/x/main.tex → exit 0, NO stderr (dead)
+//   migratsiya/papers/x/main.tex            → its notice on stderr (alive)
+// Every file-tool hook in the wild writes repo-relative prefixes, so every one
+// of them was dead for every real event. Nothing caught it because the harness
+// helpers built the relative spelling — hence `fileToolEvents`, which builds both.
+test("hook-runtime run-program: a react fires for an ABSOLUTE file_path (the spelling the harness really sends)", () => {
+  const dir = makeTmpDir();
+  try {
+    const f = fixture(
+      dir,
+      "papers-nudge.mjs",
+      `import { defineReact, tools, notice, nothing } from "__HOOK__";
+export default defineReact({
+  on: "PostToolUse",
+  match: tools("Edit", "Write"),
+  react: (e) =>
+    e.path.under(["migratsiya/papers/"]) ? notice("paper checklist") : nothing(),
+});`,
+    );
+    const cmd = `node ${CLI} hook-runtime run-program ${f}`;
+    const post = (file_path: string, extra: Record<string, unknown> = {}) => ({
+      hook_event_name: "PostToolUse",
+      tool_name: "Edit",
+      tool_input: { file_path },
+      ...extra,
+    });
+    const abs = `${dir}/migratsiya/papers/x/main.tex`;
+
+    // 1) the root from $CLAUDE_PROJECT_DIR — what the harness sets for a hook.
+    const viaEnv = runHook(cmd, post(abs), {
+      cwd: dir,
+      env: { CLAUDE_PROJECT_DIR: dir },
+    });
+    assert.equal(viaEnv.exitCode, 0);
+    assert.match(viaEnv.stderr, /paper checklist/);
+
+    // 2) the root from the payload's own `cwd`, with the env var blanked — the
+    // fallback, exercised without it.
+    const viaCwd = runHook(cmd, post(abs, { cwd: dir }), {
+      cwd: dir,
+      env: { CLAUDE_PROJECT_DIR: "" },
+    });
+    assert.equal(viaCwd.exitCode, 0);
+    assert.match(viaCwd.stderr, /paper checklist/);
+
+    // 3) the RELATIVE spelling still works — the fix adds a case, it does not
+    // trade one for the other.
+    const rel = runHook(cmd, post("migratsiya/papers/x/main.tex"), {
+      cwd: dir,
+      env: { CLAUDE_PROJECT_DIR: dir },
+    });
+    assert.match(rel.stderr, /paper checklist/);
+
+    // 4) a SIBLING checkout with the same tail is NOT this repo — silent.
+    const sibling = runHook(
+      cmd,
+      post("/somewhere/else/migratsiya/papers/x/main.tex"),
+      {
+        cwd: dir,
+        env: { CLAUDE_PROJECT_DIR: dir },
+      },
+    );
+    assert.equal(sibling.exitCode, 0);
+    assert.doesNotMatch(sibling.stderr, /paper checklist/);
+
+    // 5) NO root at all: still silent (a miss costs silence, never a false
+    // fire) — but the runtime SAYS so, because a nudge that never fires is
+    // indistinguishable from a nudge with nothing to say.
+    const rootless = runHook(cmd, post(abs), {
+      cwd: dir,
+      env: { CLAUDE_PROJECT_DIR: "" },
+    });
+    assert.equal(rootless.exitCode, 0);
+    assert.doesNotMatch(rootless.stderr, /paper checklist/);
+    assert.match(rootless.stderr, /no project root/);
+
+    // …and that warning is NOT emitted for a relative path, or it would read as
+    // the hook firing (both go to stderr).
+    const quiet = runHook(cmd, post("health/pitanie/01.md"), {
+      cwd: dir,
+      env: { CLAUDE_PROJECT_DIR: "" },
+    });
+    assert.doesNotMatch(quiet.stderr, /no project root/);
+    assert.equal(quiet.stderr.trim(), "");
+
+    // 6) 🔴 THE ROOT IS NOT `process.cwd()`, AND THIS IS THE CASE THAT PROVES
+    // IT. The hook process runs in a DIFFERENT directory from the project the
+    // harness is driving — exactly the git-worktree shape that wedged this repo
+    // once. A runtime reading `process.cwd()` resolves the wrong checkout and
+    // the nudge dies again; reading `$CLAUDE_PROJECT_DIR` it fires.
+    const elsewhere = makeTmpDir();
+    try {
+      const crossed = runHook(cmd, post(abs), {
+        cwd: elsewhere,
+        env: { CLAUDE_PROJECT_DIR: dir },
+      });
+      assert.match(crossed.stderr, /paper checklist/);
+      // …and the mirror: the path lives under the ENV root while the process
+      // sits in `dir`, so a cwd-based root would silently miss this one too.
+      const mirrored = runHook(
+        cmd,
+        post(`${elsewhere}/migratsiya/papers/x/main.tex`),
+        { cwd: dir, env: { CLAUDE_PROJECT_DIR: elsewhere } },
+      );
+      assert.match(mirrored.stderr, /paper checklist/);
+    } finally {
+      cleanupTmpDir(elsewhere);
+    }
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+// E2E dogfood — a FILE-GATE confined to a directory, decided on the absolute
+// spelling. The gate direction matters: before the fix an absolute path matched
+// nothing, so a confinement gate DENIED every real write — loud, but wrong; a
+// denylist gate written the same way would have ALLOWED every real write.
+test("hook-runtime run-program: a file-gate confined to src/ decides an ABSOLUTE file_path correctly", () => {
+  const dir = makeTmpDir();
+  try {
+    const f = fixture(
+      dir,
+      "confine.mjs",
+      `import { defineFileGate, tools, deny, allow } from "__HOOK__";
+export default defineFileGate({
+  on: "PreToolUse",
+  match: tools("Write", "Edit"),
+  decide: (e) => (e.path.under(["src"]) ? allow() : deny("confined to src/")),
+});`,
+    );
+    const cmd = `node ${CLI} hook-runtime run-program ${f}`;
+    const pre = (file_path: string) => ({
+      hook_event_name: "PreToolUse",
+      tool_name: "Write",
+      tool_input: { file_path },
+    });
+    const env = { CLAUDE_PROJECT_DIR: dir };
+    assert.equal(
+      runHook(cmd, pre(`${dir}/src/x.ts`), { cwd: dir, env }).blocked,
+      false,
+    );
+    assert.equal(
+      runHook(cmd, pre(`${dir}/dist/x.js`), { cwd: dir, env }).blocked,
+      true,
+    );
+    // Outside the root entirely, and a sibling checkout: both denied.
+    assert.equal(
+      runHook(cmd, pre("/etc/passwd"), { cwd: dir, env }).blocked,
+      true,
+    );
+    assert.equal(
+      runHook(cmd, pre("/elsewhere/src/x.ts"), { cwd: dir, env }).blocked,
+      true,
+    );
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
 // E2E dogfood — the PROMPT-GATE role (definePromptGate): a UserPromptSubmit gate
 // reads the prompt TEXT and denies (exit 2) a prompt that leaks a secret, allows
 // a clean one. Harness scope (test-both-harnesses): the deny→exit 2 runtime is

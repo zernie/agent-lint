@@ -21,6 +21,7 @@ export {
   parseHookOutput,
   decideHook,
   propertyHook,
+  fileToolEvents,
 } from "./run-hook.js";
 export type {
   HookInput,
@@ -28,6 +29,7 @@ export type {
   HookRunResult,
   RunHookOptions,
   HookPropertyResult,
+  FileToolEventOptions,
 } from "./run-hook.js";
 // The PRIMITIVE beneath runHook: run any program, get what it did. A hook has a
 // DECISION, a script has EFFECTS — two questions, so two result types.

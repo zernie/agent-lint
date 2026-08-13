@@ -46,6 +46,16 @@ export interface ModelRequest {
     readonly role: string;
     readonly text: string;
   }[];
+  /**
+   * `true` when the agent CLI made this call for its OWN bookkeeping rather than
+   * to advance the agent loop — a SIDE-CHANNEL call.
+   *
+   * MEASURED on Claude Code 2.1.228: a `post_turn_summary` classifier (it decides
+   * whether to push the user a phone notification) runs on every turn, on the
+   * user's own credential, and it declares NO tools. The mock does not let such a
+   * request consume a script entry — see `isMainLoopRequest` in `mock-model.ts`.
+   */
+  readonly sideChannel?: boolean;
 }
 
 /** A tool the agent invoked, paired with its result (transcript mode only). */
@@ -82,8 +92,15 @@ export interface HarnessMockHandle {
   readonly url: string;
   /** Every request the mock received, flattened for assertions, in order. */
   readonly requests: readonly ModelRequest[];
-  /** Number of model turns served so far. */
+  /**
+   * Number of SCRIPT turns served so far — i.e. main-loop requests. A
+   * side-channel request ({@link ModelRequest.sideChannel}) is answered without
+   * touching the script and is NOT counted here, so this stays the agent's turn
+   * count rather than the CLI's HTTP-call count.
+   */
   readonly count: number;
+  /** Side-channel requests answered so far (never script-consuming). */
+  readonly sideChannelCount?: number;
   /** Stop the mock server. */
   close(): void | Promise<void>;
 }
