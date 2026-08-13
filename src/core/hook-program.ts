@@ -305,14 +305,38 @@ const normalizePrefix = (prefix: string): string => {
   return trimTrailingSeparators(stripped);
 };
 
+/**
+ * Case folded when — and only when — a Windows filesystem would fold it.
+ *
+ * 🔴 THIS LIVES IN THE COMPARATOR ON PURPOSE. Three review rounds in a row were
+ * earned by fixing one branch of a comparison and leaving its sibling: the root
+ * separator (round 29 fixed the root, round 30 the prefix), the spread order
+ * (round 30 fixed `tool_input`, round 31 `extra`), and case folding itself
+ * (round 31 folded the repo-relative branch, round 32 found the absolute one and
+ * `mightBeUnder` still comparing exactly — which for a DENYLIST caller like
+ * `writesTo` means an allowed write to a protected path). A rule applied at call
+ * sites diverges; a rule inside the comparator cannot.
+ *
+ * The asymmetry is unchanged and load-bearing: fold only drive-rooted operands.
+ * POSIX is case-sensitive, so folding there would judge a path from `/REPO` to
+ * be inside `/repo` — a silent FALSE GRANT, the direction never taken.
+ */
+const foldForCompare = (value: string, reference: string): string =>
+  /^[A-Za-z]:/.test(reference) ? value.toLowerCase() : value;
+
 /** Is `candidate` the prefix itself, or something below it? Boundary-aware. */
-const isAtOrUnder = (candidate: string, base: string): boolean =>
-  candidate === base ||
-  // A base that IS a separator (`"/"`, `"C:/"` — see `trimTrailingSeparators`)
-  // already carries the boundary, so appending another looks for `"C://"` and
-  // matches nothing. Keeping the carve-out without this line trades one silent
-  // never-match for another.
-  candidate.startsWith(/[/\\]$/.test(base) ? base : base + "/");
+const isAtOrUnder = (rawCandidate: string, rawBase: string): boolean => {
+  const base = foldForCompare(rawBase, rawBase);
+  const candidate = foldForCompare(rawCandidate, rawBase);
+  return (
+    candidate === base ||
+    // A base that IS a separator (`"/"`, `"C:/"` — see `trimTrailingSeparators`)
+    // already carries the boundary, so appending another looks for `"C://"` and
+    // matches nothing. Keeping the carve-out without this line trades one silent
+    // never-match for another.
+    candidate.startsWith(/[/\\]$/.test(base) ? base : base + "/")
+  );
+};
 
 /**
  * Could this path be under this prefix under SOME root or working directory?
@@ -345,12 +369,13 @@ const isAtOrUnder = (candidate: string, base: string): boolean =>
 const mightBeUnder = (path: string, base: string): boolean => {
   const needle = base.replace(/^\/+/, "").replace(/^[A-Za-z]:\//, "");
   if (needle === "") return true;
-  const p = path.replace(/\\/g, "/").replace(/^\.\//, "");
-  return (
-    isAtOrUnder(p, needle) ||
-    p.endsWith("/" + needle) ||
-    p.includes("/" + needle + "/")
-  );
+  const raw = path.replace(/\\/g, "/").replace(/^\.\//, "");
+  // Same fold, same rule: keyed on the BASE, which is what decides whether a
+  // Windows filesystem is in play. Left case-sensitive here, the denylist's
+  // "could this be under it?" fallback misses on casing alone.
+  const p = foldForCompare(raw, base);
+  const n = foldForCompare(needle, base);
+  return isAtOrUnder(p, n) || p.endsWith("/" + n) || p.includes("/" + n + "/");
 };
 
 /**
@@ -500,15 +525,24 @@ export function commandView(raw: string, root?: string): CommandView {
     // Both of these are DENYLIST matchers, so both break an undecidable verdict
     // toward "match" — see the block above `PrefixVerdict` for the measurement
     // that made the opposite default a security hole.
+    // 🔴 READS THE NORMALIZED ARGV, NOT THE RAW ONE, AND THAT IS THE FIX FOR A
+    // REAL BYPASS. `leafCommands` keeps a word exactly as written, quotes and
+    // all, so a token arrived as `"papers/x.tex"` — with the quote characters —
+    // and matched no prefix at all. MEASURED end-to-end on a shipped guard:
+    // `sed -i s/a/b/ migratsiya/papers/x/paper.tex` exited 2 (blocked) while
+    // `sed -i s/a/b/ "migratsiya/papers/x/paper.tex"` exited 0. Quoting a path
+    // is not an exotic evasion — it is what anyone writes for a path with a
+    // space in it, so every denylist built on `touches` was one quote from open.
+    // `writesTo` was already correct precisely because it reads `normalized`;
+    // this is the same class as the other siblings this PR keeps finding, so
+    // both denylists now read the SAME argv.
     touches: (prefixes) =>
-      leaves.some((argv) =>
-        argv
-          .slice(1)
-          .some((tok) =>
-            prefixes.some((p) =>
-              matchesPrefix(prefixVerdict(tok, p, root), "match"),
-            ),
+      normalized.some((leaf) =>
+        leaf.args.some((tok) =>
+          prefixes.some((p) =>
+            matchesPrefix(prefixVerdict(tok, p, root), "match"),
           ),
+        ),
       ),
     writesTo: (prefixes) =>
       writeTargets.some((t) =>
@@ -1026,10 +1060,8 @@ function relativeToRoot(root: string, raw: string): string | undefined {
   // silent miss into a silent false grant, which is the worse direction. So the
   // fold is applied only when the root is drive-rooted, and only for the
   // comparison; the returned remainder keeps the path's own casing.
-  const fold = (p: string): string =>
-    /^[A-Za-z]:/.test(base) ? p.toLowerCase() : p;
-  const foldedBase = fold(base);
-  const foldedFull = fold(full);
+  const foldedBase = foldForCompare(base, base);
+  const foldedFull = foldForCompare(full, base);
   if (foldedFull === foldedBase) return "";
   if (foldedBase === "/") return full.slice(1);
   return foldedFull.startsWith(foldedBase + "/")

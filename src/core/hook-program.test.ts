@@ -1602,3 +1602,67 @@ test("under: POSIX stays case-SENSITIVE — folding there would invent a match",
   // A weaker sibling: prefix comparison keeps the path's own casing either way.
   assert.equal(pathView("/repo/Secrets/x", "/repo").under(["secrets"]), false);
 });
+
+// ---------------------------------------------------------------------------
+// Round 32: the fold reached the repo-relative branch and not the ABSOLUTE one,
+// nor `mightBeUnder`. For a denylist caller (`writesTo`) that miss ALLOWS a
+// write to a protected path — the failure direction this PR exists to remove.
+// The fix moved the rule into the comparator, so these cover both branches and
+// the fallback at once.
+// ---------------------------------------------------------------------------
+test("under: an ABSOLUTE drive-rooted prefix folds case too", () => {
+  assert.equal(
+    pathView("c:/repo/secrets/x", "C:/repo").under(["C:/Repo/Secrets"]),
+    true,
+  );
+  assert.equal(
+    pathView("C:/REPO/SECRETS/x", "c:/repo").under(["c:/repo/secrets"]),
+    true,
+  );
+});
+
+test("under: an absolute POSIX prefix stays case-SENSITIVE", () => {
+  assert.equal(
+    pathView("/repo/secrets/x", "/repo").under(["/repo/Secrets"]),
+    false,
+  );
+  assert.equal(
+    pathView("/repo/secrets/x", "/repo").under(["/repo/secrets"]),
+    true,
+  );
+});
+
+test("touches: the denylist fallback folds on a drive-rooted prefix", () => {
+  // No root known — the answer must be `undecidable`, which a denylist reads as
+  // a match. Case-sensitive, this missed and the write went through.
+  const v = commandView('cp /tmp/a "C:/Repo/Secrets/x.txt"');
+  assert.equal(v.touches(["C:/repo/secrets"]), true);
+});
+
+// ---------------------------------------------------------------------------
+// A quoted path used to walk straight through every denylist built on
+// `touches`. Found while writing the round-32 case above, then MEASURED
+// end-to-end on a shipped guard: the unquoted spelling exited 2 (blocked), the
+// quoted one exited 0. Quoting is not an evasion technique — it is what anyone
+// writes for a path with a space — so the gate was one quote from open.
+// `writesTo` was already right because it reads the normalized argv; `touches`
+// read the raw one. Both read the same argv now.
+// ---------------------------------------------------------------------------
+test("touches: a QUOTED path does not walk through the denylist", () => {
+  for (const cmd of [
+    'cp /tmp/a "papers/x.tex"',
+    "cp /tmp/a 'papers/x.tex'",
+    'sed -i s/a/b/ "papers/x.tex"',
+    "cp /tmp/a papers/x.tex",
+  ]) {
+    assert.equal(commandView(cmd).touches(["papers"]), true, cmd);
+  }
+});
+
+test("touches: quoting does not make an unrelated path match either", () => {
+  assert.equal(
+    commandView('cp /tmp/a "other/x.tex"').touches(["papers"]),
+    false,
+  );
+  assert.equal(commandView("cp /tmp/a other/x.tex").touches(["papers"]), false);
+});
