@@ -47,8 +47,15 @@ function fieldMatches(value: unknown, type: OutputFieldType): boolean {
   }
 }
 
-/** Validate a parsed object against a contract track; null when it conforms. */
-function shapeError(
+/**
+ * Validate a parsed object against a contract track; null when it conforms.
+ *
+ * Exported because the EXPERIMENTAL emit channel (`src/experimental-emit.ts`)
+ * validates the SAME `OutputContract` on a different delivery. One contract, two
+ * deliveries, one validator — a second copy would drift, and the two rails
+ * disagreeing about what satisfies a contract is the worst outcome available.
+ */
+export function shapeError(
   obj: Record<string, unknown>,
   shape: Readonly<Record<string, OutputFieldType>>,
 ): string | null {
