@@ -1,6 +1,6 @@
 import { describe, it, beforeAll as before, afterAll as after } from "vitest";
 import assert from "node:assert/strict";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -119,6 +119,103 @@ describe("iterateSidecars", () => {
     iterateSidecars(empty, () => count++);
     assert.equal(count, 0);
     cleanupTmpDir(empty);
+  });
+});
+
+/**
+ * The walk classified entries with a bare `statSync().isDirectory()`, which
+ * FOLLOWS a symlink — third instance of that class in this repo, and the reason
+ * `entryOf` exists. Both halves per shape: the symlinked DIRECTORY is refused,
+ * and everything else still resolves exactly as before. A fix that skipped every
+ * symlink, or every entry, would pass the first half alone and silently stop the
+ * audit from seeing manifests it used to see.
+ */
+describe("iterateSidecars and symlinks", () => {
+  it("does not descend into a directory symlink inside .vigiles/", () => {
+    const tmp = makeTmpDir("sidecar-symlink-dir");
+    writeSidecarManifest(tmp, {
+      specFile: "Real.md.spec.ts",
+      target: "Real.md",
+      compiledAt: new Date().toISOString(),
+      files: {},
+    });
+    // A tree OUTSIDE .vigiles/ holding something that looks like a manifest.
+    const outside = join(tmp, "outside");
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(
+      join(outside, "Foreign.md.inputs.json"),
+      JSON.stringify({
+        specFile: "Foreign.md.spec.ts",
+        target: "Foreign.md",
+        compiledAt: new Date().toISOString(),
+        files: {},
+      }),
+    );
+    symlinkSync(outside, join(tmp, ".vigiles", "linked"), "dir");
+
+    const seen: string[] = [];
+    iterateSidecars(tmp, (target) => seen.push(target));
+    // FIRES: following the link pulled a foreign tree's manifests into the audit
+    // under a reconstructed target name (`linked/Foreign.md`).
+    assert.deepEqual(seen, ["Real.md"]);
+    cleanupTmpDir(tmp);
+  });
+
+  it("reports a manifest once under a symlink cycle, not once per lap", () => {
+    const tmp = makeTmpDir("sidecar-symlink-cycle");
+    writeSidecarManifest(tmp, {
+      specFile: "Real.md.spec.ts",
+      target: "Real.md",
+      compiledAt: new Date().toISOString(),
+      files: {},
+    });
+    // `.vigiles/loop -> .vigiles`: statSync says "directory" on every lap.
+    symlinkSync(join(tmp, ".vigiles"), join(tmp, ".vigiles", "loop"), "dir");
+
+    const seen: string[] = [];
+    // FIRES: reverting the fix reported this ONE manifest 41 times — `Real.md`,
+    // `loop/Real.md`, `loop/loop/Real.md` … until the kernel's link limit ended
+    // it. Note it did NOT throw the way the loader's uncaught walk did: the
+    // `catch` inside walk() swallowed the ELOOP, so the only visible symptom was
+    // a multiplied audit. So the assertion is on the LIST, not on "it didn't
+    // throw" — the no-throw half stays green under the defect and would prove
+    // nothing. (A throw still fails this test: it escapes the call below.)
+    iterateSidecars(tmp, (target) => seen.push(target));
+    assert.deepEqual(seen, ["Real.md"]);
+    cleanupTmpDir(tmp);
+  });
+
+  it("still finds nested sidecars and follows a symlinked manifest FILE", () => {
+    const tmp = makeTmpDir("sidecar-symlink-quiet");
+    writeSidecarManifest(tmp, {
+      specFile: "CLAUDE.md.spec.ts",
+      target: "CLAUDE.md",
+      compiledAt: new Date().toISOString(),
+      files: {},
+    });
+    // The nested case the recursion exists for, in a real directory.
+    writeSidecarManifest(tmp, {
+      specFile: "copilot.spec.ts",
+      target: ".github/copilot-instructions.md",
+      compiledAt: new Date().toISOString(),
+      files: {},
+    });
+    // A symlink to a manifest FILE cannot recurse and is a real manifest, so it
+    // is read like any other — dropping it would lose findings.
+    symlinkSync(
+      sidecarPath(tmp, "CLAUDE.md"),
+      sidecarPath(tmp, "Linked.md"),
+      "file",
+    );
+
+    const seen: string[] = [];
+    iterateSidecars(tmp, (target) => seen.push(target));
+    assert.deepEqual(seen.sort(), [
+      ".github/copilot-instructions.md",
+      "CLAUDE.md",
+      "Linked.md",
+    ]);
+    cleanupTmpDir(tmp);
   });
 });
 
