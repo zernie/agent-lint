@@ -1580,3 +1580,25 @@ test("under: a catch-all still matches when a root IS known", () => {
 test("under: a drive root is NOT a catch-all — a different drive stays outside", () => {
   assert.equal(pathView("D:/repo/x", "D:/repo").under(["C:/"]), false);
 });
+
+// ---------------------------------------------------------------------------
+// Round 31: Windows filesystems are case-insensitive, POSIX ones are not.
+// Folding everywhere would turn a silent miss into a silent FALSE GRANT on
+// Linux, where /repo/Secrets and /repo/secrets are two different files. So the
+// fold is drive-rooted-only, and both halves are pinned here.
+// ---------------------------------------------------------------------------
+test("under: a drive-rooted path matches its root case-insensitively", () => {
+  assert.equal(pathView("c:/repo/src/x.ts", "C:/Repo").under(["src"]), true);
+  assert.equal(pathView("C:/REPO/src/x.ts", "c:/repo").under(["src"]), true);
+});
+
+test("under: POSIX stays case-SENSITIVE — folding there would invent a match", () => {
+  // The load-bearing case is whether the path is judged INSIDE THE ROOT at all.
+  // On Linux `/REPO` and `/repo` are two different directories, so a file in one
+  // is not in the other. Fold here and an allowlist gate would accept a path
+  // from a DIFFERENT tree — a false grant, the direction we never take.
+  assert.equal(pathView("/repo/src/x.ts", "/REPO").under(["src"]), false);
+  assert.equal(pathView("/repo/src/x.ts", "/repo").under(["src"]), true);
+  // A weaker sibling: prefix comparison keeps the path's own casing either way.
+  assert.equal(pathView("/repo/Secrets/x", "/repo").under(["secrets"]), false);
+});

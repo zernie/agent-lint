@@ -193,10 +193,16 @@ export function fileToolEvents(
   );
   const rel = path.replace(/\\/g, "/").replace(/^\.\//, "");
   const base = {
+    // `opts.extra` spreads FIRST, for the same reason `opts.input` does below:
+    // extras copied from a real hook event carry a `cwd`, and spread last it
+    // would replace the root this helper just selected. The absolute entry would
+    // still be BUILT from `opts.root` but EVALUATED against someone else's cwd —
+    // so the helper would hand back a pair that no longer tests the spelling it
+    // promises, and nothing would fail to say so.
+    ...opts.extra,
     hook_event_name: opts.event ?? "PostToolUse",
     tool_name: opts.tool ?? "Edit",
     cwd: root,
-    ...opts.extra,
   };
   const build = (file_path: string): HookInput => ({
     ...base,

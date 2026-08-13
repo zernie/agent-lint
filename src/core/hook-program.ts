@@ -1017,9 +1017,24 @@ function relativeSpelling(path: string, root?: string): string | undefined {
 function relativeToRoot(root: string, raw: string): string | undefined {
   const base = resolveRef(root.replace(/\\/g, "/"), ".");
   const full = resolveRef(root.replace(/\\/g, "/"), raw);
-  if (full === base) return "";
-  if (base === "/") return full.slice(1);
-  return full.startsWith(base + "/") ? full.slice(base.length + 1) : undefined;
+  // 🔴 CASE FOLDING IS DRIVE-ROOTED-ONLY, AND THE ASYMMETRY IS THE POINT.
+  // Windows filesystems are case-insensitive by default, so `C:/Repo` and
+  // `c:/repo/src/x.ts` name the same place — compared exactly, the second reads
+  // as OUTSIDE the first and the gate silently denies a same-repo edit. POSIX is
+  // case-SENSITIVE: `/repo/Secrets` and `/repo/secrets` are two different files,
+  // and folding there would invent a match that does not exist — turning a
+  // silent miss into a silent false grant, which is the worse direction. So the
+  // fold is applied only when the root is drive-rooted, and only for the
+  // comparison; the returned remainder keeps the path's own casing.
+  const fold = (p: string): string =>
+    /^[A-Za-z]:/.test(base) ? p.toLowerCase() : p;
+  const foldedBase = fold(base);
+  const foldedFull = fold(full);
+  if (foldedFull === foldedBase) return "";
+  if (foldedBase === "/") return full.slice(1);
+  return foldedFull.startsWith(foldedBase + "/")
+    ? full.slice(base.length + 1)
+    : undefined;
 }
 
 /**

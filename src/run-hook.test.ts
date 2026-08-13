@@ -848,3 +848,18 @@ test("fileToolEvents: an input fixture cannot overwrite the generated path", () 
   assert.equal(inputOf(rel).old_string, "a");
   assert.notEqual(inputOf(rel).file_path, inputOf(abs).file_path);
 });
+
+// Round 31: the sibling of the `file_path` case, two lines up in the same
+// object. Extras copied from a real event carry a `cwd`; spread last it replaced
+// the root the helper had just chosen, so the absolute entry was built from one
+// root and evaluated against another.
+test("fileToolEvents: extras cannot override the selected root", () => {
+  const [rel, abs] = fileToolEvents("src/x.ts", {
+    root: "/repo",
+    extra: { cwd: "/somewhere/else", session_id: "s1" },
+  });
+  assert.equal(rel.cwd, "/repo");
+  assert.equal(abs.cwd, "/repo");
+  // the other extras still land
+  assert.equal((rel as unknown as Record<string, unknown>).session_id, "s1");
+});
