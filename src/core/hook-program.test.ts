@@ -1666,3 +1666,37 @@ test("touches: quoting does not make an unrelated path match either", () => {
   );
   assert.equal(commandView("cp /tmp/a other/x.tex").touches(["papers"]), false);
 });
+
+// ---------------------------------------------------------------------------
+// P1, round 33 — and it was MY regression: switching `touches` to the normalized
+// argv fixed quoted paths and broke wrapper-consumed ones, because
+// `stripWrappers` CONSUMES the option and its value. `env -C secrets cat key`
+// still reads `secrets/key`, so a denylist on `secrets` failed open. Reading one
+// argv trades one bypass for the other; the union reads both.
+// ---------------------------------------------------------------------------
+test("touches: a WRAPPER-consumed path is still seen", () => {
+  assert.equal(
+    commandView("env -C secrets cat key").touches(["secrets"]),
+    true,
+  );
+  assert.equal(
+    commandView("env --chdir=secrets cat key").touches(["secrets"]),
+    true,
+  );
+});
+
+test("touches: both halves of the union hold at once", () => {
+  // quoted (needs normalized) and wrapper-consumed (needs raw), one command
+  assert.equal(
+    commandView('env -C secrets cat "key/x.txt"').touches(["secrets"]),
+    true,
+  );
+});
+
+test("touches: an option VALUE that is not a path still does not match", () => {
+  assert.equal(
+    commandView("grep --color=always x file").touches(["papers"]),
+    false,
+  );
+  assert.equal(commandView("cp /tmp/a other/x").touches(["papers"]), false);
+});

@@ -537,13 +537,30 @@ export function commandView(raw: string, root?: string): CommandView {
     // this is the same class as the other siblings this PR keeps finding, so
     // both denylists now read the SAME argv.
     touches: (prefixes) =>
-      normalized.some((leaf) =>
-        leaf.args.some((tok) =>
+      // 🔴 THE UNION IS THE FIX, AND EACH HALF COVERS THE OTHER'S BLIND SPOT.
+      // Raw argv keeps a word exactly as written, so a QUOTED path arrives as
+      // `"papers/x.tex"` and matches nothing — measured end-to-end on a shipped
+      // guard: unquoted exited 2, quoted exited 0. Normalized argv unwraps the
+      // quotes, but `stripWrappers` also CONSUMES wrapper options, so
+      // `env -C secrets cat key` loses `secrets` entirely and a denylist on it
+      // fails open. Reading only one of the two trades one bypass for the other;
+      // that is exactly what the previous commit did, and it earned a P1.
+      // A denylist over-matching costs an argument. Missing costs the write.
+      [...leaves.map((argv) => argv.slice(1)), ...normalized.map((l) => l.args)]
+        .flat()
+        // `--chdir=secrets` is ONE token, so the path is invisible to a whole-token
+        // comparison. Only the tail of an `--opt=value` word can be a path, so the
+        // extra candidate is added rather than replacing the token.
+        .flatMap((tok) =>
+          /^-{1,2}[^=]+=/.test(tok)
+            ? [tok, tok.slice(tok.indexOf("=") + 1)]
+            : [tok],
+        )
+        .some((tok) =>
           prefixes.some((p) =>
             matchesPrefix(prefixVerdict(tok, p, root), "match"),
           ),
         ),
-      ),
     writesTo: (prefixes) =>
       writeTargets.some((t) =>
         prefixes.some((p) => matchesPrefix(prefixVerdict(t, p, root), "match")),
