@@ -4,11 +4,17 @@
 
 ```ts
 
+// @public
+export function admissibleWrites(writes: readonly unknown[]): {
+    readonly ok: readonly StateWrite[];
+    readonly refused: readonly string[];
+};
+
 // @public (undocumented)
 export const allow: () => Decision;
 
 // @public (undocumented)
-export type AnyHook = HookProgram<ErasedNeeds> | FileGateHook<ErasedNeeds> | PromptGateHook<ErasedNeeds> | StopGateHook<ErasedNeeds> | InjectHook | ReactHook;
+export type AnyHook = HookProgram<ErasedNeeds> | FileGateHook<ErasedNeeds> | PromptGateHook<ErasedNeeds> | StopGateHook<ErasedNeeds> | InjectHook<ErasedNeeds> | ReactHook<ErasedNeeds>;
 
 // @public (undocumented)
 export const ask: (reason: string) => Decision;
@@ -79,7 +85,7 @@ export function decideFileGate<N extends readonly NeedSpec[]>(hook: FileGateHook
         file_path?: unknown;
     };
     cwd?: unknown;
-}, ctx?: Record<string, string | boolean>, root?: string | undefined): Decision;
+}, ctx?: RawCtx, root?: string | undefined): Decision;
 
 // @public
 export function decideProgram<N extends readonly NeedSpec[]>(program: HookProgram<N>, rawEvent: {
@@ -88,17 +94,17 @@ export function decideProgram<N extends readonly NeedSpec[]>(program: HookProgra
         command?: unknown;
     };
     cwd?: unknown;
-}, ctx?: Record<string, string | boolean>, root?: string | undefined): Decision;
+}, ctx?: RawCtx, root?: string | undefined): Decision;
 
 // @public
 export function decidePromptGate<N extends readonly NeedSpec[]>(hook: PromptGateHook<N>, raw: {
     prompt?: unknown;
-}, ctx?: Record<string, string | boolean>): Decision;
+}, ctx?: RawCtx): Decision;
 
 // @public
 export function decideStopGate<N extends readonly NeedSpec[]>(hook: StopGateHook<N>, raw: {
     stop_hook_active?: unknown;
-}, ctx?: Record<string, string | boolean>): Decision;
+}, ctx?: RawCtx): Decision;
 
 // @public (undocumented)
 export type Decision = {
@@ -121,7 +127,7 @@ export function defineFileGate<const N extends readonly NeedSpec[] = readonly []
 export function defineHook<const N extends readonly NeedSpec[] = readonly []>(p: HookProgram<N>): HookProgram<N>;
 
 // @public (undocumented)
-export const defineInject: (p: Omit<InjectHook, "role">) => InjectHook;
+export function defineInject<const N extends readonly NeedSpec[] = readonly []>(p: Omit<InjectHook<N>, "role">): InjectHook<N>;
 
 // @public (undocumented)
 export function definePromptGate<const N extends readonly NeedSpec[] = readonly []>(p: Omit<PromptGateHook<N>, "role">): PromptGateHook<N>;
@@ -134,7 +140,7 @@ export const defineProvider: <const Name extends string>(p: {
 }) => RegisteredProvider<Name>;
 
 // @public (undocumented)
-export const defineReact: (p: Omit<ReactHook, "role">) => ReactHook;
+export function defineReact<const N extends readonly NeedSpec[] = readonly []>(p: Omit<ReactHook<N>, "role">): ReactHook<N>;
 
 // @public (undocumented)
 export function defineStopGate<const N extends readonly NeedSpec[] = readonly []>(p: Omit<StopGateHook<N>, "role">): StopGateHook<N>;
@@ -147,6 +153,12 @@ export type DispatchKind = "bash-gate" | "file-gate" | "prompt-gate" | "stop-gat
 
 // @public (undocumented)
 export function dispatchKind(hook: AnyHook): DispatchKind;
+
+// @public
+export type Duration = `${number}${"s" | "m" | "h" | "d"}`;
+
+// @public
+export function durationSeconds(d: string): number | null;
 
 // @public (undocumented)
 export interface FileGateHook<N extends readonly NeedSpec[] = readonly ProviderName[]> {
@@ -232,6 +244,7 @@ export type HookProgramOutcome = {
 } | {
     readonly kind: "injection";
     readonly context: string;
+    readonly records: readonly StateWrite[];
 } | {
     readonly kind: "reaction";
     readonly reaction: Reaction;
@@ -243,14 +256,19 @@ export function hookRouting(hook: AnyHook): {
     matcher?: string;
 };
 
-// @public (undocumented)
-export const inject: (context: string) => Injection;
+// @public
+export class HookStateError extends Error {
+}
+
+// @public
+export const inject: (context: string, ...records: readonly StateWrite[]) => Injection;
 
 // @public (undocumented)
-export interface InjectHook {
+export interface InjectHook<N extends readonly NeedSpec[] = readonly ProviderName[]> {
+    readonly needs?: N;
     // (undocumented)
     readonly on: string;
-    readonly produce: (e: SessionEvent) => Injection;
+    readonly produce: (e: SessionEvent<N>) => Injection;
     // (undocumented)
     readonly role: "inject";
 }
@@ -261,7 +279,13 @@ export interface Injection {
     readonly context: string;
     // (undocumented)
     readonly kind: "inject";
+    readonly records: readonly StateWrite[];
 }
+
+// @public
+export function injectionOf<N extends readonly NeedSpec[]>(hook: InjectHook<N>, raw: {
+    source?: string;
+}, ctx?: RawCtx): Injection;
 
 // @public
 export interface InlineProvider<Name extends string = string> {
@@ -276,6 +300,18 @@ export interface InlineProvider<Name extends string = string> {
 }
 
 // @public
+export function invalidToolPatterns(tools: readonly string[]): string[];
+
+// @public
+export function isStateNeed(need: unknown): need is StateNeed;
+
+// @public
+export function isStateWrite(w: unknown): w is StateWrite;
+
+// @public (undocumented)
+export function isValidStateKey(key: string): boolean;
+
+// @public
 export function leafCommandsNormalized(command: string): NormalizedLeaf[];
 
 // @public
@@ -287,7 +323,10 @@ export interface LeafRedirect {
 }
 
 // @public
-export type NeedSpec = ProviderName | InlineProvider | RegisteredRef;
+export function matchesTool(tools: readonly string[], name: string): boolean;
+
+// @public
+export type NeedSpec = ProviderName | InlineProvider | RegisteredRef | StateNeed;
 
 // @public
 export interface NormalizedLeaf {
@@ -302,10 +341,16 @@ export interface NormalizedLeaf {
 }
 
 // @public
-export const nothing: () => Reaction;
+export const nothing: (...records: readonly StateWrite[]) => Reaction;
 
 // @public
-export const notice: (message: string) => Reaction;
+export const notice: (message: string, ...records: readonly StateWrite[]) => Reaction;
+
+// @public
+export function outcomeWrites(outcome: HookProgramOutcome): {
+    readonly ok: readonly StateWrite[];
+    readonly refused: readonly string[];
+};
 
 // @public
 export interface PathView {
@@ -375,7 +420,8 @@ export interface RawHookEvent {
 }
 
 // @public
-export interface ReactEvent {
+export interface ReactEvent<N extends readonly NeedSpec[] = readonly ProviderName[]> {
+    readonly ctx: HookCtx<N>;
     // (undocumented)
     readonly event: string;
     // (undocumented)
@@ -386,14 +432,14 @@ export interface ReactEvent {
 }
 
 // @public (undocumented)
-export interface ReactHook {
-    // (undocumented)
-    readonly match: {
+export interface ReactHook<N extends readonly NeedSpec[] = readonly ProviderName[]> {
+    readonly match?: {
         readonly tools: readonly string[];
     };
+    readonly needs?: N;
     // (undocumented)
     readonly on: string;
-    readonly react: (e: ReactEvent) => Reaction;
+    readonly react: (e: ReactEvent<N>) => Reaction;
     // (undocumented)
     readonly role: "react";
 }
@@ -402,9 +448,14 @@ export interface ReactHook {
 export type Reaction = RunReaction | {
     readonly kind: "notice";
     readonly message: string;
+    readonly records: readonly StateWrite[];
 } | {
     readonly kind: "none";
+    readonly records: readonly StateWrite[];
 };
+
+// @public
+export function record(name: string, value?: string): StateWrite;
 
 // @public
 export interface RegisteredProvider<Name extends string = string> {
@@ -437,15 +488,15 @@ export interface ResponseView {
 export function responseView(raw: unknown): ResponseView;
 
 // @public
-export const run: (command: string) => RunReaction;
+export const run: (command: string, ...records: readonly StateWrite[]) => RunReaction;
 
 // @public
-export function runHookProgram(hook: AnyHook, event: RawHookEvent, ctx?: Record<string, string | boolean>, root?: string | undefined): HookProgramOutcome;
+export function runHookProgram(hook: AnyHook, event: RawHookEvent, ctx?: RawCtx, root?: string | undefined): HookProgramOutcome;
 
 // @public
-export function runInject(hook: InjectHook, raw: {
+export function runInject<N extends readonly NeedSpec[]>(hook: InjectHook<N>, raw: {
     source?: string;
-}): {
+}, ctx?: RawCtx): {
     hookSpecificOutput: {
         hookEventName: string;
         additionalContext: string;
@@ -453,14 +504,14 @@ export function runInject(hook: InjectHook, raw: {
 };
 
 // @public
-export function runReact(hook: ReactHook, raw: {
+export function runReact<N extends readonly NeedSpec[]>(hook: ReactHook<N>, raw: {
     tool_name?: string;
     tool_input?: {
         file_path?: unknown;
     };
     tool_response?: unknown;
     cwd?: unknown;
-}, root?: string | undefined): Reaction;
+}, ctx?: RawCtx, root?: string | undefined): Reaction;
 
 // @public (undocumented)
 export interface RunReaction {
@@ -470,10 +521,13 @@ export interface RunReaction {
     readonly effect: BashEffect;
     // (undocumented)
     readonly kind: "run";
+    // (undocumented)
+    readonly records: readonly StateWrite[];
 }
 
 // @public
-export interface SessionEvent {
+export interface SessionEvent<N extends readonly NeedSpec[] = readonly ProviderName[]> {
+    readonly ctx: HookCtx<N>;
     // (undocumented)
     readonly event: string;
     // (undocumented)
@@ -482,6 +536,50 @@ export interface SessionEvent {
 
 // @public
 export function stampHook(source: string): SHA256Hash;
+
+// @public
+export function state<const Name extends string>(name: Name): StateNeed<Name>;
+
+// @public
+export interface StateEntry {
+    // (undocumented)
+    readonly at: string;
+    // (undocumented)
+    readonly by?: string;
+    // (undocumented)
+    readonly value: string;
+}
+
+// @public
+export interface StateFact {
+    readonly ageSeconds: number;
+    readonly at: string;
+    fresherThan(within: Duration): boolean;
+    olderThan(within: Duration): boolean;
+    readonly recorded: boolean;
+    readonly value: string;
+}
+
+// @public
+export function stateFact(entry: StateEntry | null, nowMs: number): StateFact;
+
+// @public
+export interface StateNeed<Name extends string = string> {
+    // (undocumented)
+    readonly kind: "state";
+    // (undocumented)
+    readonly name: Name;
+}
+
+// @public
+export interface StateWrite {
+    // (undocumented)
+    readonly kind: "record";
+    // (undocumented)
+    readonly name: string;
+    // (undocumented)
+    readonly value: string;
+}
 
 // @public
 export interface StopEvent<N extends readonly NeedSpec[] = readonly ProviderName[]> {

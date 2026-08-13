@@ -19,6 +19,13 @@
  * testable with a fake exec and core depends on no child_process.
  */
 import { isReadOnlyBash } from "./bash-effects.js";
+import {
+  isStateNeed,
+  stateFact,
+  type StateEntry,
+  type StateFact,
+  type StateNeed,
+} from "./hook-state.js";
 
 /** The closed set of built-in facts a gate may declare via `needs`, with value types. */
 export interface ProviderResults {
@@ -52,8 +59,20 @@ export interface InlineProvider<Name extends string = string> {
   readonly dangerous: boolean;
 }
 
-/** A `needs` entry — a built-in name, an inline `provide`/`dangerously`, or a `provider()` ref. */
-export type NeedSpec = ProviderName | InlineProvider | RegisteredRef;
+/**
+ * A `needs` entry — a built-in name, an inline `provide`/`dangerously`, a
+ * `provider()` ref, or a `state()` read of a fact some hook recorded.
+ *
+ * `state()` rides this union rather than getting its own accessor so that ALL of
+ * a hook's external inputs stay in one declared list: the dependency is auditable
+ * from outside the hook, and reading an undeclared one is a `tsc` error. See the
+ * design note in `hook-state.ts`.
+ */
+export type NeedSpec =
+  | ProviderName
+  | InlineProvider
+  | RegisteredRef
+  | StateNeed;
 
 /**
  * Declare an INLINE read-only fact: `provide("k8sCtx", "kubectl config current-context")`.
@@ -123,10 +142,14 @@ type NeedName<E extends NeedSpec> = E extends ProviderName
     ? Nm
     : E extends RegisteredRef<infer Rn>
       ? Rn
-      : never;
+      : E extends StateNeed<infer Sn>
+        ? Sn
+        : never;
 type NeedValue<E extends NeedSpec> = E extends ProviderName
   ? ProviderResults[E]
-  : string;
+  : E extends StateNeed
+    ? StateFact
+    : string;
 
 /**
  * The typed `e.ctx` for a hook that declared `needs: N` — ONLY the declared facts
@@ -151,6 +174,14 @@ export interface ProviderIO {
   readonly platform: NodeJS.Platform;
   /** Whether the process is on a CI server (the CLI injects `ci-info`'s verdict). */
   readonly isCI: boolean;
+  /**
+   * Read one recorded fact from THIS hook's state namespace, or `null` if it was
+   * never recorded. The namespace is resolved by the caller, so a key can never
+   * address another owner's store — see `hook-state.ts`.
+   */
+  readonly readState: (key: string) => StateEntry | null;
+  /** Epoch milliseconds, injected so fact ages are pinnable in a test. */
+  readonly now: number;
 }
 
 interface ProviderDef<K extends ProviderName> {
@@ -222,6 +253,10 @@ export function unknownProviders(
   const out: string[] = [];
   for (const n of needs) {
     if (isInline(n)) continue;
+    // A `state()` key is self-defining: it resolves to "never recorded" until
+    // some hook records it, which is a legitimate steady state (the very first
+    // run of every throttled hook), not a dangling reference.
+    if (isStateNeed(n)) continue;
     if (isRef(n)) {
       if (!registered.has(n.name)) out.push(n.name);
     } else if (!(n in BUILTIN_PROVIDERS)) out.push(n);
@@ -261,10 +296,15 @@ export function gatherContext(
   needs: readonly NeedSpec[],
   io: ProviderIO,
   registry: ProviderRegistry = {},
-): Record<string, string | boolean> {
-  const ctx: Record<string, string | boolean> = {};
+): Record<string, string | boolean | StateFact> {
+  const ctx: Record<string, string | boolean | StateFact> = {};
   for (const need of needs) {
-    if (isInline(need)) ctx[need.name] = tryExec(io, need.run);
+    if (isStateNeed(need)) {
+      // The one need that reaches no subprocess: the trusted runtime hands the
+      // stored entry (or null) straight in, and the fact view does the clamping
+      // every shell stamp-reader used to re-implement by hand.
+      ctx[need.name] = stateFact(io.readState(need.name), io.now);
+    } else if (isInline(need)) ctx[need.name] = tryExec(io, need.run);
     else if (isRef(need)) {
       const def = registry[need.name];
       ctx[need.name] = def ? tryExec(io, def.run) : "";

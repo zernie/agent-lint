@@ -50,6 +50,77 @@ import {
   type NeedSpec,
   type HookCtx,
 } from "./hook-providers.js";
+import {
+  admissibleWrites,
+  type StateFact,
+  type StateWrite,
+} from "./hook-state.js";
+
+/**
+ * The erased runtime shape of a gathered context. Author-facing types keep the
+ * precise `HookCtx<N>`; the decode functions re-narrow and cast.
+ */
+type RawCtx = Record<string, string | boolean | StateFact>;
+
+/**
+ * Does `name` match a hook's declared tool list, under the SAME semantics as the
+ * matcher the compiler emits for it?
+ *
+ * 🔴 IT DID NOT, AND THE DISAGREEMENT WAS SILENT. `hookRouting` joins a react's
+ * tools with `|` and emits that as the harness matcher, and a Claude Code matcher
+ * is a REGEX — `Edit|Write|MultiEdit` only works because it is one. The runtime
+ * meanwhile compared with `Array.includes`, i.e. exact string equality. So a hook
+ * declaring a tool FAMILY compiled fine, was wired up fine, was routed to by the
+ * harness fine, and was then dropped by vigiles' own filter without a word.
+ *
+ * MEASURED 2026-08-12 against the real runtime, before the fix:
+ *
+ *   $ echo '{"tool_name":"mcp__4f54037d-0499__list_events",…}' \
+ *       | vigiles hook-runtime run-program mcp-family.hook.mjs
+ *   exit=0                       # silence — react() never ran
+ *   $ echo '{"tool_name":"mcp__.*",…}' | …
+ *   FIRED on mcp__.*             # fires only for a tool LITERALLY named "mcp__.*"
+ *
+ * That is the false-confidence class this whole subsystem exists to eliminate,
+ * living inside the subsystem. The live evidence that the harness really does
+ * route these: the knowledge base has shipped `"matcher": "mcp__.*"` in
+ * `.claude/settings.json` for months and its stamp file was last written the
+ * morning this was measured. The MCP server's id changes per session, so an exact
+ * list cannot be written down — a family matcher is the only correct spelling.
+ *
+ * Anchored `^(…)$` so a pattern cannot match a longer tool name by accident, and
+ * identical to `includes` for ordinary names, which contain no metacharacters.
+ * An unparseable pattern is rejected at COMPILE ({@link invalidToolPatterns}), so
+ * the fallback here is unreachable in a compiled hook and exists only so that a
+ * hand-constructed one degrades to exact matching rather than throwing mid-event.
+ */
+export function matchesTool(tools: readonly string[], name: string): boolean {
+  // An EMPTY list matches NOTHING. Found by a mutation that was meant to disable
+  // tool-less reacts and didn't: with no tools the joined pattern is `^()$`,
+  // which matches the EMPTY STRING — and a tool-less event's name is the empty
+  // string. Without this line `tools()` would quietly be a catch-all on exactly
+  // the events where a react has no tool to check. Declaring nothing must mean
+  // nothing, not everything.
+  if (tools.length === 0) return false;
+  if (tools.includes(name)) return true;
+  try {
+    return new RegExp(`^(${tools.join("|")})$`).test(name);
+  } catch {
+    return false;
+  }
+}
+
+/** Tool patterns that are not valid regexes — rejected at compile, see {@link matchesTool}. */
+export function invalidToolPatterns(tools: readonly string[]): string[] {
+  return tools.filter((t) => {
+    try {
+      new RegExp(`^(${t})$`);
+      return false;
+    } catch {
+      return true;
+    }
+  });
+}
 
 // ---------------------------------------------------------------------------
 // The closed vocabulary (this is the entire surface a hook author may touch)
@@ -670,7 +741,7 @@ export function decideProgram<N extends readonly NeedSpec[]>(
     tool_input?: { command?: unknown };
     cwd?: unknown;
   },
-  ctx: Record<string, string | boolean> = {},
+  ctx: RawCtx = {},
   root: string | undefined = typeof rawEvent.cwd === "string"
     ? rawEvent.cwd
     : undefined,
@@ -788,8 +859,8 @@ export type AnyHook =
   | FileGateHook<ErasedNeeds>
   | PromptGateHook<ErasedNeeds>
   | StopGateHook<ErasedNeeds>
-  | InjectHook
-  | ReactHook;
+  | InjectHook<ErasedNeeds>
+  | ReactHook<ErasedNeeds>;
 /* eslint-enable @typescript-eslint/no-unnecessary-type-arguments */
 
 /**
@@ -838,6 +909,8 @@ export function hookRouting(hook: AnyHook): {
       hook.role === "stop-gate"
     )
       return { on: hook.on };
+    // A react MAY also be tool-less (Stop/SessionEnd) — same shape, same reason.
+    if (hook.match === undefined) return { on: hook.on };
     return { on: hook.on, matcher: hook.match.tools.join("|") };
   }
   return { on: hook.on, matcher: hook.match.tool };
@@ -904,6 +977,18 @@ export function compileHookProgram(
     );
   }
   const { on, matcher: rawMatcher } = hookRouting(hook);
+  // A tool pattern that is not a valid regex cannot match under the semantics the
+  // emitted matcher is read with, so it would compile to a hook that never fires.
+  // Reject it here rather than let `matchesTool` fall back silently.
+  if ("match" in hook && hook.match !== undefined && "tools" in hook.match) {
+    const bad = invalidToolPatterns(hook.match.tools);
+    if (bad.length > 0) {
+      throw new HookCompileError(
+        `invalid tool matcher pattern(s): ${bad.join(", ")} — a tool matcher is a ` +
+          `regex (that is why "Edit|Write" works), so it must parse as one.`,
+      );
+    }
+  }
   // A hook registered under an event the harness never fires is dead — reject it.
   if (opts.dialect) {
     const issues = verifyHookEvents([on], opts.dialect);
@@ -1246,11 +1331,12 @@ export function decideFileGate<N extends readonly NeedSpec[]>(
     tool_input?: { file_path?: unknown };
     cwd?: unknown;
   },
-  ctx: Record<string, string | boolean> = {},
+  ctx: RawCtx = {},
   root: string | undefined = typeof raw.cwd === "string" ? raw.cwd : undefined,
 ): Decision {
   const t = raw.tool_name ?? "";
-  if (!hook.match.tools.includes(t)) return allow();
+  // Same matcher semantics as the emitted settings block — see {@link matchesTool}.
+  if (!matchesTool(hook.match.tools, t)) return allow();
   const fp =
     typeof raw.tool_input?.file_path === "string"
       ? raw.tool_input.file_path
@@ -1311,7 +1397,7 @@ export function definePromptGate<
 export function decidePromptGate<N extends readonly NeedSpec[]>(
   hook: PromptGateHook<N>,
   raw: { prompt?: unknown },
-  ctx: Record<string, string | boolean> = {},
+  ctx: RawCtx = {},
 ): Decision {
   const prompt = typeof raw.prompt === "string" ? raw.prompt : "";
   return hook.decide({
@@ -1362,7 +1448,7 @@ export function defineStopGate<
 export function decideStopGate<N extends readonly NeedSpec[]>(
   hook: StopGateHook<N>,
   raw: { stop_hook_active?: unknown },
-  ctx: Record<string, string | boolean> = {},
+  ctx: RawCtx = {},
 ): Decision {
   return hook.decide({
     event: hook.on,
@@ -1377,47 +1463,93 @@ export function decideStopGate<N extends readonly NeedSpec[]>(
 export interface Injection {
   readonly kind: "inject";
   readonly context: string;
+  /** Facts to record — a DECLARATION; the trusted runtime performs the write. */
+  readonly records: readonly StateWrite[];
 }
-export const inject = (context: string): Injection => ({
+/**
+ * Context to add, plus any facts that just became true:
+ * `inject(text, record("calendar.nagged"))`.
+ *
+ * The writes are trailing arguments on every output builder, so there is one rule
+ * to learn rather than a per-role spelling — and a hook that records nothing is
+ * written exactly as it was before.
+ */
+export const inject = (
+  context: string,
+  ...records: readonly StateWrite[]
+): Injection => ({
   kind: "inject",
   context,
+  records,
 });
 
-/** The event an inject hook produces from (no tool — SessionStart/UserPromptSubmit). */
-export interface SessionEvent {
+/**
+ * The event an inject hook produces from (no tool — SessionStart/UserPromptSubmit).
+ * Generic over its declared `needs`, exactly like the gate events.
+ */
+export interface SessionEvent<
+  N extends readonly NeedSpec[] = readonly ProviderName[],
+> {
   readonly event: string;
   readonly source: string;
+  /** Host-gathered, DECLARED facts — built-ins, inline providers, and `state()` reads. */
+  readonly ctx: HookCtx<N>;
 }
 
-export interface InjectHook {
+export interface InjectHook<
+  N extends readonly NeedSpec[] = readonly ProviderName[],
+> {
   readonly role: "inject";
   readonly on: string;
+  /**
+   * Declared context providers the trusted runtime gathers into `e.ctx`.
+   *
+   * Injects and reacts could not declare `needs` at all until state landed, for
+   * no reason anyone had recorded — and a fact a hook cannot read is not a
+   * feature. `needs` is now uniform across every role.
+   */
+  readonly needs?: N;
   /** Produces context to add. Its return type (Injection) has no `deny` — by design. */
-  readonly produce: (e: SessionEvent) => Injection;
+  readonly produce: (e: SessionEvent<N>) => Injection;
 }
-export const defineInject = (p: Omit<InjectHook, "role">): InjectHook => ({
-  role: "inject",
-  ...p,
-});
+export function defineInject<const N extends readonly NeedSpec[] = readonly []>(
+  p: Omit<InjectHook<N>, "role">,
+): InjectHook<N> {
+  return { role: "inject", ...p };
+}
 
 /**
  * Run an inject hook → the CC JSON the author never hand-writes. The compiler
  * targets `additionalContext` (the RIGHT field for this event), so the
  * wrong-JSON-field pain can't occur.
  */
-export function runInject(
-  hook: InjectHook,
+export function runInject<N extends readonly NeedSpec[]>(
+  hook: InjectHook<N>,
   raw: { source?: string },
+  ctx: RawCtx = {},
 ): {
   hookSpecificOutput: { hookEventName: string; additionalContext: string };
 } {
-  const out = hook.produce({ event: hook.on, source: raw.source ?? "startup" });
+  const out = injectionOf(hook, raw, ctx);
   return {
     hookSpecificOutput: {
       hookEventName: hook.on,
       additionalContext: out.context,
     },
   };
+}
+
+/** The full {@link Injection} — the runtime needs its `records`, which the CC JSON drops. */
+export function injectionOf<N extends readonly NeedSpec[]>(
+  hook: InjectHook<N>,
+  raw: { source?: string },
+  ctx: RawCtx = {},
+): Injection {
+  return hook.produce({
+    event: hook.on,
+    source: raw.source ?? "startup",
+    ctx: ctx as unknown as HookCtx<N>,
+  });
 }
 
 // --- PROBE 3 — the REACT shape (PostToolUse): where side effects re-enter ---
@@ -1470,68 +1602,124 @@ export function responseView(raw: unknown): ResponseView {
 }
 
 /** The event a react hook reacts over — the tool, the file path, AND its response. */
-export interface ReactEvent {
+export interface ReactEvent<
+  N extends readonly NeedSpec[] = readonly ProviderName[],
+> {
   readonly event: string;
   readonly tool: string;
   readonly path: PathView;
   /** The tool's response (PostToolUse) — react only on an error, capture output, … */
   readonly response: ResponseView;
+  /** Host-gathered, DECLARED facts — built-ins, inline providers, and `state()` reads. */
+  readonly ctx: HookCtx<N>;
 }
 
 export interface RunReaction {
   readonly kind: "run";
   readonly command: string;
   readonly effect: BashEffect;
+  readonly records: readonly StateWrite[];
 }
 export type Reaction =
   | RunReaction
-  | { readonly kind: "notice"; readonly message: string }
-  | { readonly kind: "none" };
+  | {
+      readonly kind: "notice";
+      readonly message: string;
+      readonly records: readonly StateWrite[];
+    }
+  | { readonly kind: "none"; readonly records: readonly StateWrite[] };
 
-/** Run a command in reaction — its effect is classified AT CONSTRUCTION (audit/diff-able). */
-export const run = (command: string): RunReaction => ({
+/**
+ * Run a command in reaction — its effect is classified AT CONSTRUCTION
+ * (audit/diff-able). Trailing arguments record facts.
+ *
+ * ⚠️ `run()` is for invoking a real TOOL. Using it to write a stamp
+ * (`run("date +%s > .claude/.stamp")`) was the only way to remember anything
+ * before `record()` existed; it is now the wrong tool — it spends a subprocess
+ * and a shell on a variable assignment, and it classifies as side-effecting.
+ */
+export const run = (
+  command: string,
+  ...records: readonly StateWrite[]
+): RunReaction => ({
   kind: "run",
   command,
   effect: classifyBashCommand(command),
+  records,
 });
-/** Surface a non-blocking note (no execution). */
-export const notice = (message: string): Reaction => ({
+/** Surface a non-blocking note (no execution). Trailing arguments record facts. */
+export const notice = (
+  message: string,
+  ...records: readonly StateWrite[]
+): Reaction => ({
   kind: "notice",
   message,
+  records,
 });
-/** Do nothing. */
-export const nothing = (): Reaction => ({ kind: "none" });
+/**
+ * Take no action. Trailing arguments still record facts — `nothing(record("x"))`
+ * is the shape of a hook whose entire job is to WITNESS that something happened
+ * (an MCP call, a deploy) so a different hook can read it later.
+ */
+export const nothing = (...records: readonly StateWrite[]): Reaction => ({
+  kind: "none",
+  records,
+});
 
-export interface ReactHook {
+export interface ReactHook<
+  N extends readonly NeedSpec[] = readonly ProviderName[],
+> {
   readonly role: "react";
   readonly on: string;
-  readonly match: { readonly tools: readonly string[] };
+  /**
+   * Which tools to react to. OMIT IT for an event that carries no tool at all
+   * (`Stop`, `SubagentStop`, `SessionEnd`), exactly as inject and the prompt/stop
+   * gates already do — `hookRouting` then emits no matcher.
+   *
+   * 🔴 IT USED TO BE REQUIRED, WHICH MADE EVERY TOOL-LESS REACT DEAD. `runReact`
+   * gates on `tool_name`; a `Stop` event carries none, so the name defaulted to
+   * `""`, matched nothing, and the hook returned `nothing()` forever. MEASURED
+   * 2026-08-12 against the real runtime: a `Stop` react printed nothing and
+   * exited 0 — indistinguishable from a hook that decided to stay quiet, which
+   * is the whole reason advisory hooks die unnoticed. Three of the seven hooks
+   * this feature was built for are `Stop` nudges.
+   */
+  readonly match?: { readonly tools: readonly string[] };
+  /** Declared context providers the trusted runtime gathers into `e.ctx`. */
+  readonly needs?: N;
   /** Reacts to a tool that already ran. Returns a Reaction — NO `deny` exists here. */
-  readonly react: (e: ReactEvent) => Reaction;
+  readonly react: (e: ReactEvent<N>) => Reaction;
 }
-export const defineReact = (p: Omit<ReactHook, "role">): ReactHook => ({
-  role: "react",
-  ...p,
-});
+export function defineReact<const N extends readonly NeedSpec[] = readonly []>(
+  p: Omit<ReactHook<N>, "role">,
+): ReactHook<N> {
+  return { role: "react", ...p };
+}
 
 /**
  * Run a react hook against a raw PostToolUse event → the (classified) Reaction.
  *
  * `root` behaves exactly as in {@link decideFileGate}: the event's own `cwd` by
- * default, the CLI's {@link projectRootOf} when the runtime supplies one.
+ * default, the CLI's {@link projectRootOf} when the runtime supplies one. It
+ * trails `ctx` so the argument order matches {@link decideProgram} and
+ * {@link decideFileGate} — every decode function reads `(hook, raw, ctx, root)`.
  */
-export function runReact(
-  hook: ReactHook,
+export function runReact<N extends readonly NeedSpec[]>(
+  hook: ReactHook<N>,
   raw: {
     tool_name?: string;
     tool_input?: { file_path?: unknown };
     tool_response?: unknown;
     cwd?: unknown;
   },
+  ctx: RawCtx = {},
   root: string | undefined = typeof raw.cwd === "string" ? raw.cwd : undefined,
 ): Reaction {
   const t = raw.tool_name ?? "";
-  if (!hook.match.tools.includes(t)) return nothing();
+  // No `match` → a tool-less event (Stop/SessionEnd): there is nothing to filter
+  // on, and filtering on the empty string is how these hooks used to die.
+  if (hook.match !== undefined && !matchesTool(hook.match.tools, t))
+    return nothing();
   const fp =
     typeof raw.tool_input?.file_path === "string"
       ? raw.tool_input.file_path
@@ -1541,6 +1729,7 @@ export function runReact(
     tool: t,
     path: pathView(fp, root),
     response: responseView(raw.tool_response),
+    ctx: ctx as unknown as HookCtx<N>,
   });
 }
 
@@ -1579,8 +1768,29 @@ export interface RawHookEvent {
 /** The normalized outcome of running a hook program — discriminated by role. */
 export type HookProgramOutcome =
   | { readonly kind: "decision"; readonly decision: Decision }
-  | { readonly kind: "injection"; readonly context: string }
+  | {
+      readonly kind: "injection";
+      readonly context: string;
+      readonly records: readonly StateWrite[];
+    }
   | { readonly kind: "reaction"; readonly reaction: Reaction };
+
+/**
+ * The state writes an outcome declares, filtered to the ones the runtime may
+ * actually perform. A gate's `Decision` carries none — deliberately: a gate is
+ * the role that must be trustworthy and runs on every tool call, so it READS
+ * state (via `needs`) and never writes it. Adding a write there later is easy;
+ * removing one would not be.
+ */
+export function outcomeWrites(outcome: HookProgramOutcome): {
+  readonly ok: readonly StateWrite[];
+  readonly refused: readonly string[];
+} {
+  if (outcome.kind === "injection") return admissibleWrites(outcome.records);
+  if (outcome.kind === "reaction")
+    return admissibleWrites(outcome.reaction.records);
+  return admissibleWrites([]);
+}
 
 /**
  * The file a hook program was LOADED from — the one coverage attribution in this
@@ -1625,7 +1835,7 @@ export function hookSource(hook: AnyHook): string | undefined {
 export function runHookProgram(
   hook: AnyHook,
   event: RawHookEvent,
-  ctx: Record<string, string | boolean> = {},
+  ctx: RawCtx = {},
   root: string | undefined = event.cwd,
 ): HookProgramOutcome {
   const kind = dispatchKind(hook);
@@ -1650,16 +1860,14 @@ export function runHookProgram(
         kind: "decision",
         decision: decideStopGate(hook as StopGateHook, event, ctx),
       };
-    case "inject":
-      return {
-        kind: "injection",
-        context: runInject(hook as InjectHook, event).hookSpecificOutput
-          .additionalContext,
-      };
+    case "inject": {
+      const out = injectionOf(hook as InjectHook, event, ctx);
+      return { kind: "injection", context: out.context, records: out.records };
+    }
     case "react":
       return {
         kind: "reaction",
-        reaction: runReact(hook as ReactHook, event, root),
+        reaction: runReact(hook as ReactHook, event, ctx, root),
       };
     default:
       return assertNever(kind);

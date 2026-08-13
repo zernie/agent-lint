@@ -23,6 +23,7 @@ import {
   type ProviderRegistry,
 } from "./hook-providers.js";
 import { isReadOnlyBash } from "./bash-effects.js";
+import { type StateEntry } from "./hook-state.js";
 
 /** A fake IO that answers a fixed map of commands. */
 function fakeIO(
@@ -30,11 +31,17 @@ function fakeIO(
   cwd = "/repo",
   platform: NodeJS.Platform = "linux",
   isCI = false,
+  store: Record<string, StateEntry> = {},
+  now = Date.parse("2026-08-12T12:00:00.000Z"),
 ): ProviderIO {
   return {
     cwd,
     platform,
     isCI,
+    // The state port and a PINNED clock: every ProviderIO carries them, and the
+    // default here ("nothing was ever recorded") is what the provider tests mean.
+    readState: (key) => store[key] ?? null,
+    now,
     exec: (command) => {
       if (command in answers) return answers[command];
       throw new Error(`fake exec: command failed: ${command}`);
