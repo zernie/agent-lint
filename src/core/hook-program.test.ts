@@ -1700,3 +1700,40 @@ test("touches: an option VALUE that is not a path still does not match", () => {
   );
   assert.equal(commandView("cp /tmp/a other/x").touches(["papers"]), false);
 });
+
+// ---------------------------------------------------------------------------
+// P1, round 34: case-insensitivity belongs to the FILESYSTEM, so it is decided
+// by the ROOT. Keyed on the operand, a repo-relative prefix (`secrets`) looked
+// case-sensitive even under a Windows root, so `C:/REPO/SECRETS/x` vs `secrets`
+// compared exactly and a denylist allowed the protected write.
+// ---------------------------------------------------------------------------
+test("a Windows ROOT folds a repo-RELATIVE prefix too", () => {
+  assert.equal(
+    pathView("C:/REPO/SECRETS/x", "C:/repo").under(["secrets"]),
+    true,
+  );
+  assert.equal(
+    commandView("sed -i s/a/b/ C:/REPO/SECRETS/x", "C:/repo").writesTo([
+      "secrets",
+    ]),
+    true,
+  );
+  assert.equal(
+    commandView("sed -i s/a/b/ C:/REPO/SECRETS/x", "C:/repo").touches([
+      "secrets",
+    ]),
+    true,
+  );
+});
+
+test("a POSIX root does NOT fold a repo-relative prefix", () => {
+  assert.equal(pathView("/repo/SECRETS/x", "/repo").under(["secrets"]), false);
+  assert.equal(pathView("/repo/secrets/x", "/repo").under(["secrets"]), true);
+});
+
+test("folding never invents a match under a Windows root", () => {
+  assert.equal(
+    pathView("C:/repo/other/x", "C:/repo").under(["secrets"]),
+    false,
+  );
+});

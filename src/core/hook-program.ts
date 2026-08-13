@@ -306,28 +306,41 @@ const normalizePrefix = (prefix: string): string => {
 };
 
 /**
- * Case folded when — and only when — a Windows filesystem would fold it.
+ * Case-insensitivity is a property of the FILESYSTEM, so it is decided by the
+ * root — never by the operand being compared.
  *
- * 🔴 THIS LIVES IN THE COMPARATOR ON PURPOSE. Three review rounds in a row were
- * earned by fixing one branch of a comparison and leaving its sibling: the root
- * separator (round 29 fixed the root, round 30 the prefix), the spread order
- * (round 30 fixed `tool_input`, round 31 `extra`), and case folding itself
- * (round 31 folded the repo-relative branch, round 32 found the absolute one and
- * `mightBeUnder` still comparing exactly — which for a DENYLIST caller like
- * `writesTo` means an allowed write to a protected path). A rule applied at call
- * sites diverges; a rule inside the comparator cannot.
+ * 🔴 KEYING IT ON THE OPERAND COST A P1, and the shape is worth keeping in view.
+ * The first version asked "does this string look drive-rooted?", which is true of
+ * a root (`C:/repo`) and of an absolute prefix (`C:/repo/secrets`) but FALSE of a
+ * repo-relative prefix (`secrets`). So under a Windows root, `C:/REPO/SECRETS/x`
+ * resolved to the remainder `SECRETS/x`, was compared against `secrets`
+ * case-sensitively, and `writesTo(["secrets"])` returned false — a denylist
+ * allowing the protected write. The drive letter was known; it just never reached
+ * the comparison that needed it.
  *
- * The asymmetry is unchanged and load-bearing: fold only drive-rooted operands.
- * POSIX is case-sensitive, so folding there would judge a path from `/REPO` to
- * be inside `/repo` — a silent FALSE GRANT, the direction never taken.
+ * The asymmetry is unchanged and load-bearing: fold only when the ROOT is
+ * drive-rooted. POSIX is case-sensitive, so folding there would judge a path from
+ * `/REPO` to be inside `/repo` — a silent FALSE GRANT, the direction never taken.
+ * With no root known, nothing is folded: an unprovable answer must not be turned
+ * into a match by a guess about someone else's filesystem.
  */
-const foldForCompare = (value: string, reference: string): string =>
-  /^[A-Za-z]:/.test(reference) ? value.toLowerCase() : value;
+const caseInsensitiveFs = (root: string | undefined): boolean =>
+  root !== undefined && /^[A-Za-z]:/.test(root);
+
+const foldWhen = (value: string, insensitive: boolean): string =>
+  insensitive ? value.toLowerCase() : value;
 
 /** Is `candidate` the prefix itself, or something below it? Boundary-aware. */
-const isAtOrUnder = (rawCandidate: string, rawBase: string): boolean => {
-  const base = foldForCompare(rawBase, rawBase);
-  const candidate = foldForCompare(rawCandidate, rawBase);
+const isAtOrUnder = (
+  rawCandidate: string,
+  rawBase: string,
+  insensitive = false,
+): boolean => {
+  // An absolute drive-rooted BASE names a Windows filesystem by itself, even when
+  // the caller could not say so (`under(["C:/x"])` with no root).
+  const fold = insensitive || /^[A-Za-z]:/.test(rawBase);
+  const base = foldWhen(rawBase, fold);
+  const candidate = foldWhen(rawCandidate, fold);
   return (
     candidate === base ||
     // A base that IS a separator (`"/"`, `"C:/"` — see `trimTrailingSeparators`)
@@ -366,16 +379,23 @@ const isAtOrUnder = (rawCandidate: string, rawBase: string): boolean => {
  *    it has one. Widening this arm would also cost precision in the case that
  *    matters — a token that IS placeable would start matching on segments alone.
  */
-const mightBeUnder = (path: string, base: string): boolean => {
+const mightBeUnder = (
+  path: string,
+  base: string,
+  insensitive = false,
+): boolean => {
   const needle = base.replace(/^\/+/, "").replace(/^[A-Za-z]:\//, "");
   if (needle === "") return true;
   const raw = path.replace(/\\/g, "/").replace(/^\.\//, "");
   // Same fold, same rule: keyed on the BASE, which is what decides whether a
   // Windows filesystem is in play. Left case-sensitive here, the denylist's
   // "could this be under it?" fallback misses on casing alone.
-  const p = foldForCompare(raw, base);
-  const n = foldForCompare(needle, base);
-  return isAtOrUnder(p, n) || p.endsWith("/" + n) || p.includes("/" + n + "/");
+  const fold = insensitive || /^[A-Za-z]:/.test(base);
+  const p = foldWhen(raw, fold);
+  const n = foldWhen(needle, fold);
+  return (
+    isAtOrUnder(p, n, fold) || p.endsWith("/" + n) || p.includes("/" + n + "/")
+  );
 };
 
 /**
@@ -405,8 +425,10 @@ function prefixVerdict(
   const placed = isAbsoluteRef(base)
     ? absoluteSpelling(slashed, root)
     : relativeSpelling(slashed, root);
-  if (placed !== undefined && isAtOrUnder(placed, base)) return "under";
-  return mightBeUnder(slashed, base) ? "undecidable" : "outside";
+  const insensitive = caseInsensitiveFs(root);
+  if (placed !== undefined && isAtOrUnder(placed, base, insensitive))
+    return "under";
+  return mightBeUnder(slashed, base, insensitive) ? "undecidable" : "outside";
 }
 
 /** A leaf whose head is a shell reading stdin (no script-file argument). */
@@ -1077,8 +1099,9 @@ function relativeToRoot(root: string, raw: string): string | undefined {
   // silent miss into a silent false grant, which is the worse direction. So the
   // fold is applied only when the root is drive-rooted, and only for the
   // comparison; the returned remainder keeps the path's own casing.
-  const foldedBase = foldForCompare(base, base);
-  const foldedFull = foldForCompare(full, base);
+  const insensitive = caseInsensitiveFs(base);
+  const foldedBase = foldWhen(base, insensitive);
+  const foldedFull = foldWhen(full, insensitive);
   if (foldedFull === foldedBase) return "";
   if (foldedBase === "/") return full.slice(1);
   return foldedFull.startsWith(foldedBase + "/")
