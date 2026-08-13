@@ -1778,11 +1778,31 @@ test("folding under a UNC root does not invent a match", () => {
   );
 });
 
-test("KNOWN LIMIT: a UNC path is not RESOLVED, so the allowlist stays quiet", () => {
+// ✅ Round 36 CLOSED the limit named above: `resolveRef` was collapsing the UNC
+// leader `//` to `/` while `normalizePrefix` kept the pair, so the two disagreed
+// on the same string and a UNC path never matched a UNC prefix — an allowlist
+// gate denying every valid edit on a network share. Both spellings now resolve.
+test("a UNC path RESOLVES, so the allowlist can match it", () => {
   assert.equal(
-    pathView("//server/share/repo/secrets/x", "//Server/Share/Repo").under([
-      "secrets",
+    pathView("//server/share/repo/src/x.ts").under(["//server/share/repo/src"]),
+    true,
+  );
+  assert.equal(
+    pathView("//server/share/repo/src/x.ts", "//server/share/repo").under([
+      "//server/share/repo/src",
+    ]),
+    true,
+  );
+  assert.equal(
+    pathView("//server/share/repo/other/x", "//server/share/repo").under([
+      "//server/share/repo/src",
     ]),
     false,
   );
+});
+
+test("preserving the UNC leader leaves POSIX resolution untouched", () => {
+  assert.equal(pathView("/repo/src/x", "/repo").under(["src"]), true);
+  assert.equal(pathView("/repo/src/x", "/repo").under(["/repo/src"]), true);
+  assert.equal(pathView("/repo/other/x", "/repo").under(["/repo/src"]), false);
 });

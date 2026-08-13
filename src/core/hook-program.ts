@@ -1714,7 +1714,19 @@ function resolveRef(root: string, ref: string): string {
     }
     out.push(seg);
   }
-  return (joined.startsWith("/") ? "/" : "") + out.join("/");
+  // 🔴 A UNC LEADER IS TWO SLASHES AND BOTH ARE LOAD-BEARING. Collapsing
+  // `//server/share/x` to `/server/share/x` makes this function disagree with
+  // `normalizePrefix`, which keeps the pair — so a UNC path and a UNC prefix
+  // never compared equal, and an allowlist gate denied every valid edit on a
+  // Windows network share while a react hook stayed silent. Two functions
+  // normalising the SAME string differently is the defect class this PR keeps
+  // finding; here it is inside one call.
+  const leader = joined.startsWith("//")
+    ? "//"
+    : joined.startsWith("/")
+      ? "/"
+      : "";
+  return leader + out.join("/");
 }
 
 /**
