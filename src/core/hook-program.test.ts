@@ -483,6 +483,192 @@ test("commandView.writesTo: file-writing programs, at the position that writes",
 });
 
 // ---------------------------------------------------------------------------
+// writeTargets() — WHICH file, not just whether. The list was already computed
+// here and collapsed to a boolean on the way out, so every consumer that needed
+// a filename rebuilt it from the raw string: the shipped paper guard carried a
+// 69-line character scan with its own quote tracking, and that scan had THREE
+// documented silent bypasses (a quoted path, an absolute path, a path eaten by a
+// wrapper) plus a fourth found while designing this — `env sed -i <full path>`,
+// where the guard's `runs()` conjunct read raw leaves while `writesTo` read
+// normalized ones and the two disagreed.
+// ---------------------------------------------------------------------------
+test("commandView.writeTargets: names the file, from both write sources", () => {
+  // Redirection target.
+  assert.deepEqual(
+    commandView("echo x > papers/x/paper.md").writeTargets(["papers"]),
+    ["papers/x/paper.md"],
+  );
+  // File-writing program, at the argv position that writes.
+  assert.deepEqual(
+    commandView("sed -i s/a/b/ papers/x/paper.tex").writeTargets(["papers"]),
+    ["papers/x/paper.tex"],
+  );
+  // cp/mv report the DESTINATION only — the source is read, and the list is
+  // where that distinction becomes visible rather than merely true.
+  assert.deepEqual(
+    commandView("cp papers/draft.md papers/final.md").writeTargets(["papers"]),
+    ["papers/final.md"],
+  );
+  // Several leaves, in order of appearance, exact duplicates collapsed.
+  assert.deepEqual(
+    commandView(
+      "sed -i s/a/b/ papers/b.md && echo x > papers/a.md && tee papers/b.md",
+    ).writeTargets(["papers"]),
+    ["papers/b.md", "papers/a.md"],
+  );
+  // Spelling is as-written after normalization: the parser removed the quotes,
+  // so the consumer never sees them and never needs an `unquote` of its own.
+  assert.deepEqual(
+    commandView('sed -i s/a/b/ "papers/x/paper.tex"').writeTargets(["papers"]),
+    ["papers/x/paper.tex"],
+  );
+});
+
+test("commandView.writeTargets: empty on a read, a quoted mention, or a path outside the prefixes", () => {
+  // A READ is not a write — the false-block regression, asked the other way.
+  assert.deepEqual(commandView("cat papers/x.md").writeTargets(["papers"]), []);
+  assert.deepEqual(
+    commandView("grep -c x papers/x.md 2>/dev/null").writeTargets(["papers"]),
+    [],
+  );
+  assert.deepEqual(
+    commandView("cp papers/x.md /tmp/y").writeTargets(["papers"]),
+    [],
+  );
+  // A write QUOTED inside another command is data, not a redirection.
+  const quoted = commandView("echo 'echo y > papers/x.md' > /tmp/note.txt");
+  assert.deepEqual(quoted.writeTargets(["papers"]), []);
+  assert.deepEqual(quoted.writeTargets(["/tmp"]), ["/tmp/note.txt"]);
+  // A real write, outside the prefixes asked about: the filter is the API, and
+  // handing back the unfiltered list is what this signature refuses to do.
+  assert.deepEqual(
+    commandView("sed -i s/a/b/ src/x.ts", MINE_ROOT).writeTargets(["papers"]),
+    [],
+  );
+  assert.deepEqual(
+    commandView("echo x > /etc/hosts", MINE_ROOT).writeTargets(["papers"]),
+    [],
+  );
+  // An unresolvable target is never guessed at, so it cannot appear.
+  assert.deepEqual(
+    commandView('echo x > "$OUT"', MINE_ROOT).writeTargets(["papers"]),
+    [],
+  );
+});
+
+test("commandView.writeTargets: a leaf's own chdir wrapper resolves; a preceding `cd` does NOT", () => {
+  // MEASURED before this change (root set, prefix `migratsiya/papers`):
+  //   sed -i s/a/b/ migratsiya/papers/x/paper.tex          → true
+  //   env -C migratsiya sed -i s/a/b/ papers/x/paper.tex   → FALSE, silently
+  // `stripWrappers` read the `-C` value in order to skip past it and then threw
+  // it away, so the operand resolved against the wrong directory and a denylist
+  // built on `writesTo` waved the write through.
+  for (const cmd of [
+    "env -C migratsiya sed -i s/a/b/ papers/x/paper.tex",
+    "env --chdir=migratsiya sed -i s/a/b/ papers/x/paper.tex",
+    "sudo -D migratsiya sed -i s/a/b/ papers/x/paper.tex",
+    // The live guard's own shape: the wrapper carries the whole directory.
+    "env -C migratsiya/papers/x sed -i s/a/b/ paper.tex",
+  ]) {
+    assert.deepEqual(
+      commandView(cmd, MINE_ROOT).writeTargets(PAPER_DIR),
+      ["migratsiya/papers/x/paper.tex"],
+      cmd,
+    );
+    assert.equal(commandView(cmd, MINE_ROOT).writesTo(PAPER_DIR), true, cmd);
+  }
+  // Nested wrappers layer, rather than the innermost one winning.
+  assert.deepEqual(
+    commandView(
+      "sudo -D migratsiya env -C papers sed -i s/a/b/ x/paper.tex",
+      MINE_ROOT,
+    ).writeTargets(PAPER_DIR),
+    ["migratsiya/papers/x/paper.tex"],
+  );
+  // 🔴 `-C` IS `--chdir` FOR env AND `--close-from` FOR sudo, so the option
+  // table is keyed by head. Read as one shared set, this reports `5/papers/x.tex`
+  // — a directory that does not exist, from a file descriptor.
+  assert.deepEqual(
+    commandView("sudo -C 5 sed -i s/a/b/ papers/x.tex").writeTargets([
+      "papers",
+    ]),
+    ["papers/x.tex"],
+  );
+  // A REDIRECTION is opened by the SHELL, in the shell's directory — `-C` moves
+  // only the process `env` execs. Joining it would name a file nothing writes.
+  assert.deepEqual(
+    commandView(
+      "env -C migratsiya echo hi > papers/x/paper.md",
+      MINE_ROOT,
+    ).writeTargets(PAPER_DIR),
+    [],
+  );
+  assert.deepEqual(
+    commandView("env -C migratsiya echo hi > papers/x/paper.md").writeTargets([
+      "papers",
+    ]),
+    ["papers/x/paper.md"],
+  );
+  // ⚠️ CHARACTERIZATION, NOT AN ENDORSEMENT. A cwd changed by a PRECEDING
+  // statement is explicitly out of scope: connectors do not survive leaf
+  // extraction, and `cd x; cmd` writes into the OLD directory when the `cd`
+  // fails — a model with failure semantics, not a field on a leaf. The error
+  // direction is ALLOW, which is the wrong one for a denylist, so it is pinned
+  // here to make the day it closes loud instead of silent.
+  assert.deepEqual(
+    commandView(
+      "cd migratsiya && sed -i s/a/b/ papers/x/paper.tex",
+      MINE_ROOT,
+    ).writeTargets(PAPER_DIR),
+    [],
+  );
+});
+
+test("commandView.writesTo is DERIVED from writeTargets — one code path, no drift", () => {
+  // The boolean is `writeTargets(p).length > 0` and nothing else. Two
+  // implementations of one rule is how `runs()` (raw leaves) and `writesTo`
+  // (normalized leaves) came to disagree inside a single gate, so the agreement
+  // is asserted across the whole grid rather than assumed from the source.
+  //
+  // ⚠️ WHAT THIS CAN AND CANNOT CATCH, measured by mutation rather than assumed.
+  // Restoring `writesTo` as its own EXTRACTION (re-walking the leaves, which is
+  // what the code did before this list existed) fails here on `env -C` — the
+  // second path misses the chdir the first one resolves, which is exactly the
+  // drift the derivation removes. Rewriting only the MATCHING half over the same
+  // shared list (`targets.some(...)` instead of `filter(...).length > 0`) passes,
+  // and no test can do better: that is the same function written twice, not a
+  // second answer. So the grid is deliberately stocked with the shapes where a
+  // second extraction diverges — a chdir wrapper, a wrapper with a full path, a
+  // redirection, a dynamic target, a read — rather than with more commands.
+  for (const cmd of [
+    "sed -i s/a/b/ migratsiya/papers/x/paper.tex",
+    "env -C migratsiya sed -i s/a/b/ papers/x/paper.tex",
+    "env sed -i s/a/b/ migratsiya/papers/x/paper.tex",
+    "echo x > migratsiya/papers/x/paper.md",
+    'echo x > "$OUT"',
+    "cat migratsiya/papers/x/paper.tex",
+    "cd migratsiya && sed -i s/a/b/ papers/x/paper.tex",
+    "git status",
+  ]) {
+    for (const root of [MINE_ROOT, undefined]) {
+      const v = commandView(cmd, root);
+      assert.equal(
+        v.writesTo(PAPER_DIR),
+        v.writeTargets(PAPER_DIR).length > 0,
+        `${cmd} (root=${String(root)})`,
+      );
+    }
+  }
+  // The denylist bias reaches the list too: an undecidable placement is INCLUDED,
+  // so a sibling checkout's copy comes back as a target rather than as silence.
+  const foreign = "/somewhere/else/migratsiya/papers/x/paper.tex";
+  assert.deepEqual(
+    commandView(`sed -i s/a/b/ ${foreign}`, MINE_ROOT).writeTargets(PAPER_DIR),
+    [foreign],
+  );
+});
+
+// ---------------------------------------------------------------------------
 // MULTI-HARNESS EMIT — one typed program, the settings block is per-harness.
 // The dogfood is NON-CC-shaped (TOML + regex matcher) so it can't pass by
 // accident on a Claude-Code-hardcoded path (the adapter-aware-lint discipline).

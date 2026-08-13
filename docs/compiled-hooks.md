@@ -67,6 +67,7 @@ export default defineHook({
   - `runs(program, { force? })` — a leaf runs `program` (e.g. `"git reset --hard"`), optionally forced.
   - `touches(prefixes)` — a leaf **mentions** a path under one of `prefixes` (e.g. `["~/.ssh", ".env"]`) — secret reads.
   - `writesTo(prefixes)` — a leaf **creates or modifies** a file under one of `prefixes`: redirection targets (`cmd > f`, `>>`, `>|`, `&>`) plus the writing argv position of `sed -i`, `cp` / `mv` / `install` (destination), `tee`, `dd of=`, `truncate`, `shred`.
+  - `writeTargets(prefixes)` — the same write targets as the **list of files** rather than a boolean, for a gate that has to tell _which_ file (`writeTargets(PAPER_SOURCES).some(isPaperSource)`); `writesTo` is exactly `writeTargets(prefixes).length > 0`. Spelling is as-written after normalization (quotes removed by the parser, `$HOME` canonicalized, a leaf's own `env -C` / `sudo -D` directory resolved), duplicates collapsed — so filter by basename or suffix. `prefixes` is required and there is no unfiltered form: a consumer holding the raw list has to re-implement prefix matching by hand, which is where every measured gate bypass came from.
   - `pipesToShell()` — pipes into a bare shell (`curl … | sh`) — remote-code execution. A shell _with_ a script file (`sh deploy.sh`) is **not** flagged.
   - `isSideEffecting()` — the deterministic Bash-effect classifier's verdict.
 
