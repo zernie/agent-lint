@@ -16,10 +16,13 @@
  *
  * ## What is UNPROVEN (why the `experimental_` prefix is on every runtime export)
  *
- *  1. **N=3.** The emit was measured on ONE real unforked skill, three trials, one
- *     model (sonnet). That is enough to answer "does it land at all" and nothing
- *     about the rate. Three of three is an upper bound on the true failure rate of
- *     roughly 63%, not evidence of reliability.
+ *  1. **N=8, one skill, one model.** Measured 2026-08-13 against `paper-status`
+ *     (unforked; `allowed-tools: Bash, Read, Grep, Glob`) on sonnet: 8 runs, 8
+ *     emits, all on the `ok` track, all parsing against the contract, none
+ *     repeated. That answers "does it land at all" and nothing about the rate —
+ *     8 of 8 bounds the true failure rate at about 31%, which is not evidence of
+ *     reliability. Raw arguments + the free re-scorer:
+ *     `examples/experimental-emit/`.
  *  2. **Nobody depends on it.** Neither `compileSkill` nor `compileAgent` emits
  *     this instruction; the caller pastes `.instruction` into a skill body and
  *     serves `.tool` from their own MCP server by hand. There is no compile-time

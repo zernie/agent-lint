@@ -50,6 +50,7 @@ mkdirSync(RECORDS_DIR, { recursive: true });
 const RECORDS = `${RECORDS_DIR}/records-emit.jsonl`;
 const TOOL_JSON = `${RECORDS_DIR}/emit-tool.json`;
 const EMITTED = `${RECORDS_DIR}/emitted.jsonl`;
+const EMITS = `${RECORDS_DIR}/emits.jsonl`;
 
 // --- 1. the skill, unmodified except for its output section -----------------
 
@@ -149,7 +150,9 @@ if (process.env.VIGILES_EMIT_DRY) {
 
 writeFileSync(RECORDS, "");
 writeFileSync(EMITTED, "");
+writeFileSync(EMITS, "");
 let seq = 0;
+let emitSeq = 0;
 
 const report = await runEval({
   name: `emit from an UNFORKED skill (${skillName})`,
@@ -162,6 +165,20 @@ const report = await runEval({
     const parsed = experimental_parseEmitted(ctx.toolCalls, CONTRACT);
     const emitCalls = ctx.toolCalls.filter((c) => /emit_result$/.test(c.name));
     const skillCalls = ctx.toolCalls.filter((c) => c.name === "Skill");
+    // The scorer's input: the tool call exactly as the runtime delivered it, so
+    // `score-emits.mjs` re-runs the parse for free after any change to it.
+    for (const c of emitCalls) {
+      appendFileSync(
+        EMITS,
+        JSON.stringify({
+          run: ++emitSeq,
+          cwd: `trial-${String(seq)}`,
+          at: new Date().toISOString(),
+          name: c.name,
+          input: c.input,
+        }) + "\n",
+      );
+    }
     appendFileSync(
       RECORDS,
       JSON.stringify({
@@ -198,6 +215,14 @@ const report = await runEval({
   ],
   maxCostUsd,
   spacingSec: 3,
+  // 🔴 NOT the default 3. Measured 2026-08-13: the CLI emits an informational
+  // `rate_limit_event` line on every run, `isRateLimited` matched it, and every
+  // trial silently ran `retries + 1` = 4 times — 8 model runs for 2 trials, with
+  // only the LAST attempt's cost reaching `maxCostUsd`, so a $0.60 cap was crossed
+  // at roughly $3. The pattern is fixed in `src/eval.ts`; this stays at 0 anyway,
+  // because on a PAID script a silent re-run is the expensive failure and a real
+  // rate limit is a visible one.
+  rateLimitRetries: 0,
 });
 
 console.log(formatEvalReport(report));
