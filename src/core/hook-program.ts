@@ -232,8 +232,33 @@ export interface CommandView {
    *
    * Deletion is a different question and is deliberately NOT reported here —
    * pair with `runs("rm")` if a gate cares about removal too.
+   *
+   * Exactly `writeTargets(prefixes).length > 0`, and implemented as that — reach
+   * for {@link writeTargets} when the gate needs to know WHICH file.
    */
   writesTo(prefixes: readonly string[]): boolean;
+  /**
+   * The write targets of this command that fall under one of the prefixes — the
+   * "WHICH file is written" counterpart to {@link writesTo}. Same two AST-backed
+   * sources (redirection targets + file-writing programs' argv positions), same
+   * denylist bias (an undecidable placement is INCLUDED).
+   *
+   * Spelling is as-written after normalization — quote-unwrapped,
+   * `$HOME`-canonicalized, and resolved against the leaf's own chdir wrapper
+   * (`env -C dir sed -i x` reports `dir/x`) — in order of appearance, exact
+   * duplicates collapsed. Filter by basename/suffix; never re-match the prefixes
+   * by hand, because hand-rolled prefix matching is the exact source of the
+   * trailing-slash, absolute-path and root-blindness defects this vocabulary
+   * exists to remove.
+   *
+   * An empty array ⇔ `writesTo(prefixes) === false`, so the natural
+   * `writeTargets(P).some(pred)` needs no emptiness check to behave correctly.
+   *
+   * `prefixes` is REQUIRED and there is no unfiltered overload: the raw list
+   * does not cross the API boundary, because a consumer holding it has to
+   * re-implement the matching that {@link prefixVerdict} exists to own.
+   */
+  writeTargets(prefixes: readonly string[]): readonly string[];
   /**
    * True iff the command pipes into a BARE shell interpreter (`curl … | sh`,
    * `… | bash -s`) — the remote-code-execution shape. High-signal: a shell leaf
@@ -604,6 +629,20 @@ function writeTargetsOf(leaf: NormalizedLeaf): string[] {
 }
 
 /**
+ * A write target as it lands on disk, given the chdir wrapper the leaf ran under
+ * (`env -C migratsiya sed -i s/a/b/ papers/x.tex` writes `migratsiya/papers/x.tex`).
+ *
+ * Absolute targets and `~`-rooted ones already name their directory and are
+ * returned untouched. The join itself is {@link resolveRef} rather than a fresh
+ * `a + "/" + b`, because two functions normalising the same string differently is
+ * the defect class this file keeps finding.
+ */
+const underChdir = (target: string, chdir: string | null): string =>
+  chdir === null || target === "" || target.startsWith("~")
+    ? target
+    : resolveRef(chdir, target);
+
+/**
  * An AST-backed view of a Bash command.
  *
  * @param raw - the command line as the tool event carried it.
@@ -620,12 +659,28 @@ export function commandView(raw: string, root?: string): CommandView {
   // The operation-normalized leaves carry the redirections (and quote-unwrapped,
   // wrapper-resolved argv) that `writesTo` needs; `leafCommands` cannot see them.
   const normalized = leafCommandsNormalized(raw);
-  const writeTargets = normalized.flatMap((leaf) => [
+  const allWriteTargets = normalized.flatMap((leaf) => [
+    // 🔴 A REDIRECTION IS NOT JOINED ONTO THE LEAF'S CHDIR, AND THAT IS THE
+    // SHELL'S RULE, NOT A SHORTCUT. `env -C dir cmd > out.txt` opens `out.txt`
+    // in the SHELL's directory — the redirection happens before `env` ever runs
+    // and `-C` only moves the process `env` execs. Joining here would report a
+    // file the command never writes.
     ...leaf.redirects.flatMap((r) =>
       r.writes && r.target !== null ? [r.target] : [],
     ),
-    ...writeTargetsOf(leaf),
+    // The wrapped program's own operands DO resolve against it — see
+    // `NormalizedLeaf.chdir` for why the value was being read and discarded.
+    ...writeTargetsOf(leaf).map((t) => underChdir(t, leaf.chdir)),
   ]);
+  const matchedWriteTargets = (
+    prefixes: readonly string[],
+  ): readonly string[] => [
+    ...new Set(
+      allWriteTargets.filter((t) =>
+        prefixes.some((p) => matchesPrefix(prefixVerdict(t, p, root), "match")),
+      ),
+    ),
+  ];
   return {
     raw,
     runs(program, opts) {
@@ -675,10 +730,13 @@ export function commandView(raw: string, root?: string): CommandView {
             matchesPrefix(prefixVerdict(tok, p, root), "match"),
           ),
         ),
-    writesTo: (prefixes) =>
-      writeTargets.some((t) =>
-        prefixes.some((p) => matchesPrefix(prefixVerdict(t, p, root), "match")),
-      ),
+    // DERIVED, not a second implementation of the same rule. The boolean stays
+    // because `writesTo(secrets) ? deny() : allow()` is the common gate shape,
+    // but it is a PROJECTION of the list — one code path, so the two can never
+    // drift the way `runs()` and `writesTo` did (one reads raw leaves, the other
+    // normalized ones, and a gate built on both had a silent hole).
+    writesTo: (prefixes) => matchedWriteTargets(prefixes).length > 0,
+    writeTargets: matchedWriteTargets,
     pipesToShell: () => leaves.some(isBareShellLeaf),
   };
 }

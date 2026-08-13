@@ -44,6 +44,7 @@ export interface CommandView {
     }): boolean;
     touches(prefixes: readonly string[]): boolean;
     writesTo(prefixes: readonly string[]): boolean;
+    writeTargets(prefixes: readonly string[]): readonly string[];
 }
 
 // @public
@@ -333,6 +334,7 @@ export interface NormalizedLeaf {
     readonly args: readonly string[];
     readonly argv: readonly string[];
     readonly assigns: ReadonlyMap<string, string | null>;
+    readonly chdir: string | null;
     readonly flags: ReadonlySet<string>;
     hasAssign(...names: readonly string[]): boolean;
     hasFlag(...names: readonly string[]): boolean;

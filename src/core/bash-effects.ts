@@ -609,6 +609,26 @@ export interface NormalizedLeaf {
    * {@link LeafRedirect}. Empty for a command with no redirection.
    */
   readonly redirects: readonly LeafRedirect[];
+  /**
+   * The directory a chdir WRAPPER moved this leaf into before exec'ing it —
+   * `env -C dir`, `env --chdir=dir`, `sudo -D dir` — or `null` when there was
+   * none. Nested wrappers accumulate (`sudo -D a env -C b cmd` → `a/b`).
+   *
+   * The parser already READ this token in order to skip past it, then threw the
+   * value away — so every relative operand of the wrapped command resolved
+   * against the wrong directory for every consumer. Same shape as the
+   * redirection targets the leaf used to drop: the parser knew, the leaf did
+   * not carry it. `git -C` is deliberately NOT here — `git` is not a wrapper
+   * (it does not exec the rest of its argv as a command).
+   *
+   * ⚠️ ONE LEAF'S OWN WRAPPER, NOT A CWD MODEL. A directory changed by a
+   * PRECEDING statement (`cd x && …`, `pushd`, a subshell) is not reported:
+   * connectors do not survive leaf extraction, and `cd x; cmd` writes into the
+   * OLD directory when the `cd` fails — that is a model with failure semantics,
+   * not a field. A dynamic value (`env -C "$DIR" …`) is not resolvable and the
+   * whole leaf is already unnormalizable in that case.
+   */
+  readonly chdir: string | null;
 }
 
 /**
@@ -770,6 +790,46 @@ const WRAPPER_VALUE_OPTS: Readonly<Record<string, ReadonlySet<string>>> = {
   nohup: new Set(),
 };
 
+/**
+ * Per-wrapper options whose value is a DIRECTORY the wrapper chdirs into before
+ * exec'ing the command. A subset of {@link WRAPPER_VALUE_OPTS}, and keyed by head
+ * for a reason: `-C` is `--chdir` for `env` but `--close-from` (a file
+ * descriptor) for `sudo`, whose chdir is `-D`. One shared set would read a
+ * number as a directory.
+ */
+const WRAPPER_CHDIR_OPTS: Readonly<Record<string, ReadonlySet<string>>> = {
+  env: new Set(["-C", "--chdir"]),
+  sudo: new Set(["-D", "--chdir"]),
+};
+
+/**
+ * The directory carried by an option WORD, when that word is one of this
+ * wrapper's chdir options — covering both spellings, since `--chdir=dir` is a
+ * single token that never reaches the separate-value table.
+ */
+function chdirValue(
+  word: string,
+  next: string | undefined,
+  chdirOpts: ReadonlySet<string>,
+): string | undefined {
+  if (chdirOpts.has(word)) return next; // `-C dir`, `--chdir dir`
+  const eq = word.indexOf("=");
+  return eq > 0 && chdirOpts.has(word.slice(0, eq))
+    ? word.slice(eq + 1) // `--chdir=dir`
+    : undefined;
+}
+
+/** Layer a wrapper's chdir onto the one an outer wrapper already applied. */
+function nestChdir(
+  outer: string | null,
+  inner: string | undefined,
+): string | null {
+  if (inner === undefined || inner === "") return outer;
+  if (outer === null || inner.startsWith("/") || /^[A-Za-z]:\//.test(inner))
+    return inner;
+  return `${outer.replace(/\/+$/, "")}/${inner}`;
+}
+
 /** Count of leading NON-option positionals a wrapper consumes before the command (timeout DURATION). */
 const WRAPPER_SKIP_POSITIONALS: Readonly<Record<string, number>> = {
   timeout: 1,
@@ -797,13 +857,16 @@ function splitAssignmentWord(word: string): [string, string] {
 function stripWrappers(argv: readonly string[]): {
   argv: readonly string[];
   envAssigns: Map<string, string | null>;
+  chdir: string | null;
 } {
   const envAssigns = new Map<string, string | null>();
+  let chdir: string | null = null;
   let cur: readonly string[] = argv;
   for (let guard = 0; guard < 8; guard++) {
     const head = cur[0];
     if (head === undefined || !WRAPPER_HEADS.has(head)) break;
     const valueOpts = WRAPPER_VALUE_OPTS[head] ?? new Set<string>();
+    const chdirOpts = WRAPPER_CHDIR_OPTS[head] ?? new Set<string>();
     let positionalsToSkip = WRAPPER_SKIP_POSITIONALS[head] ?? 0;
     let i = 1; // start after the wrapper head
     let ended = false;
@@ -816,6 +879,11 @@ function stripWrappers(argv: readonly string[]): {
         break;
       }
       if (a.length > 1 && a.startsWith("-")) {
+        // The chdir value is CAPTURED before it is skipped. It was always read
+        // here — reading it is how the loop knows to skip past it — and then
+        // discarded, so every relative operand of the wrapped command resolved
+        // against the wrong directory downstream.
+        chdir = nestChdir(chdir, chdirValue(a, cur[i + 1], chdirOpts));
         if (valueOpts.has(a)) i++; // skip this option's separate value too
         continue;
       }
@@ -836,7 +904,7 @@ function stripWrappers(argv: readonly string[]): {
     if (next.length === cur.length) break; // no progress → stop
     cur = next;
   }
-  return { argv: cur, envAssigns };
+  return { argv: cur, envAssigns, chdir };
 }
 
 /**
@@ -1200,5 +1268,6 @@ function normalizeCallExpr(
     assigns,
     hasAssign: (...names) => names.some((n) => assigns.has(n)),
     redirects: normalizeRedirects(redirs),
+    chdir: stripped.chdir,
   };
 }
