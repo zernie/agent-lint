@@ -119,6 +119,25 @@ function fieldSchema(type: OutputFieldType): EmitFieldSchema {
       return { type: "boolean" };
     case "string[]":
       return { type: "array", items: { type: "string" } };
+    default:
+      // 🔴 Unreachable from TypeScript, reachable from JavaScript — and the one
+      // shipped example of this API (examples/experimental-emit/run-emit.mjs) is
+      // .mjs, so this is the path a real author takes.
+      //
+      // Without this arm the switch fell through to `undefined`, and every later
+      // step read that as a field: `"actions" in properties` is TRUE for an
+      // undefined value, so nothing noticed; `JSON.stringify` then DROPPED the
+      // key while `required` kept it and `additionalProperties: false` forbade
+      // it. The served schema demanded a property it also banned — unsatisfiable,
+      // silent, and contradicted by `.instruction`, which still asked the model
+      // to send it. Throwing here makes the contradiction impossible to construct
+      // instead of merely unlikely.
+      throw new TypeError(
+        `experimental_emitTool: unsupported field type ${JSON.stringify(type)}. ` +
+          `Supported: "string", "number", "boolean", "string[]". ` +
+          `Nested objects and enums are outside this surface's ceiling — flatten the field, ` +
+          `or use the fenced fork rail if the shape cannot be flattened.`,
+      );
   }
 }
 

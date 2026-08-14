@@ -213,3 +213,41 @@ test("assertEmittedOk returns the value, and names the tools called when it thro
     /tools called: none/,
   );
 });
+
+/**
+ * 🔴 REGRESSION — the schema was UNSATISFIABLE and silent, found by dogfooding this
+ * surface across five real skills (2026-08-14). A type outside the ceiling fell
+ * through `fieldSchema`'s switch to `undefined`; `"actions" in properties` stayed
+ * TRUE, so no guard noticed; `JSON.stringify` then dropped the key while `required`
+ * kept it and `additionalProperties: false` forbade it. The served schema demanded
+ * a property it also banned, and `.instruction` still told the model to send it.
+ *
+ * TypeScript rejects this call, which is exactly why it needed a runtime test: the
+ * one shipped example of this API is `.mjs`, where the compiler is not present.
+ */
+test("a field type outside the ceiling THROWS rather than serving an unsatisfiable schema", () => {
+  const outOfCeiling = result(
+    // @ts-expect-error — unreachable from TS, reachable from the .mjs example
+    { verdict: "string", actions: "object[]" },
+    { reason: "string" },
+  );
+
+  assert.throws(
+    () => experimental_emitTool(outOfCeiling),
+    /unsupported field type "object\[\]".*Supported: "string", "number", "boolean", "string\[\]"/s,
+  );
+
+  // The half that made it silent: an undefined value is still an `in` hit, so any
+  // check written that way would have passed the broken schema through. Pinned so
+  // a future "cheap validation" cannot reintroduce the same blind spot.
+  const properties: Record<string, unknown> = {
+    verdict: { type: "string" },
+    actions: undefined,
+  };
+  assert.equal("actions" in properties, true);
+  const roundTripped = JSON.parse(JSON.stringify({ properties })) as {
+    properties: Record<string, unknown>;
+  };
+  assert.equal("actions" in roundTripped.properties, false);
+  assert.deepEqual(Object.keys(roundTripped.properties), ["verdict"]);
+});
