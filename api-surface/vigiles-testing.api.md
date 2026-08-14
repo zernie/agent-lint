@@ -473,6 +473,9 @@ export function formatContainment(v: ContainmentVerdict): string;
 export function formatEvalReport(report: EvalReport): string;
 
 // @public
+export function formatMutationReport(report: MutationReport): string;
+
+// @public
 export function formatTriggerRateReport(report: TriggerRateReport): string;
 
 // @public
@@ -699,6 +702,45 @@ export function mustInclude(fragment: string, why: string): Check<readonly DocCo
 export function mustNotInclude(fragment: string, why: string): Check<readonly DocCommand[]>;
 
 // @public
+export interface MutationCase {
+    readonly disables: string;
+    readonly edits: readonly MutationEdit[];
+    readonly expect: string;
+    readonly name: string;
+    readonly test: string;
+}
+
+// @public
+export type MutationEdit = readonly [
+file: string,
+find: string,
+replace: string
+];
+
+// @public
+export interface MutationOutcome {
+    readonly detail: string;
+    // (undocumented)
+    readonly disables: string;
+    // (undocumented)
+    readonly name: string;
+    // (undocumented)
+    readonly verdict: MutationVerdict;
+}
+
+// @public
+export interface MutationReport {
+    readonly alreadyRed: readonly string[];
+    readonly killed: number;
+    // (undocumented)
+    readonly outcomes: readonly MutationOutcome[];
+    readonly restored: boolean;
+}
+
+// @public
+export type MutationVerdict = "killed" | "wrong-assertion" | "survived" | "unjudgeable" | "not-applied";
+
+// @public
 export function notTool(name: string, args?: ArgMatcher): Check<Trace>;
 
 // @public
@@ -818,6 +860,17 @@ export function runHook(command: string, input: HookInput, opts?: RunHookOptions
 
 // @public
 export type RunHookOptions = Omit<RunScriptOptions, "stdin">;
+
+// @public
+export function runMutations(o: RunMutationsOptions): MutationReport;
+
+// @public (undocumented)
+export interface RunMutationsOptions {
+    // (undocumented)
+    readonly cases: readonly MutationCase[];
+    readonly cwd: string;
+    readonly env?: NodeJS.ProcessEnv;
+}
 
 // @public
 export interface RunOut {
