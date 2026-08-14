@@ -23,6 +23,22 @@
 // vitest's `expect` — so those are visible to the runner too. See check-count.ts.
 export { recordCheck } from "./check-count.js";
 
+// --- the tier above the tiers: is a passing test PROVING anything? ---
+// Every tier below reports that a check passed. None can tell a watched assertion
+// from a vacuous one — both print `✓`. `runMutations` plants a defect, runs the
+// test that owns it, and requires the test to fail with the message that NAMES
+// it, so "green" stops being the strongest claim a suite can make about itself.
+export {
+  runMutations,
+  formatMutationReport,
+  type MutationCase,
+  type MutationEdit,
+  type MutationOutcome,
+  type MutationReport,
+  type MutationVerdict,
+  type RunMutationsOptions,
+} from "./mutations.js";
+
 // --- unit tier: runScript (the primitive) + runHook (it, plus a decision) ---
 // `runScript` runs any program and reports what it DID (exit, both streams,
 // writes, egress). `runHook` is that plus the hook protocol: event to stdin,
