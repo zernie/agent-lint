@@ -92,6 +92,38 @@ export default defineHook({
 - **`e.response`** (PostToolUse react) — a `ResponseView`: `isError()` (the tool failed) and `contains(needle)`.
 - **`allow()` / `deny(reason)` / `ask(reason)`** — the gate decision (every gate role).
 - **`inject(text)`** — inject output. **`run(cmd)` / `notice(msg)` / `nothing()`** — react output.
+- **`state(name)` in `needs`, `record(name, value?)` in a return** — **runtime-owned named memory**, so a hook can remember a fact without reaching for the filesystem. See below.
+
+### Remembering a fact — `state()` and `record()`
+
+A hook that should speak _at most once an hour_, or only _after something else actually happened_, has to remember something. By hand that means a stamp file: a path, a format, and two hooks racing for the same one — and it means the hook can reach the filesystem at all, which is the capability compiling took away.
+
+So the hook does not write. It **declares** a fact, and the runtime writes it:
+
+```ts
+export default defineHook({
+  on: "Stop",
+  needs: { sync: state("calendar.synced") },
+  react: (e) =>
+    e.ctx.sync.olderThan("1h")
+      ? run("./bin/remind.sh") // meanwhile whoever DID the sync returns
+      : nothing(), //   record("calendar.synced")
+});
+```
+
+A key is a **name, not a path** — the runtime decides where it lives, so two hooks cannot disagree about a file. Reading one gives a `StateFact`:
+
+| field                                       | meaning                                                                           |
+| ------------------------------------------- | --------------------------------------------------------------------------------- |
+| `recorded`                                  | has this key **ever** been written — the only way to tell "never" from "long ago" |
+| `value`                                     | the recorded string (`""` when never)                                             |
+| `at`                                        | ISO-8601 instant (`""` when never)                                                |
+| `ageSeconds`                                | seconds since — **`Infinity` when never recorded, never `null`**                  |
+| `fresherThan(within)` / `olderThan(within)` | `"90s"`, `"30m"`, `"1h"`, `"7d"`                                                  |
+
+> 🔴 **`Infinity` rather than `null` is a safety property, not a style choice.** The natural throttle is `if (ageSeconds < LIMIT) return nothing()`. In JavaScript `null < 3600` is `true`, so a key that was **never** recorded would read as _fresh_, and a newly installed hook would go silent forever — quietest exactly when it was just added. With `Infinity` every "younger than X" test is false on a missing key, so the hook fires. An unparseable timestamp is treated the same way, as never-recorded: that fails toward **noise** instead of toward a silence nobody can notice.
+
+Throttling is not a separate feature — it is this one, read as "when did I last speak". And `record` is a **declaration in the return value**, not a call the hook makes, so a hook cannot record that something happened while doing nothing: the two cannot drift apart.
 
 A prompt gate and a stop gate read like any other gate — they just decide over a different event:
 
