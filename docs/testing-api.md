@@ -21,8 +21,10 @@ how-to; this is the reference you reach for when you need the exact name or knob
 
 ## Picking a runner
 
-Four runners, keyed on the question you actually have. The first three are free
-and deterministic; only the last needs a model.
+Four runners for "does my harness work", keyed on the question you actually have.
+The first three are free and deterministic; only the last needs a model. A fifth,
+[`runMutations`](#and-one-that-asks-about-the-tests-themselves), asks a different
+question — about your TESTS rather than your harness — and is below the table.
 
 | Your question                                                  | Runner                           | Result              | Cost                |
 | -------------------------------------------------------------- | -------------------------------- | ------------------- | ------------------- |

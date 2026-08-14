@@ -61,14 +61,15 @@ no key) and `npx vigiles eval` (real model) discover and run `*.harness.mjs` /
 
 Start here. Pick the row that matches your question — each links to its section.
 
-| I want to check…                                             | Use                                                            | Needs               |
-| ------------------------------------------------------------ | -------------------------------------------------------------- | ------------------- |
-| my **helper script** does what it claims                     | [`runScript`](#test-a-plain-program-runscript)                 | nothing             |
-| my **hook** blocks/allows an event                           | [`runHook`](#test-a-hook-in-isolation-runhook)                 | nothing             |
-| my hook/skill is **wired in** and actually fires             | [`runHarnessTest`](#test-the-assembled-machine-runharnesstest) | harness CLI, no key |
-| my **skill fires** on the right prompts (recall + precision) | [`measureTriggerRate`](#test-a-skill-fires-measuretriggerrate) | a real model        |
-| a change **moves the agent's behaviour** (A/B, with stats)   | [`runEval`](#test-a-change-moves-behaviour-runeval)            | a real model        |
-| the **references** my CLAUDE.md cites are real               | [`vigiles lint`](verifying-instruction-files.md)               | nothing             |
+| I want to check…                                              | Use                                                            | Needs               |
+| ------------------------------------------------------------- | -------------------------------------------------------------- | ------------------- |
+| my **helper script** does what it claims                      | [`runScript`](#test-a-plain-program-runscript)                 | nothing             |
+| my **hook** blocks/allows an event                            | [`runHook`](#test-a-hook-in-isolation-runhook)                 | nothing             |
+| my hook/skill is **wired in** and actually fires              | [`runHarnessTest`](#test-the-assembled-machine-runharnesstest) | harness CLI, no key |
+| my **skill fires** on the right prompts (recall + precision)  | [`measureTriggerRate`](#test-a-skill-fires-measuretriggerrate) | a real model        |
+| a change **moves the agent's behaviour** (A/B, with stats)    | [`runEval`](#test-a-change-moves-behaviour-runeval)            | a real model        |
+| the **references** my CLAUDE.md cites are real                | [`vigiles lint`](verifying-instruction-files.md)               | nothing             |
+| my **test would notice** if the check it watches were deleted | [`runMutations`](#prove-a-test-can-fail-runmutations)          | nothing             |
 
 The first three are **deterministic** — assert pass/fail, run on every commit,
 free. The model tiers **measure** (a rate ± error across trials) — run them
@@ -449,6 +450,74 @@ without a single input having changed.
 nudge as `additionalContext` (Claude Code and Codex both honor it). See the per-harness guides:
 [Claude Code](harness-testing-claude-code.md#keeping-eval-results-fresh--the-nudge-claude-code)
 · [Codex](harness-testing-codex.md#keeping-eval-results-fresh--the-nudge-codex).
+
+## Prove a test can fail (`runMutations`)
+
+Every tier above answers "did the check pass". None can tell a **watched**
+assertion from a **vacuous** one — an assertion that cannot fail prints the same
+`✓` as one that just caught a bug. Neither can a reader: the two look identical
+on the page. The only way to find out is to break the thing the test watches and
+demand the test notice.
+
+```ts
+import { runMutations, formatMutationReport } from "vigiles/testing";
+
+const report = runMutations({
+  cwd: repoRoot,
+  cases: [
+    {
+      name: "year",
+      disables: "the year comparison",
+      edits: [[checker, "rec.year !== ourYear", "false"]],
+      test: harness,
+      expect: "a wrong year was not reported",
+    },
+  ],
+});
+console.log(formatMutationReport(report));
+process.exit(
+  report.killed === report.outcomes.length && report.restored ? 0 : 1,
+);
+```
+
+A mutation counts as killed only when the test goes red **with the message that
+names it**. Red-for-another-reason is reported separately (`wrong-assertion`),
+because two defects sharing one assertion means neither is really watched. The
+full verdict table is in the [reference](testing-api.md#and-one-that-asks-about-the-tests-themselves).
+
+**What it typically finds on its first run** — in this project and the repos that
+dogfood it, the first run has essentially never been clean, and the findings are
+usually about the TEST rather than the checker: a fixture that satisfied an
+assertion by accident, two assertions with one message, a guard whose branch the
+test never reached, and occasionally a rule in the checker that no verdict
+depends on at all.
+
+### When NOT to reach for it
+
+- **A one-off script.** The run rewrites real files and takes minutes; that price
+  buys you nothing on code you will delete next week.
+- **When the test is already red.** Mutations against a red test are reported
+  `unjudgeable` rather than guessed at — fix the test first, or the run tells you
+  nothing.
+- **As a coverage number.** There is no kill-ratio score here on purpose: these
+  are hand-authored defects, not generated operators, so the count says how many
+  cases you wrote — not how good the suite is. If you want generated-operator
+  mutation coverage over ordinary code, use Stryker/mutmut/PIT; that is a
+  different tool for a different job.
+
+### CI, and why it is usually the wrong place
+
+A mutation run forks a process per case over full files, so a table of 25 cases
+takes minutes, not seconds — and CI minutes spent re-proving an unchanged
+assertion buy nothing. The pattern that works:
+
+- run it **by hand after editing the test or the checker**, which is when the
+  answer can change;
+- if you do wire it into CI, give it its **own job** rather than a step inside a
+  fast one, so a slow proof cannot mask quick checks that fail after it;
+- and remember it **needs a clean working tree** — it rewrites the files it
+  mutates and restores them, and it refuses to start on uncommitted changes to a
+  target file.
 
 ## Advanced
 
