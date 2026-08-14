@@ -31,7 +31,12 @@ export type ParsedAgentResult<
 
 // Capture every vigiles:ok / vigiles:err fenced block; the LAST one is the
 // worker's final answer (earlier ones may be illustrative in its reasoning).
-const BLOCK_RE = /```vigiles:(ok|err)[ \t]*\r?\n([\s\S]*?)```/g;
+// The CLOSING fence must own its line: a ``` inside a JSON string value sits
+// mid-line, so it no longer terminates the block (measured 2026-08-13 — a
+// contract field carrying a code snippet made every such answer `malformed`
+// even though the model's JSON was valid).
+const BLOCK_RE =
+  /^[ \t]*```vigiles:(ok|err)[ \t]*\r?\n([\s\S]*?)\r?\n^[ \t]*```[ \t]*$/gm;
 
 /** Does a runtime value match a declared field type? */
 function fieldMatches(value: unknown, type: OutputFieldType): boolean {

@@ -130,3 +130,44 @@ test("contract validation runs against the err track too", () => {
   );
   assert.equal(good.kind, "err");
 });
+
+// --- a payload that carries a fenced code block --------------------------------
+//
+// MEASURED 2026-08-13 (spike, N=28 real sonnet runs, model=sonnet): across the
+// whole sample the old pattern returned `malformed` exactly 5 times, and the
+// correspondence was EXACT — it failed if and only if the model put a fence inside
+// the JSON payload (5 with a fence: 5 malformed; 23 without: 0 malformed). Never
+// because the model misbehaved: its JSON was valid, newlines correctly escaped.
+// The old closing-fence pattern simply matched the first ``` it saw, which sat
+// INSIDE the JSON string. A fence in the PROSE before the block was always fine.
+// The block below is a verbatim capture of one failing run.
+// Raw records: mine `vigiles/repro/output-contract-2026-08-13/`.
+
+const REAL_MEASURED_ANSWER =
+  "```vigiles:ok\n" +
+  '{ "finding": "makeToken() uses Math.random(), not a CSPRNG.", ' +
+  '"snippet": "```javascript\\nfunction makeToken(userId) {\\n  return String(userId);\\n}\\n```", ' +
+  '"line": 4, "severity": "high" }\n' +
+  "```";
+
+test("a payload containing a fenced code block still parses", () => {
+  const r = parseAgentResult(REAL_MEASURED_ANSWER);
+  assert.equal(r.kind, "ok");
+  assert.match(
+    String(r.kind === "ok" && r.value.snippet),
+    /```javascript/,
+    "the snippet must survive the round trip with its fence intact",
+  );
+});
+
+test("a fence in the PROSE before the block was never the problem", () => {
+  const withProse =
+    "Here is the offending code:\n\n```js\nconst a = 1;\n```\n\n" +
+    okBlock('{ "summary": "done" }');
+  assert.equal(parseAgentResult(withProse).kind, "ok");
+});
+
+test("an indented closing fence still closes the block", () => {
+  const r = parseAgentResult('```vigiles:ok\n{ "summary": "done" }\n  ```');
+  assert.equal(r.kind, "ok");
+});
