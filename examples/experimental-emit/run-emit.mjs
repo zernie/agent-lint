@@ -11,8 +11,9 @@
  * What it does:
  *  1. reads `<skill-dir>/SKILL.md` and asserts it has NO `context: fork` — the
  *     whole question is about the skills that cannot carry an `output:` today;
- *  2. replaces exactly ONE section, `## Record the verdict` (which today shells
- *     out to a ledger script), with `experimental_emitTool(contract).instruction`;
+ *  2. replaces exactly ONE section — the h2 whose heading reads "Record the verdict",
+ *     numbered or not (which today shells out to a ledger script) — with
+ *     `experimental_emitTool(contract).instruction`;
  *  3. serves `experimental_emitTool(contract).tool` from `emit-server.mjs` over a
  *     cwd `.mcp.json`, so no approval prompt and no global config are involved;
  *  4. runs the skill through the real CLI and reads the result back out of
@@ -31,6 +32,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, resolve } from "node:path";
+import MarkdownIt from "markdown-it";
 
 import { result } from "../../dist/core/spec.js";
 import {
@@ -71,17 +73,64 @@ const CONTRACT = result(
 const emit = experimental_emitTool(CONTRACT);
 writeFileSync(TOOL_JSON, JSON.stringify(emit.tool, null, 2));
 
-const MARKER = "## Record the verdict";
-if (!original.includes(MARKER)) {
+// 🔴 The matcher used to be `original.includes("## Record the verdict")`, and it
+// REFUSED 5 of the 22 recording skills in the dogfood corpus — 4 of them wrongly.
+// Their heading is numbered or reworded, which is a formatting choice, not a
+// different section:
+//
+//   ## 6. Record the verdict          (camera-ready, submit-paper, verify-citations)
+//   ## 5. Record the verdict          (plan-paper-timeline)
+//   ## Step 8 — record the verdict    (map-prior-work — and lowercase `record`)
+//
+// So the heading is read as a HEADING, through the parser, not as a substring of
+// the file. A string search cannot tell a heading from the same words inside a
+// fenced block or a sentence, and has no notion of heading LEVEL; markdown-it
+// gives both. (Same call this repo's own linters make — see the four times a
+// regex over markdown structure silently matched the wrong thing.)
+const md = new MarkdownIt();
+
+// ⚠️ Frontmatter must go before parsing. A `---` fence is SETEXT syntax: markdown-it
+// reads the whole YAML block as an <h2> whose text is `name: … description: …`.
+// Measured on this corpus — every skill produced one such phantom heading, and a
+// description containing the words "record the verdict" would have matched it and
+// spliced the emit into the frontmatter. Blank lines, not deletion, so every
+// remaining heading keeps its original line number.
+const fm = original.match(/^---\n[\s\S]*?\n---\n/);
+const body = fm
+  ? "\n".repeat(fm[0].split("\n").length - 1) + original.slice(fm[0].length)
+  : original;
+const tokens = md.parse(body, {});
+
+/**
+ * "## 6. Record the verdict" and "## Step 8 — record the verdict" are the same section.
+ * The separator class includes WHITESPACE: without it `Step 8 — record` fails, because
+ * the dash is a space away from the digit. Caught by running this over the real 22, not
+ * over an example I made up — the invented case had no space.
+ */
+const isVerdictHeading = (text) =>
+  /^(?:step\s*)?\d*[\s.)—–-]*record the verdict\b/i.test(text.trim());
+
+const headings = tokens
+  .map((t, i) => ({ t, inline: tokens[i + 1] }))
+  .filter(({ t }) => t.type === "heading_open" && t.tag === "h2" && t.map)
+  .map(({ t, inline }) => ({ line: t.map[0], text: inline?.content ?? "" }));
+
+const target = headings.find((h) => isVerdictHeading(h.text));
+if (!target) {
   throw new Error(
-    `${skillName} has no "${MARKER}" section to swap for an emit.`,
+    `${skillName} has no "Record the verdict" section to swap for an emit. ` +
+      `Its h2 headings are: ${headings.map((h) => JSON.stringify(h.text)).join(", ") || "none"}.`,
   );
 }
-const before = original.slice(0, original.indexOf(MARKER));
-const rest = original.slice(original.indexOf(MARKER) + MARKER.length);
-const nextHeading = rest.indexOf("\n## ");
-const after = nextHeading === -1 ? "" : rest.slice(nextHeading + 1);
-const patched = `${before}${emit.instruction}\n\n${after}`;
+
+// The section ends at the NEXT h2, not at end-of-file: in all 22 recorders this
+// section is followed by `## Rules` / `## Compose` / `## Provenance`, so cutting
+// to the end would silently delete the rest of the skill.
+const lines = original.split("\n");
+const nextH2 = headings.find((h) => h.line > target.line);
+const before = lines.slice(0, target.line).join("\n");
+const after = nextH2 === undefined ? "" : lines.slice(nextH2.line).join("\n");
+const patched = `${before}\n${emit.instruction}\n\n${after}`;
 
 // --- 2. the fixture: a tiny paper the skill has something real to say about --
 
