@@ -1,0 +1,44 @@
+{
+  "name": "emit_result",
+  "description": "Emit this task's structured result. Call this exactly once. Set `track` to \"ok\" and fill `ok` on success, or \"err\" and fill `err` on failure. Do not call it twice and do not fill both tracks.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "track": {
+        "type": "string",
+        "enum": ["ok", "err"]
+      },
+      "ok": {
+        "type": "object",
+        "properties": {
+          "verdict": {
+            "type": "string"
+          },
+          "count": {
+            "type": "number"
+          },
+          "report": {
+            "type": "string"
+          }
+        },
+        "required": ["verdict", "count", "report"],
+        "additionalProperties": false
+      },
+      "err": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": ["reason", "detail"],
+        "additionalProperties": false
+      }
+    },
+    "required": ["track"],
+    "additionalProperties": false
+  }
+}

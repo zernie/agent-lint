@@ -49,3 +49,11 @@ scratch-shots/
 
 # Design and strategy notes are NOT kept in this repository
 research/
+
+# Raw output of examples/experimental-emit/run-emit.mjs. A run replays a real
+# skill from the operator's own corpus, so these carry un-redacted model prose
+# about a private harness; the committed records under records/*-2026-08-13.jsonl
+# are the redacted, publishable extraction.
+examples/experimental-emit/records/emits.jsonl
+examples/experimental-emit/records/emitted.jsonl
+examples/experimental-emit/records/records-emit.jsonl

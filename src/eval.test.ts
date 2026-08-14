@@ -2044,7 +2044,28 @@ test("isRateLimited detects rate-limit / overload in either stream", () => {
   );
   assert.ok(isRateLimited({ code: 1, stdout: "overloaded_error" }));
   assert.ok(isRateLimited({ code: 1, stdout: "rate limit exceeded" }));
+  assert.ok(isRateLimited({ code: 1, stdout: "rate-limited, backing off" }));
   assert.ok(!isRateLimited({ code: 0, stdout: "all good" }));
+});
+
+test("isRateLimited ignores the CLI's informational rate_limit_event telemetry", () => {
+  // Verbatim from a real `claude -p --output-format stream-json` run, 2026-08-13
+  // (examples/experimental-emit/records/rate-limit-event.json). The CLI emits
+  // this on EVERY run. `/rate.?limit/` matched it, because `.` matches `_`, so
+  // every eval trial retried `retries + 1` times and only the last attempt's cost
+  // was ever counted against `maxCostUsd` — measured at 8 model runs for 2 trials.
+  const telemetry =
+    '{"type":"rate_limit_event","rate_limit_info":{"status":"allowed",' +
+    '"resetsAt":1786648200,"rateLimitType":"five_hour","overageStatus":"rejected",' +
+    '"overageDisabledReason":"org_level_disabled","isUsingOverage":false}}';
+  assert.ok(!isRateLimited({ code: 0, stdout: telemetry }));
+  // A real limit still retries — the API reports it under a different name.
+  assert.ok(
+    isRateLimited({
+      code: 1,
+      stdout: `${telemetry}\n{"error":{"type":"rate_limit_error"}}`,
+    }),
+  );
 });
 
 test("runEvalWith retries a rate-limited run, then succeeds", async () => {

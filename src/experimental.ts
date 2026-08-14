@@ -10,8 +10,14 @@
  * NOT covered by the stability guarantee (STABILITY.md): the shape may change or
  * be removed WITHOUT a major-version bump. Do not depend on it in production.
  *
- * Current contents — the R3 disposable-service tier (real side-effect testing;
- * see docs/measuring-skills.md § Experimental and src/services.ts).
+ * Current contents:
+ *  - the R3 disposable-service tier (real side-effect testing; see
+ *    docs/measuring-skills.md § Experimental and src/services.ts);
+ *  - the EMIT delivery for a typed result (`src/experimental-emit.ts`) — a skill
+ *    that CALLS a tool with its outcome instead of ending its turn with a fenced
+ *    block, which is how an UNFORKED skill can carry an `OutputContract` at all.
+ *    Read that module's header before using it: it lists, by number, what is
+ *    unproven and what would have to be true to drop the prefix.
  *
  * ⚠️ SAFETY: R3 runs a model-driven skill FOR REAL. The disposable container is
  * the ONLY isolation vigiles provides — it does not confine the skill's filesystem
@@ -39,3 +45,15 @@ export {
   type DockerExec,
   type NetProbe,
 } from "./services-docker.js";
+
+export {
+  experimental_emitTool,
+  experimental_parseEmitted,
+  experimental_assertEmittedOk,
+  type EmitFieldSchema,
+  type EmitObjectSchema,
+  type EmitPropertySchema,
+  type EmitTrackSchema,
+  type EmitToolDefinition,
+  type ExperimentalEmitTool,
+} from "./experimental-emit.js";

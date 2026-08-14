@@ -1,0 +1,74 @@
+{
+  "measured": "2026-08-13",
+  "skill": "paper-status",
+  "model": "sonnet",
+  "runs": 8,
+  "what": "The TODAY-assertion (prose) scored against the same 8 runs whose emits are in emits-2026-08-13.jsonl. Only DERIVED booleans are published: the full model prose describes a private corpus.",
+  "assertions": {
+    "substring": "/BLOCKED/",
+    "count": "/(\\d+)\\s+blockers?/i"
+  },
+  "perRun": [
+    {
+      "run": 1,
+      "outputChars": 4701,
+      "substringMatched": true,
+      "countMatch": null,
+      "countValue": null
+    },
+    {
+      "run": 2,
+      "outputChars": 4396,
+      "substringMatched": true,
+      "countMatch": null,
+      "countValue": null
+    },
+    {
+      "run": 3,
+      "outputChars": 4857,
+      "substringMatched": true,
+      "countMatch": null,
+      "countValue": null
+    },
+    {
+      "run": 4,
+      "outputChars": 4178,
+      "substringMatched": true,
+      "countMatch": null,
+      "countValue": null
+    },
+    {
+      "run": 5,
+      "outputChars": 5142,
+      "substringMatched": true,
+      "countMatch": null,
+      "countValue": null
+    },
+    {
+      "run": 6,
+      "outputChars": 4273,
+      "substringMatched": true,
+      "countMatch": null,
+      "countValue": null
+    },
+    {
+      "run": 7,
+      "outputChars": 4457,
+      "substringMatched": true,
+      "countMatch": null,
+      "countValue": null
+    },
+    {
+      "run": 8,
+      "outputChars": 4530,
+      "substringMatched": true,
+      "countMatch": null,
+      "countValue": null
+    }
+  ],
+  "totals": {
+    "substringMatched": 8,
+    "countIsNaN": 8
+  },
+  "reading": "The substring check passes 8/8 while the number it is supposed to guard is NaN 8/8 — the assertion is green and measures nothing."
+}
