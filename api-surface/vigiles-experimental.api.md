@@ -80,6 +80,14 @@ export function experimental_emitTool(contract: OutputContract, options?: {
 }): ExperimentalEmitTool;
 
 // @public
+export function experimental_makeDockerRuntime(deps?: {
+    exec?: DockerExec;
+    netProbe?: NetProbe;
+    sleep?: (ms: number) => Promise<void>;
+    readyTimeoutMs?: number;
+}): ContainerRuntime;
+
+// @public
 export function experimental_parseEmitted(toolCalls: readonly ToolCall[], contract: OutputContract, options?: {
     readonly name?: string;
 }): ParsedAgentResult;
@@ -95,14 +103,6 @@ export interface ExperimentalEmitTool {
     readonly instruction: string;
     readonly tool: EmitToolDefinition;
 }
-
-// @public
-export function makeDockerRuntime(deps?: {
-    exec?: DockerExec;
-    netProbe?: NetProbe;
-    sleep?: (ms: number) => Promise<void>;
-    readyTimeoutMs?: number;
-}): ContainerRuntime;
 
 // @public
 export type NetProbe = (port: number) => Promise<boolean>;

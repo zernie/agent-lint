@@ -32,7 +32,7 @@
  */
 import {
   agent as coreAgent,
-  skill as coreSkill,
+  experimental_skill as coreSkill,
   type AgentSpec,
   type AgentSpecInput,
   type SkillSpec,
@@ -73,8 +73,8 @@ export function agent<const P extends AuthoredPurity | undefined = undefined>(
  * against the Claude Code tool catalog. Identical to the core `skill()` at
  * runtime; the typed `tools` constraint is the only difference.
  */
-export function skill<const P extends AuthoredPurity | undefined = undefined>(
-  spec: SkillSpecInput<P, ClaudeCodeToolVocabulary>,
-): SkillSpec {
+export function experimental_skill<
+  const P extends AuthoredPurity | undefined = undefined,
+>(spec: SkillSpecInput<P, ClaudeCodeToolVocabulary>): SkillSpec {
   return coreSkill<P, ClaudeCodeToolVocabulary>(spec);
 }

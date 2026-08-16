@@ -21,7 +21,7 @@ import {
   dockerExecArgs,
   parseDockerPort,
   publishedPorts,
-  makeDockerRuntime,
+  experimental_makeDockerRuntime,
   type DockerExec,
 } from "./services-docker.js";
 
@@ -196,7 +196,7 @@ describe("docker command builders (pure)", () => {
   });
 });
 
-describe("makeDockerRuntime (over a fake docker CLI)", () => {
+describe("experimental_makeDockerRuntime (over a fake docker CLI)", () => {
   /** A scriptable fake docker: maps the first arg → a canned result. */
   function fakeDocker(
     script: Partial<Record<string, { stdout?: string; code?: number }>>,
@@ -228,7 +228,7 @@ describe("makeDockerRuntime (over a fake docker CLI)", () => {
       }
       return { stdout: "", stderr: "", code: 0 };
     };
-    const runtime = makeDockerRuntime({
+    const runtime = experimental_makeDockerRuntime({
       exec,
       netProbe: () => Promise.resolve(true),
       sleep: () => Promise.resolve(),
@@ -264,7 +264,7 @@ describe("makeDockerRuntime (over a fake docker CLI)", () => {
 
   it("start: throws + cleans up when `docker run` fails", async () => {
     const { exec, calls } = fakeDocker({ run: { code: 1 } });
-    const runtime = makeDockerRuntime({
+    const runtime = experimental_makeDockerRuntime({
       exec,
       netProbe: () => Promise.resolve(true),
     });
@@ -283,7 +283,7 @@ describe("makeDockerRuntime (over a fake docker CLI)", () => {
       if (args[0] === "exec") return { stdout: "", stderr: "nope", code: 1 }; // seed fails
       return { stdout: "", stderr: "", code: 0 };
     };
-    const runtime = makeDockerRuntime({
+    const runtime = experimental_makeDockerRuntime({
       exec,
       netProbe: () => Promise.resolve(true),
       sleep: () => Promise.resolve(),
@@ -296,12 +296,12 @@ describe("makeDockerRuntime (over a fake docker CLI)", () => {
 
   it("available() reflects `docker info`", () => {
     expect(
-      makeDockerRuntime({
+      experimental_makeDockerRuntime({
         exec: fakeDocker({ info: { code: 0 } }).exec,
       }).available(),
     ).toBe(true);
     expect(
-      makeDockerRuntime({
+      experimental_makeDockerRuntime({
         exec: fakeDocker({ info: { code: 1 } }).exec,
       }).available(),
     ).toBe(false);
@@ -325,7 +325,7 @@ describe("makeDockerRuntime (over a fake docker CLI)", () => {
         return { stdout: "", stderr: "", code: 0 };
       };
       // no netProbe injected → the REAL one runs against the live socket
-      const runtime = makeDockerRuntime({
+      const runtime = experimental_makeDockerRuntime({
         exec,
         sleep: () => Promise.resolve(),
       });
@@ -349,7 +349,7 @@ describe("makeDockerRuntime (over a fake docker CLI)", () => {
       run: { stdout: "cid" },
       port: { stdout: "0.0.0.0:1" },
     });
-    const runtime = makeDockerRuntime({
+    const runtime = experimental_makeDockerRuntime({
       exec,
       netProbe: () => Promise.resolve(true),
       sleep: () => Promise.resolve(),
@@ -361,7 +361,7 @@ describe("makeDockerRuntime (over a fake docker CLI)", () => {
 
   it("stop() on a handle it never started is a no-op", async () => {
     const { exec, calls } = fakeDocker({});
-    await makeDockerRuntime({ exec }).stop({
+    await experimental_makeDockerRuntime({ exec }).stop({
       host: "127.0.0.1",
       port: 1,
       url: "",
@@ -386,7 +386,10 @@ describe("makeDockerRuntime (over a fake docker CLI)", () => {
       }
       return { stdout: "", stderr: "", code: 0 };
     };
-    const runtime = makeDockerRuntime({ exec, sleep: () => Promise.resolve() });
+    const runtime = experimental_makeDockerRuntime({
+      exec,
+      sleep: () => Promise.resolve(),
+    });
     const h = await runtime.start("db", {
       image: "x",
       port: 5432,
@@ -401,7 +404,10 @@ describe("makeDockerRuntime (over a fake docker CLI)", () => {
       args[0] === "run"
         ? { stdout: "cid", stderr: "", code: 0 }
         : { stdout: "", stderr: "", code: 0 }; // `docker port` → empty (unpublished)
-    const runtime = makeDockerRuntime({ exec, sleep: () => Promise.resolve() });
+    const runtime = experimental_makeDockerRuntime({
+      exec,
+      sleep: () => Promise.resolve(),
+    });
     await expect(
       runtime.start("db", { image: "x", ready: { tcp: 5432 } }),
     ).rejects.toThrow(/container port 5432 is not published/);
@@ -416,7 +422,7 @@ describe("makeDockerRuntime (over a fake docker CLI)", () => {
         return { stdout: "0.0.0.0:1", stderr: "", code: 0 };
       return { stdout: "", stderr: "", code: 1 }; // ready-exec never passes
     };
-    const runtime = makeDockerRuntime({
+    const runtime = experimental_makeDockerRuntime({
       exec,
       sleep: () => Promise.resolve(),
       readyTimeoutMs: 0, // fail fast — covers the timeout throw

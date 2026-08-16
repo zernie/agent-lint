@@ -129,17 +129,23 @@ composition adds.
 > **Your multi-agent pipeline doesn't compile if the handoffs don't line up.**
 
 `agent()` now **remembers** its `result()` shape at the type level. So a second,
-typed composition surface — `pipe(...)` (or the `start` / `andThen` fold) over the
+typed composition surface — `experimental_pipe(...)` (or the `experimental_start` / `experimental_andThen` fold) over the
 agent **objects** — checks at `tsc` time that **step N's `ok` output supplies step
-N+1's declared `needs`**. A missing field, a wrong field type, or an out-of-order
+N+1's declared `experimental_needs`**. A missing field, a wrong field type, or an out-of-order
 step is a **compile error** at the mismatched step, naming the offending field. No
 markdown or YAML railway can do this; it is a cross-reference only types can carry.
 
-Each consumer declares the fields it reads from its predecessor with `needs(...)`,
-paired to its agent via `pipeStep(agent, needs(...))`:
+Each consumer declares the fields it reads from its predecessor with `experimental_needs(...)`,
+paired to its agent via `experimental_pipeStep(agent, experimental_needs(...))`:
 
 ```ts
-import { agent, result, pipe, pipeStep, needs } from "vigiles";
+import {
+  agent,
+  result,
+  experimental_pipe,
+  experimental_pipeStep,
+  experimental_needs,
+} from "vigiles";
 
 const planner = agent({
   name: "planner",
@@ -163,10 +169,13 @@ const reviewer = agent({
 });
 
 // COMPILES — planner.ok ⊇ implementer.needs, implementer.ok ⊇ reviewer.needs.
-export const shipPr = pipe(
+export const shipPr = experimental_pipe(
   planner,
-  pipeStep(implementer, needs({ plan: "string", files: "string[]" })),
-  pipeStep(reviewer, needs({ diff: "string" })),
+  experimental_pipeStep(
+    implementer,
+    experimental_needs({ plan: "string", files: "string[]" }),
+  ),
+  experimental_pipeStep(reviewer, experimental_needs({ diff: "string" })),
 );
 ```
 
@@ -174,36 +183,45 @@ These three each **fail `tsc`** — the bug is caught at edit time, not at runti
 
 ```ts
 // MISSING FIELD — nobody upstream produces `securityScan`.
-pipe(
+experimental_pipe(
   planner,
-  pipeStep(implementer, needs({ plan: "string", files: "string[]" })),
-  pipeStep(reviewer, needs({ securityScan: "string" })), // ✗ won't compile
+  experimental_pipeStep(
+    implementer,
+    experimental_needs({ plan: "string", files: "string[]" }),
+  ),
+  experimental_pipeStep(
+    reviewer,
+    experimental_needs({ securityScan: "string" }),
+  ), // ✗ won't compile
 );
 
 // TYPE MISMATCH — implementer produces diff:"string", reviewer needs diff:"string[]".
-pipe(
+experimental_pipe(
   planner,
-  pipeStep(implementer, needs({ plan: "string", files: "string[]" })),
-  pipeStep(reviewer, needs({ diff: "string[]" })), // ✗ won't compile
+  experimental_pipeStep(
+    implementer,
+    experimental_needs({ plan: "string", files: "string[]" }),
+  ),
+  experimental_pipeStep(reviewer, experimental_needs({ diff: "string[]" })), // ✗ won't compile
 );
 
 // ORDER ERROR — reviewer before implementer never sees `diff`.
-pipe(
+experimental_pipe(
   planner,
-  pipeStep(reviewer, needs({ diff: "string" })), // ✗ won't compile
+  experimental_pipeStep(reviewer, experimental_needs({ diff: "string" })), // ✗ won't compile
 );
 ```
 
 **Which surface gives the type check — and which still works.** Typed composition
-(`pipe` / `start` / `andThen` over agent **objects**) is the **additive** path that
+(`experimental_pipe` / `experimental_start` / `experimental_andThen` over agent **objects**) is the **additive** path that
 checks data handoffs. The string-based `railway({ steps: [delegate("name")] })`
 path is **unchanged** and still works exactly as before — it's the name-resolution
 backstop (`validateRailway` / `compileRailway`), and it's what compiles to the
-orchestrator command today. A typed `pipe`/`Pipeline` carries an underlying
+orchestrator command today. A typed `experimental_pipe`/`Pipeline` carries an underlying
 `railway` (`pipeline.railway`) for that compile step, so you get both: the
 edit-time handoff check **and** the compiled orchestrator. Keep typed chains to a
 handful of steps (deep type recursion is avoided by design — the handoff check is
-shallow, one field-level pass per step); for longer pipelines, fold `andThen`
+shallow, one field-level pass per step); for longer pipelines, fold `experimental_andThen`
 explicitly or fall back to the string `railway`.
 
 The type-level proof (a correct pipeline + the three `@ts-expect-error` failures):
@@ -211,18 +229,18 @@ The type-level proof (a correct pipeline + the three `@ts-expect-error` failures
 
 ### Cross-file handoffs — the whole-harness registry
 
-`pipe(...)` checks handoffs **within one file** (the agent objects are in scope).
+`experimental_pipe(...)` checks handoffs **within one file** (the agent objects are in scope).
 When each agent lives in its **own** `*.spec.ts` and a `railway()` composes them by
 **name**, the same check is lifted to the **whole-harness registry** that
 [`vigiles generate harness`](cli.md#generate-harness-dir-out) emits — so a
 **cross-file** handoff mismatch is a `tsc` error too.
 
 Declare the handoff with the optional 3rd argument of `delegate()` — the same
-`needs(...)` builder `pipeStep` uses. The registry then asserts the **previous**
+`experimental_needs(...)` builder `experimental_pipeStep` uses. The registry then asserts the **previous**
 success-track step's agent `result().ok` SUPPLIES it:
 
 ```ts
-import { railway, delegate, needs } from "vigiles/spec";
+import { railway, delegate, experimental_needs } from "vigiles/spec";
 
 // agents/planner.md.spec.ts emits result({ steps: "string[]" }, …)
 // agents/implementer.md.spec.ts emits result({ files: "string[]" }, …)
@@ -230,8 +248,12 @@ export default railway({
   name: "ship-pr",
   steps: [
     delegate("planner"),
-    delegate("implementer", undefined, needs({ steps: "string[]" })), // planner.ok ⊇ { steps }
-    delegate("reviewer", undefined, needs({ summary: "string" })), // implementer.ok ⊇ { summary }
+    delegate(
+      "implementer",
+      undefined,
+      experimental_needs({ steps: "string[]" }),
+    ), // planner.ok ⊇ { steps }
+    delegate("reviewer", undefined, experimental_needs({ summary: "string" })), // implementer.ok ⊇ { summary }
   ],
 });
 ```
@@ -242,7 +264,7 @@ Run `vigiles generate harness` over the agents directory; the generated
 producer's `ok` is missing the field or has the wrong type, `tsc` rejects the gen
 file naming it (`__handoff_error: { __missing: "steps" }` /
 `{ __mismatch: "steps", expected: …, got: … }`) — **no vigiles run, across files,
-in your editor**. The check is **opt-in per edge**: a `delegate()` with no `needs`
+in your editor**. The check is **opt-in per edge**: a `delegate()` with no `experimental_needs`
 generates and behaves exactly as before. It's scoped to the **linear success
 track** for now — `recover`/`onError` edges consume an `err`, not the prior `ok`,
 so they're a noted follow-up. Worked dogfood:
@@ -302,9 +324,9 @@ contract renders. The gate is enforced at compile — an `output` without
 `context: "fork"` is an error, because an inline skill has no return to type:
 
 ```ts
-import { skill, result } from "vigiles";
+import { experimental_skill, result } from "vigiles";
 
-export default skill({
+export default experimental_skill({
   name: "review",
   description: "Review a file and return structured findings.",
   context: "fork", // runs as a subagent → has a return boundary

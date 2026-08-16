@@ -67,6 +67,9 @@ export interface ClaudeCodeToolVocabulary extends ToolVocabulary {
 }
 
 // @public
+export function experimental_skill<const P extends AuthoredPurity | undefined = undefined>(spec: SkillSpecInput<P, ClaudeCodeToolVocabulary>): SkillSpec;
+
+// @public
 export function extractRequest(body: {
     system?: unknown;
     messages?: unknown;
@@ -185,9 +188,6 @@ export interface SelectionReport {
     readonly perSkill: readonly SkillSelectionStat[];
     readonly skills: readonly string[];
 }
-
-// @public
-export function skill<const P extends AuthoredPurity | undefined = undefined>(spec: SkillSpecInput<P, ClaudeCodeToolVocabulary>): SkillSpec;
 
 // @public (undocumented)
 export interface SkillSelectionStat {

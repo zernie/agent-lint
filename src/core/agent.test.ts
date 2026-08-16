@@ -11,9 +11,9 @@ import { join } from "node:path";
 
 import {
   agent,
-  skill,
+  experimental_skill,
   instructions,
-  effect,
+  experimental_effect,
   file,
   cmd,
   enforce,
@@ -529,7 +529,7 @@ test('purity: "dangerously-unrestricted" / omitted + side-effecting tools compil
 
 test('purity: "pure" skill with read-only tools compiles clean', () => {
   const { errors } = compileSkill(
-    skill({
+    experimental_skill({
       name: "review",
       description: "Review code.",
       purity: "pure",
@@ -546,7 +546,7 @@ test('purity: "pure" skill with read-only tools compiles clean', () => {
 
 test('purity: "pure" skill with a side-effecting tool errors', () => {
   const { errors } = compileSkill(
-    skill({
+    experimental_skill({
       name: "bad",
       description: "Writes stuff.",
       purity: "pure",
@@ -562,7 +562,7 @@ test('purity: "pure" skill with a side-effecting tool errors', () => {
 
 test('purity: "pure" skill with no tools declared errors (absent = inherits-all)', () => {
   const { errors } = compileSkill(
-    skill({
+    experimental_skill({
       name: "noop",
       description: "Claims pure but inherits all tools.",
       purity: "pure",
@@ -577,7 +577,7 @@ test('purity: "pure" skill with no tools declared errors (absent = inherits-all)
 
 test('purity: "pure" skill with wildcard tools errors', () => {
   const { errors } = compileSkill(
-    skill({
+    experimental_skill({
       name: "bad",
       description: "Wildcard.",
       purity: "pure",
@@ -591,7 +591,7 @@ test('purity: "pure" skill with wildcard tools errors', () => {
   assert.match(pureErrors[0].message, /inherits-all/);
 });
 
-test("effect() body compiles to <!-- vigiles:effect --> markers in an agent", () => {
+test("experimental_effect() body compiles to <!-- vigiles:effect --> markers in an agent", () => {
   const { markdown } = compileAgent(
     agent({
       name: "releaser",
@@ -601,7 +601,7 @@ test("effect() body compiles to <!-- vigiles:effect --> markers in an agent", ()
         Read ${file("package.json")} first.
 
         ## Apply
-        ${effect`
+        ${experimental_effect`
           Side effects allowed ONLY here:
           - write the changelog
           - tag the version
@@ -624,13 +624,13 @@ test("effect() body compiles to <!-- vigiles:effect --> markers in an agent", ()
   );
 });
 
-test("effect() with a bad inner file ref reports stale-file error", () => {
+test("experimental_effect() with a bad inner file ref reports stale-file error", () => {
   const { errors } = compileAgent(
     agent({
       name: "releaser",
       description: "Cut a release.",
       body: instructions`
-        ${effect`write ${file("nonexistent-xyz.md")}`}
+        ${experimental_effect`write ${file("nonexistent-xyz.md")}`}
       `,
     }),
     { specFile: "agents/releaser.md.spec.ts", dialect: claudeCodeDialect },
@@ -638,24 +638,24 @@ test("effect() with a bad inner file ref reports stale-file error", () => {
   const stale = errors.filter((e) => e.type === "stale-file");
   assert.ok(
     stale.length > 0,
-    "should report stale-file for bad ref inside effect()",
+    "should report stale-file for bad ref inside experimental_effect()",
   );
 });
 
-test("effect() in a SKILL is a compile error (subagent-only primitive)", () => {
+test("experimental_effect() in a SKILL is a compile error (subagent-only primitive)", () => {
   const { errors } = compileSkill(
-    skill({
+    experimental_skill({
       name: "release",
       description: "Cut a release.",
       body: instructions`
         ## Apply
-        ${effect`write the changelog`}
+        ${experimental_effect`write the changelog`}
       `,
     }),
     { basePath: process.cwd() },
   );
   assert.ok(
     errors.some((e) => e.type === "effect-in-skill"),
-    "effect() in a skill body should report effect-in-skill",
+    "experimental_effect() in a skill body should report effect-in-skill",
   );
 });

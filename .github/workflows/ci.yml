@@ -375,6 +375,16 @@ jobs:
       - name: Check doc imports
         run: npm run docs:check
 
+      # A public declaration tagged `@experimental` must say so in its NAME.
+      # The convention already existed (`experimental_emitTool`, …) and was
+      # enforced by nothing, so `skill()` shipped stable-named from `vigiles/spec`
+      # while its own doc opened with "`skill()` is experimental" — prose against
+      # mechanism, in the project built to catch exactly that. Reads the
+      # `@experimental` TSDoc already in the source plus the committed
+      # `api-surface/*.api.md` reports; introduces no new marker.
+      - name: Check experimental naming
+        run: npm run experimental:check
+
       - name: Lint
         run: npm run lint
 

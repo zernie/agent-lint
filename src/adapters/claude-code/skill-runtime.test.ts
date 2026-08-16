@@ -22,7 +22,7 @@ import {
   parseSkillPurity,
   evaluateSkillPreToolUse,
 } from "./skill-runtime.js";
-import { skill } from "../../core/spec.js";
+import { experimental_skill } from "../../core/spec.js";
 import { compileSkill } from "../../core/compile.js";
 import { claudeCodeDialect } from "./dialect.js";
 import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
@@ -211,7 +211,7 @@ test("evaluateStopHook blocks when the result gate fails", () => {
 
 test("parseSkillPurity reads the vigiles:purity marker compileSkill emits", () => {
   const { markdown } = compileSkill(
-    skill({
+    experimental_skill({
       name: "editor",
       description: "Edits within a boundary.",
       purity: "bounded",
@@ -225,7 +225,11 @@ test("parseSkillPurity reads the vigiles:purity marker compileSkill emits", () =
 
 test("parseSkillPurity returns null when no marker is present", () => {
   const { markdown } = compileSkill(
-    skill({ name: "reader", description: "Reads files.", body: "b" }),
+    experimental_skill({
+      name: "reader",
+      description: "Reads files.",
+      body: "b",
+    }),
     { specFile: "SKILL.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.equal(parseSkillPurity(markdown), null);
@@ -235,7 +239,7 @@ test("evaluateSkillPreToolUse: bounded skill — Bash command-refined, Write all
   const dir = makeTmpDir("skill-purity");
   try {
     const { markdown } = compileSkill(
-      skill({
+      experimental_skill({
         name: "editor",
         description: "Edits + observes via Bash.",
         purity: "bounded",
@@ -296,7 +300,11 @@ test("evaluateSkillPreToolUse allows everything when skill declares no purity ma
   const dir = makeTmpDir("skill-purity-none-marker");
   try {
     const { markdown } = compileSkill(
-      skill({ name: "reader", description: "Reads files.", body: "b" }),
+      experimental_skill({
+        name: "reader",
+        description: "Reads files.",
+        body: "b",
+      }),
       {
         basePath: dir,
         specFile: "SKILL.md.spec.ts",
@@ -322,7 +330,7 @@ const CLI = resolve(__dirname, "..", "..", "..", "dist", "cli.js");
 function projectWithBoundedSkill(): string {
   const dir = makeTmpDir("skill-hook-cli");
   const { markdown } = compileSkill(
-    skill({
+    experimental_skill({
       name: "editor",
       description: "Edits + observes.",
       purity: "bounded",
