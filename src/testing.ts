@@ -3,7 +3,14 @@
  * the three tiers — `runHook` (unit), `runHarnessTest` (deterministic), `runEval`
  * (eval) — plus the runner-agnostic predicates/assertions. Kept deliberately
  * separate from `vigiles/claude-code` so this surface can stay harness-agnostic as
- * more harnesses are added. Granular paths (`vigiles/run-hook`, etc.) still work.
+ * more harnesses are added.
+ *
+ * 🔴 THIS LINE USED TO SAY the granular paths (`vigiles/run-hook`, etc.) «still
+ * work». MEASURED 2026-08-16: they do not. `vigiles/run-hook`, `vigiles/eval`,
+ * `vigiles/harness-test`, `vigiles/harness-assert`, `vigiles/skill` and
+ * `vigiles/skill-test` all raise ERR_PACKAGE_PATH_NOT_EXPORTED — six paths this
+ * package advertised to its own readers and does not serve. A promise that an
+ * import keeps working is exactly the kind a reader has no reason to re-check.
  *
  * It re-exports the composition-root runner modules (which do the Claude-Code
  * default-wiring), never an adapter directly — the `agnostic-surface` eslint

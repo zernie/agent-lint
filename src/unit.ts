@@ -1,8 +1,23 @@
 /**
  * `vigiles/unit` — the **no-capability** harness-testing surface.
  *
- * Importing from here is a contract: this test needs **no `claude`, no model, no
- * bubblewrap, no network** — only a process. It is the cheap base of the pyramid:
+ * Importing from here is MOSTLY a contract: this test needs no `claude`, no
+ * bubblewrap and no network — only a process. It is the cheap base of the pyramid:
+ *
+ * 🔴 «NO MODEL» IS NOT TRUE TODAY, AND SAYING SO WAS THE WORST OF THE FOUR
+ * MISSTATEMENTS ON THIS SURFACE, because it reads as a guarantee rather than a
+ * description. `judged` is re-exported here and its default judge is a REAL model
+ * call — `check.ts` resolves `opts.judge ?? ((o) => runJudge(o))`. So a test that
+ * imports only from this barrel can still spend money, and the one line a reader
+ * would rely on to know it cannot is this one.
+ *
+ * The honest fix is to MOVE `judged` off this barrel, not to reword the sentence —
+ * but that changes the public surface, and the surface is being reorganised
+ * separately (the measured proposal splits by COST: everything free on one path,
+ * everything that spends money on another, where this defect becomes unexpressible
+ * rather than merely documented). Until that lands, the claim is corrected here
+ * rather than left standing.
+ *
  * `runHook` (pipe a synthesized event to a hook and read the block/allow
  * decision), the bare `Trace` predicates, the `assert*` helpers, and the pure
  * parsers. A `*.test.ts` should import **only** from here (enforced by lint).

@@ -19,7 +19,7 @@
  *   node examples/harness/oh-my-claudecode-deterministic.harness.mjs   # standalone
  *
  * Needs the `claude` CLI (no API key) and a built dist/. External users import
- * from the package: `from "vigiles/harness-test"`.
+ * from the package: `from "vigiles/integration"`.
  */
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";

@@ -15,7 +15,7 @@
  *   node examples/harness/plugin-cohesion.harness.mjs        # standalone
  *
  * Needs the `claude` CLI and a built dist/. External users import from the
- * package: `from "vigiles/harness-test"` and `from "vigiles/harness-assert"`.
+ * package: `from "vigiles/integration"` and `from "vigiles/testing"`.
  */
 import { fileURLToPath } from "node:url";
 import { scriptModel, claudeAvailable } from "../../dist/harness-test.js";

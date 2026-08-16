@@ -2,6 +2,15 @@
 
 <!-- vigiles:ignore-file -->
 
+> 🔴 **The import paths below do not exist yet.** Measured 2026-08-16 against the
+> published package: `vigiles/skill` and `vigiles/skill-test` both raise
+> `ERR_PACKAGE_PATH_NOT_EXPORTED`, and `genSkill` / `act` / `checkpoint` /
+> `finish` / `runSkill` are reachable from **no** subpath at all — the generator
+> API is compiled from source by `vigiles compile`, and was never given an entry
+> point. Everything about the SHAPE of a skill below is accurate; the `import`
+> lines are aspirational. Read them as the intended surface, not as working code,
+> until an entry point ships.
+
 vigiles treats an agent **skill** (a `SKILL.md` procedure) the way it treats a `CLAUDE.md`: verify the deterministic parts at author time, enforce them at run time, and leave prose as prose.
 
 A skill has two kinds of content:

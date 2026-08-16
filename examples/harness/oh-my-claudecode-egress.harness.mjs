@@ -14,7 +14,7 @@
  *
  * Needs Linux + bubblewrap (and working user namespaces). Self-skips otherwise —
  * you can't record egress where you can't confine. External users import from the
- * package: `from "vigiles/run-hook"` + `from "vigiles/harness-assert"`.
+ * package: `from "vigiles/unit"` + `from "vigiles/testing"`.
  */
 import { join } from "node:path";
 import { tmpdir } from "node:os";

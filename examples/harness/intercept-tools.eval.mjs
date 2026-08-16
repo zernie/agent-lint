@@ -22,7 +22,7 @@
  *   node examples/harness/intercept-tools.eval.mjs 5     # trials
  *
  * Real model → real cost. Needs the `claude` CLI + model auth and a built dist/.
- * External users import from the package: `from "vigiles/eval"`.
+ * External users import from the package: `from "vigiles/testing"`.
  */
 import { measure, formatCheckReport, assertRates } from "../../dist/eval.js";
 import { toolWith } from "../../dist/check.js";
