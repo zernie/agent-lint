@@ -45,22 +45,20 @@ Fix failures until the suite is green.
 
 ```ts
 import {
-  experimental_skill,
-  step,
-  input,
+  experimental_skill as skill,
   cmd,
   project,
   instructions,
 } from "vigiles/spec";
 
-export default experimental_skill({
+export default skill({
   name: "ship-pr",
   description: "Run the checks and open a PR once they pass",
-  inputs: [input("branch", "branch to open the PR from")],
+  inputs: [skill.input("branch", "branch to open the PR from")],
   body: instructions`## Reference\n\n…domain knowledge the model reads…`,
   steps: [
-    step("Run the linter and fix issues.", { gate: cmd("npm run lint") }),
-    step("Run the tests; fix until green.", {
+    skill.step("Run the linter and fix issues.", { gate: cmd("npm run lint") }),
+    skill.step("Run the tests; fix until green.", {
       gate: project("test"),
       retry: 3,
     }),
@@ -68,6 +66,8 @@ export default experimental_skill({
   result: project("test"),
 });
 ```
+
+**Why `skill.input` and `skill.step` instead of two more imports.** Both are used only by skill specs; `cmd`, `file`, `project` and `result` are shared with subagents and stay top-level. Hanging the skill-only pair off the builder makes the experimental marking structural for the whole family — you cannot reach `input()` without naming `experimental_skill` first, which a per-name prefix convention could not guarantee. Aliasing at the import, as above, keeps the prefix on the one line that crosses the package boundary and keeps the body readable.
 
 What each field does:
 

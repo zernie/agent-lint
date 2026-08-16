@@ -265,13 +265,15 @@ jobs:
           fi
           echo "vigiles action output: valid=$got"
 
-      - name: Lint compiled files (direct CLI — redundant safety)
-        run: node dist/cli.js lint
-
       # Dogfood the eval staleness gate via the composite Action. This repo's
       # real-model evals run locally (`npm run test:eval`), so no lock is
       # committed yet — `eval-check` is a green no-op here, but it proves the
       # action's `command: eval-check` → `eval --check` path works in CI.
+      #
+      # 🔴 Kept OUT of `npm run check` on purpose, and nearly lost by accident when
+      # the consolidation below was written: it sat between two command-steps, so a
+      # span-based edit swallowed it. Like the lint step above it, it exercises the
+      # ACTION WRAPPER, which has no shell equivalent.
       - name: Dogfood the eval staleness gate (eval-check)
         uses: ./
         with:
@@ -279,147 +281,24 @@ jobs:
           version: local
           comment: "false"
 
-      # Public-API surface gate: API Extractor compares the live .d.ts surface of
-      # every public entry point against the committed api-surface/*.api.md reports. A PR
-      # that adds/removes/changes a public export (or leaks a Claude-Code symbol
-      # back onto the agnostic surface) fails here until `npm run api:report` is
-      # run and the report diff is reviewed + committed. dist/ is built above.
-      - name: API surface gate
-        run: node scripts/api-extractor.mjs
-
-      # Smoke-check the API reference GENERATOR (TypeDoc) on every PR — proves
-      # `npm run docs:api` / typedoc.json still build, so the api-docs.yml Pages
-      # deploy (push to main) can't silently rot. Output is gitignored, not
-      # published here.
-      - name: API reference generates (smoke, no publish)
-        run: npx typedoc
-
-      # Dogfood-corpus guards (deterministic, no model, no key). The benchmark
-      # corpus's own correctness-oracle self-checks: a check that stopped
-      # discriminating good-from-bad would silently void every downstream
-      # benchmark/optimizer claim. See research/dogfood-corpus.md.
-      - name: Dogfood corpus guards (bench self-checks)
-        run: |
-          node bench/corpus/verify.mjs
-          node bench/corpus/verify-headroom.mjs
-
-      # The @vigiles/rule-enforcer trust gate — prove the two-stage soundness gate
-      # still ABSTAINS the leaky synthesized checkers (its whole reason to
-      # exist). gate.js asserts the known-correct kept/abstain verdicts and
-      # exits non-zero on drift. Its own package + lockfile, so install in place.
-      # Deterministic, no model. See research/dogfood-corpus.md.
-      - name: Rule-enforcer trust gate (soundness dogfood)
-        run: |
-          npm ci --prefix rule-enforcer
-          node rule-enforcer/gate.js
-
-      # ── Moved here from `test` (2026-08-12) ─────────────────────────────────
-      # Not one of these needs python/ruby/java/go, bubblewrap, or the
-      # claude/codex CLIs — they were simply queued behind ~96 s of toolchain
-      # install and ~6 min of tests in the job that was CI's long pole, while
-      # this job finished in ~90 s and idled. 63 s measured, moved wholesale.
-      # Relative ORDER is preserved: `generate types` writes
-      # .vigiles/generated.d.ts before lint and prettier see the tree, exactly
-      # as it did in `test`. dist/ comes from the Build step above.
-
-      # Jest is the half of the old "cross-runner matcher tests (vitest + jest)"
-      # step that was worth keeping — a genuinely different runner, 1.4 s. The
-      # vitest half was deleted rather than moved: it re-ran the whole suite the
-      # coverage gate had just run (see the note in `test`).
-      - name: Cross-runner matcher tests (jest)
-        run: npx jest
-
-      - name: Matcher type augmentation compiles (vitest + jest)
-        run: npx tsc --noEmit -p test/types/tsconfig.json
-
-      - name: Type check
-        run: npx tsc --noEmit
-
-      # 🔴 site/ and packages/report-view have their OWN tsconfig and were never typechecked here.
-      # A field added to the engine's inventory and not to the view's mirror therefore compiled
-      # clean through all three steps above and failed only for whoever ran
-      # `tsc -p site/tsconfig.json` by hand. That is precisely what happened to `untestedHarness`
-      # and `unevaluated` earlier in this PR: three green typecheck steps, none covering the project
-      # that broke. A check that passes without covering the thing that broke is the defect this
-      # whole PR is about, so it gets a step rather than a note.
-      - name: Type check (site + report-view)
-        run: npx tsc --noEmit -p site/tsconfig.json
-
-      - name: Check generated types compile
-        run: node dist/cli.js generate types && npx tsc --noEmit
-
-      # 🔴 THE STEP ABOVE REGENERATES THE FILE AND COMPILES THE RESULT — it never looks at the
-      # COMMITTED copy, so a stale `.vigiles/generated.d.ts` passes it every time. Measured
-      # 2026-08-16: the tracked file was behind by 314 lines / ~147 entries, and CI had been
-      # green throughout. The step's name is honest about this — it checks that generated types
-      # COMPILE, not that they are up to date — which is exactly why the gap survived review.
+      # ONE list, and it lives in `scripts/check.mjs` — not restated here.
       #
-      # The prediction is on record. `zernie/mine`'s .gitignore, 2026-08-08, gives this as the
-      # reason that repo refuses to track its own copy: "drift in a generated file is invisible
-      # unless something regenerates it with --check. Upstream vigiles tracks its own copy and it
-      # IS stale on main for exactly that reason." Eight days later it was staler. Writing the
-      # prediction down did not stop it; this line does.
-      - name: Generated types are up to date
-        run: git diff --exit-code .vigiles/generated.d.ts
-
-      # Do the TypeScript examples in the docs still import things that exist?
+      # On 2026-08-16 three PRs went to `main` red because the author ran a
+      # five-command list from memory while this job ran thirteen. The failing one
+      # (`tsc -p test/types/tsconfig.json`) sits in a separate tsconfig the root
+      # type-check cannot see, and three `@ts-expect-error` assertions had quietly
+      # stopped failing. A longer list to remember would not have fixed that; a
+      # single list that CI INVOKES does — the pre-commit / just / mise pattern.
       #
-      # Nothing checked this before 2026-08-16, and on that day the docs carried SIX package
-      # subpaths that raise ERR_PACKAGE_PATH_NOT_EXPORTED, plus two examples importing a real
-      # symbol from the wrong barrel — `scriptModel` (it lives in `vigiles/claude-code`) and
-      # `runHookProgram` (`vigiles/hook`). All copy-pasteable, all broken on the reader's first
-      # line. `scriptModel` was the THIRD occurrence of the same wrong import, twice previously
-      # written down as a known boundary. Prose did not hold it; this does.
+      # `npm run check` runs `build`, then the read-only checks in parallel, then
+      # the file-WRITING ones serially (a writer beside a reader is a race), and
+      # names whatever failed — which is what the per-step names here used to buy.
+      # `node scripts/check.mjs --list` prints the commands without running them.
       #
-      # 🔴 IT REPORTS ONLY THIS PACKAGE'S OWN MODULE SURFACE, AND THAT NARROWNESS IS THE WHOLE
-      # DESIGN. Measured over this repo's 102 ts/js blocks: full `tsc` on every block — the
-      # DEFAULT of all three off-the-shelf tools — yields 234 findings, 2 real and 232 false,
-      # because only 36.3% of blocks are self-contained; the rest are illustrative fragments with
-      # free variables. This gate yields 2 of 2, with no suppression markers anywhere. A checker
-      # that fires on legitimate input is muted within a week, so a tool with a 1:24 noise ratio
-      # is not a stricter version of this one — it is a dead one.
-      #
-      # Rust's doctests take the opposite route (compile everything, opt OUT with `ignore`); here
-      # that would mean ~65 suppression markers on day one, visible to every reader on GitHub.
-      # Inverting it costs nothing and makes the false positive unrepresentable rather than filtered.
-      # Opt IN to a full type-check per block with `<!-- vigiles:check -->` above the fence.
-      #
-      # Resolution needs no path rewriting: TypeScript resolves the package to itself through the
-      # `exports` map (self-reference), so a phantom subpath is an ordinary TS2307.
-      - name: Check doc imports
-        run: npm run docs:check
-
-      # Two gates on the same convention, entered from opposite ends. They look
-      # redundant and are not: one starts from the DOOR, the other from the TAG,
-      # and a symbol can be wrong in one way while right in the other.
-      #
-      # By DOOR — a subpath that carries a warning in its name must carry it on
-      # every symbol behind it: `./eval` → `paid_*`, `./experimental` →
-      # `experimental_*`. The path warns once at the top of a file; the name warns
-      # at every call site, which is where the money is spent. Held by prose it
-      # decays — `makeDockerRuntime` sat unprefixed among six `experimental_`
-      # siblings until this step was written, and ONE missing prefix is worse than
-      # none, because the six that comply teach the reader that an unprefixed name
-      # is safe. Types are exempt on purpose: a type is never called, and the
-      # report types are re-exported from the FREE barrel too.
-      - name: Check export prefixes
-        run: npm run exports:check
-
-      # By TAG — a public declaration tagged `@experimental` must say so in its
-      # name, wherever it lives. This is the half that caught `skill()`: it shipped
-      # stable-named from `vigiles/spec` — a door with no warning in it, so the
-      # door-based gate above could never see it — while its own doc opened with
-      # "`skill()` is experimental". Prose against mechanism, in the project built
-      # to catch exactly that. Reads the `@experimental` TSDoc already in the
-      # source plus the committed `api-surface/*.api.md` reports; no new marker.
-      - name: Check experimental naming
-        run: npm run experimental:check
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Check formatting
-        run: npm run fmt:check
+      # The two `uses: ./` steps above are NOT in it on purpose: they dogfood this
+      # repo's own composite Action, which has no shell equivalent.
+      - name: Check suite (identical to `npm run check` locally)
+        run: npm run check
 
   harness:
     # Dogfood the harness-testing pillar on the in-repo build: the deterministic

@@ -613,8 +613,13 @@ export interface SkillStep {
   readonly retry?: number;
 }
 
-/** Declare a skill input (compiles to argument-hint + an Arguments entry). */
-export function input(
+/**
+ * Declare a skill input (compiles to argument-hint + an Arguments entry).
+ *
+ * Deliberately NOT a standalone export — reached as `experimental_skill.input`.
+ * The reason is on `experimental_skill` below.
+ */
+function input(
   name: string,
   hint: string,
   opts: { required?: boolean } = {},
@@ -622,8 +627,12 @@ export function input(
   return { name, hint, required: opts.required };
 }
 
-/** Declare a gated pipeline step. */
-export function step(
+/**
+ * Declare a gated pipeline step.
+ *
+ * Deliberately NOT a standalone export — reached as `experimental_skill.step`.
+ */
+function step(
   instr: string | InstructionFragment[],
   opts: { gate?: Gate; retry?: number } = {},
 ): SkillStep {
@@ -731,14 +740,35 @@ export type SkillSpecInput<
  * DIFFERENT function — a `Check<Trace>` taking an id string, asking whether a
  * skill fired. This one authors a skill; that one observes one.
  *
+ * Its helper vocabulary hangs off it — `experimental_skill.input(…)` and
+ * `experimental_skill.step(…)` — rather than being exported beside it. Both are
+ * used ONLY by skill specs (measured: zero uses in agent/claude specs, against
+ * `cmd`/`file`/`ref`/`result`, which are shared and therefore stay top-level).
+ * Hanging them here makes the experimental marking STRUCTURAL for the whole
+ * family: you cannot reach `input()` without naming `experimental_skill` first.
+ * The prefix convention alone could not do that — it is a habit, and it had
+ * already leaked once when `skill()` shipped stable-named against its own docs.
+ *
+ * Honest limit: `const { input } = experimental_skill` strips the marker again
+ * inside one file. What the shape actually guarantees is narrower and still
+ * worth having — an unmarked name never crosses the package boundary.
+ *
+ * `Object.assign` rather than `export namespace`: the latter is banned by this
+ * repo's own lint (`no-namespace: error`, inherited from strict-type-checked).
+ *
  * @experimental
  */
-export function experimental_skill<
+function skillSpec<
   const P extends AuthoredPurity | undefined = undefined,
   V extends ToolVocabulary = OpenToolVocabulary,
 >(spec: SkillSpecInput<P, V>): SkillSpec {
   return { _specType: "skill", ...spec } as SkillSpec;
 }
+
+/**
+ * @experimental
+ */
+export const experimental_skill = Object.assign(skillSpec, { input, step });
 
 // ---------------------------------------------------------------------------
 // Subagent specs

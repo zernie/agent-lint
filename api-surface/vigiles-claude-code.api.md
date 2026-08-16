@@ -66,8 +66,16 @@ export interface ClaudeCodeToolVocabulary extends ToolVocabulary {
     readonly readOnly: ClaudeCodeReadOnlyTool;
 }
 
-// @public
-export function experimental_skill<const P extends AuthoredPurity | undefined = undefined>(spec: SkillSpecInput<P, ClaudeCodeToolVocabulary>): SkillSpec;
+// @public (undocumented)
+export const experimental_skill: typeof skillSpec & {
+    input: (name: string, hint: string, opts?: {
+        required?: boolean;
+    }) => SkillInput;
+    step: (instr: string | InstructionFragment[], opts?: {
+        gate?: Gate;
+        retry?: number;
+    }) => SkillStep;
+};
 
 // @public
 export function extractRequest(body: {

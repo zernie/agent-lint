@@ -40,12 +40,14 @@ The docs are grouped by what you're trying to do:
 
 - [`harnesses.md`](harnesses.md) — which harness vigiles targets and how you pick one (by import), plus the capability matrix.
 - [`authoring-an-adapter.md`](authoring-an-adapter.md) — teach vigiles a new harness: the five ports, a worked skeleton, validating with the conformance kit.
+- [`non-js-harnesses.md`](non-js-harnesses.md) — running vigiles on a harness whose project is Kotlin, Go or anything else non-JS: what needs Node and what does not.
 - [`agent-setup.md`](agent-setup.md) — agent setup & workflows in one guide: what `init` does, per-agent recipes (Claude Code / Codex / multi-agent / Cursor), non-interactive setup + fallback hooks, and CI.
 
 ## Reference — "the exact flag, symbol, or rule"
 
 - [`cli.md`](cli.md) — the full CLI: every verb and flag, the Claude Code plugin, `lint` vs `audit`.
 - [`commands-and-how-they-relate.md`](commands-and-how-they-relate.md) — the mental model: how `audit` / `lint` / `test` / `eval` / `init` fit together, and why measuring "do my skills fire?" uses `init`, not `audit`.
+- [`testing-matrix.md`](testing-matrix.md) — every use case of the harness-testing API mapped to the tier that tests it, and what each tier costs.
 - [`testing-api.md`](testing-api.md) — the full harness-testing API: every predicate, assertion, `check`, matcher, and option (`measureTriggerRate` / `runEval` / significance).
 - [`spec-format.md`](spec-format.md) — the typed `.spec.ts` format (target, sections, rules, verified references) — the source of truth.
 - [`linter-support.md`](linter-support.md) — the 11 linters + `generate-types` / `generate-schema`.
