@@ -252,7 +252,8 @@ order and renders the Anthropic Messages SSE shape `claude` expects.
 
 ```ts
 import { test } from "node:test";
-import { withHarness, assertCreated, scriptModel } from "vigiles/testing";
+import { withHarness, assertCreated } from "vigiles/testing";
+import { scriptModel } from "vigiles/claude-code";
 
 test("Stop hook forces more work", async () => {
   await withHarness(

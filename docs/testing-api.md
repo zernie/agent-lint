@@ -133,8 +133,8 @@ import {
   assertHookAllows,
   assertHookNotices,
   assertHookSilent,
-  runHookProgram,
 } from "vigiles/testing";
+import { runHookProgram } from "vigiles/hook";
 
 // loadHook takes the hook's PATH — what a .harness.mjs file actually has. It is
 // the same loader the runtime uses, and it handles a .hook.ts under tsx / Node
