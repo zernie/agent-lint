@@ -17,7 +17,7 @@
  *   node examples/harness/skill-outcome.eval.mjs 6      # standalone
  *
  * Real model → real cost. Needs the `claude` CLI + model auth and a built
- * dist/. External users import from the package: `from "vigiles/eval"`.
+ * dist/. External users import from the package: `from "vigiles/testing"`.
  *
  * Note: this example delivers the arm difference by telling the agent to read a
  * working-dir SKILL.md — the simplest illustration for a prose-only skill. To

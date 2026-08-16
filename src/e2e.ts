@@ -10,6 +10,8 @@
  * four tiers). Prefer `vigiles/integration`.
  *
  * NOT here: **evals** (`runEval` / `measure` / `measureTriggerRate` / `judge`) —
- * those are non-deterministic measurement (`vigiles/eval`), a different axis.
+ * those are non-deterministic measurement, a different axis. (They live on
+ * `vigiles/testing`; `vigiles/eval` is named here in the original comment and does
+ * not exist as an entry point.)
  */
 export * from "./integration.js";

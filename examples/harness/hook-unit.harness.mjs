@@ -15,8 +15,8 @@
  *   npx vigiles test examples/harness/hook-unit.harness.mjs
  *   node examples/harness/hook-unit.harness.mjs        # standalone
  *
- * External users import from the package: `from "vigiles/run-hook"` and
- * `from "vigiles/harness-assert"`.
+ * External users import from the package: `from "vigiles/unit"` and
+ * `from "vigiles/testing"`.
  */
 import { runHook } from "../../dist/run-hook.js";
 import {

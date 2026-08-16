@@ -43,7 +43,8 @@ import {
 } from "./eval-baseline.js";
 
 // Re-export the significance primitives so the whole eval-analysis surface lives
-// behind `vigiles/harness-assert` (no separate entry point).
+// re-exported from `vigiles/testing` (there is no `vigiles/harness-assert` entry
+// point — it was advertised in this very comment and never existed).
 export { compareArms } from "./stats.js";
 export type { Comparison } from "./stats.js";
 export {
@@ -935,7 +936,7 @@ interface MatcherOutput {
  * Custom matchers compatible with both vitest and jest. Register once:
  *
  *   import { expect } from "vitest"; // or "@jest/globals"
- *   import { vigilesMatchers } from "vigiles/harness-assert";
+ *   import { vigilesMatchers } from "vigiles/testing";
  *   expect.extend(vigilesMatchers);
  *
  *   expect(result).toHaveCreated("RESULT");

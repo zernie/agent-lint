@@ -17,7 +17,7 @@
  *   node examples/harness/policy-gate.harness.mjs        # standalone
  *
  * Needs the `claude` CLI and a built dist/ (`npm run build`). External users
- * import from the package instead: `from "vigiles/harness-test"`.
+ * import from the package instead: `from "vigiles/integration"`.
  */
 import {
   runHarnessTest,
