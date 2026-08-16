@@ -502,10 +502,10 @@ function writeHandoffFixture(
   writeFileSync(join(dir, "implementer.spec.ts"), HANDOFF_IMPLEMENTER);
   writeFileSync(
     join(dir, "ship.spec.ts"),
-    `import { railway, delegate, needs } from "vigiles/spec";
+    `import { railway, delegate, experimental_needs } from "vigiles/spec";
 export default railway({
   name: "ship",
-  steps: [delegate("planner"), delegate("implementer", undefined, needs(${needsLiteral}))],
+  steps: [delegate("planner"), delegate("implementer", undefined, experimental_needs(${needsLiteral}))],
 });
 `,
   );

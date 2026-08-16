@@ -8,7 +8,12 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { agent, instructions, effect, file } from "../../core/spec.js";
+import {
+  agent,
+  instructions,
+  experimental_effect,
+  file,
+} from "../../core/spec.js";
 import { compileAgent } from "../../core/compile.js";
 import { claudeCodeDialect } from "./dialect.js";
 import {
@@ -681,7 +686,7 @@ test("evaluatePreToolUse: effect boundary outside blocks side-effecting tools", 
           Read ${file("package.json")}.
 
           ## Apply
-          ${effect`
+          ${experimental_effect`
             Side effects allowed ONLY here.
           `}
         `,
@@ -719,7 +724,7 @@ test("evaluatePreToolUse: effect boundary inside allows side-effecting tools", (
         tools: ["Read", "Write"],
         body: instructions`
           ## Apply
-          ${effect`Write ${file("package.json")}.`}
+          ${experimental_effect`Write ${file("package.json")}.`}
         `,
       }),
       {
@@ -750,7 +755,7 @@ test("agent-hook CLI: effect-enter allows Write; effect-exit blocks Write again"
       tools: ["Read", "Write"],
       body: instructions`
         ## Apply
-        ${effect`Write the changelog.`}
+        ${experimental_effect`Write the changelog.`}
       `,
     }),
     {

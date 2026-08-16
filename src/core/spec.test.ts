@@ -12,7 +12,7 @@ import {
   dir,
   glob,
   instructions,
-  effect,
+  experimental_effect,
   claude,
   experimental_skill,
 } from "./spec.js";
@@ -136,16 +136,16 @@ describe("instructions tagged template", () => {
   });
 });
 
-describe("effect() tagged template", () => {
+describe("experimental_effect() tagged template", () => {
   it("produces an EffectRegion with correct _ref", () => {
-    const region = effect`Side effects allowed here.`;
+    const region = experimental_effect`Side effects allowed here.`;
     assert.equal(region._ref, "effect");
     assert.equal(region.body.length, 1);
     assert.equal(typeof region.body[0], "string");
   });
 
   it("interleaves strings and InstructionFragment refs", () => {
-    const region = effect`Write ${file("package.json")} and run ${cmd("npm publish")}.`;
+    const region = experimental_effect`Write ${file("package.json")} and run ${cmd("npm publish")}.`;
     assert.equal(region._ref, "effect");
     assert.equal(region.body.length, 5);
     assert.equal(typeof region.body[0], "string");
@@ -156,7 +156,7 @@ describe("effect() tagged template", () => {
   });
 
   it("can be nested inside instructions", () => {
-    const frags = instructions`Before. ${effect`Inside ${file("package.json")}.`} After.`;
+    const frags = instructions`Before. ${experimental_effect`Inside ${file("package.json")}.`} After.`;
     // [string, EffectRegion, string]
     assert.equal(frags.length, 3);
     const region = frags[1] as { _ref: string; body: unknown[] };

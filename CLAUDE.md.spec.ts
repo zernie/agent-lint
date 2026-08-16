@@ -662,6 +662,9 @@ BUILD + TOOLING + GENERATED:
       "Hexagonal boundary: the reference-verification domain (verify-core) must not import the Claude Code harness/transport adapter (cc-harness). The core stays harness-agnostic so a future vigiles/<other-harness> (e.g. Codex) can sit beside the Claude Code one. Dogfoods enforce() over eslint-plugin-boundaries.",
     ),
 
+    "experimental-names-carry-the-warning": guidance(
+      'If we EXPORT it and it is not stable, its NAME starts with `experimental_`. Declare it once with the `@experimental` TSDoc tag; `npm run experimental:check` (scripts/check-experimental-naming.mjs, wired into ci.yml) fails if a tagged, exported symbol lacks the prefix, so the tag and the name cannot drift. `@internal` does NOT mean unstable — it answers whether something is part of the API at all, and is only correct on a symbol we do not export; an `@internal` symbol that appears in api-surface/*.api.md is a contradiction the same check reports, because the exports map ships it whatever the tag says. Types are out of scope (the convention is about call sites; a type annotation is not one). Opt out on the declaration with `vigiles:experimental-name-ok <reason>` — the reason is required and must be on the same line. WHY the name and not just a tag: a tag is invisible where it matters, while a name is in every call site, diff, review and autocomplete. Learned the hard way — `skill()` shipped under a stable name while docs/skills.md opened with "`skill()` is experimental", and nothing caught it because the convention was a habit rather than a check. Renaming an `experimental_` symbol is NOT a breaking change and gets no major bump; that is what the prefix promises. See STABILITY.md.',
+    ),
     "never-skip-tests": guidance(
       "All tests must pass. If a test requires a CLI tool (pylint, rubocop, ruff, clippy), install the tool, don't skip the test.",
     ),

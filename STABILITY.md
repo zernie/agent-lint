@@ -45,27 +45,47 @@ A breaking change to any of the above is signalled with a Conventional-Commit
 These are kept and worked on, but a launch user never needs them and they may
 change or be removed **without** a major bump.
 
-Three markers say this today, and which one you meet depends on where the symbol
-lives: `@internal` in the TSDoc (hidden from the published API docs),
-`@experimental` in the TSDoc (visible, and enforced to match the name by
-`npm run experimental:check`), and the `experimental_` name prefix. They overlap
-and there is no rule yet for choosing between them — treat any of the three as
-the same promise, which is none.
+### The one rule
+
+**If we export it and it isn't stable, its name starts with `experimental_`.**
+
+That is the whole convention. Two supporting clauses:
+
+- **`@experimental` in the TSDoc is how it's declared**, and `npm run
+experimental:check` fails CI if a tagged, exported symbol lacks the prefix — so
+  the tag and the name cannot drift apart.
+- **`@internal` no longer means "unstable".** It answers a different question —
+  _is this part of the API at all_ — and it is only correct on something we do
+  **not** export. An `@internal` symbol that appears in `api-surface/*.api.md` is
+  a contradiction the same check reports: the exports map ships it, so it is
+  public whatever the tag says.
+
+Why the name and not just a tag: a tag is invisible where it matters. You see a
+name at every call site, in every diff, in every review, in autocomplete. Nobody
+using `experimental_pipe(...)` can say they weren't told. We arrived at this the
+hard way — `skill()` shipped under a stable name while its own documentation
+opened with "`skill()` is experimental", and nothing caught it, because the
+convention was a habit rather than a check.
+
+Cost of the promise: renaming one of these is **not** a breaking change and does
+not get a major bump. That is what "no stability promise" means.
+
+### What's on the list
 
 - **`experimental_skill()`** in `vigiles/spec` / `vigiles/claude-code` — skill
   authoring. Compiles, and its gates are verified, but no real skill corpus has
   been converted and a compiled `SKILL.md` has never been exercised as an
   installed skill. See `docs/skills.md` §Status.
-  ⚠️ Its helper vocabulary — `input()` and `step()` — is used **only** by skill
-  specs but is exported unmarked and unprefixed, so nothing in the name warns
-  you. Treat both as carrying `experimental_skill`'s promise, not this list's
-  stable one.
-- Typed-composition combinators in `vigiles/spec` — `pipe` / `pipeStep` /
-  `needs` / `start` / `andThen` and their helper types (`Supplies`, `Handoff`,
-  `KnownAgentName`). Tagged `@internal`, though on `pipe` the tag sits on the
-  first overload only, so later overloads still read `@public (undocumented)` in
-  the API report.
-- `effect()` / effect-region (parked).
+  ⚠️ Known gap: its helper vocabulary — `input()` and `step()` — is used **only**
+  by skill specs, yet is exported with no tag and no prefix, so nothing warns
+  you. The check enforces "tagged ⇒ named", not "everything that should be
+  tagged is". Treat both as carrying `experimental_skill`'s promise.
+- **Typed-composition combinators** in `vigiles/spec` — `experimental_pipe` /
+  `experimental_pipeStep` / `experimental_needs` / `experimental_start` /
+  `experimental_andThen`, and their helper types (`Supplies`, `Handoff`,
+  `KnownAgentName`). The types stay unprefixed: the convention covers callables,
+  since a type annotation is not a call site.
+- **`experimental_effect()`** / effect-region (parked).
 - The whole-harness codegen (`generate harness`) and capability lattice.
 - Internal-only research/spike modules (`guards`, `hook-spec`, `evolve`) — not
   exported from any entry point.

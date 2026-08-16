@@ -79,6 +79,68 @@ describe("check-experimental-naming", () => {
     expect(out).toContain("findings: 0");
   });
 
+  // ── the second half of the rule: @internal is about VISIBILITY, not stability ──
+
+  it("FIRES on an @internal function that IS exported — a contradiction", () => {
+    // The tag says "not part of the API" while the exports map ships it. Six of
+    // these existed on the real corpus (`pipe`, `pipeStep`, `needs`, `start`,
+    // `andThen`, `effect`), all reachable from `vigiles` and `vigiles/linting`.
+    const { code, out } = run(
+      fixture("/**\n * @internal\n */\nexport function widget(): void {}\n"),
+    );
+    expect(code).not.toBe(0);
+    expect(out).toContain("tagged @internal but IS exported");
+  });
+
+  it("is SILENT on an @internal function that is NOT exported — the correct use", () => {
+    const { code, out } = run(
+      fixture(
+        "/**\n * @internal\n */\nexport function helper(): void {}\n",
+        "export function somethingElse(): void;",
+      ),
+    );
+    expect(code).toBe(0);
+    expect(out).toContain("checked: 0");
+  });
+
+  it("reads a tag that carries PROSE after it", () => {
+    // 🔴 The shipped first version anchored the tag at end-of-line, so
+    // `@internal Experimental typed-composition surface — …` (the real text on
+    // `pipe`) was invisible. 2 of 8 `@experimental` and 31 of 39 `@internal`
+    // declarations were skipped. Deleting this test restores that blindness.
+    const { code, out } = run(
+      fixture(
+        "/**\n * @experimental — surface may change without a major bump.\n */\nexport function widget(): void {}\n",
+      ),
+    );
+    expect(code).not.toBe(0);
+    expect(out).toContain("experimental_widget");
+  });
+
+  it("finds the declaration past an intervening comment", () => {
+    // `pipe` has an eslint-disable block between its JSDoc and its first
+    // overload; anchoring at the very next character missed it entirely.
+    const { code, out } = run(
+      fixture(
+        "/**\n * @experimental\n */\n/* eslint-disable no-redeclare -- overloads */\nexport function widget(): void {}\n",
+      ),
+    );
+    expect(code).not.toBe(0);
+    expect(out).toContain("experimental_widget");
+  });
+
+  it("never suggests a DOUBLED prefix on an already-prefixed name", () => {
+    // An `@internal` + already-prefixed symbol must be told to change its TAG,
+    // not to become `experimental_experimental_x`.
+    const { out } = run(
+      fixture(
+        "/**\n * @internal\n */\nexport function experimental_widget(): void {}\n",
+        "export function experimental_widget(): void;",
+      ),
+    );
+    expect(out).not.toContain("experimental_experimental_");
+  });
+
   // ── the exemptions, each with the reason it exists ──
 
   it("is SILENT on an INTERNAL @experimental function — absent from every report", () => {

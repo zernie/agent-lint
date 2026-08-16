@@ -106,6 +106,39 @@ function publicSymbols() {
 const VALUE_DECL =
   /^\s*export\s+(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(function|const|let|var|class)\s+([A-Za-z0-9_$]+)/;
 
+/**
+ * A TSDoc tag, with or without prose after it.
+ *
+ * 🔴 The first version of this required the tag ALONE on its line
+ * (`@experimental\s*$`). Real tags carry prose — `@internal Experimental
+ * typed-composition surface — …` on `pipe`, and two in `services.ts` — so the
+ * check silently skipped them. Measured the day it shipped: 2 of 8 tagged
+ * `@experimental` declarations and 31 of 39 `@internal` ones were invisible to
+ * it. A stricter pattern read as a safer one and was the opposite.
+ */
+const tagRe = (tag) => new RegExp(`^\\s*\\*\\s*@${tag}\\b`, "m");
+
+/**
+ * The next value declaration after a doc block, skipping anything that is not
+ * one — `pipe` has an `/* eslint-disable ... *\/` between its JSDoc and its
+ * first overload, and anchoring at the very next character missed it. Only
+ * comments and blank lines may intervene; real code ends the search, so a doc
+ * block that documents nothing does not silently adopt a distant declaration.
+ */
+function declAfter(src, from) {
+  let rest = src.slice(from);
+  for (;;) {
+    const skipped = rest.replace(
+      /^(?:\s*(?:\/\/[^\n]*|\/\*[\s\S]*?\*\/)\s*)+/,
+      "",
+    );
+    const decl = VALUE_DECL.exec(skipped);
+    if (decl) return decl;
+    if (skipped === rest) return null;
+    rest = skipped;
+  }
+}
+
 function taggedExperimental(file) {
   const src = readFileSync(file, "utf8");
   const out = [];
@@ -113,12 +146,19 @@ function taggedExperimental(file) {
   let m;
   while ((m = BLOCK.exec(src)) !== null) {
     const block = m[0];
-    if (!/^\s*\*\s*@experimental\s*$/m.test(block)) continue;
+    const experimental = tagRe("experimental").test(block);
+    const internal = tagRe("internal").test(block);
+    if (!experimental && !internal) continue;
     if (/@module\b/.test(block)) continue; // file-level tag, not a symbol
-    const decl = VALUE_DECL.exec(src.slice(m.index + block.length));
+    const decl = declAfter(src, m.index + block.length);
     if (!decl) continue;
     const line = src.slice(0, m.index + block.length).split("\n").length;
-    out.push({ name: decl[2], line, exempt: ALLOW.test(block) });
+    out.push({
+      name: decl[2],
+      line,
+      tag: experimental ? "@experimental" : "@internal",
+      exempt: ALLOW.test(block),
+    });
   }
   return out;
 }
@@ -137,14 +177,36 @@ let findings = 0;
 for (const file of walk(join(ROOT, "src"))) {
   for (const d of taggedExperimental(file)) {
     const doors = pub.get(d.name);
-    if (!doors) continue; // internal — may be experimental without renaming
+    // Not exported from any subpath: the tag is a note to maintainers and
+    // promises nothing to anyone. Both tags are fine there, unchecked.
+    if (!doors) continue;
     checked++;
     if (d.exempt) continue;
+
+    // `vigiles.api.md` is the root subpath: label it `vigiles`, not `vigiles/vigiles`.
+    const where = [...new Set(doors)]
+      .map((d) => (d === "vigiles" ? "vigiles" : `vigiles/${d}`))
+      .join(", ");
+    // `@internal` on a symbol that IS exported is a contradiction: the tag says
+    // "not part of the API" while the exports map ships it. Say which half to
+    // change rather than guessing — retracting the export and renaming are both
+    // legitimate, and only the author knows which was meant.
+    if (d.tag === "@internal") {
+      findings++;
+      console.log(
+        `${relative(ROOT, file)}:${d.line} \`${d.name}\` is tagged @internal but IS exported ` +
+          `(${where}). @internal answers "is it public", not "is it stable" — an exported symbol ` +
+          `is public whatever the tag says. Either stop exporting it, or mark it @experimental ` +
+          `and rename it \`${d.name.startsWith(PREFIX) ? d.name : PREFIX + d.name}\`.`,
+      );
+      continue;
+    }
+
     if (d.name.startsWith(PREFIX)) continue;
     findings++;
     console.log(
       `${relative(ROOT, file)}:${d.line} \`${d.name}\` is tagged @experimental and is ` +
-        `public (vigiles/${doors.join(", vigiles/")}) but is not named \`${PREFIX}${d.name}\`. ` +
+        `public (${where}) but is not named \`${PREFIX}${d.name}\`. ` +
         `Rename it, drop the tag, or mark the declaration ` +
         `\`vigiles:experimental-name-ok <reason>\`.`,
     );
@@ -152,7 +214,7 @@ for (const file of walk(join(ROOT, "src"))) {
 }
 
 console.log(
-  `\npublic @experimental declarations checked: ${checked}  (across ${reports.length} api reports)`,
+  `\npublic @experimental/@internal declarations checked: ${checked}  (across ${reports.length} api reports)`,
 );
 console.log(`findings: ${findings}`);
 process.exit(findings ? 1 : 0);
