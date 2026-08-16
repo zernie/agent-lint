@@ -19,8 +19,9 @@ their exit codes. Most of the churn is in the library API underneath it.
   - `vigiles/linting` — the compiler + reference verification
     (`compileClaude`, `compileSkill`, …).
   - `vigiles/spec` — the core builders (`enforce`, `guidance`, `claude`,
-    `skill`, `agent`, `file`, `cmd`, `ref`, `dir`, `glob`, `result`,
-    `delegate`, `railway`).
+    `agent`, `file`, `cmd`, `ref`, `dir`, `glob`, `result`,
+    `delegate`, `railway`). Skill authoring is **not** on this list — see
+    `experimental_skill` below.
   - `vigiles/testing`, `vigiles/unit` — the harness-test + check vocabulary.
   - `vigiles/claude-code`, `vigiles/codex` — the per-harness surfaces.
   - `vigiles/adapter` — the adapter-authoring kit.
@@ -39,15 +40,31 @@ A breaking change to any of the above is signalled with a Conventional-Commit
   frozen** — it carries a known delivery caveat
   ([#34692](https://github.com/anthropics/claude-code/issues/34692)).
 
-## Experimental — marked `@internal`, no stability promise
+## Experimental — no stability promise
 
 These are kept and worked on, but a launch user never needs them and they may
-change or be removed **without** a major bump. They're tagged `@internal` in the
-source (excluded from the published API docs) so a later change burns nobody:
+change or be removed **without** a major bump.
 
+Three markers say this today, and which one you meet depends on where the symbol
+lives: `@internal` in the TSDoc (hidden from the published API docs),
+`@experimental` in the TSDoc (visible, and enforced to match the name by
+`npm run experimental:check`), and the `experimental_` name prefix. They overlap
+and there is no rule yet for choosing between them — treat any of the three as
+the same promise, which is none.
+
+- **`experimental_skill()`** in `vigiles/spec` / `vigiles/claude-code` — skill
+  authoring. Compiles, and its gates are verified, but no real skill corpus has
+  been converted and a compiled `SKILL.md` has never been exercised as an
+  installed skill. See `docs/skills.md` §Status.
+  ⚠️ Its helper vocabulary — `input()` and `step()` — is used **only** by skill
+  specs but is exported unmarked and unprefixed, so nothing in the name warns
+  you. Treat both as carrying `experimental_skill`'s promise, not this list's
+  stable one.
 - Typed-composition combinators in `vigiles/spec` — `pipe` / `pipeStep` /
   `needs` / `start` / `andThen` and their helper types (`Supplies`, `Handoff`,
-  `KnownAgentName`).
+  `KnownAgentName`). Tagged `@internal`, though on `pipe` the tag sits on the
+  first overload only, so later overloads still read `@public (undocumented)` in
+  the API report.
 - `effect()` / effect-region (parked).
 - The whole-harness codegen (`generate harness`) and capability lattice.
 - Internal-only research/spike modules (`guards`, `hook-spec`, `evolve`) — not
