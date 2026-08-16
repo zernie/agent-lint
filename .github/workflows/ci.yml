@@ -348,6 +348,20 @@ jobs:
       - name: Check generated types compile
         run: node dist/cli.js generate types && npx tsc --noEmit
 
+      # 🔴 THE STEP ABOVE REGENERATES THE FILE AND COMPILES THE RESULT — it never looks at the
+      # COMMITTED copy, so a stale `.vigiles/generated.d.ts` passes it every time. Measured
+      # 2026-08-16: the tracked file was behind by 314 lines / ~147 entries, and CI had been
+      # green throughout. The step's name is honest about this — it checks that generated types
+      # COMPILE, not that they are up to date — which is exactly why the gap survived review.
+      #
+      # The prediction is on record. `zernie/mine`'s .gitignore, 2026-08-08, gives this as the
+      # reason that repo refuses to track its own copy: "drift in a generated file is invisible
+      # unless something regenerates it with --check. Upstream vigiles tracks its own copy and it
+      # IS stale on main for exactly that reason." Eight days later it was staler. Writing the
+      # prediction down did not stop it; this line does.
+      - name: Generated types are up to date
+        run: git diff --exit-code .vigiles/generated.d.ts
+
       # Do the TypeScript examples in the docs still import things that exist?
       #
       # Nothing checked this before 2026-08-16, and on that day the docs carried SIX package
