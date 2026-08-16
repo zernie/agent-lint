@@ -1,6 +1,6 @@
 /**
  * Type-level constraint: typed purity. The `vigiles/claude-code` `agent` /
- * `skill` builders enforce the `purity` floor AGAINST the Claude Code tool
+ * `experimental_skill` builders enforce the `purity` floor AGAINST the Claude Code tool
  * catalog at `tsc` time — a strict addition to the runtime/compile purity
  * checks. Compiled with `tsc --noEmit` (npm run test:types); it asserts types,
  * it is not executed. `// @ts-expect-error` marks the must-NOT-compile cases.
@@ -9,10 +9,10 @@
  * bounded = read-only ∪ Write/Edit/NotebookEdit ∪ Bash; no purity / dangerous =
  * open. The core (harness-agnostic) `agent()` is unconstrained by default.
  */
-import { agent, skill } from "../../dist/claude-code.js";
+import { agent, experimental_skill } from "../../dist/claude-code.js";
 import {
   agent as coreAgent,
-  skill as coreSkill,
+  experimental_skill as coreSkill,
 } from "../../dist/core/spec.js";
 
 // ---------------------------------------------------------------------------
@@ -79,17 +79,17 @@ agent({
 });
 
 // ---------------------------------------------------------------------------
-// CC-bound `skill` — the same constraint applies.
+// CC-bound `experimental_skill` — the same constraint applies.
 // ---------------------------------------------------------------------------
 
-skill({
+experimental_skill({
   name: "pure-skill",
   description: "read-only skill",
   purity: "pure",
   tools: ["Read", "Grep"],
 });
 
-skill({
+experimental_skill({
   name: "bad-pure-skill",
   description: "pure skill cannot take Bash",
   purity: "pure",
@@ -97,14 +97,14 @@ skill({
   tools: ["Read", "Bash"],
 });
 
-skill({
+experimental_skill({
   name: "open-skill",
   description: "no purity → open",
   tools: ["Bash", "mcp__server__tool"],
 });
 
 // ---------------------------------------------------------------------------
-// Core (harness-agnostic) `agent` / `skill` — UNCONSTRAINED by default, so even
+// Core (harness-agnostic) `agent` / `experimental_skill` — UNCONSTRAINED by default, so even
 // `purity: "pure"` + a side-effecting tool COMPILES (the runtime/compile checks
 // are the backstop for the untyped import). Backwards compatibility.
 // ---------------------------------------------------------------------------
