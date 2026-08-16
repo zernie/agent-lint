@@ -348,6 +348,33 @@ jobs:
       - name: Check generated types compile
         run: node dist/cli.js generate types && npx tsc --noEmit
 
+      # Do the TypeScript examples in the docs still import things that exist?
+      #
+      # Nothing checked this before 2026-08-16, and on that day the docs carried SIX package
+      # subpaths that raise ERR_PACKAGE_PATH_NOT_EXPORTED, plus two examples importing a real
+      # symbol from the wrong barrel — `scriptModel` (it lives in `vigiles/claude-code`) and
+      # `runHookProgram` (`vigiles/hook`). All copy-pasteable, all broken on the reader's first
+      # line. `scriptModel` was the THIRD occurrence of the same wrong import, twice previously
+      # written down as a known boundary. Prose did not hold it; this does.
+      #
+      # 🔴 IT REPORTS ONLY THIS PACKAGE'S OWN MODULE SURFACE, AND THAT NARROWNESS IS THE WHOLE
+      # DESIGN. Measured over this repo's 102 ts/js blocks: full `tsc` on every block — the
+      # DEFAULT of all three off-the-shelf tools — yields 234 findings, 2 real and 232 false,
+      # because only 36.3% of blocks are self-contained; the rest are illustrative fragments with
+      # free variables. This gate yields 2 of 2, with no suppression markers anywhere. A checker
+      # that fires on legitimate input is muted within a week, so a tool with a 1:24 noise ratio
+      # is not a stricter version of this one — it is a dead one.
+      #
+      # Rust's doctests take the opposite route (compile everything, opt OUT with `ignore`); here
+      # that would mean ~65 suppression markers on day one, visible to every reader on GitHub.
+      # Inverting it costs nothing and makes the false positive unrepresentable rather than filtered.
+      # Opt IN to a full type-check per block with `<!-- vigiles:check -->` above the fence.
+      #
+      # Resolution needs no path rewriting: TypeScript resolves the package to itself through the
+      # `exports` map (self-reference), so a phantom subpath is an ordinary TS2307.
+      - name: Check doc imports
+        run: npm run docs:check
+
       - name: Lint
         run: npm run lint
 
