@@ -6,13 +6,13 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { skill, step, input, cmd, file } from "../../core/spec.js";
+import { experimental_skill, step, input, cmd, file } from "../../core/spec.js";
 import { compileSkill } from "../../core/compile.js";
 
 const opts = { specFile: "SKILL.md.spec.ts" };
 
 test("typed inputs compile to argument-hint and an Arguments section", () => {
-  const spec = skill({
+  const spec = experimental_skill({
     name: "ship-pr",
     description: "Run checks and open a PR",
     inputs: [
@@ -33,7 +33,7 @@ test("typed inputs compile to argument-hint and an Arguments section", () => {
 });
 
 test("gated steps render gate markers + retry; result renders a result marker", () => {
-  const spec = skill({
+  const spec = experimental_skill({
     name: "ship-pr",
     description: "Run checks and open a PR once they pass",
     steps: [
@@ -57,7 +57,7 @@ test("gated steps render gate markers + retry; result renders a result marker", 
 });
 
 test("a step gate referencing a missing npm script is a compile error", () => {
-  const spec = skill({
+  const spec = experimental_skill({
     name: "x",
     description: "...",
     steps: [step("do a thing", { gate: cmd("npm run does-not-exist") })],
@@ -70,7 +70,7 @@ test("a step gate referencing a missing npm script is a compile error", () => {
 });
 
 test("a file gate referencing a missing path is a compile error", () => {
-  const spec = skill({
+  const spec = experimental_skill({
     name: "x",
     description: "...",
     result: file("does/not/exist.txt"),
@@ -83,7 +83,7 @@ test("a file gate referencing a missing path is a compile error", () => {
 });
 
 test("a knowledge body composes with gated steps (both render, body first)", () => {
-  const spec = skill({
+  const spec = experimental_skill({
     name: "docx",
     description: "...",
     body: "## Reference\n\nImportant domain knowledge here.",
@@ -101,7 +101,7 @@ test("a knowledge body composes with gated steps (both render, body first)", () 
 test("a large inline code block warns (non-blocking), nudging extraction to a file", () => {
   const big = "```bash\n" + Array(25).fill("echo line").join("\n") + "\n```";
   const { errors, warnings } = compileSkill(
-    skill({ name: "x", description: "...", body: big }),
+    experimental_skill({ name: "x", description: "...", body: big }),
     opts,
   );
   // It's a WARNING, not an error — adoption must still compile.
@@ -119,7 +119,7 @@ test("a large inline code block warns (non-blocking), nudging extraction to a fi
 test("small code blocks pass; maxInlineCodeLines:0 disables the check", () => {
   const small = "```bash\necho a\necho b\n```";
   const smallRes = compileSkill(
-    skill({ name: "x", description: "...", body: small }),
+    experimental_skill({ name: "x", description: "...", body: small }),
     opts,
   );
   assert.equal(smallRes.errors.length, 0);
@@ -127,7 +127,7 @@ test("small code blocks pass; maxInlineCodeLines:0 disables the check", () => {
   // A big block normally warns; maxInlineCodeLines:0 turns the check off entirely.
   const big = "```bash\n" + Array(50).fill("echo x").join("\n") + "\n```";
   const offRes = compileSkill(
-    skill({
+    experimental_skill({
       name: "x",
       description: "...",
       body: big,
@@ -141,7 +141,7 @@ test("small code blocks pass; maxInlineCodeLines:0 disables the check", () => {
 
 test("a script-runner gate verifies the referenced script file exists", () => {
   const okRes = compileSkill(
-    skill({
+    experimental_skill({
       name: "x",
       description: "...",
       steps: [step("run it", { gate: cmd("python src/core/compile.ts") })],
@@ -151,7 +151,7 @@ test("a script-runner gate verifies the referenced script file exists", () => {
   assert.equal(okRes.errors.length, 0, JSON.stringify(okRes.errors));
 
   const badRes = compileSkill(
-    skill({
+    experimental_skill({
       name: "x",
       description: "...",
       steps: [step("run it", { gate: cmd("python scripts/nope.py out.x") })],

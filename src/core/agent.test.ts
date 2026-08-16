@@ -11,7 +11,7 @@ import { join } from "node:path";
 
 import {
   agent,
-  skill,
+  experimental_skill,
   instructions,
   effect,
   file,
@@ -529,7 +529,7 @@ test('purity: "dangerously-unrestricted" / omitted + side-effecting tools compil
 
 test('purity: "pure" skill with read-only tools compiles clean', () => {
   const { errors } = compileSkill(
-    skill({
+    experimental_skill({
       name: "review",
       description: "Review code.",
       purity: "pure",
@@ -546,7 +546,7 @@ test('purity: "pure" skill with read-only tools compiles clean', () => {
 
 test('purity: "pure" skill with a side-effecting tool errors', () => {
   const { errors } = compileSkill(
-    skill({
+    experimental_skill({
       name: "bad",
       description: "Writes stuff.",
       purity: "pure",
@@ -562,7 +562,7 @@ test('purity: "pure" skill with a side-effecting tool errors', () => {
 
 test('purity: "pure" skill with no tools declared errors (absent = inherits-all)', () => {
   const { errors } = compileSkill(
-    skill({
+    experimental_skill({
       name: "noop",
       description: "Claims pure but inherits all tools.",
       purity: "pure",
@@ -577,7 +577,7 @@ test('purity: "pure" skill with no tools declared errors (absent = inherits-all)
 
 test('purity: "pure" skill with wildcard tools errors', () => {
   const { errors } = compileSkill(
-    skill({
+    experimental_skill({
       name: "bad",
       description: "Wildcard.",
       purity: "pure",
@@ -644,7 +644,7 @@ test("effect() with a bad inner file ref reports stale-file error", () => {
 
 test("effect() in a SKILL is a compile error (subagent-only primitive)", () => {
   const { errors } = compileSkill(
-    skill({
+    experimental_skill({
       name: "release",
       description: "Cut a release.",
       body: instructions`

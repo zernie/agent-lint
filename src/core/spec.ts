@@ -720,14 +720,20 @@ export type SkillSpecInput<
  * Define a SKILL.md specification.
  *
  *   // skills/my-skill/SKILL.md.spec.ts
- *   export default skill({ name: "my-skill", description: "...", body: "..." });
+ *   export default experimental_skill({ name: "my-skill", description: "…" });
  *
  * Generic over a tool `Vocabulary` (default `OpenToolVocabulary` — no
- * constraint), exactly like `agent()`: a vocabulary-bound `skill` (e.g.
- * `vigiles/claude-code`) makes `purity: "pure"` + a side-effecting tool a `tsc`
- * error; the bare core `skill()` accepts any tools, as before.
+ * constraint), exactly like `agent()`: a vocabulary-bound `experimental_skill`
+ * (e.g. `vigiles/claude-code`) makes `purity: "pure"` + a side-effecting tool a
+ * `tsc` error; the bare core one accepts any tools, as before.
+ *
+ * The name also disambiguates: `vigiles/testing` exports a `skill()` that is a
+ * DIFFERENT function — a `Check<Trace>` taking an id string, asking whether a
+ * skill fired. This one authors a skill; that one observes one.
+ *
+ * @experimental
  */
-export function skill<
+export function experimental_skill<
   const P extends AuthoredPurity | undefined = undefined,
   V extends ToolVocabulary = OpenToolVocabulary,
 >(spec: SkillSpecInput<P, V>): SkillSpec {

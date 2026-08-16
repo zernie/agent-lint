@@ -126,6 +126,9 @@ export interface EnforceRule {
 }
 
 // @public
+export function experimental_skill<const P extends AuthoredPurity | undefined = undefined, V extends ToolVocabulary = OpenToolVocabulary>(spec: SkillSpecInput<P, V>): SkillSpec;
+
+// @public
 export function file(path: NoInfer<StrictFile>): FileRef;
 
 // @public
@@ -380,9 +383,6 @@ export type Rule = EnforceRule | GuidanceRule | GuardRule;
 
 // @public
 export type Shape = Readonly<Record<string, OutputFieldType>>;
-
-// @public
-export function skill<const P extends AuthoredPurity | undefined = undefined, V extends ToolVocabulary = OpenToolVocabulary>(spec: SkillSpecInput<P, V>): SkillSpec;
 
 // @public
 export interface SkillInput {

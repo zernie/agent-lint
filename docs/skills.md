@@ -25,8 +25,6 @@ Two on-ramps. They differ by **who owns the file**, not by power: in markdown mo
 
 **Write `SKILL.md` prose and drop deterministic gates in as markers.** No spec, no TypeScript. Best for prose authors and the shallow majority of skills.
 
-**Write `SKILL.md` prose and drop deterministic gates in as markers.** No spec, no TypeScript. Best for prose authors and the shallow majority of skills.
-
 ```md
 ## Step: Run the tests
 
@@ -46,9 +44,16 @@ Fix failures until the suite is green.
 **For a linear skill**, a `SKILL.md.spec.ts` gives typed inputs, a knowledge body, and gated steps that compile to a verified `SKILL.md`:
 
 ```ts
-import { skill, step, input, cmd, project, instructions } from "vigiles/spec";
+import {
+  experimental_skill,
+  step,
+  input,
+  cmd,
+  project,
+  instructions,
+} from "vigiles/spec";
 
-export default skill({
+export default experimental_skill({
   name: "ship-pr",
   description: "Run the checks and open a PR once they pass",
   inputs: [input("branch", "branch to open the PR from")],
@@ -104,7 +109,10 @@ A skill's **firing** and its **gates** are testable without a spec, from the pub
 
 `skill()` is experimental, and these are the measured reasons:
 
-- 🔴 **A compiled `SKILL.md` has never been shown to load as a skill.** `vigiles compile` prepends the `vigiles:sha256:` integrity header, so the YAML frontmatter no longer opens the file — a reader anchored at `^---` (the near-universal convention) finds no frontmatter at all. Every `SKILL.md` that demonstrably works, including all of vigiles's own, starts with `---` on line 1; the only two files in this repo carrying the header are under `examples/`, which no harness loads. Until this is settled, treat compiled skills as build artifacts to inspect, not as installable skills.
+- **A compiled `SKILL.md` has never been exercised as an installed skill.** Every `SKILL.md` in this repo that a harness actually loads — all of vigiles's own — is hand-written; the only two carrying the `vigiles:sha256:` header live under `examples/`. So the compiled path is untested end-to-end for skills, and adopting one means being the first to try it.
+
+  Note what this is _not_: the header is **not** known to break loading. It does push the YAML frontmatter off line 1, and a reader anchored at `^---` finds none — but the sibling surface is measured working with exactly that shape. In `examples/harness/dogfood/reviewer-ab.eval.mjs`, real Claude Code loaded a compiled `agents/code-reviewer.md` **carrying the header** through `--plugin-dir`, dispatched to it, and the subagent read the file — 100% of trials against real sonnet (2026-06-20). Treat compiled skills as unproven, not as broken.
+
 - **Adoption is all-or-nothing.** `renderSkillSections` composes the whole document in a fixed order, so converting an existing skill rewrites its structure rather than adding a gate to it. There is no "keep my prose, add one verified gate" path.
 - **`inputs` costs more than it looks.** One `input()` adds both the `argument-hint` frontmatter key and a generated `## Arguments` section.
 - The generator authoring mode (`genSkill` / `act` / `checkpoint` / `finish`) is **parked** and undocumented. It compiles, but it is reachable from no package subpath, so it is not part of the public API.

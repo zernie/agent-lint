@@ -1,7 +1,7 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { skill, instructions } from "./core/spec.js";
+import { experimental_skill, instructions } from "./core/spec.js";
 import {
   claudeOnlyFrontmatterKeys,
   skillFrontmatterDropWarnings,
@@ -10,26 +10,33 @@ import {
 const base = { name: "demo", description: "d", body: instructions`x` };
 
 test("claudeOnlyFrontmatterKeys picks up disable-model-invocation + argument-hint", () => {
-  assert.deepEqual(claudeOnlyFrontmatterKeys(skill({ ...base })), []);
   assert.deepEqual(
-    claudeOnlyFrontmatterKeys(skill({ ...base, disableModelInvocation: true })),
+    claudeOnlyFrontmatterKeys(experimental_skill({ ...base })),
+    [],
+  );
+  assert.deepEqual(
+    claudeOnlyFrontmatterKeys(
+      experimental_skill({ ...base, disableModelInvocation: true }),
+    ),
     ["disable-model-invocation"],
   );
   assert.deepEqual(
-    claudeOnlyFrontmatterKeys(skill({ ...base, argumentHint: "<x>" })),
+    claudeOnlyFrontmatterKeys(
+      experimental_skill({ ...base, argumentHint: "<x>" }),
+    ),
     ["argument-hint"],
   );
   // `inputs` also drive the argument-hint key.
   assert.deepEqual(
     claudeOnlyFrontmatterKeys(
-      skill({ ...base, inputs: [{ name: "x", hint: "an x" }] }),
+      experimental_skill({ ...base, inputs: [{ name: "x", hint: "an x" }] }),
     ),
     ["argument-hint"],
   );
 });
 
 test("warns for a declared minimal-profile harness (codex) that drops CC-only keys", () => {
-  const spec = skill({ ...base, disableModelInvocation: true });
+  const spec = experimental_skill({ ...base, disableModelInvocation: true });
   const warnings = skillFrontmatterDropWarnings(spec, ["claude-code", "codex"]);
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /disable-model-invocation/);
@@ -38,7 +45,7 @@ test("warns for a declared minimal-profile harness (codex) that drops CC-only ke
 });
 
 test("no warning when the only declared harness keeps the keys (claude-code)", () => {
-  const spec = skill({
+  const spec = experimental_skill({
     ...base,
     disableModelInvocation: true,
     argumentHint: "<x>",
@@ -48,13 +55,13 @@ test("no warning when the only declared harness keeps the keys (claude-code)", (
 
 test("no warning when the skill uses no CC-only keys", () => {
   assert.deepEqual(
-    skillFrontmatterDropWarnings(skill({ ...base }), ["codex"]),
+    skillFrontmatterDropWarnings(experimental_skill({ ...base }), ["codex"]),
     [],
   );
 });
 
 test("plural phrasing + dedupe across repeated harness names", () => {
-  const spec = skill({
+  const spec = experimental_skill({
     ...base,
     disableModelInvocation: true,
     argumentHint: "<x>",
@@ -66,6 +73,6 @@ test("plural phrasing + dedupe across repeated harness names", () => {
 });
 
 test("unknown harness names are ignored, not thrown", () => {
-  const spec = skill({ ...base, disableModelInvocation: true });
+  const spec = experimental_skill({ ...base, disableModelInvocation: true });
   assert.deepEqual(skillFrontmatterDropWarnings(spec, ["bogus"]), []);
 });

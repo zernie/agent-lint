@@ -302,9 +302,9 @@ contract renders. The gate is enforced at compile — an `output` without
 `context: "fork"` is an error, because an inline skill has no return to type:
 
 ```ts
-import { skill, result } from "vigiles";
+import { experimental_skill, result } from "vigiles";
 
-export default skill({
+export default experimental_skill({
   name: "review",
   description: "Review a file and return structured findings.",
   context: "fork", // runs as a subagent → has a return boundary

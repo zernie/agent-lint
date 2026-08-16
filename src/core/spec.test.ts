@@ -14,7 +14,7 @@ import {
   instructions,
   effect,
   claude,
-  skill,
+  experimental_skill,
 } from "./spec.js";
 import type {
   SpecPath,
@@ -177,9 +177,9 @@ describe("claude()", () => {
   });
 });
 
-describe("skill()", () => {
+describe("experimental_skill()", () => {
   it("creates a skill spec with correct type tag", () => {
-    const spec = skill({
+    const spec = experimental_skill({
       name: "test-skill",
       description: "A test skill",
       body: "Do the thing.",
@@ -318,7 +318,7 @@ describe("compileClaude()", () => {
 
 describe("compileSkill()", () => {
   it("compiles a skill with string body", () => {
-    const spec = skill({
+    const spec = experimental_skill({
       name: "test-skill",
       description: "A test skill",
       body: "Do the thing.\n\n## Step 1\nDo step 1.",
@@ -336,7 +336,7 @@ describe("compileSkill()", () => {
     // never breaks the harness — so it's a non-blocking warning, and a faithful
     // adoption of a code-heavy skill still compiles (errors stay empty).
     const bigBlock = "```ts\n" + "const x = 1;\n".repeat(25) + "```";
-    const spec = skill({
+    const spec = experimental_skill({
       name: "code-heavy",
       description: "A skill with a big code example",
       body: `Do the thing.\n\n${bigBlock}\n`,
@@ -350,7 +350,7 @@ describe("compileSkill()", () => {
   });
 
   it("renders context: fork and a forked skill's typed output contract", () => {
-    const spec = skill({
+    const spec = experimental_skill({
       name: "review",
       description: "Review a file.",
       context: "fork", // runs as a subagent → has a return boundary
@@ -366,7 +366,7 @@ describe("compileSkill()", () => {
   });
 
   it("errors when output is set WITHOUT context: fork (inline = no return)", () => {
-    const spec = skill({
+    const spec = experimental_skill({
       name: "review",
       description: "Review a file.",
       output: result({ ok: "boolean" }, { reason: "string" }),
@@ -377,7 +377,7 @@ describe("compileSkill()", () => {
   });
 
   it("compiles a skill with tagged template body", () => {
-    const spec = skill({
+    const spec = experimental_skill({
       name: "test-skill",
       description: "A test skill",
       body: instructions`Check ${file("package.json")} and run ${cmd("npm test")}.`,
@@ -388,7 +388,7 @@ describe("compileSkill()", () => {
   });
 
   it("reports errors for missing file refs in body", () => {
-    const spec = skill({
+    const spec = experimental_skill({
       name: "test-skill",
       description: "A test skill",
       body: instructions`Check ${file("nonexistent-xyz.ts")}.`,
@@ -399,7 +399,7 @@ describe("compileSkill()", () => {
   });
 
   it("verifies a dir() ref against a real directory", () => {
-    const spec = skill({
+    const spec = experimental_skill({
       name: "test-skill",
       description: "A test skill",
       body: instructions`The engine lives in ${dir("src/core")}.`,
@@ -412,7 +412,7 @@ describe("compileSkill()", () => {
   });
 
   it("flags a dir() ref to a missing directory", () => {
-    const spec = skill({
+    const spec = experimental_skill({
       name: "test-skill",
       description: "A test skill",
       body: instructions`See ${dir("src/nonexistent-dir-xyz")}.`,
@@ -423,7 +423,7 @@ describe("compileSkill()", () => {
   });
 
   it("flags a dir() ref that points at a FILE, not a directory", () => {
-    const spec = skill({
+    const spec = experimental_skill({
       name: "test-skill",
       description: "A test skill",
       body: instructions`See ${dir("package.json")}.`,
@@ -435,7 +435,7 @@ describe("compileSkill()", () => {
   });
 
   it("verifies a glob() ref that matches at least one file", () => {
-    const spec = skill({
+    const spec = experimental_skill({
       name: "test-skill",
       description: "A test skill",
       body: instructions`Specs: ${glob("src/core/*.test.ts")}.`,
@@ -448,7 +448,7 @@ describe("compileSkill()", () => {
   });
 
   it("flags a glob() ref that matches nothing", () => {
-    const spec = skill({
+    const spec = experimental_skill({
       name: "test-skill",
       description: "A test skill",
       body: instructions`Specs: ${glob("src/**/*.nonexistent-ext")}.`,
@@ -460,7 +460,7 @@ describe("compileSkill()", () => {
   });
 
   it("includes frontmatter fields", () => {
-    const spec = skill({
+    const spec = experimental_skill({
       name: "my-skill",
       description: "My skill desc",
       disableModelInvocation: true,
@@ -473,7 +473,7 @@ describe("compileSkill()", () => {
   });
 
   it("claude-code dialect frontmatter is unchanged (default == claudeCodeDialect)", () => {
-    const spec = skill({
+    const spec = experimental_skill({
       name: "my-skill",
       description: "My skill desc",
       disableModelInvocation: true,
@@ -490,7 +490,7 @@ describe("compileSkill()", () => {
   });
 
   it("codex (minimal) dialect emits ONLY name + description frontmatter", () => {
-    const spec = skill({
+    const spec = experimental_skill({
       name: "my-skill",
       description: "My skill desc",
       disableModelInvocation: true,
@@ -1391,7 +1391,7 @@ describe("spec file naming convention", () => {
   });
 
   it("accepts SKILL.md.spec.ts for skills", () => {
-    const spec = skill({
+    const spec = experimental_skill({
       name: "test",
       description: "Test skill",
       body: "Do the thing.",
@@ -1403,7 +1403,7 @@ describe("spec file naming convention", () => {
   });
 
   it("errors for skills with wrong spec name", () => {
-    const spec = skill({
+    const spec = experimental_skill({
       name: "test",
       description: "Test skill",
       body: "Do the thing.",
@@ -1547,7 +1547,7 @@ describe("edge cases", () => {
   });
 
   it("compileSkill with empty body", () => {
-    const spec = skill({
+    const spec = experimental_skill({
       name: "empty",
       description: "Nothing",
       body: "",

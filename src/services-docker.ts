@@ -226,7 +226,7 @@ function numericNow(): number {
  *
  * @experimental
  */
-export function makeDockerRuntime(
+export function experimental_makeDockerRuntime(
   deps: {
     exec?: DockerExec;
     netProbe?: NetProbe;
@@ -317,4 +317,5 @@ const containerNames = new WeakMap<ServiceHandle, string>();
  *
  * @experimental
  */
-export const experimental_dockerRuntime: ContainerRuntime = makeDockerRuntime();
+export const experimental_dockerRuntime: ContainerRuntime =
+  experimental_makeDockerRuntime();

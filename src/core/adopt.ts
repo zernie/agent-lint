@@ -26,7 +26,12 @@ import {
   frontmatterList,
   type FrontmatterRead,
 } from "./frontmatter-read.js";
-import { skill, agent, type SkillSpec, type AgentSpec } from "./spec.js";
+import {
+  experimental_skill,
+  agent,
+  type SkillSpec,
+  type AgentSpec,
+} from "./spec.js";
 import { fencedLineFlags } from "./markdown.js";
 
 export type AdoptTier = "structured" | "raw";
@@ -262,7 +267,7 @@ export function adoptMarkdown(markdown: string, target: string): AdoptResult {
 
 // ---------------------------------------------------------------------------
 // Skill / subagent adoption — turn an existing SKILL.md / agents/<name>.md into
-// a `skill()` / `agent()` spec source. BEST-EFFORT (not a guaranteed byte
+// an `experimental_skill()` / `agent()` spec source. BEST-EFFORT (not a guaranteed byte
 // round-trip like the instruction-file path): the verbatim BODY and the
 // standard frontmatter fields round-trip, but a non-standard frontmatter key the
 // typed spec can't model (e.g. a custom `level:`/`skills:`) is PRESERVED in a
@@ -388,7 +393,7 @@ const SURFACE_HEADER = (from: string) =>
   `// frontmatter mapped; no rules inferred. Review the diff, then \`compile\`.\n`;
 
 /**
- * Adopt an existing SKILL.md into a `skill()` spec. The body is carried verbatim
+ * Adopt an existing SKILL.md into an `experimental_skill()` spec. The body is carried verbatim
  * (skills are freeform markdown — `##` headings stay in the body), so a clean
  * skill round-trips below the integrity header.
  *
@@ -429,7 +434,7 @@ export function adoptSkill(
   const trimmedBody = body.trim();
   if (trimmedBody) lines.push(`  body: ${tsTemplate(trimmedBody)},`);
 
-  const spec = skill({
+  const spec = experimental_skill({
     name,
     description,
     ...(argumentHint ? { argumentHint } : {}),
@@ -442,8 +447,8 @@ export function adoptSkill(
   const source =
     SURFACE_HEADER(`${dirName}/SKILL.md`) +
     unmappedNote("skill", unmappedKeys) +
-    `import { skill } from "vigiles/spec";\n\n` +
-    `export default skill({\n${lines.join("\n")}\n});\n`;
+    `import { experimental_skill } from "vigiles/spec";\n\n` +
+    `export default experimental_skill({\n${lines.join("\n")}\n});\n`;
   return { source, kind: "skill", spec, unmappedKeys };
 }
 

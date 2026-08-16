@@ -93,6 +93,7 @@
     "api:report": "npm run build && node scripts/api-extractor.mjs --local",
     "api:check": "npm run build && node scripts/api-extractor.mjs",
     "docs:check": "npm run build && node scripts/check-doc-imports.mjs . docs README.md",
+    "experimental:check": "npm run api:check && node scripts/check-experimental-naming.mjs",
     "docs:api": "typedoc"
   },
   "devDependencies": {
