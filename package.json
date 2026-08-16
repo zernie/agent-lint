@@ -89,6 +89,7 @@
     "test:types": "npm run build && tsc --noEmit -p test/types/tsconfig.json",
     "api:report": "npm run build && node scripts/api-extractor.mjs --local",
     "api:check": "npm run build && node scripts/api-extractor.mjs",
+    "check": "node scripts/check.mjs",
     "docs:check": "npm run build && node scripts/check-doc-imports.mjs . docs README.md",
     "exports:check": "npm run build && node scripts/check-export-prefixes.mjs .",
     "experimental:check": "npm run api:check && node scripts/check-experimental-naming.mjs",
