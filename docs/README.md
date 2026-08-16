@@ -47,7 +47,6 @@ The docs are grouped by what you're trying to do:
 - [`cli.md`](cli.md) — the full CLI: every verb and flag, the Claude Code plugin, `lint` vs `audit`.
 - [`commands-and-how-they-relate.md`](commands-and-how-they-relate.md) — the mental model: how `audit` / `lint` / `test` / `eval` / `init` fit together, and why measuring "do my skills fire?" uses `init`, not `audit`.
 - [`testing-api.md`](testing-api.md) — the full harness-testing API: every predicate, assertion, `check`, matcher, and option (`measureTriggerRate` / `runEval` / significance).
-  - `runMutations` lives there too — the one runner that judges your TESTS rather than your harness: it plants a defect and requires the test to fail with the message that names it. Task-first walkthrough (and when NOT to use it) in [`harness-testing.md`](harness-testing.md#prove-a-test-can-fail-runmutations).
 - [`spec-format.md`](spec-format.md) — the typed `.spec.ts` format (target, sections, rules, verified references) — the source of truth.
 - [`linter-support.md`](linter-support.md) — the 11 linters + `generate-types` / `generate-schema`.
 - [`adapter-api.md`](adapter-api.md) — the adapter API reference: every port field, the conformance functions, the registry API.
