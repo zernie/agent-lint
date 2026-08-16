@@ -35,7 +35,7 @@
  * tool avoids.
  *
  * WHAT A MISSING COUNT MEANS: nothing at all. A script that never imports
- * `vigiles/testing` cannot report, so the runner sees no file and treats it
+ * `vigiles` cannot report, so the runner sees no file and treats it
  * exactly as before — a plain pass. Silence is the legacy branch, never a
  * verdict; only a count of literally zero is a finding. (The alternative —
  * force-loading this module into every child with `node --import` so silence

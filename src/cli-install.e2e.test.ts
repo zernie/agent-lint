@@ -4,7 +4,7 @@
  * pillar-2 evals and the unit `planPluginInstall` tests assert WHICH command we
  * run; this proves the command actually installs, for real, against the live
  * cross-agent `skills` CLI + the GitHub `zernie/vigiles` repo. It needs npx +
- * network (the top of the pyramid), so it lives in `vigiles/e2e` and self-skips
+ * network (the top of the pyramid), so it is named `*.e2e.test.ts` and self-skips
  * (loudly, via vitest's skipIf) where the CLI/network isn't reachable — e.g. an
  * offline sandbox — instead of failing red.
  *

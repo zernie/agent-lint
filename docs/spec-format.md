@@ -57,7 +57,7 @@ floor. See [harness-testing.md](harness-testing.md).
 Use `claude()` to define a CLAUDE.md spec. Export it as the default export.
 
 ```ts
-import { claude, enforce, guidance, file, cmd, ref, instructions } from "vigiles";
+import { claude, enforce, guidance, file, cmd, ref, instructions } from "vigiles/spec";
 
 export default claude({
   target: "CLAUDE.md",          // or "AGENTS.md", or ["CLAUDE.md", "AGENTS.md"]
@@ -125,7 +125,7 @@ Use `skill()` to define a SKILL.md spec. Compiles to markdown with YAML frontmat
 <!-- vigiles:ignore -->
 
 ```ts
-import { skill, file, cmd, ref, instructions } from "vigiles";
+import { skill, file, cmd, ref, instructions } from "vigiles/spec";
 
 export default skill({
   name: "example-skill",
@@ -167,7 +167,7 @@ this is the field reference.
 <!-- vigiles:ignore -->
 
 ```ts
-import { agent, result } from "vigiles";
+import { agent, result } from "vigiles/spec";
 
 export default agent({
   name: "code-reviewer",
@@ -379,7 +379,7 @@ The compiler only accepts these branded types in path-sensitive positions. This 
 Create `vigiles.config.ts` with `defineConfig()`:
 
 ```ts
-import { defineConfig } from "vigiles";
+import { defineConfig } from "vigiles/spec";
 
 export default defineConfig({
   specs: "**/*.spec.ts", // glob pattern for spec discovery (default: "**/*.spec.ts")

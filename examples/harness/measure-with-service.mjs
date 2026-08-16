@@ -19,7 +19,7 @@ import {
   experimental_withServices,
   experimental_dockerRuntime,
 } from "../../dist/experimental.js";
-import { runEval } from "../../dist/testing.js";
+import { runEval } from "../../dist/eval.js";
 
 if (!experimental_dockerRuntime.available()) {
   console.log("⊘ SKIPPED — no Docker daemon reachable (this tier needs one)");

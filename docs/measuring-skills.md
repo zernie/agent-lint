@@ -42,9 +42,9 @@ This is `runEval` / `measureArms` — arms × trials → mean ± se, with Welch'
 ## Worked example
 
 ```typescript
-import { runEval } from "vigiles/testing";
+import { paid_runEval } from "vigiles/eval";
 
-const report = await runEval({
+const report = await paid_runEval({
   fixture: { "in.txt": "Implement a slug helper." },
   task: "Read in.txt, write slugify() to slug.js, then explain. Stop.",
   arms: {
@@ -139,7 +139,7 @@ import {
   experimental_withServices,
   experimental_dockerRuntime,
 } from "vigiles/experimental";
-import { runEval } from "vigiles/testing";
+import { paid_runEval } from "vigiles/eval";
 
 await experimental_withServices(
   {
@@ -156,7 +156,7 @@ await experimental_withServices(
   experimental_dockerRuntime,
   async (svc) => {
     // runEval — it takes a measure(ctx) callback + supports ephemeralEnv
-    return runEval({
+    return paid_runEval({
       // migration.sql must be in the run FIXTURE for the agent to read it —
       // a bare filename in the task doesn't materialize the file.
       fixture: { "migration.sql": "ALTER TABLE users ADD COLUMN age int;" },

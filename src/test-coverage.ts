@@ -829,7 +829,7 @@ export function evalTierQuestion(kind: SurfaceKind): string | null {
       //
       // ⚠️ It does NOT offer `{ evalDriver }` here, and that is checked rather
       // than assumed: `runEval`/`measure`/`measureArms` all hard-wire
-      // `spawnAgent`, and `runEvalWith` is not exported from `vigiles/testing` —
+      // `spawnAgent`, and `runEvalWith` is not exported from `vigiles/eval` —
       // `measureTriggerRate` is the only public call with that seam. Suggesting
       // an argument the function does not take is this finding's own defect.
       return (

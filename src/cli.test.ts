@@ -1315,9 +1315,9 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
-  it("no package.json: NO harness job (the JS test tier can't resolve vigiles/testing) — lint only (dogfood I1 / Codex review)", () => {
+  it("no package.json: NO harness job (the JS test tier can't resolve vigiles) — lint only (dogfood I1 / Codex review)", () => {
     // A non-JS repo has no package.json, so `npx vigiles test` on the starter
-    // harness can't resolve its `vigiles/testing` import — the whole harness job
+    // harness can't resolve its `vigiles` import — the whole harness job
     // would fail, not just an install step. So the workflow emits the lint job
     // (needs no toolchain) and NO harness job.
     const dir = mkdtempSync(join(tmpdir(), "vigiles-init-nopkg-"));
@@ -1335,7 +1335,7 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
       assert.doesNotMatch(
         yaml,
         /npx vigiles test/,
-        "no harness job without a package.json (can't resolve vigiles/testing)",
+        "no harness job without a package.json (can't resolve vigiles)",
       );
       assert.doesNotMatch(yaml, /run: npm install/, "no npm install step");
     } finally {

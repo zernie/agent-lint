@@ -38,9 +38,9 @@ describe("scaffoldTest — hook (unit tier)", () => {
     expect(s.kind).toBe("hook");
   });
 
-  it("wires runHook from vigiles/unit + the hook command", () => {
+  it("wires runHook from the vigiles root + the hook command", () => {
     const { content } = scaffoldTest(input);
-    expect(content).toContain('from "vigiles/unit"');
+    expect(content).toContain('from "vigiles"');
     expect(content).toContain("runHook(");
     expect(content).toContain('"bash hooks/pre-edit.sh"');
     expect(content).toContain("assertHookAllowed");
@@ -72,8 +72,8 @@ describe("scaffoldTest — skill (eval tier)", () => {
 
   it("wires measureTriggerRate + the namespaced id + the precision gate", () => {
     const { content } = scaffoldTest(input);
-    expect(content).toContain('from "vigiles/testing"');
-    expect(content).toContain("measureTriggerRate(");
+    expect(content).toContain('from "vigiles/eval"');
+    expect(content).toContain("paid_measureTriggerRate(");
     expect(content).toContain('"vigiles:strengthen"');
     expect(content).toContain("irrelevantPrompts");
     expect(content).toContain("assertTriggerRate(report, { min: 0.8");

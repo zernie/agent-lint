@@ -3,7 +3,7 @@ description: >
   Run one vigiles test tier with exactly the capabilities it needs. unit needs
   nothing; integration adds bubblewrap + the claude CLI (no API key);
   e2e additionally sets up rootless egress (pasta/slirp4netns + nftables). Mirrors
-  the tiered import paths vigiles/unit · /integration · /e2e and the vitest
+  the vitest
   projects. Usage from any repo:
   `- uses: zernie/vigiles/.github/actions/harness-tier@main` with `tier: e2e`.
 

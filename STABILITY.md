@@ -22,7 +22,11 @@ their exit codes. Most of the churn is in the library API underneath it.
     `agent`, `file`, `cmd`, `ref`, `dir`, `glob`, `result`,
     `delegate`, `railway`). Skill authoring is **not** on this list — see
     `experimental_skill` below.
-  - `vigiles/testing`, `vigiles/unit` — the harness-test + check vocabulary.
+  - `vigiles` (the package root) — the free harness-test + check vocabulary.
+  - `vigiles/eval` — the model-calling measurement API; every runtime export
+    carries a `paid_` prefix (`paid_runEval`, `paid_measure`, `paid_measureArms`,
+    `paid_measureTriggerRate`, `paid_judge`, `paid_judged`,
+    `paid_claudeEvalDriver`). Types are not prefixed.
   - `vigiles/claude-code`, `vigiles/codex` — the per-harness surfaces.
   - `vigiles/adapter` — the adapter-authoring kit.
 - **Compiled output contracts** — the `vigiles:sha256` integrity header and the

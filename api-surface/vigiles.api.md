@@ -5,536 +5,1093 @@
 ```ts
 
 // @public
-export function agent<const P extends AuthoredPurity | undefined = undefined, V extends ToolVocabulary = OpenToolVocabulary, Ok extends Shape = Shape, Err extends Shape = Shape>(spec: AgentSpecInput<P, V, Ok, Err>): TypedAgentSpec<Ok, Err>;
-
-// @public
-export interface AgentSpec {
-    readonly body?: string | InstructionFragment[];
-    readonly color?: string;
-    readonly description: string;
-    readonly disallowedTools?: readonly string[];
-    readonly model?: string;
-    readonly name: string;
-    readonly output?: OutputContract;
-    readonly purity?: AuthoredPurity;
-    readonly rules?: Record<string, Rule>;
-    readonly sections?: Record<string, string | InstructionFragment[]>;
+export interface AgentRunArgs {
     // (undocumented)
-    readonly _specType: "agent";
-    readonly tools?: readonly string[];
+    readonly cwd: string;
+    readonly env?: Record<string, string>;
+    // (undocumented)
+    readonly hasSettings: boolean;
+    // (undocumented)
+    readonly model: string;
+    // (undocumented)
+    readonly pluginDir: string | undefined;
+    readonly replaceEnv?: boolean;
+    // (undocumented)
+    readonly task: string;
+    // (undocumented)
+    readonly timeoutMs: number;
+    // (undocumented)
+    readonly tools: readonly string[];
 }
 
 // @public
-export type AgentSpecInput<P extends AuthoredPurity | undefined, V extends ToolVocabulary, Ok extends Shape = Shape, Err extends Shape = Shape> = Omit<AgentSpec, "_specType" | "tools" | "purity" | "output"> & {
-    readonly purity?: P;
-    readonly tools?: readonly AllowedAt<P, V>[];
-    readonly output?: OutputContract<Ok, Err>;
+export type AgentRunner = (args: AgentRunArgs) => Promise<RunOut>;
+
+// @public
+export function allowed(): Check<HookRunResult>;
+
+// @public
+export type ArgMatcher = Record<string, string | number | boolean | RegExp>;
+
+// @public (undocumented)
+export interface ArmReport {
+    readonly metrics: Record<string, number>;
+    // (undocumented)
+    readonly runs: number;
+    readonly stats: Record<string, MetricStat>;
+    readonly usage: ArmUsage;
+}
+
+// @public
+export interface ArmsCheckReport {
+    // (undocumented)
+    readonly arms: Record<string, CheckReport>;
+}
+
+// @public
+export interface ArmsMeasureSpec {
+    // (undocumented)
+    readonly allowedTools?: readonly string[];
+    readonly arms: Record<string, EvalArm>;
+    // (undocumented)
+    readonly checks: readonly Check<RunContext>[];
+    // (undocumented)
+    readonly fixture?: Record<string, string>;
+    // (undocumented)
+    readonly model?: string;
+    // (undocumented)
+    readonly spacingSec?: number;
+    readonly stubSkillBodies?: boolean;
+    // (undocumented)
+    readonly task: string;
+    // (undocumented)
+    readonly timeoutMs?: number;
+    // (undocumented)
+    readonly trials?: number;
+}
+
+// @public
+export interface ArmUsage {
+    // (undocumented)
+    readonly meanCostUsd: number;
+    // (undocumented)
+    readonly meanDurationMs: number;
+    // (undocumented)
+    readonly totalCacheCreationTokens: number;
+    // (undocumented)
+    readonly totalCacheReadTokens: number;
+    // (undocumented)
+    readonly totalCostUsd: number;
+    // (undocumented)
+    readonly totalInputTokens: number;
+    // (undocumented)
+    readonly totalOutputTokens: number;
+}
+
+// @public
+export function assertAgentErr(output: string, contract?: OutputContract): Record<string, unknown>;
+
+// @public
+export function assertAgentOk(output: string, contract?: OutputContract): Record<string, unknown>;
+
+// @public
+export function assertAgentResult(output: string, predicate: (r: ParsedAgentResult) => boolean, contract?: OutputContract): void;
+
+// @public
+export function assertBlocksDisasters(hookCommand: string, opts?: VerifyGuardrailOptions): void;
+
+// @public
+export function assertChecks<T>(target: T, checks: readonly Check<T>[]): void;
+
+// @public
+export function assertCreated(r: HarnessTestResult, path: string): void;
+
+// @public
+export function assertEgressOnly(r: HasEgress, allowed: ReadonlyArray<string | RegExp>): void;
+
+// @public
+export function assertHookAllowed(r: HookRunResult): void;
+
+// @public
+export function assertHookAllows(hook: AnyHook, event: RawHookEvent): void;
+
+// @public
+export function assertHookBlocked(r: HookRunResult): void;
+
+// @public
+export function assertHookDenies(hook: AnyHook, event: RawHookEvent): void;
+
+// @public
+export function assertHookFired(trace: Trace, name: string | RegExp, opts?: {
+    blocked?: boolean;
+}): void;
+
+// @public
+export function assertHookNotices(hook: AnyHook, event: RawHookEvent, matcher?: string | RegExp): void;
+
+// @public
+export function assertHookSilent(hook: AnyHook, event: RawHookEvent): void;
+
+// @public
+export function assertImproves(report: EvalReport, opts: {
+    baseline: string;
+    arm: string;
+    metric: string;
+    by?: number;
+    significant?: boolean;
+    alpha?: number;
+}): void;
+
+// @public
+export function assertNoEgress(r: HasEgress): void;
+
+// @public
+export function assertNoRegression(current: EvalReport | readonly EvalReport[], baseline: BaselineFile, opts?: DiffOptions): void;
+
+// @public
+export function assertNotCreated(r: HarnessTestResult, path: string): void;
+
+// @public
+export function assertNoWrite(r: HasWrites, pattern: string | RegExp): void;
+
+// @public
+export function assertOutputContains(trace: Trace, needle: string | RegExp): void;
+
+// @public
+export function assertPromptDiversity(prompts: readonly string[], opts?: {
+    minPrompts?: number;
+    minDistance?: number;
+    label?: string;
+}): void;
+
+// @public
+export function assertRates(report: CheckReport, opts: {
+    min: number;
+    per?: Readonly<Record<string, number>>;
+}): void;
+
+// @public
+export function assertReliable(report: EvalReport, opts: {
+    arm: string;
+    metric: string;
+}): void;
+
+// @public
+export function assertRequestContains(trace: Trace, needle: string | RegExp): void;
+
+// @public
+export function assertServedTurns(r: HarnessTestResult, n: number): void;
+
+// @public
+export function assertSignificant(report: EvalReport, opts: {
+    baseline: string;
+    arm: string;
+    metric: string;
+    alpha?: number;
+}): void;
+
+// @public
+export function assertSkillResolved(trace: Trace, skill: string): void;
+
+// @public
+export function assertToolCalls(trace: Trace, predicate: (calls: readonly ToolCall[]) => boolean, message?: string): void;
+
+// @public
+export function assertToolCount(trace: Trace, name: string | RegExp, bounds: {
+    min?: number;
+    max?: number;
+    exactly?: number;
+}): void;
+
+// @public
+export function assertToolNotUsed(trace: Trace, name: string | RegExp): void;
+
+// @public
+export function assertToolSequence(trace: Trace, names: ReadonlyArray<string | RegExp>): void;
+
+// @public
+export function assertToolUsed(trace: Trace, name: string | RegExp): void;
+
+// @public
+export function assertToolUsedWith(trace: Trace, name: string | RegExp, inputMatcher: (input: unknown) => boolean, message?: string): void;
+
+// @public
+export function assertTriggerRate(report: TriggerRateReport, opts: {
+    min?: number;
+    maxFalsePositive?: number;
+    minPrecision?: number;
+}): void;
+
+// @public
+export function assertWroteOnly(r: HasWrites, allowed: ReadonlyArray<string | RegExp>): void;
+
+// @public (undocumented)
+export interface BaselineDiff {
+    readonly entries: readonly MetricDiff[];
+    readonly improvements: readonly MetricDiff[];
+    readonly passed: boolean;
+    readonly regressions: readonly MetricDiff[];
+}
+
+// @public
+export interface BaselineFile {
+    readonly recordedAt: string;
+    readonly reports: Record<string, EvalReport>;
+    // (undocumented)
+    readonly version: number;
+}
+
+// @public
+export function blocked(): Check<HookRunResult>;
+
+// @public
+export function cacheTokens(opts: {
+    maxCreation?: number;
+    maxRead?: number;
+}): Check<UsageTrace>;
+
+// @public
+export interface Check<T> {
+    eval(target: T): CheckResult;
+    readonly kind: string;
+    toJSON(): CheckJSON;
+}
+
+// @public
+export interface CheckJSON {
+    // (undocumented)
+    readonly [field: string]: unknown;
+    // (undocumented)
+    readonly kind: string;
+}
+
+// @public
+export function checkPromptDiversity(prompts: readonly string[], opts?: {
+    minPrompts?: number;
+    minDistance?: number;
+    label?: string;
+}): PromptDiversityIssue[];
+
+// @public
+export interface CheckRate {
+    // (undocumented)
+    readonly check: CheckJSON;
+    readonly n: number;
+    readonly passK: number;
+    readonly rate: number;
+    readonly se: number;
+}
+
+// @public (undocumented)
+export interface CheckReport {
+    // (undocumented)
+    readonly n: number;
+    // (undocumented)
+    readonly perCheck: readonly CheckRate[];
+    readonly usage: ArmUsage;
+}
+
+// @public
+export function checkReportToJUnit(report: CheckReport, opts?: {
+    min?: number;
+    per?: Readonly<Record<string, number>>;
+    name?: string;
+}): string;
+
+// @public
+export interface CheckResult {
+    readonly message: string;
+    readonly pass: boolean;
+    readonly score: number;
+}
+
+// @public
+export function commandsIn(md: string, matching: RegExp): DocCommand[];
+
+// @public
+export function compareArms(report: EvalReport, baseline: string, arm: string, metric: string, alpha?: number): Comparison | null;
+
+// @public
+export function compareContainment(weak: readonly ContainmentInput[], strong: readonly ContainmentInput[]): ContainmentVerdict;
+
+// @public
+export interface Comparison {
+    readonly delta: number;
+    readonly df: number;
+    readonly pValue: number;
+    readonly seDelta: number;
+    readonly significant: boolean;
+    readonly t: number;
+}
+
+// @public
+export interface ContainmentInput {
+    // (undocumented)
+    readonly perPrompt: readonly {
+        readonly prompt: string;
+        readonly rate: number;
+    }[];
+    readonly subject: string;
+}
+
+// @public (undocumented)
+export interface ContainmentVerdict {
+    readonly both: readonly string[];
+    readonly compared: number;
+    readonly holds: boolean;
+    readonly neither: readonly string[];
+    readonly strongOnly: readonly string[];
+    readonly weakOnly: readonly string[];
+}
+
+// @public
+export function cost(opts: {
+    maxUsd: number;
+}): Check<UsageTrace>;
+
+// @public
+export function decideHook(exitCode: number, json: HookOutput | null, protocol?: HookProtocol): {
+    blocked: boolean;
+    decision: HookRunResult["decision"];
 };
 
 // @public
-export type AllowedAt<P extends AuthoredPurity | undefined, V extends ToolVocabulary> = P extends "pure" ? V["readOnly"] : P extends "bounded" ? V["bounded"] : string;
+export function decideSandbox(opts: {
+    trusted: boolean;
+    mode: SandboxMode;
+    available: boolean;
+}): SandboxDecision;
 
 // @public
-export type AuthoredPurity = "pure" | "bounded" | "dangerously-unrestricted";
-
-// @public
-export const BUILTIN_LINTERS: readonly ["eslint", "stylelint", "ruff", "clippy", "pylint", "rubocop", "detekt", "ktlint", "checkstyle", "golangci-lint", "cedar"];
+export function didNotWrite(path: string): Check<Trace>;
 
 // @public (undocumented)
-export type BuiltinLinter = (typeof BUILTIN_LINTERS)[number];
-
-// @public
-export function claude(spec: ClaudeSpecInput): ClaudeSpec;
-
-// @public (undocumented)
-export interface ClaudeSpec {
-    readonly commands?: Record<string, string>;
-    readonly keyFiles?: Record<string, string>;
-    readonly maxSectionLines?: number;
-    readonly maxTokens?: number;
-    readonly rules: Record<string, Rule>;
-    readonly sections?: Record<string, string | InstructionFragment[]>;
-    // (undocumented)
-    readonly _specType: "claude";
-    readonly target?: InstructionTarget | InstructionTarget[];
-}
-
-// @public (undocumented)
-export type ClaudeTool = "Read" | "Write" | "Edit" | "Bash" | "Grep" | "Glob" | "Agent" | "TodoWrite" | "WebSearch" | "WebFetch" | "NotebookEdit";
-
-// @public
-export function cmd(command: NoInfer<StrictCmd>): CmdRef;
-
-// @public
-export interface CmdRef {
-    // (undocumented)
-    readonly command: VerifiedCmd;
-    // (undocumented)
-    readonly _ref: "cmd";
-}
-
-// @public (undocumented)
-export function defineConfig(config: VigilesV2Config): VigilesV2Config;
-
-// @public
-export function delegate(agent: string, task?: string, needsContract?: Shape): RailwayStep;
-
-// @public
-export function dir(path: string): DirRef;
-
-// @public
-export interface DirRef {
-    // (undocumented)
-    readonly path: VerifiedDir;
-    // (undocumented)
-    readonly _ref: "dir";
-}
-
-// @internal
-export interface EffectRegion {
-    // (undocumented)
-    readonly body: InstructionFragment[];
-    // (undocumented)
-    readonly _ref: "effect";
+export interface DiffOptions {
+    readonly alpha?: number;
+    readonly lowerIsBetter?: readonly string[];
 }
 
 // @public
-export function enforce(ref: NoInfer<StrictLinterRule> | VigilesRef, why: string, options?: {
-    verify?: boolean;
-}): EnforceRule;
+export function diffReports(baseline: BaselineFile, current: readonly EvalReport[], opts?: DiffOptions): BaselineDiff;
 
 // @public
-export type EnforcementRef = LinterRule | VigilesRef;
+export type DiffStatus = "regressed" | "improved" | "unchanged";
 
 // @public
-export interface EnforceRule {
-    // (undocumented)
-    readonly _kind: "enforce";
-    // (undocumented)
-    readonly linterRule: LinterRule | VigilesRef;
-    readonly verify: boolean;
-    // (undocumented)
-    readonly why: string;
+export function diffToJUnit(diff: BaselineDiff): string;
+
+// @public
+export const DISASTER_CATALOG: readonly DisasterEvent[];
+
+// @public
+export type DisasterCategory = "destructive-git" | "destructive-fs" | "bypass-verification" | "secret-exfiltration" | "remote-code";
+
+// @public
+export interface DisasterEvent {
+    readonly category: DisasterCategory;
+    readonly id: string;
+    readonly input: Record<string, unknown>;
+    readonly label: string;
+    readonly tool: string;
 }
 
 // @public
-export function experimental_andThen<PriorOk extends Shape, PriorErr extends Shape, Needs extends Shape, Ok extends Shape, Err extends Shape>(prior: Pipeline<PriorOk, PriorErr>, next: Supplies<PriorOk, Needs> extends true ? PipeStep<Needs, Ok, Err> : {
-    readonly __HANDOFF_ERROR: Supplies<PriorOk, Needs>;
-}): Pipeline<Ok, PriorErr | Err>;
-
-// @public
-export function experimental_effect(strings: TemplateStringsArray, ...values: InstructionFragment[]): EffectRegion;
-
-// @public
-export function experimental_needs<const N extends Shape>(shape: N): NeedsContract<N>;
-
-// @public
-export function experimental_pipe<A extends Shape, AE extends Shape>(a: TypedAgentSpec<A, AE>): Pipeline<A, AE>;
-
-// @public (undocumented)
-export function experimental_pipe<A extends Shape, AE extends Shape, BN extends Shape, B extends Shape, BE extends Shape>(a: TypedAgentSpec<A, AE>, b: Supplies<A, BN> extends true ? PipeStep<BN, B, BE> : {
-    readonly __HANDOFF_ERROR: Supplies<A, BN>;
-}): Pipeline<B, AE | BE>;
-
-// @public (undocumented)
-export function experimental_pipe<A extends Shape, AE extends Shape, BN extends Shape, B extends Shape, BE extends Shape, CN extends Shape, C extends Shape, CE extends Shape>(a: TypedAgentSpec<A, AE>, b: Supplies<A, BN> extends true ? PipeStep<BN, B, BE> : {
-    readonly __HANDOFF_ERROR: Supplies<A, BN>;
-}, c: Supplies<B, CN> extends true ? PipeStep<CN, C, CE> : {
-    readonly __HANDOFF_ERROR: Supplies<B, CN>;
-}): Pipeline<C, AE | BE | CE>;
-
-// @public (undocumented)
-export function experimental_pipe<A extends Shape, AE extends Shape, BN extends Shape, B extends Shape, BE extends Shape, CN extends Shape, C extends Shape, CE extends Shape, DN extends Shape, D extends Shape, DE extends Shape>(a: TypedAgentSpec<A, AE>, b: Supplies<A, BN> extends true ? PipeStep<BN, B, BE> : {
-    readonly __HANDOFF_ERROR: Supplies<A, BN>;
-}, c: Supplies<B, CN> extends true ? PipeStep<CN, C, CE> : {
-    readonly __HANDOFF_ERROR: Supplies<B, CN>;
-}, d: Supplies<C, DN> extends true ? PipeStep<DN, D, DE> : {
-    readonly __HANDOFF_ERROR: Supplies<C, DN>;
-}): Pipeline<D, AE | BE | CE | DE>;
-
-// @public
-export function experimental_pipeStep<Needs extends Shape, Ok extends Shape, Err extends Shape>(a: TypedAgentSpec<Ok, Err>, needsContract?: Needs): PipeStep<Needs, Ok, Err>;
-
-// @public
-export function experimental_skill<const P extends AuthoredPurity | undefined = undefined, V extends ToolVocabulary = OpenToolVocabulary>(spec: SkillSpecInput<P, V>): SkillSpec;
-
-// @public
-export function experimental_start<Ok extends Shape, Err extends Shape>(first: PipeStep<Record<string, never>, Ok, Err> | TypedAgentSpec<Ok, Err>): Pipeline<Ok, Err>;
-
-// @public
-export function file(path: NoInfer<StrictFile>): FileRef;
-
-// @public
-export interface FileRef {
-    // (undocumented)
-    readonly path: VerifiedPath;
-    // (undocumented)
-    readonly _ref: "file";
-}
-
-// @public
-export type Gate = CmdRef | FileRef | RoleGate;
-
-// @public
-export function glob(pattern: string): GlobRef;
-
-// @public
-export interface GlobRef {
-    // (undocumented)
-    readonly pattern: VerifiedGlob;
-    // (undocumented)
-    readonly _ref: "glob";
-}
-
-// @public
-export function guard(options: {
-    watch: string | readonly string[];
-    run: string;
-}, description: string): GuardRule;
-
-// @public
-export interface GuardRule {
-    // (undocumented)
-    readonly description: string;
-    // (undocumented)
-    readonly _kind: "guard";
-    // (undocumented)
-    readonly run: string;
-    // (undocumented)
-    readonly watch: string | readonly string[];
-}
-
-// @public
-export function guidance(text: string): GuidanceRule;
-
-// @public
-export interface GuidanceRule {
-    // (undocumented)
-    readonly _kind: "guidance";
-    // (undocumented)
+export interface DocCommand {
+    readonly line: number;
     readonly text: string;
 }
 
-// @internal
-export type Handoff<Producer extends Shape, Consumer extends Shape> = Supplies<Producer, Consumer> extends true ? true : {
-    readonly __handoff_error: Supplies<Producer, Consumer>;
-};
+// @public
+export function egressHosts(r: HasEgress): string[];
 
 // @public (undocumented)
-export type HookEvent = "PreToolUse" | "PostToolUse" | "PreSession" | "PostSession" | "Notification";
+export function egressRoutes(): boolean;
 
 // @public
-export function input(name: string, hint: string, opts?: {
-    required?: boolean;
-}): SkillInput;
+export interface EvalArm {
+    readonly files?: Record<string, string>;
+    readonly interceptTools?: readonly ToolIntercept[];
+    readonly model?: string;
+    readonly plugin?: string;
+    readonly pluginDir?: string;
+    readonly settings?: unknown;
+}
+
+// @public
+export function evalChecks<T>(target: T, checks: readonly Check<T>[]): CheckResult[];
+
+// @public
+export interface EvalDriver {
+    readonly experimental?: string;
+    readonly harness?: string;
+    // (undocumented)
+    readonly parse: ModelOutputParser;
+    // (undocumented)
+    readonly runError?: (out: RunOut) => string | null;
+    // (undocumented)
+    readonly runner: AgentRunner;
+}
 
 // @public (undocumented)
-export type InstructionFragment = string | Ref | EffectRegion;
-
-// @public
-export function instructions(strings: TemplateStringsArray, ...values: InstructionFragment[]): InstructionFragment[];
-
-// @public
-export type InstructionTarget = "CLAUDE.md" | "AGENTS.md" | (string & {});
-
-// @internal
-export type KnownAgentName<Target extends string, Names extends string, From extends string = string> = [Target] extends [Names] ? true : {
-    readonly __dangling_delegate: Target;
-    readonly from: From;
-};
-
-// @public
-export interface KnownLinterRules {
-}
-
-// @public
-export interface KnownNpmScripts {
-}
-
-// @public
-export interface KnownProjectFiles {
-}
-
-// @public
-export type LinterMode = boolean | "catalog-only";
-
-// @public
-export type LinterRule = `${BuiltinLinter}/${string}` | ScopedPlugin;
-
-// @public
-export type LintersVerified<T extends ClaudeSpec | SkillSpec = ClaudeSpec> = T & {
-    readonly [__stage]: "linters-verified";
-};
-
-// @internal
-export type NeedsContract<N extends Shape> = N;
-
-// @public
-export type OkOf<T> = T extends TypedOutcome<infer Ok, Shape> ? Ok : Shape;
-
-// @public
-export interface OpenToolVocabulary extends ToolVocabulary {
+export interface EvalReport {
+    readonly aborted: boolean;
     // (undocumented)
-    readonly bounded: string;
-    // (undocumented)
-    readonly readOnly: string;
-}
-
-// @public
-export interface OutputContract<Ok extends Shape = Shape, Err extends Shape = Shape> {
-    // (undocumented)
-    readonly err: Err;
-    // (undocumented)
-    readonly ok: Ok;
-    // (undocumented)
-    readonly _ref: "output";
-}
-
-// @public
-export type OutputFieldType = "string" | "number" | "boolean" | "string[]";
-
-// @public
-export type OutputPath<Spec extends `${string}.md.spec.ts`> = Spec extends `${infer Base}.spec.ts` ? Base : never;
-
-// @internal
-export interface Pipeline<Ok extends Shape, Err extends Shape> {
-    readonly agents: readonly string[];
-    readonly err: Err;
-    readonly ok: Ok;
-    readonly railway: Railway;
-    // (undocumented)
-    readonly _specType: "pipeline";
-}
-
-// @internal
-export interface PipeStep<Needs extends Shape, Ok extends Shape, Err extends Shape> {
-    // (undocumented)
-    readonly agent: TypedAgentSpec<Ok, Err>;
-    // (undocumented)
-    readonly needs: Needs;
-    // (undocumented)
-    readonly _step: "typed-delegate";
-}
-
-// @public
-export function project(role: ProjectRole): RoleGate;
-
-// @public
-export type ProjectRole = "test" | "build" | "lint";
-
-// @public
-export interface Railway {
+    readonly arms: Record<string, ArmReport>;
     // (undocumented)
     readonly name: string;
-    readonly onError?: RailwayStep;
-    readonly recover?: {
-        readonly step: RailwayStep;
-        readonly max: number;
-    };
+    readonly totalCostUsd: number;
     // (undocumented)
-    readonly _specType: "railway";
-    // (undocumented)
-    readonly steps: readonly RailwayStep[];
-}
-
-// @public
-export function railway(spec: Omit<Railway, "_specType">): Railway;
-
-// @public
-export interface RailwayStep {
-    readonly agent: string;
-    readonly needs?: Shape;
-    // (undocumented)
-    readonly _step: "delegate";
-    readonly task?: string;
-}
-
-// @public
-export type RawSpec<T extends ClaudeSpec | SkillSpec = ClaudeSpec> = T & {
-    readonly [__stage]: "raw";
-};
-
-// @public
-export type ReadyToEmit<T extends ClaudeSpec | SkillSpec = ClaudeSpec> = T & {
-    readonly [__stage]: "ready";
-};
-
-// @public (undocumented)
-export type Ref = FileRef | CmdRef | SkillRef | SymbolRef | DirRef | GlobRef;
-
-// @public
-export function ref(path: string): SkillRef;
-
-// @public
-export type RefsValidated<T extends ClaudeSpec | SkillSpec = ClaudeSpec> = T & {
-    readonly [__stage]: "refs-validated";
-};
-
-// @public
-export function result<const Ok extends Shape, const Err extends Shape>(ok: Ok, err: Err): OutputContract<Ok, Err>;
-
-// @public
-export interface RoleGate {
-    // (undocumented)
-    readonly _ref: "role";
-    // (undocumented)
-    readonly role: ProjectRole;
+    readonly trials: number;
 }
 
 // @public (undocumented)
-export type Rule = EnforceRule | GuidanceRule | GuardRule;
+export interface EvalSpec<M extends Metrics> {
+    readonly allowedTools?: readonly string[];
+    readonly arms: Record<string, EvalArm>;
+    readonly cache?: CacheMode;
+    readonly cacheDir?: string;
+    readonly concurrency?: number;
+    readonly ephemeralEnv?: boolean;
+    readonly fixture?: Record<string, string>;
+    readonly lock?: EvalLockOptions;
+    readonly maxCostUsd?: number;
+    readonly measure: (ctx: RunContext) => M;
+    readonly model?: string;
+    // (undocumented)
+    readonly name?: string;
+    readonly rateLimitRetries?: number;
+    readonly retryBackoffMs?: number;
+    readonly spacingSec?: number;
+    readonly stubs?: readonly ToolStub[];
+    readonly task: string;
+    readonly timeoutMs?: number;
+    readonly trials?: number;
+}
 
 // @public
-export type Shape = Readonly<Record<string, OutputFieldType>>;
+export interface EvalUsage {
+    readonly cacheCreationTokens: number;
+    readonly cacheReadTokens: number;
+    readonly costUsd: number;
+    readonly durationMs: number;
+    readonly inputTokens: number;
+    // (undocumented)
+    readonly outputTokens: number;
+}
 
 // @public
-export interface SkillInput {
-    readonly hint: string;
+export interface FileToolEventOptions {
+    readonly event?: string;
+    readonly extra?: Readonly<Record<string, unknown>>;
+    readonly input?: Readonly<Record<string, unknown>>;
+    readonly root?: string;
+    readonly tool?: string;
+}
+
+// @public
+export function fileToolEvents(path: string, opts?: FileToolEventOptions): readonly [HookInput, HookInput];
+
+// @public
+export function formatBaselineDiff(diff: BaselineDiff): string;
+
+// @public
+export function formatCheckReport(report: CheckReport): string;
+
+// @public
+export function formatContainment(v: ContainmentVerdict): string;
+
+// @public
+export function formatEvalReport(report: EvalReport): string;
+
+// @public
+export function formatGuardrailReport(hookCommand: string, results: readonly GuardrailResult[]): string;
+
+// @public
+export function formatTriggerRateReport(report: TriggerRateReport): string;
+
+// @public
+export interface GuardrailResult {
+    readonly blocked: boolean;
+    // (undocumented)
+    readonly event: DisasterEvent;
+    readonly exitCode: number;
+}
+
+// @public
+export interface HarnessTestDriver {
+    available(): boolean;
+    buildArgs(ctx: HarnessDriverContext): readonly string[];
+    parseRun(stdout: string): ParsedRun;
+    readonly runtime: HarnessRuntime;
+    startMock(script: readonly ModelTurn[]): Promise<HarnessMockHandle>;
+}
+
+// @public (undocumented)
+export interface HarnessTestResult extends Trace {
+    cleanup(): void;
+    readonly cwd: string;
+    // (undocumented)
+    readonly exitCode: number;
+    readonly stderr: string;
+    // (undocumented)
+    readonly stdout: string;
+    readonly turns: number;
+}
+
+// @public (undocumented)
+export interface HarnessTestSpec {
+    readonly allowedTools?: readonly string[];
+    readonly files?: Record<string, string>;
+    readonly model: readonly ModelTurn[];
+    readonly plugin?: string;
+    readonly pluginDir?: string;
+    readonly prompt?: string;
+    readonly sandbox?: SandboxMode;
+    readonly settings?: unknown;
+    readonly timeoutMs?: number;
+    readonly transcript?: boolean;
+}
+
+// @public
+export function hookBlocked(trace: Trace, name: string | RegExp): boolean;
+
+// @public
+export interface HookFire {
+    readonly blocked: boolean;
+    readonly event: string;
+    readonly exitCode: number | undefined;
     readonly name: string;
-    readonly required?: boolean;
+    readonly output: string;
 }
 
 // @public
-export interface SkillRef {
+export function hookFired(event: string): Check<Trace>;
+
+// @public
+export interface HookInput {
+    readonly [k: string]: unknown;
+    readonly hook_event_name?: string;
+    readonly prompt?: string;
+    readonly source?: string;
+    readonly stop_hook_active?: boolean;
     // (undocumented)
-    readonly path: VerifiedRef;
+    readonly tool_input?: unknown;
+    readonly tool_name?: string;
     // (undocumented)
-    readonly _ref: "skill";
+    readonly tool_response?: unknown;
+}
+
+// @public
+export interface HookOutput {
+    // (undocumented)
+    readonly [k: string]: unknown;
+    // (undocumented)
+    readonly continue?: boolean;
+    // (undocumented)
+    readonly decision?: "approve" | "block";
+    // (undocumented)
+    readonly hookSpecificOutput?: {
+        readonly hookEventName?: string;
+        readonly permissionDecision?: "allow" | "deny" | "ask";
+        readonly permissionDecisionReason?: string;
+        readonly additionalContext?: string;
+    };
+    // (undocumented)
+    readonly reason?: string;
+    // (undocumented)
+    readonly stopReason?: string;
+    // (undocumented)
+    readonly suppressOutput?: boolean;
+    // (undocumented)
+    readonly systemMessage?: string;
+}
+
+// @public
+export interface HookPropertyResult<E> {
+    readonly counterexample?: E;
+    readonly failedInvariant?: string;
+    // (undocumented)
+    readonly iterations: number;
+    // (undocumented)
+    readonly passed: boolean;
 }
 
 // @public (undocumented)
-export interface SkillSpec {
-    readonly argumentHint?: string;
-    readonly body?: string | InstructionFragment[];
-    readonly context?: "fork";
-    readonly description: string;
-    readonly disableModelInvocation?: boolean;
-    readonly inputs?: readonly SkillInput[];
-    readonly maxInlineCodeLines?: number;
+export interface HookRunResult extends ScriptRunResult {
+    readonly blocked: boolean;
+    readonly decision: HookOutput["decision"] | "allow" | "deny" | "ask" | undefined;
+    readonly json: HookOutput | null;
+}
+
+// @public
+export function improvement(report: EvalReport, baseline: string, arm: string, metric: string): number;
+
+// @public
+export function inputTokens(opts: {
+    max: number;
+}): Check<UsageTrace>;
+
+// @public
+export type JudgeFn = (opts: {
+    output: string;
+    rubric: string;
+    threshold?: number;
+}) => {
+    score: number;
+    pass: boolean;
+    reason?: string;
+};
+
+// @public
+export function latency(opts: {
+    maxMs: number;
+}): Check<UsageTrace>;
+
+// @public
+export function loadHook(file: string): Promise<AnyHook>;
+
+// @public
+export function mcp(server: string, toolName: string): Check<Trace>;
+
+// @public
+export interface MeasureSpec {
+    readonly allowedTools?: readonly string[];
+    readonly checks: readonly Check<RunContext>[];
+    readonly fixture?: Record<string, string>;
+    readonly interceptTools?: readonly ToolIntercept[];
+    readonly model?: string;
+    readonly plugin?: string;
+    readonly pluginDir?: string;
+    readonly settings?: unknown;
+    readonly spacingSec?: number;
+    readonly stubSkillBodies?: boolean;
+    readonly task: string;
+    readonly timeoutMs?: number;
+    readonly trials?: number;
+}
+
+// @public
+export interface MetricDiff {
+    // (undocumented)
+    readonly arm: string;
+    readonly comparison: Comparison;
+    // (undocumented)
+    readonly metric: string;
+    readonly report: string;
+    // (undocumented)
+    readonly status: DiffStatus;
+}
+
+// @public (undocumented)
+export type Metrics = Record<string, number | boolean>;
+
+// @public
+export interface MetricStat {
+    readonly mean: number;
+    readonly n: number;
+    readonly passK: number;
+    readonly se: number;
+    readonly std: number;
+}
+
+// @public (undocumented)
+export type ModelOutputParser = (out: RunOut) => ParsedModelRun;
+
+// @public
+export interface ModelRequest {
+    readonly messages: readonly {
+        readonly role: string;
+        readonly text: string;
+    }[];
+    readonly sideChannel?: boolean;
+    readonly system: string;
+}
+
+// @public
+export interface ModelTurn {
+    readonly input?: Record<string, unknown>;
+    readonly text?: string;
+    readonly tool?: string;
+}
+
+// @public
+export function mustInclude(fragment: string, why: string): Check<readonly DocCommand[]>;
+
+// @public
+export function mustNotInclude(fragment: string, why: string): Check<readonly DocCommand[]>;
+
+// @public
+export function notTool(name: string, args?: ArgMatcher): Check<Trace>;
+
+// @public
+export function onlyTools(allowed: readonly string[]): Check<Trace>;
+
+// @public
+export function output(matcher: string | RegExp): Check<Trace>;
+
+// @public
+export function outputContains(trace: Trace, needle: string | RegExp): boolean;
+
+// @public
+export function outputTokens(opts: {
+    max: number;
+}): Check<UsageTrace>;
+
+// @public
+export function parseBaselineFile(json: string): BaselineFile;
+
+// @public
+export function parseClaudeRun(out: RunOut): ParsedModelRun;
+
+// @public
+export interface ParsedModelRun {
+    // (undocumented)
+    readonly hooks: ReturnType<typeof parseHooks>;
+    // (undocumented)
+    readonly output: string;
+    // (undocumented)
+    readonly subagents: ReturnType<typeof parseSubagents>;
+    // (undocumented)
+    readonly toolCalls: ReturnType<typeof parseToolCalls>;
+    // (undocumented)
+    readonly turns: number;
+    // (undocumented)
+    readonly usage: EvalUsage;
+}
+
+// @public
+export function parseHookOutput(stdout: string): HookOutput | null;
+
+// @public (undocumented)
+export function parseHooks(stdout: string): HookFire[];
+
+// @public
+export function parseOutput(stdout: string): string;
+
+// @public
+export function parseResultEvent(stdout: string): Record<string, unknown> | null;
+
+// @public
+export function parseSubagents(streamJson: string): SubagentTrace[];
+
+// @public
+export function parseToolCalls(streamJson: string): ToolCall[];
+
+// @public (undocumented)
+export interface PromptDiversityIssue {
+    // (undocumented)
+    readonly kind: "too-few" | "too-similar";
+    // (undocumented)
+    readonly message: string;
+}
+
+// @public
+export interface PromptTriggerStat {
+    // (undocumented)
+    readonly fired: number;
+    // (undocumented)
+    readonly prompt: string;
+    readonly rate: number;
+    // (undocumented)
+    readonly trials: number;
+}
+
+// @public
+export function propertyHook<E, D>(opts: {
+    readonly seed: E;
+    readonly mutate: (event: E, rng: number) => E;
+    readonly decide: (event: E) => D;
+    readonly invariants: Record<string, (decision: D, event: E) => boolean>;
+    readonly iterations?: number;
+}): HookPropertyResult<E>;
+
+// @public
+export function readBaseline(path: string): BaselineFile | null;
+
+// @public
+export function received(matcher: string | RegExp): Check<Trace>;
+
+// @public
+export function recordCheck(n?: number): void;
+
+// @public
+export function reliable(report: EvalReport, arm: string, metric: string): boolean;
+
+// @public
+export function renderToolStub(stub: ToolStub): string;
+
+// @public
+export function requestContains(trace: Trace, needle: string | RegExp): boolean;
+
+// @public
+export interface RunContext extends Trace {
+    // (undocumented)
+    readonly cwd: string;
+    // (undocumented)
+    readonly exitCode: number;
+    sh(command: string): string;
+    // (undocumented)
+    readonly stdout: string;
+    readonly toolCalls: readonly ToolCall[];
+    readonly turns: number;
+    readonly usage: EvalUsage;
+}
+
+// @public
+export function runHarness(spec: HarnessTestSpec, opts?: RunHarnessTestOptions & {
+    model?: "mock" | "real";
+}): Promise<HarnessTestResult>;
+
+// @public
+export function runHarnessTest(spec: HarnessTestSpec, opts?: RunHarnessTestOptions): Promise<HarnessTestResult>;
+
+// @public
+export interface RunHarnessTestOptions {
+    readonly adapter?: HarnessAdapter;
+}
+
+// @public
+export function runHook(command: string, input: HookInput, opts?: RunHookOptions): HookRunResult;
+
+// @public
+export type RunHookOptions = Omit<RunScriptOptions, "stdin">;
+
+// @public
+export interface RunOut {
+    // (undocumented)
+    code: number;
+    stderr?: string;
+    // (undocumented)
+    stdout: string;
+}
+
+// @public
+export function runScript(command: string, opts?: RunScriptOptions): ScriptRunResult;
+
+// @public (undocumented)
+export interface RunScriptOptions {
+    readonly cwd?: string;
+    readonly egress?: {
+        readonly allow: readonly string[];
+    };
+    readonly env?: Record<string, string>;
+    readonly recordEgress?: boolean;
+    readonly sandbox?: SandboxMode;
+    readonly stdin?: string;
+    readonly timeoutMs?: number;
+    readonly trusted?: boolean;
+}
+
+// @public
+export function sandboxAvailable(): boolean;
+
+// @public
+export type SandboxMode = "auto" | "strict" | false;
+
+// @public
+export interface ScriptRunResult {
+    readonly egress: readonly EgressAttempt[];
+    readonly egressDropped?: {
+        readonly packets: number;
+        readonly bytes: number;
+    };
+    readonly exitCode: number;
+    readonly filesWritten?: readonly string[];
+    readonly stderr: string;
+    // (undocumented)
+    readonly stdout: string;
+}
+
+// @public
+export interface SelectionTrialResult {
+    // (undocumented)
+    readonly errored: boolean;
+    // (undocumented)
+    readonly fired: readonly string[];
+}
+
+// @public
+export function significantlyBeats(report: EvalReport, baseline: string, arm: string, metric: string, alpha?: number): boolean;
+
+// @public
+export function skill(id: string): Check<Trace>;
+
+// @public (undocumented)
+export interface SkillContract {
+    readonly activation: Check<Trace>;
+    readonly declared: readonly string[];
+    readonly id: string;
+    readonly malformed: boolean;
     readonly name: string;
-    readonly output?: OutputContract;
-    readonly purity?: AuthoredPurity;
-    readonly result?: Gate;
+    readonly surface: readonly Check<Trace>[];
+    readonly undeclared: boolean;
+}
+
+// @public
+export function skillContract(skillDir: string, options?: SkillContractOptions): SkillContract;
+
+// @public (undocumented)
+export interface SkillContractOptions {
+    readonly plugin?: string;
+}
+
+// @public
+export function skillResolved(trace: Trace, skill: string): boolean;
+
+// @public
+export function skip(reason?: string): never;
+
+// @public
+export function specTrusted(spec: {
+    plugin?: string;
+    pluginDir?: string;
+}): boolean;
+
+// @public
+export function stubBinDir(stubs: readonly ToolStub[], parentDir: string): string;
+
+// @public
+export function stubSkillBody(skillMd: string): string;
+
+// @public
+export function subagent(name: string, checks: readonly Check<Trace>[]): Check<Trace>;
+
+// @public
+export interface SubagentTrace {
+    readonly name: string;
+    readonly output: string;
+    readonly toolCalls: readonly ToolCall[];
+}
+
+// @public
+export function toBaselineFile(reports: readonly EvalReport[], recordedAt?: string): BaselineFile;
+
+// @public
+export function tokens(opts: {
+    max: number;
+}): Check<UsageTrace>;
+
+// @public
+export function tool(name: string): Check<Trace>;
+
+// @public
+export interface ToolCall {
     // (undocumented)
-    readonly _specType: "skill";
-    readonly steps?: readonly SkillStep[];
-    readonly tools?: readonly string[];
-}
-
-// @public
-export type SkillSpecInput<P extends AuthoredPurity | undefined, V extends ToolVocabulary> = Omit<SkillSpec, "_specType" | "tools" | "purity"> & {
-    readonly purity?: P;
-    readonly tools?: readonly AllowedAt<P, V>[];
-};
-
-// @public
-export interface SkillStep {
-    readonly do: string | InstructionFragment[];
-    readonly gate?: Gate;
-    readonly retry?: number;
-}
-
-// @public
-export type SpecPath<Output extends `${string}.md`> = `${Output}.spec.ts`;
-
-// @public
-export function step(instr: string | InstructionFragment[], opts?: {
-    gate?: Gate;
-    retry?: number;
-}): SkillStep;
-
-// @public (undocumented)
-export type StrictCmd = [keyof KnownNpmScripts] extends [never] ? string : `npm run ${KnownNpmScripts[keyof KnownNpmScripts] & string}` | `npm ${KnownNpmScripts[keyof KnownNpmScripts] & string}` | (string & {});
-
-// @public
-export type StrictFile = [keyof KnownProjectFiles] extends [never] ? string : KnownProjectFiles[keyof KnownProjectFiles] & string;
-
-// @public
-export type StrictLinterRule = [keyof KnownLinterRules] extends [never] ? LinterRule : {
-    [K in keyof KnownLinterRules]: `${K & string}/${KnownLinterRules[K] & string}`;
-}[keyof KnownLinterRules];
-
-// @internal
-export type Supplies<Producer extends Shape, Consumer extends Shape> = {
-    [K in keyof Consumer]: K extends keyof Producer ? Producer[K] extends Consumer[K] ? true : {
-        readonly __mismatch: K;
-        readonly expected: Consumer[K];
-        readonly got: Producer[K];
-    } : {
-        readonly __missing: K;
-        readonly required: Consumer[K];
-    };
-}[keyof Consumer];
-
-// @public
-export function symbol(file: NoInfer<StrictFile>, name: string): SymbolRef;
-
-// @public
-export interface SymbolRef {
+    readonly input: unknown;
+    readonly isError: boolean;
     // (undocumented)
-    readonly file: VerifiedPath;
+    readonly name: string;
+    readonly resultText: string;
+}
+
+// @public
+export function toolCount(trace: Trace, name: string | RegExp): number;
+
+// @public
+export interface ToolStub {
+    readonly exitCode?: number;
+    readonly name: string;
+    readonly stderr?: string;
+    readonly stdout?: string;
+}
+
+// @public
+export function toolUsedWith(trace: Trace, name: string | RegExp, inputMatcher: (input: unknown) => boolean): boolean;
+
+// @public
+export function toolWith(name: string, args: ArgMatcher): Check<Trace>;
+
+// @public
+export interface Trace {
+    file(path: string): string | null;
+    readonly hooks: readonly HookFire[];
+    readonly modelRequests: readonly ModelRequest[];
+    readonly output: string;
+    readonly subagents?: readonly SubagentTrace[];
+    readonly toolCalls: readonly ToolCall[];
+    readonly turns: number;
+}
+
+// @public (undocumented)
+export interface TriggerRateReport {
+    readonly competitors: number;
+    readonly errored?: number;
+    readonly experimental?: string;
+    readonly falsePositiveRate?: number;
+    readonly n: number;
+    readonly perIrrelevant?: readonly PromptTriggerStat[];
     // (undocumented)
-    readonly _ref: "symbol";
-    // (undocumented)
-    readonly symbol: string;
+    readonly perPrompt: readonly PromptTriggerStat[];
+    readonly precision?: number;
+    readonly rate: number;
+    readonly usage: ArmUsage;
 }
 
 // @public
-export interface ToolVocabulary {
-    readonly bounded: string;
-    readonly readOnly: string;
+export interface TriggerRateSpec {
+    readonly allowedTools?: readonly string[];
+    readonly concurrency?: number;
+    readonly fired: (trace: Trace) => boolean;
+    readonly fixture?: Record<string, string>;
+    readonly installSet?: readonly string[];
+    readonly irrelevantPrompts?: readonly string[];
+    readonly lock?: EvalLockOptions;
+    readonly minDistance?: number;
+    readonly minModel?: string;
+    readonly minPrompts?: number;
+    readonly model?: string;
+    readonly name?: string;
+    readonly pluginDir?: string;
+    readonly prompts: readonly string[];
+    readonly skillsDir?: string;
+    readonly spacingSec?: number;
+    readonly stubSkillBodies?: boolean;
+    readonly timeoutMs?: number;
+    readonly trials?: number;
 }
 
 // @public
-export type TypedAgentSpec<Ok extends Shape, Err extends Shape> = AgentSpec & TypedOutcome<Ok, Err>;
+export function turns(opts: {
+    min?: number;
+    max?: number;
+}): Check<Trace>;
 
 // @public
-export interface TypedOutcome<Ok extends Shape, Err extends Shape> {
-    // (undocumented)
-    readonly [__outcome]: {
-        readonly ok: Ok;
-        readonly err: Err;
-    };
+export function unblockedDisasters(results: readonly GuardrailResult[]): GuardrailResult[];
+
+// @public
+export function usedTool(trace: Trace, name: string | RegExp): boolean;
+
+// @public
+export function verifyGuardrail(hookCommand: string, opts?: VerifyGuardrailOptions): GuardrailResult[];
+
+// @public (undocumented)
+export interface VerifyGuardrailOptions extends RunHookOptions {
+    readonly categories?: readonly DisasterCategory[];
+    readonly event?: string;
+    readonly events?: readonly DisasterEvent[];
 }
 
-// @public (undocumented)
-export type VerifiedCmd = string & {
-    readonly [__brand]: "VerifiedCmd";
-};
-
-// @public (undocumented)
-export type VerifiedDir = string & {
-    readonly [__brand]: "VerifiedDir";
-};
-
-// @public (undocumented)
-export type VerifiedGlob = string & {
-    readonly [__brand]: "VerifiedGlob";
-};
-
-// @public (undocumented)
-export type VerifiedPath = string & {
-    readonly [__brand]: "VerifiedPath";
-};
-
-// @public (undocumented)
-export type VerifiedRef = string & {
-    readonly [__brand]: "VerifiedRef";
+// @public
+export const vigilesMatchers: {
+    toHaveCreated(received: HarnessTestResult, path: string): MatcherOutput;
+    toBlock(received: HookRunResult): MatcherOutput;
+    toBeatBaseline(received: EvalReport, baseline: string, arm: string, metric: string, by?: number): MatcherOutput;
+    toPass<T>(received: T, check: Check<T>): MatcherOutput;
+    toPassAll<T>(received: T, checks: readonly Check<T>[]): MatcherOutput;
 };
 
 // @public
-export type VigilesRef = `vigiles/${string}`;
+export function withHarness<T>(spec: HarnessTestSpec, fn: (r: HarnessTestResult) => T | Promise<T>): Promise<T>;
 
-// @public (undocumented)
-export interface VigilesV2Config {
-    readonly discover?: boolean;
-    readonly linters?: Record<string, LinterMode>;
-    readonly maxRules?: number;
-    readonly maxSectionLines?: number;
-    readonly maxTokens?: number;
-    readonly specs?: string;
-    readonly verifyLinters?: boolean;
-}
+// @public
+export function writeBaseline(path: string, reports: readonly EvalReport[]): void;
+
+// @public
+export function writeToolStubs(binDir: string, stubs: readonly ToolStub[]): void;
+
+// @public
+export function wrote(path: string): Check<Trace>;
 
 // (No @packageDocumentation comment for this package)
 

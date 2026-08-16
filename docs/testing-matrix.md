@@ -170,13 +170,13 @@ as a `✓ passed`. A skip passes by default (capabilities differ per job — thi
 repo runs the egress tier under `e2e`, not `harness`), but in a CI job that
 **asserts** the capability is present, add **`vigiles test --no-skip`** so a
 skipped tier **fails**: a green-with-skips is itself untested surface. A standalone
-script emits a skip with `skip(reason)` from `vigiles/testing`.
+script emits a skip with `skip(reason)` from `vigiles`.
 
 **And so is a file that verified nothing.** A script that exits clean having
 recorded **zero** checks reports `∅ … 0 CHECKS`, tallied apart from `passed` — the
 shape being a harness that _defines_ tests (`export default { … }`) and never calls
 them, which no exit code can distinguish from a pass. Non-fatal by design: it never
-turns a build red, and a script that doesn't import `vigiles/testing` cannot report,
+turns a build red, and a script that doesn't import `vigiles` cannot report,
 so it stays a plain pass. `recordCheck()` reports assertions made another way.
 
 ## See also

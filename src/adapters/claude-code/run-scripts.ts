@@ -35,7 +35,7 @@ export interface ScriptRunResult {
   readonly status: ScriptStatus;
   /**
    * How many checks the script reported making, or `undefined` when it reported
-   * nothing at all — a script that never imports `vigiles/testing` has no way to
+   * nothing at all — a script that never imports `vigiles` has no way to
    * report, and that silence is NOT a claim about it. `0` is a claim: the script
    * loaded the library and used none of it.
    */
@@ -57,7 +57,7 @@ export interface ScriptRunResult {
  * Exit code a harness/eval script uses to report itself SKIPPED (e.g. the
  * deterministic tier when `claude` isn't installed) — the autotools convention.
  * The runner surfaces it as a loud `⊘ SKIPPED` instead of a silent `✓`, and a
- * skip never fails the run. Scripts call `skip()` (vigiles/testing) to emit it.
+ * skip never fails the run. Scripts call `skip()` (vigiles) to emit it.
  */
 export const SKIP_EXIT_CODE = 77;
 
@@ -80,7 +80,7 @@ export const SKIP_EXIT_CODE = 77;
  * punishing people for upgrading. It is loud and it is not fatal.
  *
  * AND SILENCE IS NOT ZERO. `checks === undefined` means the script never
- * reported — it may not import `vigiles/testing` at all — so it stays a plain
+ * reported — it may not import `vigiles` at all — so it stays a plain
  * `pass`, exactly as before. Only a script that loaded the library and used
  * none of it says zero. This is the `undefined`-vs-`[]` distinction
  * `assertNoWrite` already draws: "nobody looked" must not read as "nothing
@@ -179,7 +179,7 @@ export function discoverScripts(
 
 /**
  * What a script left behind, or `undefined` if it left nothing (it never
- * imported `vigiles/testing`, or died before its exit handler). The parse itself
+ * imported `vigiles`, or died before its exit handler). The parse itself
  * lives beside the writer in `check-count.ts` so the two cannot drift; anything
  * malformed is treated as no report — a corrupt scratch file must not invent a
  * verdict.
@@ -201,7 +201,7 @@ function readCheckReport(
  * (e.g. `VIGILES_TRIALS`). Returns the per-file exit codes + check counts.
  *
  * Each child is handed its OWN scratch path in `VIGILES_CHECK_COUNT_ENV`, which
- * `vigiles/testing` writes its check count to on exit — the channel that makes
+ * `vigiles` writes its check count to on exit — the channel that makes
  * "ran nothing" distinguishable from "ran and passed" (see check-count.ts). It
  * has to be a file: stdio is inherited so the script's report streams live,
  * which leaves no stream to parse.
@@ -340,9 +340,9 @@ export function formatScriptSummary(
   // asserting some other way, which the runner cannot see.
   if (n("vacuous") > 0) {
     lines.push(
-      `  ∅ = the file loaded vigiles/testing and used none of it. Either nothing ran ` +
+      `  ∅ = the file loaded vigiles and used none of it. Either nothing ran ` +
         `(an exported test object nobody calls), or it asserts another way — in which ` +
-        `case call recordCheck() from vigiles/testing so those count.`,
+        `case call recordCheck() from vigiles so those count.`,
     );
   }
   return lines.join("\n");

@@ -9,8 +9,8 @@ safe-by-default bubblewrap sandbox + egress.
 
 Imports here come from the adapter surface `vigiles/claude-code` (CC-specific
 transport: `scriptModel`, `loadPlugin`, `resolveHarness`); the runners and
-assertions come from the agnostic `vigiles/testing` (or the tier barrels
-`vigiles/unit` / `vigiles/integration` / `vigiles/e2e`). Claude Code is the
+assertions come from the agnostic package root `vigiles` (and, for anything that
+calls a model, `vigiles/eval`). Claude Code is the
 **default** adapter — `runHarnessTest(spec)` with no `{ adapter }` drives it.
 
 ## Contents
@@ -19,7 +19,7 @@ assertions come from the agnostic `vigiles/testing` (or the tier barrels
   - [Tier 0 — load the assembled machine](#tier-0--load-the-assembled-machine)
   - [Tier 1 — unit-test a hook (`runHook`)](#tier-1--unit-test-a-hook-runhook)
   - [Tier 2 — deterministic: fired _and_ landed (`runHarnessTest`)](#tier-2--deterministic-fired-and-landed-runharnesstest)
-  - [Tier 3 — eval: does the skill _trigger_? (`measureTriggerRate`)](#tier-3--eval-does-the-skill-trigger-measuretriggerrate)
+  - [Tier 3 — eval: does the skill _trigger_? (`paid_measureTriggerRate`)](#tier-3--eval-does-the-skill-trigger-paid_measuretriggerrate)
 - [Test the whole machine (`plugin`)](#test-the-whole-machine-plugin)
   - [Native install: testing skills (`pluginDir`)](#native-install-testing-skills-plugindir)
 - [The scripted Anthropic Messages mock (`scriptModel`)](#the-scripted-anthropic-messages-mock-scriptmodel)
@@ -66,7 +66,7 @@ OMC's `keyword-detector` is a `UserPromptSubmit` hook: it scans the prompt for a
 an event and check the decision — no `claude`, no model, milliseconds:
 
 ```ts
-import { runHook } from "vigiles/testing";
+import { runHook } from "vigiles";
 
 const hit = runHook(keywordDetectorCmd, {
   hook_event_name: "UserPromptSubmit",
@@ -81,10 +81,10 @@ _not_ linted, pass `{ trusted: false }` and `runHook` confines it under
 bubblewrap (no egress, cleared env). Full file:
 [`examples/harness/oh-my-claudecode-unit.harness.mjs`](../examples/harness/oh-my-claudecode-unit.harness.mjs).
 
-`runHook` is harness-agnostic at the API level (it's in `vigiles/testing` /
-`vigiles/unit`), but its event shape and the bubblewrap confinement are
+`runHook` is harness-agnostic at the API level (it's on the `vigiles` root), but
+its event shape and the bubblewrap confinement are
 Claude-Code-specific. See
-[`vigiles/unit`](harness-testing.md#test-a-hook-in-isolation-runhook) for the
+[`runHook`](harness-testing.md#test-a-hook-in-isolation-runhook) for the
 agnostic contract.
 
 ### Tier 2 — deterministic: fired _and_ landed (`runHarnessTest`)
@@ -100,7 +100,7 @@ import {
   runHarnessTest,
   assertHookFired,
   assertRequestContains,
-} from "vigiles/testing";
+} from "vigiles";
 import { scriptModel } from "vigiles/claude-code";
 
 const r = await runHarnessTest({
@@ -124,7 +124,7 @@ sandbox). Pointing `pluginDir` at the whole untrusted plugin instead would run i
 confined under bubblewrap. Full file:
 [`examples/harness/oh-my-claudecode-deterministic.harness.mjs`](../examples/harness/oh-my-claudecode-deterministic.harness.mjs).
 
-### Tier 3 — eval: does the skill _trigger_? (`measureTriggerRate`)
+### Tier 3 — eval: does the skill _trigger_? (`paid_measureTriggerRate`)
 
 Wiring (Tier 0) proves a skill _resolves_; whether the **real model chooses** it
 from its description across varied phrasings is a property only a model can
@@ -132,9 +132,10 @@ answer. Install OMC natively (`pluginDir`) and measure how reliably its `verify`
 skill fires on prompts about confirming a change works:
 
 ```ts
-import { measureTriggerRate, skillResolved } from "vigiles/testing";
+import { paid_measureTriggerRate } from "vigiles/eval"; // `paid_` = a real model runs
+import { skillResolved } from "vigiles";
 
-const report = await measureTriggerRate({
+const report = await paid_measureTriggerRate({
   pluginDir: "test/dogfood/oh-my-claudecode@deee3a4",
   prompts: [
     "I think the pagination fix is done — can you confirm it actually works?",
@@ -149,7 +150,7 @@ This is the **one** tier that needs model auth, so — unlike Tiers 0–2 — it
 **not** run in CI. Full file:
 [`examples/harness/oh-my-claudecode-eval.eval.mjs`](../examples/harness/oh-my-claudecode-eval.eval.mjs).
 
-**Multi-skill plugin? Also gate _selection collision_.** `measureTriggerRate`
+**Multi-skill plugin? Also gate _selection collision_.** `paid_measureTriggerRate`
 tests one skill in isolation; for a plugin where several skills do similar things,
 `measureSelectionMatrix` + `assertNoCollision` catch one skill hijacking a
 sibling's prompt. It's **Claude-Code-only** (it reads which skill the selector
@@ -165,7 +166,7 @@ your repo) and the real harness is loaded from `.claude-plugin/plugin.json` (or
 scripts, plus its CLAUDE.md and skills:
 
 ```ts
-import { runHarnessTest } from "vigiles/testing";
+import { runHarnessTest } from "vigiles";
 import { scriptModel } from "vigiles/claude-code";
 
 const r = await runHarnessTest({
@@ -206,7 +207,7 @@ internal references). Add `transcript: true` to capture the event stream so you
 can assert the skill's body was injected:
 
 ```ts
-import { assertSkillResolved, assertToolNotUsed } from "vigiles/testing";
+import { assertSkillResolved, assertToolNotUsed } from "vigiles";
 
 const r = await runHarnessTest({
   pluginDir: "./path/to/a/whole/plugin", // installs natively; skills activate
@@ -252,7 +253,7 @@ order and renders the Anthropic Messages SSE shape `claude` expects.
 
 ```ts
 import { test } from "node:test";
-import { withHarness, assertCreated } from "vigiles/testing";
+import { withHarness, assertCreated } from "vigiles";
 import { scriptModel } from "vigiles/claude-code";
 
 test("Stop hook forces more work", async () => {
@@ -299,7 +300,7 @@ and messages), captured by the scripted mock, and `assertRequestContains` assert
 your text is in it:
 
 ```ts
-import { assertRequestContains } from "vigiles/testing";
+import { assertRequestContains } from "vigiles";
 
 assertRequestContains(r, "You have superpowers"); // the injected context is really there
 ```

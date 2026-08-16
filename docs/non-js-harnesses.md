@@ -95,7 +95,7 @@ A file matched by a custom `testGlobs` counts toward **Tested**.
 ## What still assumes JS
 
 The harness-**testing** API (`runHook` / `runHarnessTest` / `runEval` from
-`vigiles/testing`) is authored in JS/TS — you `import` it. It tests the
+`vigiles` / `vigiles/eval`) is authored in JS/TS — you `import` it. It tests the
 **harness** (hooks, skills, subagents), which is language-agnostic, so it applies
 to a Kotlin/Go repo's Claude Code harness too — you just write the test file in
 JS (or run the zero-setup `*.harness.mjs` CLI fallback via `npx vigiles test`).

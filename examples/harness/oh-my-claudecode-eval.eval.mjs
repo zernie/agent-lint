@@ -14,7 +14,8 @@
  *
  * Real model → real cost. This is the ONE tier that needs model auth, so it is
  * NOT run in CI (unlike the unit/deterministic tiers above). External users
- * import from the package: `from "vigiles/testing"`.
+ * import from the package: `from "vigiles/eval"` (the paid runners) and
+ * `from "vigiles"` (the free checks).
  */
 import { fileURLToPath } from "node:url";
 
@@ -49,6 +50,6 @@ const report = await measureTriggerRate({
 console.log(formatTriggerRateReport(report));
 
 // A trigger-rate eval is a measurement; gate it in CI (where auth exists) with
-// assertTriggerRate(report, { min: 0.6 }) from vigiles/testing.
+// assertTriggerRate(report, { min: 0.6 }) from vigiles.
 if (report.n === 0) throw new Error("no runs executed");
 console.log(`\n✓ measured ${report.n} run(s).`);

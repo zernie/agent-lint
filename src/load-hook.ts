@@ -29,7 +29,7 @@ import {
  * points at authoring the hook as `.mjs`.
  *
  * ```js
- * import { loadHook, assertHookDenies } from "vigiles/testing";
+ * import { loadHook, assertHookDenies } from "vigiles";
  *
  * const guard = await loadHook(".vigiles/hooks/guard.mjs");
  * assertHookDenies(guard, {

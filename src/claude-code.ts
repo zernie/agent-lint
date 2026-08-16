@@ -2,7 +2,7 @@
  * `vigiles/claude-code` — the Claude Code-specific harness pieces a *different*
  * harness would swap out: the plugin/repo loader (reads real Claude Code plugin
  * layouts) and the scriptable Anthropic Messages mock. Split from
- * `vigiles/testing` on purpose — the test API above is the stable surface; this
+ * the `vigiles` root on purpose — the test API above is the stable surface; this
  * is the adapter, so a future `vigiles/<other-harness>` can sit beside it.
  */
 export * from "./adapters/claude-code/plugin-loader.js";
@@ -11,7 +11,7 @@ export * from "./mock-model.js";
 // helpers + the `claude` capability probe. Agnostic users never need these
 // (`runHarnessTest` defaults to the CC driver), but they're exposed here — beside
 // the Codex driver in `vigiles/codex` — for CC-specific tests/tooling. They are
-// deliberately NOT on the agnostic `vigiles/testing` surface.
+// deliberately NOT on the agnostic `vigiles` surface.
 export {
   claudeCodeDriver,
   buildClaudeArgs,
@@ -36,7 +36,7 @@ export {
 } from "./adapters/claude-code/typed-spec.js";
 // Selection-collision — a Claude-Code-ONLY behavioral measurement (Codex has no
 // skill-selection event to read), so it lives on this surface, not the agnostic
-// `vigiles/testing`. `measureSelectionMatrix` builds the N×N "which skill fired?"
+// `vigiles`. `measureSelectionMatrix` builds the N×N "which skill fired?"
 // matrix (diagonal = recall, off-diagonal = collision); `assertNoCollision` gates it.
 export {
   measureSelectionMatrix,

@@ -99,7 +99,7 @@ describe("formatExecuteSkip", () => {
     const note = formatExecuteSkip("headless");
     expect(note).toContain("skipped");
     expect(note).toContain("interactively");
-    expect(note).toContain("vigiles/testing");
+    expect(note).toContain("`vigiles` testing API");
     expect(note).not.toContain("--measure");
   });
 

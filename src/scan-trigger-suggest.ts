@@ -7,7 +7,7 @@
  * remembers in `.vigilesrc.json` `audit.measure`); headless (an agent / `--json` /
  * `--no-interactive` / a pipe) it stays a read + a one-line nudge — never hangs,
  * never silently executes. There is deliberately NO execution flag: automation
- * tests the harness through the `vigiles/testing` API + skills (the layered tiers),
+ * tests the harness through the `vigiles` testing API + skills (the layered tiers),
  * not through the report verb. The IO (prompt / run / remember) lives in the CLI;
  * this is the pure decision + helpers.
  */
@@ -83,7 +83,7 @@ export interface ExecuteEnv {
  * the executing checks need a human to consent:
  *  1. nothing executable → skip "nothing" (a clean read; no nudge)
  *  2. headless (`--json` / `--no-interactive` / non-TTY — an agent, a pipe, CI) →
- *     skip "headless" (no one to ask; automation uses the `vigiles/testing` API)
+ *     skip "headless" (no one to ask; automation uses the `vigiles` testing API)
  *  3. sticky no → skip "remembered-no"
  *  4. sticky yes → run
  *  5. interactive human, no sticky choice → ask (then remember)
@@ -101,7 +101,7 @@ export function decideExecute(o: ExecuteEnv): ExecuteDecision {
  * The one-line "executing checks not run" nudge for a skipped read (the
  * no-silent-skips corollary). Returns null for `nothing` (nothing to run — not a
  * gap). There is no flag to point at — `audit` runs them only interactively, and
- * automation uses the `vigiles/testing` API.
+ * automation uses the `vigiles` testing API.
  */
 export function formatExecuteSkip(reason: ExecuteSkipReason): string | null {
   switch (reason) {
@@ -111,7 +111,7 @@ export function formatExecuteSkip(reason: ExecuteSkipReason): string | null {
       return (
         "\nℹ Executing checks (safety battery · live MCP · skill firing) skipped — " +
         "`audit` runs them only interactively (a terminal). For automation, test the " +
-        "harness with the `vigiles/testing` API."
+        "harness with the `vigiles` testing API."
       );
     case "remembered-no":
       return (

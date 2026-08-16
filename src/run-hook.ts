@@ -49,7 +49,7 @@ import {
 } from "./run-script.js";
 
 export type { EgressAttempt } from "./run-script.js";
-// The general runner this module specializes. Re-exported so `vigiles/unit`'s
+// The general runner this module specializes. Re-exported so the `vigiles` root's
 // hook surface and the script surface stay one import away from each other.
 export { runScript, runScriptWith, egressRoutes } from "./run-script.js";
 export type {

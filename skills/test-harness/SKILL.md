@@ -58,7 +58,7 @@ anything; every one of them ships today.
 
 | The question you're actually asking                                     | Use                                                                                    |
 | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Which tools did it call, and with what arguments?                       | `trace.toolCalls` · `tool` / `toolWith` checks · `parseToolCalls` (`vigiles/e2e`)      |
+| Which tools did it call, and with what arguments?                       | `trace.toolCalls` · `tool` / `toolWith` checks · `parseToolCalls` (`vigiles`)          |
 | Did it call a tool it must not?                                         | `notTool(name)`                                                                        |
 | Did it call **only** tools from a known set?                            | `onlyTools([...])` — the white-list, symmetric to `assertWroteOnly`                    |
 | Did it stay inside the `allowed-tools` its own frontmatter declares?    | `skillContract(dir).surface` — builds that check FROM the declaration                  |
@@ -80,7 +80,7 @@ the `allowed-tools:` the skill already claims and hands back ready checks, so
 the claim is verified instead of restated:
 
 ```ts
-import { skillContract, assertChecks } from "vigiles/testing";
+import { skillContract, assertChecks } from "vigiles";
 
 const c = skillContract(".claude/skills/my-skill");
 assertChecks(trace, [c.activation, ...c.surface]);
@@ -157,7 +157,7 @@ Pick one concrete thing to pin down — a specific `PreToolUse` hook, a specific
 **Unit (`runHook`)** — hand a hook a synthesized event, assert the decision:
 
 ```ts
-import { runHook, assertHookBlocked } from "vigiles/testing";
+import { runHook, assertHookBlocked } from "vigiles";
 
 const r = runHook(hookCommand, {
   hook_event_name: "PreToolUse",
@@ -188,9 +188,9 @@ import {
   runHarnessTest,
   assertHookFired,
   assertRequestContains,
-} from "vigiles/testing";
+} from "vigiles";
 // `scriptModel` is the Claude-Code TRANSPORT, deliberately not re-exported from
-// the harness-agnostic `vigiles/testing` — import it from the harness package:
+// the harness-agnostic root surface — import it from the harness package:
 import { scriptModel } from "vigiles/claude-code";
 
 const r = await runHarnessTest({
@@ -202,34 +202,36 @@ assertHookFired(r, "SessionStart");
 assertRequestContains(r, "expected injected text"); // did it actually land?
 ```
 
-**Eval — absolute (`measure` + `judged`)** — testing _one_ skill, the usual case:
+**Eval — absolute (`paid_measure` + `paid_judged`)** — testing _one_ skill, the usual case:
 score its output directly against a rubric. No on/off baseline — this is the
 "is it any good?" oracle (what promptfoo/DeepEval lead with), and the right
 default when there's nothing to compare against:
 
 ```ts
-import { measure, judged, skill, assertRates } from "vigiles/testing";
+import { paid_measure, paid_judged } from "vigiles/eval"; // `paid_` = these call a model
+import { skill, assertRates } from "vigiles";
 
-const report = await measure({
+const report = await paid_measure({
   pluginDir: "./",
   task: "…a task the skill should handle…",
   checks: [
     skill("my-plugin:my-skill"), // it fired
-    judged("the answer correctly does X and avoids Y"), // …and the output is good
+    paid_judged("the answer correctly does X and avoids Y"), // …and the output is good
   ],
   trials: 6,
 });
 assertRates(report, { min: 0.8 }); // each check passes ≥ 80% of trials
 ```
 
-**Eval — relative (`runEval` + `assertSignificant`)** — when the question is
+**Eval — relative (`paid_runEval` + `assertSignificant`)** — when the question is
 _lift over no-skill_ (regression, or proving a change isn't noise): A/B the
 change on vs off and gate on significance, not eyeballing:
 
 ```ts
-import { runEval, assertSignificant } from "vigiles/testing";
+import { paid_runEval } from "vigiles/eval"; // `paid_` = a real model runs
+import { assertSignificant } from "vigiles";
 
-const report = await runEval({
+const report = await paid_runEval({
   arms: { off: {}, on: { pluginDir: "./" } },
   task: "…a task the harness change should affect…",
   measure: (ctx) => ({ ok: /* a bare predicate over the trace */ true }),
@@ -261,7 +263,7 @@ unrepresentable:
 Use **`runScript`** — it runs any command and reports what it did:
 
 ```ts
-import { runScript } from "vigiles/testing";
+import { runScript } from "vigiles";
 
 const r = runScript("bash scripts/check-links.sh", { cwd: repoDir });
 assert.equal(r.exitCode, 0);
@@ -293,7 +295,7 @@ npx vigiles eval --trials=6      # *.eval.{mjs,ts} — real model (local / night
 Unit-tier `runHook` tests need no `claude` and **always run** — write and run them
 even with no `claude` installed. A tier that genuinely can't run reports a loud
 `⊘ SKIPPED` (tallied separately, never a fake `✓`); a standalone script emits one
-via `skip(reason)` from `vigiles/testing`. A skip passes by default, but in a CI
+via `skip(reason)` from `vigiles`. A skip passes by default, but in a CI
 job that asserts the capability is present, run **`vigiles test --no-skip`** so a
 skipped tier fails — a green-with-skips is untested surface. Keep unit +
 deterministic tests in CI (free); run evals locally or on a schedule with auth.

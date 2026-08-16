@@ -10,13 +10,14 @@ An agent is **Model + Harness**. The _harness_ is the machine around the model: 
 
 ```ts
 // Core — harness-agnostic. The stable API you write tests/evals against.
-import { runHarnessTest, runEval, assertHookBlocked } from "vigiles/testing";
+import { paid_runEval } from "vigiles/eval";
+import { runHarnessTest, assertHookBlocked } from "vigiles";
 
 // Adapter — the Claude Code-specific pieces, named explicitly.
 import { loadPlugin, scriptModel } from "vigiles/claude-code";
 ```
 
-`vigiles/testing` is the part that never changes when the harness changes. It includes `runHarnessTest`, `runEval`, `runHook`, the `Trace` predicates, and all assertions.
+The `vigiles` root (plus `vigiles/eval` for the model-calling half) is the part that never changes when the harness changes. It includes `runHarnessTest`, `paid_runEval`, `runHook`, the `Trace` predicates, and all assertions.
 
 `vigiles/claude-code` is the adapter. It reads real Claude Code layouts (`.claude-plugin/plugin.json`, `.claude/settings.json`, `${CLAUDE_PLUGIN_ROOT}`, `skills/`, `agents/`) and provides the scriptable Anthropic Messages mock you point `claude` at.
 
@@ -26,7 +27,7 @@ A second harness sits **beside** the first — same core, a different import. Co
 import { startCodexMock, codexAdapter } from "vigiles/codex";
 ```
 
-Nothing in `vigiles/testing` changes, and unused adapters tree-shake out. Importing the adapter (rather than a `harness:` config key) means the bundle carries only what you use, and the choice is type-checked where you write it.
+Nothing in `vigiles` or `vigiles/eval` changes, and unused adapters tree-shake out. Importing the adapter (rather than a `harness:` config key) means the bundle carries only what you use, and the choice is type-checked where you write it.
 
 ## The CLI auto-detects (or reads project config)
 
@@ -91,5 +92,5 @@ vigiles also **dogfoods** that rule: `CLAUDE.md.spec.ts` carries `enforce("bound
 
 ## See also
 
-- [`docs/harness-testing.md`](harness-testing.md) — the harness-agnostic test tiers that ride on `vigiles/testing`. Per-harness specifics: [`harness-testing-claude-code.md`](harness-testing-claude-code.md) · [`harness-testing-codex.md`](harness-testing-codex.md).
+- [`docs/harness-testing.md`](harness-testing.md) — the harness-agnostic test tiers that ride on `vigiles` / `vigiles/eval`. Per-harness specifics: [`harness-testing-claude-code.md`](harness-testing-claude-code.md) · [`harness-testing-codex.md`](harness-testing-codex.md).
 - [`docs/non-js-harnesses.md`](non-js-harnesses.md) — using vigiles on a Kotlin/Go/Java repo with no `package.json` or Node toolchain (which checks work with zero setup, JVM/Go linter cross-referencing).

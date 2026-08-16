@@ -122,7 +122,7 @@ import {
   verifyGuardrail,
   formatGuardrailReport,
   // assertBlocksDisasters, // uncomment to gate CI on the battery (see below)
-} from "vigiles/unit";
+} from "vigiles";
 
 const cmd = ${JSON.stringify(cmd)};
 
@@ -158,19 +158,15 @@ function skillScaffold(input: ScaffoldInput): string {
     `Starter trigger-rate eval for the \`${id}\` skill (recall + precision).`,
     `npx vigiles eval ${suggestedPath(input)}   # real model, on your subscription`,
   )}
-import {
-  measureTriggerRate,
-  formatTriggerRateReport,
-  assertTriggerRate,
-  skillResolved,
-} from "vigiles/testing";
+import { paid_measureTriggerRate } from "vigiles/eval"; // paid_ = a real model runs
+import { formatTriggerRateReport, assertTriggerRate, skillResolved } from "vigiles";
 import { fileURLToPath } from "node:url";
 ${note}
 // TODO: point at the plugin root (the dir holding .claude-plugin/ or skills/).
 const pluginDir = fileURLToPath(new URL("../../", import.meta.url));
 const skill = ${JSON.stringify(id)};
 
-const report = await measureTriggerRate({
+const report = await paid_measureTriggerRate({
   pluginDir,
   stubSkillBodies: true, // firing is a frontmatter property — stub bodies, pay less
   prompts: [
@@ -230,7 +226,7 @@ function outcomeSection(
     : "";
   return `import assert from "node:assert/strict";
 import { result } from "vigiles/spec";
-import { assertAgentOk } from "vigiles/testing";
+import { assertAgentOk } from "vigiles";
 
 // Reconstructed from ${input.name}'s ## Output contract (its compiled .md) — the
 // typed result() the spec wrote. assertAgentOk parses + validates the outcome
@@ -257,7 +253,7 @@ function fallbackSection(input: ScaffoldInput): string {
     input.tools && input.tools.length > 0
       ? `assertToolUsed(r, ${JSON.stringify(input.tools[0])}); // its declared contract: ${input.tools.join(", ")}`
       : `assertToolUsed(r, "Task"); // TODO: assert what the subagent should do`;
-  return `import { runHarnessTest, assertToolUsed } from "vigiles/testing";
+  return `import { runHarnessTest, assertToolUsed } from "vigiles";
 
 // ${input.name} has no result() contract, so its outcome can't be asserted
 // deterministically — add one (result() on its agent() spec) for a no-judge
@@ -334,7 +330,7 @@ function agentScaffold(input: ScaffoldInput): string {
   );
   const safetyImport =
     input.sideEffectingTools && input.sideEffectingTools.length > 0
-      ? `import { notTool, didNotWrite, assertChecks } from "vigiles/testing";\n`
+      ? `import { notTool, didNotWrite, assertChecks } from "vigiles";\n`
       : "";
   const body = input.resultContract
     ? outcomeSection(input, input.resultContract)

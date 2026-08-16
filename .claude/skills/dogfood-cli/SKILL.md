@@ -98,7 +98,7 @@ Code that guesses how an external thing behaves without checking: a CLI flag's
 format (the `skills` `-s` was assumed comma-separated, is space-separated → the
 install exited 1), a harness's frontmatter key (skills use `allowed-tools`, not
 `tools:`), git's behavior (`git config origin` in a subdir walks UP to the parent
-repo), module resolution (`vigiles/testing` can't resolve without a package.json),
+repo), module resolution (`vigiles` can't resolve without a package.json),
 a linter's enabled-state (a checkstyle `severity=ignore` module is disabled).
 
 - **PARSE, DON'T VALIDATE the boundary.** Read the REAL contract before coding —

@@ -28,7 +28,7 @@ The agnostic runner defaults to Claude Code; you pick Codex by passing the
 adapter object — the same surface, a different transport:
 
 ```ts
-import { runHarnessTest } from "vigiles/testing";
+import { runHarnessTest } from "vigiles";
 import { codexAdapter } from "vigiles/codex";
 
 const r = await runHarnessTest(spec, { adapter: codexAdapter });
@@ -50,7 +50,7 @@ landed" shape: assert the scripted reply reached the agent's output **and** that
 the mock recorded the prompt (so the request actually reached the model):
 
 ```ts
-import { runHarnessTest } from "vigiles/testing";
+import { runHarnessTest } from "vigiles";
 import { codexAdapter } from "vigiles/codex";
 
 const r = await runHarnessTest(

@@ -1749,13 +1749,13 @@ test("a directory symlink is not descended into, so a cycle cannot hang the scan
   write(
     dir,
     ".claude/skills/loop/loop.test.mjs",
-    'import { runEval } from "vigiles/testing";\nawait runEval({});\n',
+    'import { paid_runEval } from "vigiles/eval";\nawait paid_runEval({});\n',
   );
   // …and an ordinary nested dir, to pin that descent still happens at all.
   write(
     dir,
     ".claude/skills/loop/nested/deep.test.mjs",
-    'import { runEval } from "vigiles/testing";\nawait runEval({});\n',
+    'import { paid_runEval } from "vigiles/eval";\nawait paid_runEval({});\n',
   );
   // `.claude/skills/loop/self` → `.claude/skills` : an ancestor, so following it
   // re-enters `loop/` forever.
@@ -1833,7 +1833,7 @@ test("a surface ROOT that links back over the repo is refused, so the walk stays
   write(
     dir,
     "node_modules/junk/planted.test.mjs",
-    'import { runEval } from "vigiles/testing";\nawait runEval({});\n',
+    'import { paid_runEval } from "vigiles/eval";\nawait paid_runEval({});\n',
   );
   write(dir, "unrelated/notes.md", "# not a surface\n");
   mkdirSync(join(dir, ".claude"), { recursive: true });
@@ -1900,7 +1900,7 @@ test("…but a symlink to a FILE is still collected — it cannot recurse", () =
   write(
     dir,
     "real/driver.test.mjs",
-    'import { runEval } from "vigiles/testing";\nawait runEval({});\n',
+    'import { paid_runEval } from "vigiles/eval";\nawait paid_runEval({});\n',
   );
   mkdirSync(join(dir, ".claude", "skills", "s"), { recursive: true });
   write(

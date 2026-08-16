@@ -29,15 +29,16 @@ against the harness loaded the way a user installs it. See
 | promptfoo                                                | vigiles                                               | Notes                                                     |
 | -------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------- |
 | `providers: [anthropic:messages:claude-…]` (metered API) | `model: "sonnet"` on the sub (`apiKeySource: "none"`) | The cost win — your own `claude` CLI, no metered billing. |
-| `prompts:` + `tests[].vars`                              | the `task` (+ `measureTriggerRate` prompt set)        | One prompt or a varied set.                               |
-| a `test` with `assert:`                                  | one `measure` run with a `checks:` array              | Each assertion becomes a check.                           |
-| baseline vs skill (two providers/configs)                | `measureArms({ arms: { baseline: {}, skill: {…} } })` | The A/B is first-class; the delta is the signal.          |
-| "did the skill even get used?"                           | `measureTriggerRate` (recall + precision)             | The CC-specific question promptfoo can't cleanly answer.  |
+| `prompts:` + `tests[].vars`                              | the `task` (+ `paid_measureTriggerRate` prompts)      | One prompt or a varied set.                               |
+| a `test` with `assert:`                                  | one `paid_measure` run with a `checks:` array         | Each assertion becomes a check.                           |
+| baseline vs skill (two providers/configs)                | `paid_measureArms({ arms: { … } })`                   | The A/B is first-class; the delta is the signal.          |
+| "did the skill even get used?"                           | `paid_measureTriggerRate` (recall + precision)        | The CC-specific question promptfoo can't cleanly answer.  |
 | a whole skill dir installed                              | `pluginDir: "./skills/my-skill"`                      | Loads the real plugin (skills + hooks) natively.          |
 
 ## Assertion mapping
 
-Each promptfoo `assert` entry maps to a vigiles check (from `vigiles/testing`):
+Each promptfoo `assert` entry maps to a vigiles check (from `vigiles` — except
+`paid_judged`, which calls a model and lives on `vigiles/eval`):
 
 | promptfoo `assert.type` | vigiles check                  | Notes                                                                         |
 | ----------------------- | ------------------------------ | ----------------------------------------------------------------------------- |
@@ -45,11 +46,11 @@ Each promptfoo `assert` entry maps to a vigiles check (from `vigiles/testing`):
 | `icontains`             | `output(/substring/i)`         | Case-insensitive → a regex.                                                   |
 | `regex`                 | `output(/pattern/)`            |                                                                               |
 | `equals`                | `output(/^exact$/)`            | Anchor the regex.                                                             |
-| `llm-rubric`            | `judged("rubric", { min })`    | Model-graded, on the sub. `threshold` → `min`.                                |
+| `llm-rubric`            | `paid_judged("rubric", …)`     | Model-graded, on the sub. `threshold` → `min`.                                |
 | `cost`                  | `cost({ maxUsd })`             | vigiles reads the real `total_cost_usd`.                                      |
 | `latency`               | `latency({ maxMs })`           |                                                                               |
 | `javascript` / `python` | a custom `measure((ctx) => …)` | Not auto-portable — read `ctx.file()`/`ctx.output` and return `1/0` yourself. |
-| `similar` (embeddings)  | —                              | No direct equivalent; use `judged` or a custom check.                         |
+| `similar` (embeddings)  | —                              | No direct equivalent; use `paid_judged` or a custom check.                    |
 
 ℹ️ vigiles won't silently pretend to convert what it can't. Anything not in the
 table above stays a **deliberate manual step**, not a false green — the same
@@ -78,23 +79,24 @@ tests:
 [`examples/harness/from-promptfoo.mjs`](../examples/harness/from-promptfoo.mjs)):
 
 ```javascript
-import { measure, output, judged, cost, assertRates } from "vigiles/testing";
+import { paid_measure, paid_judged } from "vigiles/eval"; // `paid_` = these call a model
+import { output, cost, assertRates } from "vigiles"; // these only read the result
 
-const report = await measure({
+const report = await paid_measure({
   task: "Summarize in.txt in one sentence. Write it to out.txt, then stop.",
   fixture: { "in.txt": "…" },
   model: "sonnet",
   trials: 5,
   checks: [
     output(/invoice/i), // icontains
-    judged("A single, accurate one-sentence summary", { min: 0.7 }), // llm-rubric
+    paid_judged("A single, accurate one-sentence summary", { min: 0.7 }), // llm-rubric
     cost({ maxUsd: 0.01 }), // cost
   ],
 });
 assertRates(report, { min: 0.8 }); // each check passes ≥80% of trials
 ```
 
-To A/B a skill against no-skill, wrap it in `measureArms({ arms: { baseline: {}, skill: { pluginDir: "./skills/my-skill" } } })` and read the per-arm delta.
+To A/B a skill against no-skill, wrap it in `paid_measureArms({ arms: { baseline: {}, skill: { pluginDir: "./skills/my-skill" } } })` and read the per-arm delta.
 
 ## What moves cleanly — and what doesn't yet
 
@@ -102,11 +104,11 @@ To A/B a skill against no-skill, wrap it in `measureArms({ arms: { baseline: {},
 | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Behavior / output assertions (contains, regex, rubric)  | ✅ Move cleanly, on the sub.                                                                                                                                                                                                                                                                                                           |
 | Cost / latency assertions                               | ✅ Move cleanly (real `total_cost_usd`).                                                                                                                                                                                                                                                                                               |
-| "Does the skill fire?"                                  | ✅ Better — `measureTriggerRate` (recall + precision).                                                                                                                                                                                                                                                                                 |
-| Baseline vs skill A/B                                   | ✅ First-class (`measureArms` + significance).                                                                                                                                                                                                                                                                                         |
+| "Does the skill fire?"                                  | ✅ Better — `paid_measureTriggerRate` (recall + precision).                                                                                                                                                                                                                                                                            |
+| Baseline vs skill A/B                                   | ✅ First-class (`paid_measureArms` + significance).                                                                                                                                                                                                                                                                                    |
 | **Redteam suites**                                      | ⚠️ **Not covered.** vigiles has a safety-hook battery (`assertBlocksDisasters`) and judged adversarial checks, but **no redteam _generator_**. Keep promptfoo (or your own adversarial prompts) for that.                                                                                                                              |
 | Skills with **real side effects** (write to a DB, etc.) | 🧪 vigiles has an **experimental** tier that runs the skill against a disposable container and checks the real result — [R3](measuring-skills.md#experimental-real-side-effect-testing). promptfoo has **no equivalent** (it grades the model's text; it never runs a real side effect), so this is a capability you _gain_, not lose. |
-| `javascript`/`python` assertions                        | ✍️ Manual — port the logic into a custom `measure` callback.                                                                                                                                                                                                                                                                           |
+| `javascript`/`python` assertions                        | ✍️ Manual — port the logic into a custom `measure` callback (the spec field, not the runner).                                                                                                                                                                                                                                          |
 
 ## See also
 

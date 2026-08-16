@@ -35,17 +35,14 @@
   "bin": {
     "vigiles": "dist/cli.js"
   },
-  "main": "./dist/core/spec.js",
-  "types": "./dist/core/spec.d.ts",
+  "main": "./dist/test.js",
+  "types": "./dist/test.d.ts",
   "exports": {
-    ".": "./dist/core/spec.js",
+    ".": "./dist/test.js",
     "./spec": "./dist/core/spec.js",
+    "./eval": "./dist/eval-surface.js",
     "./linting": "./dist/linting.js",
-    "./testing": "./dist/testing.js",
-    "./unit": "./dist/unit.js",
     "./hook": "./dist/hook.js",
-    "./integration": "./dist/integration.js",
-    "./e2e": "./dist/e2e.js",
     "./claude-code": "./dist/claude-code.js",
     "./codex": "./dist/codex.js",
     "./adapter": "./dist/adapter.js",
@@ -93,6 +90,7 @@
     "api:report": "npm run build && node scripts/api-extractor.mjs --local",
     "api:check": "npm run build && node scripts/api-extractor.mjs",
     "docs:check": "npm run build && node scripts/check-doc-imports.mjs . docs README.md",
+    "exports:check": "npm run build && node scripts/check-export-prefixes.mjs .",
     "experimental:check": "npm run api:check && node scripts/check-experimental-naming.mjs",
     "docs:api": "typedoc"
   },

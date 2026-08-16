@@ -49,7 +49,7 @@ kernel.apparmor_restrict_unprivileged_userns=0` (see `.github/workflows/ci.yml`)
 **Record what it wrote.** A confined `runHook` / `runScript` also reports the files it touched in its work dir (`r.filesWritten`, relative paths) — so you can assert it stayed in its lane:
 
 ```ts
-import { assertWroteOnly, assertNoWrite } from "vigiles/testing";
+import { assertWroteOnly, assertNoWrite } from "vigiles";
 
 const r = runHook(thirdPartyHookCmd, event, { trusted: false });
 // r.filesWritten → [".omc/state/ultrawork-state.json"]
@@ -75,8 +75,7 @@ Dogfood: `src/run-hook.test.ts` confines oh-my-claudecode's `keyword-detector` a
 **`recordEgress` — record what it tried to reach, while still blocking it.** A deny-all wall tells you nothing about _what_ a hook wanted. For the supply-chain question — "what does this skill phone home to / which registry would its install hit?" — turn on recording:
 
 ```ts
-import { runHook } from "vigiles/testing";
-import { assertNoEgress, assertEgressOnly } from "vigiles/testing";
+import { runHook, assertNoEgress, assertEgressOnly } from "vigiles";
 
 const r = runHook(thirdPartyHookCmd, event, { recordEgress: true });
 // r.egress → [{ host: "registry.npmjs.org", port: 443, ts }]   (recorded)
@@ -97,7 +96,7 @@ assertNoEgress(r); // a hook that should phone home to nothing
 **Let it actually reach the network, but only the hosts you list.** When the question is "does this skill install cleanly, and _only_ from the registries I expect?", a wall (record or not) can't answer it — the install has to succeed. `egress: { allow }` lets traffic out to an allowlist and **drops the rest at the packet layer**:
 
 ```ts
-import { runHook } from "vigiles/testing";
+import { runHook } from "vigiles";
 
 const r = runHook(installHookCmd, event, {
   egress: { allow: ["registry.npmjs.org"] },

@@ -9,7 +9,7 @@ import globals from "globals";
 // reshape the two element types are whole directories: the reference-verification
 // DOMAIN lives in src/core/, the Claude Code harness/transport ADAPTER in
 // src/adapters/claude-code/. The application/barrel layer (cli, scan, the
-// testing/integration/unit barrels, action) stays at src/ root, unclassified —
+// test/eval barrels, action) stays at src/ root, unclassified —
 // it's the composition root, allowed to wire adapter to core. The invariant: the
 // domain must never import the adapter, so the core stays harness-agnostic for a
 // future src/adapters/<other-harness>. Holds today with zero violations.
@@ -18,20 +18,22 @@ const VERIFY_CORE = "src/core/**/*.ts";
 // — Claude-Code-specific in CONTENT even though it sits at the src/ root, so it is
 // classified as part of the CC adapter here. That makes the import-graph boundary
 // rule below FORBID the agnostic surface from re-exporting it (the leak that let
-// `scriptModel` surface from `vigiles/testing`); get the CC mock from
+// `scriptModel` surface from the root testing barrel); get the CC mock from
 // `vigiles/claude-code` instead. (The principled end-state is to physically move
 // the file under src/adapters/claude-code/ — tracked in research/roadmap.md — but
 // classifying it enforces the invariant today, with no move required.)
 const CC_HARNESS = ["src/adapters/claude-code/**/*.ts", "src/mock-model.ts"];
 const CODEX_HARNESS = "src/adapters/codex/**/*.ts";
 const OPENCODE_HARNESS = "src/adapters/opencode/**/*.ts";
-// The harness-AGNOSTIC public surface: the pillar-2 entry + the per-tier barrels.
-// These advertise themselves as harness-agnostic, so they must route through the
-// composition-root runner modules (src/{harness-test,run-hook,eval}.ts) and may
-// re-export ONLY the agnostic names from them — never the Claude-Code transport
-// (`scriptModel`, `claudeCodeDriver`, `loadPlugin`, …), and never a specific
-// adapter. Otherwise "agnostic" is a name only. See research/adapter-api-design.md.
-const AGNOSTIC_SURFACE = "src/{testing,unit,integration,e2e}.ts";
+// The harness-AGNOSTIC public surface: the two testing barrels, split on COST —
+// `src/test.ts` (the package root: everything free) and `src/eval-surface.ts`
+// (`vigiles/eval`: everything that can call a model). They advertise themselves as
+// harness-agnostic, so they must route through the composition-root runner modules
+// (src/{harness-test,run-hook,eval}.ts) and may re-export ONLY the agnostic names
+// from them — never the Claude-Code transport (`scriptModel`, `claudeCodeDriver`,
+// `loadPlugin`, …), and never a specific adapter. Otherwise "agnostic" is a name
+// only. See research/adapter-api-design.md.
+const AGNOSTIC_SURFACE = "src/{test,eval-surface}.ts";
 
 // The harness-agnostic DOMAIN + the reference-verification DETECTORS — these take
 // a PluginLayout / HarnessDialect by injection, so they must NOT hard-code a
@@ -191,7 +193,7 @@ export default [
   },
   // No barrel imports: internal modules must import the LEAF that defines a
   // symbol, never the package's own public barrel entry points (the
-  // `vigiles/<x>` surfaces — src/{linting,testing,unit,integration,e2e,hook,
+  // `vigiles/<x>` surfaces — src/{linting,test,eval-surface,hook,
   // claude-code,codex,adapter}.ts). Importing a barrel pulls its whole
   // re-export graph (slow in the test runner / any non-treeshaking consumer,
   // and a circular-import risk), and re-leaks the internal seams the curated
@@ -200,8 +202,10 @@ export default [
   // ESLint-9-removed `context.getFilename()` and crashes on ESLint 10 — so we
   // express the same intent with the built-in rule (prefer-existing-solutions:
   // a working core rule over a broken dependency). The barrels themselves are
-  // exempt below (they legitimately compose each other — the e2e→integration→
-  // unit tier ladder), and tests may exercise the public surface.
+  // exempt below, and tests may exercise the public surface. (They used to be
+  // exempt because they composed each other up the e2e→integration→unit tier
+  // ladder; that ladder is gone — the two cost-split barrels are siblings and
+  // neither imports the other.)
   //
   // `**/<name>.js` matches the relative specifier at every depth
   // (`./x.js`, `../x.js`, `../../x.js`). The public `vigiles/adapter` barrel
@@ -214,7 +218,7 @@ export default [
     files: ["src/**/*.ts"],
     ignores: [
       "src/**/*.test.ts",
-      "src/{linting,testing,unit,integration,e2e,hook,claude-code,codex,adapter}.ts",
+      "src/{linting,test,eval-surface,hook,claude-code,codex,adapter}.ts",
     ],
     rules: {
       "no-restricted-imports": [
@@ -224,10 +228,8 @@ export default [
             {
               group: [
                 "**/linting.js",
-                "**/testing.js",
-                "**/unit.js",
-                "**/integration.js",
-                "**/e2e.js",
+                "**/test.js",
+                "**/eval-surface.js",
                 "**/hook.js",
                 "**/claude-code.js",
                 "**/codex.js",

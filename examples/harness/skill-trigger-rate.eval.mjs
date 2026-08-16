@@ -12,7 +12,8 @@
  *   node examples/harness/skill-trigger-rate.eval.mjs 2     # trials per prompt
  *
  * Real model → real cost. Needs the `claude` CLI + model auth and a built dist/.
- * External users import from the package: `from "vigiles/testing"`.
+ * External users import from the package: `from "vigiles/eval"` (the paid
+ * runners) and `from "vigiles"` (the free checks).
  */
 import {
   measureTriggerRate,
@@ -56,7 +57,7 @@ const report = await measureTriggerRate({
 console.log(formatTriggerRateReport(report));
 
 // A trigger-rate eval is a measurement, not a hard gate by default — but you can
-// gate in CI with assertTriggerRate(report, { min: 0.6 }) from vigiles/testing.
+// gate in CI with assertTriggerRate(report, { min: 0.6 }) from vigiles.
 if (report.n === 0) {
   throw new Error("no runs executed");
 }

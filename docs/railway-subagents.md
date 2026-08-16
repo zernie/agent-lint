@@ -44,7 +44,7 @@ typed value on one track.
 `output`. Field types are `"string" | "number" | "boolean" | "string[]"`.
 
 ```ts
-import { agent, result, file, instructions } from "vigiles";
+import { agent, result, file, instructions } from "vigiles/spec";
 
 export default agent({
   name: "implementer",
@@ -95,7 +95,7 @@ track — no loop combinator, so it always terminates and every `delegate()` tar
 is resolved against the real agent specs at compile time.
 
 ```ts
-import { railway, delegate } from "vigiles";
+import { railway, delegate } from "vigiles/spec";
 
 export default railway({
   name: "ship-pr",
@@ -145,7 +145,7 @@ import {
   experimental_pipe,
   experimental_pipeStep,
   experimental_needs,
-} from "vigiles";
+} from "vigiles/spec";
 
 const planner = agent({
   name: "planner",
@@ -273,16 +273,12 @@ so they're a noted follow-up. Worked dogfood:
 ## Test the outcome deterministically
 
 This is the payoff: a `result()` contract replaces
-`judged(output, "did the worker succeed?")` with a **parse + assert** — no model,
+`paid_judged("did the worker succeed?")` with a **parse + assert** — no model,
 no key.
 
 ```ts
-import { result } from "vigiles";
-import {
-  assertAgentOk,
-  assertAgentErr,
-  assertAgentResult,
-} from "vigiles/testing";
+import { result } from "vigiles/spec";
+import { assertAgentOk, assertAgentErr, assertAgentResult } from "vigiles";
 
 const implementer = result(
   { files: "string[]", summary: "string" },
@@ -324,7 +320,7 @@ contract renders. The gate is enforced at compile — an `output` without
 `context: "fork"` is an error, because an inline skill has no return to type:
 
 ```ts
-import { experimental_skill, result } from "vigiles";
+import { experimental_skill, result } from "vigiles/spec";
 
 export default experimental_skill({
   name: "review",
