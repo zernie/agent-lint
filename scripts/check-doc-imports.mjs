@@ -33,7 +33,15 @@ const md = new MarkdownIt();
 const PKG = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).name;
 
 const LANGS = new Set(["ts", "typescript", "tsx"]);
-const IGNORE_FILE = /<!--\s*vigiles:ignore-file\s*-->/;
+// This check owns its own file-level opt-out. It must NOT reuse
+// `vigiles:ignore-file`, which answers a different question — that marker tells
+// the REFERENCE resolver to leave a doc's `vigiles:gate`/`file()` markers alone,
+// and docs full of illustrative markers carry it for that reason. Sharing one
+// marker made opting out of ref-resolution silently opt out of import-checking
+// too: `docs/skills.md` carried it, so the one doc with provably broken imports
+// (`vigiles/skill`, `vigiles/skill-test` — neither subpath exists) was the one
+// file this gate could not see. Measured 2026-08-16, the day after it shipped.
+const IGNORE_FILE = /<!--\s*vigiles:ignore-imports\s*-->/;
 const IGNORE = /<!--\s*vigiles:ignore\s*-->/;
 const CHECK = /<!--\s*vigiles:check\s*-->/;
 

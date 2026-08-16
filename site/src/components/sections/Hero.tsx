@@ -25,6 +25,14 @@ export function Hero() {
           >
             Grade a repo
           </a>
+          {/* The docs are a directory away and used to be unreachable from the
+              top of the page — a visitor who wanted detail had to guess. */}
+          <a
+            href="#docs"
+            className="hidden text-sm font-medium text-muted-foreground no-underline transition-colors hover:text-foreground sm:inline"
+          >
+            Docs
+          </a>
           <a
             href={REPO}
             target="_blank"

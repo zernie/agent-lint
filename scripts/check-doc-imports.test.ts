@@ -198,11 +198,27 @@ describe("check-doc-imports", () => {
     expect(out).toContain("demo-pkg/gone"); // the exemption did not leak to the next block
   });
 
-  it("`vigiles:ignore-file` exempts the whole file", () => {
+  it("`vigiles:ignore-imports` exempts the whole file", () => {
+    const body =
+      "<!-- vigiles:ignore-imports -->\n" +
+      fence(`import { greet } from "demo-pkg/phantom";`);
+    expect(run(fixture(body)).code).toBe(0);
+  });
+
+  // Two markers, two questions. `vigiles:ignore-file` tells the REFERENCE
+  // resolver to leave a doc's illustrative `vigiles:gate`/`file()` markers
+  // alone; it says nothing about whether the doc's imports resolve. They shared
+  // one marker until 2026-08-16, and the cost was concrete: `docs/skills.md`
+  // carried `ignore-file` for its markers, so the single doc with two provably
+  // broken subpaths was the one file this gate could not see. Deleting this
+  // test's assertion re-blinds the gate to exactly that class of doc.
+  it("`vigiles:ignore-file` does NOT exempt it — that marker is the ref resolver's", () => {
     const body =
       "<!-- vigiles:ignore-file -->\n" +
       fence(`import { greet } from "demo-pkg/phantom";`);
-    expect(run(fixture(body)).code).toBe(0);
+    const { code, out } = run(fixture(body));
+    expect(code).not.toBe(0);
+    expect(out).toContain("demo-pkg/phantom");
   });
 
   // ── the failure mode that would make it green and dead ──

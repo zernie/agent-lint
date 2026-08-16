@@ -7,9 +7,9 @@
  *
  * Run `vigiles compile` to generate SKILL.md from this spec.
  */
-import { skill, step, input, cmd } from "../../src/core/spec.js";
+import { experimental_skill, step, input, cmd } from "../../src/core/spec.js";
 
-export default skill({
+export default experimental_skill({
   name: "ship-pr",
   description: "Run the project checks and open a pull request once they pass",
 

@@ -641,16 +641,20 @@ guard({ watch: "*.spec.ts", run: "npx vigiles generate harness" });
 ```
 
 Declare a handoff with the optional 3rd argument of `delegate()` — the same
-`needs(...)` builder a typed `pipeStep` uses:
+`experimental_needs(...)` builder a typed `experimental_pipeStep` uses:
 
 ```ts
-import { railway, delegate, needs } from "vigiles/spec";
+import { railway, delegate, experimental_needs } from "vigiles/spec";
 railway({
   name: "ship-pr",
   steps: [
     delegate("planner"),
-    delegate("implementer", undefined, needs({ steps: "string[]" })), // planner.ok must supply `steps`
-    delegate("reviewer", undefined, needs({ summary: "string" })), // implementer.ok must supply `summary`
+    delegate(
+      "implementer",
+      undefined,
+      experimental_needs({ steps: "string[]" }),
+    ), // planner.ok must supply `steps`
+    delegate("reviewer", undefined, experimental_needs({ summary: "string" })), // implementer.ok must supply `summary`
   ],
 });
 ```

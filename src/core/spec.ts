@@ -460,10 +460,10 @@ export function instructions(
  * `<!-- vigiles:effect -->` markers. Independent of the `doc()` authoring
  * surface — it does not block on it.
  *
- * @internal Experimental (parked P3) — NOT part of the frozen public surface;
+ * @experimental Experimental (parked P3) — NOT part of the frozen public surface;
  * may change or be removed without a major bump pre-1.0.
  */
-export function effect(
+export function experimental_effect(
   strings: TemplateStringsArray,
   ...values: InstructionFragment[]
 ): EffectRegion {
@@ -720,14 +720,20 @@ export type SkillSpecInput<
  * Define a SKILL.md specification.
  *
  *   // skills/my-skill/SKILL.md.spec.ts
- *   export default skill({ name: "my-skill", description: "...", body: "..." });
+ *   export default experimental_skill({ name: "my-skill", description: "…" });
  *
  * Generic over a tool `Vocabulary` (default `OpenToolVocabulary` — no
- * constraint), exactly like `agent()`: a vocabulary-bound `skill` (e.g.
- * `vigiles/claude-code`) makes `purity: "pure"` + a side-effecting tool a `tsc`
- * error; the bare core `skill()` accepts any tools, as before.
+ * constraint), exactly like `agent()`: a vocabulary-bound `experimental_skill`
+ * (e.g. `vigiles/claude-code`) makes `purity: "pure"` + a side-effecting tool a
+ * `tsc` error; the bare core one accepts any tools, as before.
+ *
+ * The name also disambiguates: `vigiles/testing` exports a `skill()` that is a
+ * DIFFERENT function — a `Check<Trace>` taking an id string, asking whether a
+ * skill fired. This one authors a skill; that one observes one.
+ *
+ * @experimental
  */
-export function skill<
+export function experimental_skill<
   const P extends AuthoredPurity | undefined = undefined,
   V extends ToolVocabulary = OpenToolVocabulary,
 >(spec: SkillSpecInput<P, V>): SkillSpec {
@@ -1090,10 +1096,12 @@ export type NeedsContract<N extends Shape> = N;
  *
  *   needs({ plan: "string", files: "string[]" })
  *
- * @internal Experimental typed-composition surface — NOT part of the frozen
+ * @experimental Experimental typed-composition surface — NOT part of the frozen
  * public API (pre-1.0); may change without a major bump.
  */
-export function needs<const N extends Shape>(shape: N): NeedsContract<N> {
+export function experimental_needs<const N extends Shape>(
+  shape: N,
+): NeedsContract<N> {
   return shape;
 }
 
@@ -1122,10 +1130,10 @@ export interface PipeStep<
  *
  *   pipeStep(implementer, needs({ plan: "string", files: "string[]" }))
  *
- * @internal Experimental typed-composition surface — NOT part of the frozen
+ * @experimental Experimental typed-composition surface — NOT part of the frozen
  * public API (pre-1.0); may change without a major bump.
  */
-export function pipeStep<
+export function experimental_pipeStep<
   Needs extends Shape,
   Ok extends Shape,
   Err extends Shape,
@@ -1199,14 +1207,16 @@ export interface Pipeline<Ok extends Shape, Err extends Shape> {
  * its `needs` must be empty (`needs({})` or omitted). Returns a `Pipeline`
  * carrying that step's `ok`/`err` forward.
  *
- * @internal Experimental typed-composition surface — NOT part of the frozen
+ * @experimental Experimental typed-composition surface — NOT part of the frozen
  * public API (pre-1.0); may change without a major bump.
  */
-export function start<Ok extends Shape, Err extends Shape>(
+export function experimental_start<Ok extends Shape, Err extends Shape>(
   first: PipeStep<Record<string, never>, Ok, Err> | TypedAgentSpec<Ok, Err>,
 ): Pipeline<Ok, Err> {
   const step =
-    "_step" in first ? first : pipeStep(first, {} as Record<string, never>);
+    "_step" in first
+      ? first
+      : experimental_pipeStep(first, {} as Record<string, never>);
   const out = step.agent.output;
   return {
     _specType: "pipeline",
@@ -1231,10 +1241,10 @@ export function start<Ok extends Shape, Err extends Shape>(
  * exporting a function called `then` becomes a thenable, so `await import()` of
  * any barrel re-exporting it would invoke it — a footgun the rename avoids.
  *
- * @internal Experimental typed-composition surface — NOT part of the frozen
+ * @experimental Experimental typed-composition surface — NOT part of the frozen
  * public API (pre-1.0); may change without a major bump.
  */
-export function andThen<
+export function experimental_andThen<
   PriorOk extends Shape,
   PriorErr extends Shape,
   Needs extends Shape,
@@ -1278,16 +1288,16 @@ export function andThen<
  *     pipeStep(reviewer, needs({ diff: "string" })),
  *   ) // ← won't compile if a handoff doesn't line up
  *
- * @internal Experimental typed-composition surface — NOT part of the frozen
+ * @experimental Experimental typed-composition surface — NOT part of the frozen
  * public API (pre-1.0); may change without a major bump.
  */
 /* eslint-disable no-redeclare -- TypeScript function overloads (the base
    no-redeclare rule, unlike @typescript-eslint/no-redeclare, flags the overload
    signatures; each `pipe` line is one arity of the SAME function). */
-export function pipe<A extends Shape, AE extends Shape>(
+export function experimental_pipe<A extends Shape, AE extends Shape>(
   a: TypedAgentSpec<A, AE>,
 ): Pipeline<A, AE>;
-export function pipe<
+export function experimental_pipe<
   A extends Shape,
   AE extends Shape,
   BN extends Shape,
@@ -1299,7 +1309,7 @@ export function pipe<
     ? PipeStep<BN, B, BE>
     : { readonly __HANDOFF_ERROR: Supplies<A, BN> },
 ): Pipeline<B, AE | BE>;
-export function pipe<
+export function experimental_pipe<
   A extends Shape,
   AE extends Shape,
   BN extends Shape,
@@ -1317,7 +1327,7 @@ export function pipe<
     ? PipeStep<CN, C, CE>
     : { readonly __HANDOFF_ERROR: Supplies<B, CN> },
 ): Pipeline<C, AE | BE | CE>;
-export function pipe<
+export function experimental_pipe<
   A extends Shape,
   AE extends Shape,
   BN extends Shape,
@@ -1341,15 +1351,15 @@ export function pipe<
     ? PipeStep<DN, D, DE>
     : { readonly __HANDOFF_ERROR: Supplies<C, DN> },
 ): Pipeline<D, AE | BE | CE | DE>;
-export function pipe(
+export function experimental_pipe(
   first: TypedAgentSpec<Shape, Shape>,
   ...rest: readonly PipeStep<Shape, Shape, Shape>[]
 ): Pipeline<Shape, Shape> {
   // The overloads above enforce each handoff at the type level; the runtime body
   // is the same left fold of start/andThen, untyped (the checks already happened).
-  let pipeline: Pipeline<Shape, Shape> = start(first);
+  let pipeline: Pipeline<Shape, Shape> = experimental_start(first);
   for (const s of rest) {
-    pipeline = andThen(pipeline, s);
+    pipeline = experimental_andThen(pipeline, s);
   }
   return pipeline;
 }

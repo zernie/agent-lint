@@ -1,6 +1,15 @@
 /**
  * vigiles — Generator → SKILL.md compiler.
  *
+ * PARKED (2026-08-16). Not part of the public API and not in `docs/skills.md`.
+ * It works — `vigiles compile` detects `genSkill(` and routes here (`cli.ts`),
+ * verified end-to-end — but `genSkill` / `act` / `checkpoint` / `finish` /
+ * `runSkill` are reachable from NO package subpath, so nobody outside this repo
+ * can author one. Parked rather than deleted because the code is sound and its
+ * tests pass; there is simply nothing to evaluate its usefulness against.
+ * Do not re-document it or give it an entry point without settling that first —
+ * see `docs/skills.md` §Status and the adoption-ladder work.
+ *
  * A generator skill (`function* () { … yield act/gate/result … }`) has dynamic
  * control flow, so it can't be rendered by *executing* it. Instead we parse its
  * SOURCE with the TypeScript compiler API and render the structure to markdown:

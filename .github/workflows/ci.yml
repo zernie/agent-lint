@@ -389,16 +389,31 @@ jobs:
       - name: Check doc imports
         run: npm run docs:check
 
-      # A subpath that carries a warning in its NAME must carry it on every symbol
-      # behind it: `./eval` → `paid_*`, `./experimental` → `experimental_*`. The path
-      # warns once at the top of a file; the name warns at every call site, which is
-      # where the money is spent. Held by prose it decays — `makeDockerRuntime` sat
-      # unprefixed among six `experimental_` siblings until this step was written, and
-      # ONE missing prefix is worse than none, because the six that comply teach the
-      # reader that an unprefixed name is safe. Types are exempt on purpose: a type is
-      # never called, and the report types are re-exported from the FREE barrel too.
+      # Two gates on the same convention, entered from opposite ends. They look
+      # redundant and are not: one starts from the DOOR, the other from the TAG,
+      # and a symbol can be wrong in one way while right in the other.
+      #
+      # By DOOR — a subpath that carries a warning in its name must carry it on
+      # every symbol behind it: `./eval` → `paid_*`, `./experimental` →
+      # `experimental_*`. The path warns once at the top of a file; the name warns
+      # at every call site, which is where the money is spent. Held by prose it
+      # decays — `makeDockerRuntime` sat unprefixed among six `experimental_`
+      # siblings until this step was written, and ONE missing prefix is worse than
+      # none, because the six that comply teach the reader that an unprefixed name
+      # is safe. Types are exempt on purpose: a type is never called, and the
+      # report types are re-exported from the FREE barrel too.
       - name: Check export prefixes
         run: npm run exports:check
+
+      # By TAG — a public declaration tagged `@experimental` must say so in its
+      # name, wherever it lives. This is the half that caught `skill()`: it shipped
+      # stable-named from `vigiles/spec` — a door with no warning in it, so the
+      # door-based gate above could never see it — while its own doc opened with
+      # "`skill()` is experimental". Prose against mechanism, in the project built
+      # to catch exactly that. Reads the `@experimental` TSDoc already in the
+      # source plus the committed `api-surface/*.api.md` reports; no new marker.
+      - name: Check experimental naming
+        run: npm run experimental:check
 
       - name: Lint
         run: npm run lint

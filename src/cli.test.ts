@@ -939,8 +939,8 @@ export default claude({
     try {
       writeFileSync(
         join(dir, "SKILL.md.spec.ts"),
-        `import { skill, instructions } from "${resolve(process.cwd(), "src/core/spec.js")}";
-export default skill({
+        `import { experimental_skill, instructions } from "${resolve(process.cwd(), "src/core/spec.js")}";
+export default experimental_skill({
   name: "demo",
   description: "A demo skill",
   disableModelInvocation: true,
@@ -1032,8 +1032,8 @@ export default claude({ target: "CLAUDE.md", rules: { "r": guidance("c") } });
     try {
       writeFileSync(
         join(dir, "SKILL.md.spec.ts"),
-        `import { skill, instructions } from "${resolve(process.cwd(), "src/core/spec.js")}";
-export default skill({
+        `import { experimental_skill, instructions } from "${resolve(process.cwd(), "src/core/spec.js")}";
+export default experimental_skill({
   name: "demo",
   description: "A demo skill",
   disableModelInvocation: true,
@@ -1574,7 +1574,10 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
         join(dir, "skills", "greet", "SKILL.md.spec.ts"),
         "utf-8",
       );
-      assert.ok(spec.includes("skill({"), "skill() spec written");
+      assert.ok(
+        spec.includes("experimental_skill({"),
+        "experimental_skill() spec written",
+      );
       assert.ok(spec.includes('name: "greet"'));
       assert.ok(spec.includes("Say hi."), "body captured verbatim");
     } finally {

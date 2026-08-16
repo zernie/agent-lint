@@ -1,6 +1,9 @@
 /**
  * vigiles — Skill driver: the generator (durable-imperative) form of a skill.
  *
+ * PARKED (2026-08-16) — see the header of `src/core/compile-generator.ts`.
+ * Exported from no package subpath; absent from `docs/skills.md` on purpose.
+ *
  * The declarative `skill({ steps })` form compiles to a *static* SKILL.md — it
  * can't express branching/looping, because that control flow depends on runtime
  * values. The generator form does: a skill is a generator that `yield`s

@@ -4,9 +4,15 @@
  * This is the source of truth. SKILL.md is a compiled build artifact.
  * Run `vigiles compile` to generate SKILL.md from this spec.
  */
-import { skill, file, cmd, ref, instructions } from "../src/core/spec.js";
+import {
+  experimental_skill,
+  file,
+  cmd,
+  ref,
+  instructions,
+} from "../src/core/spec.js";
 
-export default skill({
+export default experimental_skill({
   name: "pr-to-lint-rule",
   description:
     "Convert a recurring PR review comment into an automated lint rule with tests and CLAUDE.md annotation",

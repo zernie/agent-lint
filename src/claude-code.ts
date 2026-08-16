@@ -19,13 +19,19 @@ export {
   claudeAvailable,
 } from "./harness-test.js";
 export * from "./adapters/claude-code/dialect.js";
-// The typed Claude Code authoring surface: `agent` / `skill` with the `purity`
-// floor enforced AT COMPILE TIME against the CC tool catalog (a `tsc` error for
-// e.g. `purity: "pure"` + `"Bash"`). A strict addition to the runtime/compile
-// purity checks; the bare core `agent()`/`skill()` (`vigiles/spec`) stay open.
+// The typed Claude Code authoring surface: `agent` / `experimental_skill` with
+// the `purity` floor enforced AT COMPILE TIME against the CC tool catalog (a
+// `tsc` error for e.g. `purity: "pure"` + `"Bash"`). A strict addition to the
+// runtime/compile purity checks; the bare core `agent()`/`experimental_skill()`
+// (`vigiles/spec`) stay open.
+//
+// NOTE the collision this rename also resolves: `vigiles/testing` exports a
+// `skill()` too, and it is a DIFFERENT function — a `Check<Trace>` asking "did
+// this skill fire?", taking an id string. One word, two concepts, told apart
+// only by which door you imported from. Only the authoring builder is prefixed.
 export {
   agent,
-  skill,
+  experimental_skill,
   type ClaudeCodeToolVocabulary,
 } from "./adapters/claude-code/typed-spec.js";
 // Selection-collision — a Claude-Code-ONLY behavioral measurement (Codex has no
