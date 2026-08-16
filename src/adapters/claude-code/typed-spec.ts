@@ -70,11 +70,29 @@ export function agent<const P extends AuthoredPurity | undefined = undefined>(
 
 /**
  * Define a Claude Code skill with the purity floor enforced AT COMPILE TIME
- * against the Claude Code tool catalog. Identical to the core `skill()` at
- * runtime; the typed `tools` constraint is the only difference.
+ * against the Claude Code tool catalog. Identical to the core
+ * `experimental_skill()` at runtime; the typed `tools` constraint is the only
+ * difference.
+ *
+ * Carries the same `.input` / `.step` helpers as the core builder, and it must:
+ * those two stopped being standalone exports when the helper vocabulary moved
+ * onto the skill builder, so an author who picked this door would otherwise have
+ * no way to reach them. Before the move they came from `vigiles/spec` — a second
+ * import for one skill, which is the asymmetry this closes rather than a cost it
+ * introduces.
+ *
+ * @experimental
  */
-export function experimental_skill<
-  const P extends AuthoredPurity | undefined = undefined,
->(spec: SkillSpecInput<P, ClaudeCodeToolVocabulary>): SkillSpec {
+function skillSpec<const P extends AuthoredPurity | undefined = undefined>(
+  spec: SkillSpecInput<P, ClaudeCodeToolVocabulary>,
+): SkillSpec {
   return coreSkill<P, ClaudeCodeToolVocabulary>(spec);
 }
+
+/**
+ * @experimental
+ */
+export const experimental_skill = Object.assign(skillSpec, {
+  input: coreSkill.input,
+  step: coreSkill.step,
+});

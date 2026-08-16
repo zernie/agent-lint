@@ -6,7 +6,7 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { experimental_skill, step, input, cmd, file } from "../../core/spec.js";
+import { experimental_skill, cmd, file } from "../../core/spec.js";
 import { compileSkill } from "../../core/compile.js";
 
 const opts = { specFile: "SKILL.md.spec.ts" };
@@ -16,10 +16,10 @@ test("typed inputs compile to argument-hint and an Arguments section", () => {
     name: "ship-pr",
     description: "Run checks and open a PR",
     inputs: [
-      input("branch", "the branch to open the PR from"),
-      input("title", "PR title", { required: false }),
+      experimental_skill.input("branch", "the branch to open the PR from"),
+      experimental_skill.input("title", "PR title", { required: false }),
     ],
-    steps: [step("Open the pull request.")],
+    steps: [experimental_skill.step("Open the pull request.")],
   });
   const { markdown, errors } = compileSkill(spec, opts);
   assert.equal(errors.length, 0, JSON.stringify(errors));
@@ -37,14 +37,14 @@ test("gated steps render gate markers + retry; result renders a result marker", 
     name: "ship-pr",
     description: "Run checks and open a PR once they pass",
     steps: [
-      step("Run the linter and fix any reported issues.", {
+      experimental_skill.step("Run the linter and fix any reported issues.", {
         gate: cmd("npm run lint"),
       }),
-      step("Run the test suite; fix failures until green.", {
+      experimental_skill.step("Run the test suite; fix failures until green.", {
         gate: cmd("npm test"),
         retry: 3,
       }),
-      step("Open the pull request."),
+      experimental_skill.step("Open the pull request."),
     ],
     result: cmd("npm test"),
   });
@@ -60,7 +60,11 @@ test("a step gate referencing a missing npm script is a compile error", () => {
   const spec = experimental_skill({
     name: "x",
     description: "...",
-    steps: [step("do a thing", { gate: cmd("npm run does-not-exist") })],
+    steps: [
+      experimental_skill.step("do a thing", {
+        gate: cmd("npm run does-not-exist"),
+      }),
+    ],
   });
   const { errors } = compileSkill(spec, opts);
   assert.ok(
@@ -87,7 +91,7 @@ test("a knowledge body composes with gated steps (both render, body first)", () 
     name: "docx",
     description: "...",
     body: "## Reference\n\nImportant domain knowledge here.",
-    steps: [step("do it", { gate: cmd("npm test") })],
+    steps: [experimental_skill.step("do it", { gate: cmd("npm test") })],
     result: cmd("npm test"),
   });
   const { markdown, errors } = compileSkill(spec, opts);
@@ -144,7 +148,11 @@ test("a script-runner gate verifies the referenced script file exists", () => {
     experimental_skill({
       name: "x",
       description: "...",
-      steps: [step("run it", { gate: cmd("python src/core/compile.ts") })],
+      steps: [
+        experimental_skill.step("run it", {
+          gate: cmd("python src/core/compile.ts"),
+        }),
+      ],
     }),
     opts,
   );
@@ -154,7 +162,11 @@ test("a script-runner gate verifies the referenced script file exists", () => {
     experimental_skill({
       name: "x",
       description: "...",
-      steps: [step("run it", { gate: cmd("python scripts/nope.py out.x") })],
+      steps: [
+        experimental_skill.step("run it", {
+          gate: cmd("python scripts/nope.py out.x"),
+        }),
+      ],
     }),
     opts,
   );

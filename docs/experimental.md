@@ -1,8 +1,20 @@
 # Experimental surface — what is not settled yet
 
-Everything exported from `vigiles/experimental` carries an **`experimental_` prefix on the name itself**, so a call site says it is provisional without anyone opening this page. That is the whole contract of this file: **the prefix is the promise, and this page says what would have to be true to drop it.**
+**The prefix is the promise, wherever the symbol lives.** An `experimental_` name says a thing is provisional at the call site, without anyone opening this page — and that holds whether it comes from the quarantined `vigiles/experimental` subpath or sits beside stable exports in `vigiles/spec`. This page says what would have to be true to drop each one.
+
+It has not always held. `skill()` once shipped stable-named from `vigiles/spec` while its own guide opened with "`skill()` is experimental" — prose one way, API the other. `npm run experimental:check` now fails CI when a public declaration tagged `@experimental` is not named for it, so the tag and the name cannot drift apart again.
 
 Nothing here is covered by semver. An experimental export may change shape or disappear in a patch release. If that is not acceptable for your repo, do not import it — everything on this page has a non-experimental alternative, named below in each section.
+
+## `experimental_skill` — authoring a `SKILL.md` from a typed spec
+
+The declarative skill builder, and its two helpers `experimental_skill.input()` and `experimental_skill.step()`.
+
+The helpers hang off the builder rather than being exported beside it, and that placement is the point: both are used **only** by skill specs, so making them reachable only through the prefixed name makes the marking structural for the whole family. `cmd`, `file`, `project` and `result` are shared with subagents and stay top-level. Honest limit: `const { input } = experimental_skill` strips the marker inside one file — what the shape guarantees is narrower, that an unmarked name never crosses the package boundary.
+
+**What would have to be true to drop the prefix:** a real skill corpus converted to it (today: two example specs), and a compiled `SKILL.md` shown to load and run as an installed skill — never yet exercised end-to-end. See [`skills.md`](skills.md) §Status for the measured gaps.
+
+**Stable alternative:** hand-written `SKILL.md` with markdown-mode gate markers. Same enforcement, no spec.
 
 ## `experimental_emitTool` — a skill emits its result by calling a tool
 

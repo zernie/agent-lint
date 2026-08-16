@@ -248,8 +248,11 @@ export function experimental_pipe<A extends Shape, AE extends Shape, BN extends 
 // @public
 export function experimental_pipeStep<Needs extends Shape, Ok extends Shape, Err extends Shape>(a: TypedAgentSpec<Ok, Err>, needsContract?: Needs): PipeStep<Needs, Ok, Err>;
 
-// @public
-export function experimental_skill<const P extends AuthoredPurity | undefined = undefined, V extends ToolVocabulary = OpenToolVocabulary>(spec: SkillSpecInput<P, V>): SkillSpec;
+// @public (undocumented)
+export const experimental_skill: typeof skillSpec & {
+    input: typeof input;
+    step: typeof step;
+};
 
 // @public
 export function experimental_start<Ok extends Shape, Err extends Shape>(first: PipeStep<Record<string, never>, Ok, Err> | TypedAgentSpec<Ok, Err>): Pipeline<Ok, Err>;
@@ -315,11 +318,6 @@ export type Handoff<Producer extends Shape, Consumer extends Shape> = Supplies<P
 
 // @public (undocumented)
 export type HookEvent = "PreToolUse" | "PostToolUse" | "PreSession" | "PostSession" | "Notification";
-
-// @public
-export function input(name: string, hint: string, opts?: {
-    required?: boolean;
-}): SkillInput;
 
 // @public (undocumented)
 export type InstructionFragment = string | Ref | EffectRegion;
@@ -529,12 +527,6 @@ export interface SkillStep {
 
 // @public
 export type SpecPath<Output extends `${string}.md`> = `${Output}.spec.ts`;
-
-// @public
-export function step(instr: string | InstructionFragment[], opts?: {
-    gate?: Gate;
-    retry?: number;
-}): SkillStep;
 
 // @public (undocumented)
 export type StrictCmd = [keyof KnownNpmScripts] extends [never] ? string : `npm run ${KnownNpmScripts[keyof KnownNpmScripts] & string}` | `npm ${KnownNpmScripts[keyof KnownNpmScripts] & string}` | (string & {});
