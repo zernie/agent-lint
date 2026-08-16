@@ -11,7 +11,7 @@
  *   GATE 2 (opt-in, block marked `<!-- vigiles:check -->`): full tsc diagnostics.
  *
  * No network. No new CLI verb. Resolution is TypeScript's own package
- * self-reference: `import ... from "vigiles/testing"` resolves through this
+ * self-reference: `import ... from "vigiles/eval"` resolves through this
  * package.json's `exports` map to the local ./dist.
  */
 import {

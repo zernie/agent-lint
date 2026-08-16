@@ -86,7 +86,7 @@ import {
   outputContains,
   hookFired,
   hookBlocked,
-} from "vigiles/testing";
+} from "vigiles";
 
 usedTool(trace, "Skill"); // boolean
 usedTool(trace, /^mcp__github__merge/); // boolean (regex)
@@ -133,7 +133,7 @@ import {
   assertHookAllows,
   assertHookNotices,
   assertHookSilent,
-} from "vigiles/testing";
+} from "vigiles";
 import { runHookProgram } from "vigiles/hook";
 
 // loadHook takes the hook's PATH — what a .harness.mjs file actually has. It is
@@ -175,12 +175,8 @@ contract ends its turn with a `vigiles:ok` / `vigiles:err` block; these helpers
 parse it and validate it against the declared shape:
 
 ```ts
-import { result } from "vigiles";
-import {
-  assertAgentOk,
-  assertAgentErr,
-  assertAgentResult,
-} from "vigiles/testing";
+import { result } from "vigiles/spec";
+import { assertAgentOk, assertAgentErr, assertAgentResult } from "vigiles";
 
 const contract = result(
   { files: "string[]", summary: "string" }, // the ok track
@@ -210,22 +206,16 @@ how to `eval` itself against a `Trace` (or a hook decision) and `toJSON`. The sa
 check is evaluated two ways — write the assertion once:
 
 ```ts
-import {
-  tool,
-  skill,
-  output,
-  hookFired,
-  blocked,
-  assertChecks,
-} from "vigiles/testing";
+import { tool, skill, output, hookFired, blocked, assertChecks } from "vigiles";
 
 // STRICT (deterministic tiers): throws, collecting ALL failures with messages.
 assertChecks(await runHarness(spec), [tool("Bash"), output(/done/)]);
 assertChecks(runHook(cmd, event), [blocked()]);
 
 // SCORED (eval): the SAME checks, as a rate ± se across trials.
-import { measure, assertRates, checkReportToJUnit } from "vigiles/testing";
-const report = await measure({
+import { paid_measure } from "vigiles/eval"; // the `paid_` prefix = it calls a model
+import { assertRates, checkReportToJUnit } from "vigiles"; // reading the report is free
+const report = await paid_measure({
   pluginDir: "./my-plugin",
   task: "…",
   checks: [skill("vigiles:test-harness")],
@@ -241,7 +231,8 @@ A check's **failure message is the product** (`expected the agent to use tool
 "Bash", but it used [Read, Edit]`), and because it serializes, CI reports and
 regression baselines fall out for free.
 
-**The vocabulary** (from `vigiles/testing`):
+**The vocabulary** (from `vigiles` — except `paid_judged`, which calls a model and
+so lives on `vigiles/eval`):
 
 | Check                      | Holds when…                                       | Over             |
 | -------------------------- | ------------------------------------------------- | ---------------- |
@@ -254,11 +245,11 @@ regression baselines fall out for free.
 | `hookFired(event)`         | a hook fired for that event                       | Trace            |
 | `turns({ min, max })`      | the agent took N turns (multi-turn)               | Trace            |
 | `wrote(path)`              | a file was created                                | Trace            |
-| `judged(rubric, { min })`  | a model grades the output ≥ `min` (LLM rubric)    | Trace (eval)     |
+| `paid_judged(rubric, {…})` | a model grades the output ≥ `min` (LLM rubric)    | Trace (eval)     |
 | `cost/latency/tokens({…})` | the run stayed under budget                       | run usage (eval) |
 | `blocked()` / `allowed()`  | the hook blocked / allowed                        | `runHook` result |
 
-`measureArms({ arms, checks })` scores the same checks per arm (a hook/skill/rule
+`paid_measureArms({ arms, checks })` scores the same checks per arm (a hook/skill/rule
 **on vs off**); `compareCheck(report, baseline, arm, i)` returns a Welch verdict.
 It takes `stubSkillBodies` too. `propertyHook({ seed, mutate, decide, invariants })`
 fuzzes a hook's `(event) → decision` and shrinks any counterexample.
@@ -270,7 +261,7 @@ hand:
 
 ```ts
 import { expect } from "vitest"; // or "@jest/globals"
-import { vigilesMatchers } from "vigiles/testing";
+import { vigilesMatchers } from "vigiles";
 expect.extend(vigilesMatchers);
 ```
 
@@ -347,7 +338,8 @@ assertTriggerRate(report, { min: 0.8, maxFalsePositive: 0.1 });
 
 ## Selection-collision matrix (Claude Code only)
 
-> **🔵 Claude Code only — import from `vigiles/claude-code`, not `vigiles/testing`.**
+> **🔵 Claude Code only — import from `vigiles/claude-code`, not the root `vigiles`
+> surface.**
 > This reads _which_ skill the selector chose, and only Claude Code surfaces that
 > (Codex has no skill-selection event). On any other harness it returns
 > `available: false` rather than a fake pass.
@@ -423,10 +415,10 @@ the harness CLI):
 <!-- vigiles:ignore -->
 
 ```ts
-import { judge } from "vigiles/testing";
+import { paid_judge } from "vigiles/eval";
 
 measure: (ctx) => {
-  const v = judge({
+  const v = paid_judge({
     output: ctx.file("PLAN.md") ?? "",
     rubric: "1 if the plan lists concrete, ordered steps; else 0.",
   });
@@ -445,11 +437,7 @@ over two arms' summary stats and throws unless the arm beats the baseline at
 `alpha` (default 0.05) — the noise floor is **computed**, not hand-fed:
 
 ```ts
-import {
-  assertSignificant,
-  significantlyBeats,
-  compareArms,
-} from "vigiles/testing";
+import { assertSignificant, significantlyBeats, compareArms } from "vigiles";
 
 assertSignificant(report, {
   baseline: "vanilla",
@@ -476,7 +464,7 @@ import {
   assertNoRegression,
   diffToJUnit,
   diffReports,
-} from "vigiles/testing";
+} from "vigiles";
 
 // Record once (commit .vigiles/eval-baseline.json):
 writeBaseline(".vigiles/eval-baseline.json", [report]);
@@ -496,25 +484,50 @@ them. A new arm/metric absent from the baseline is skipped (not a regression).
 
 **One canonical entry point per layer** — import from these:
 
-| Layer                  | Canonical import  | What it re-exports                                                       |
-| ---------------------- | ----------------- | ------------------------------------------------------------------------ |
-| Test your harness      | `vigiles/testing` | every tier + check + assertion + matcher + tool stubs (the **superset**) |
-| Lint instruction files | `vigiles/linting` | the spec builders + the compiler                                         |
+| Layer                  | Canonical import  | What it re-exports                                                                                                                        |
+| ---------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Test your harness      | `vigiles`         | every check, assertion, matcher, hook/harness runner and tool stub — everything that costs nothing to run                                 |
+| Measure with a model   | `vigiles/eval`    | `paid_runEval` · `paid_measure` · `paid_measureArms` · `paid_measureTriggerRate` · `paid_judge` · `paid_judged` · `paid_claudeEvalDriver` |
+| Lint instruction files | `vigiles/linting` | the spec builders + the compiler                                                                                                          |
 
-`vigiles/testing` is the superset — reach for it first. The other entry points are
-deliberate surfaces, not aliases:
+**The testing surface splits on COST, not on test tier.** Free is the package
+root; anything that can call a model is `vigiles/eval`. There is no
+`vigiles/test` — the bare package name _is_ the testing surface — and the old
+`vigiles/unit` / `vigiles/integration` / `vigiles/e2e` / `vigiles/testing`
+barrels are gone. Tiers were never a property of the module graph: express them
+where they belong, in test-file naming and runner config (`vitest --project
+integration`), the way `@playwright/test` does.
 
-- **Capability-scoped tier barrels** — `vigiles/unit` / `vigiles/integration` /
-  `vigiles/e2e`: the import path _is_ the capability contract, so `vigiles/unit`
-  physically can't reach a model or the network (a higher tier re-exports the lower
-  ones; dependencies point downward only).
+**Every runtime export on `vigiles/eval` is also named `paid_`.** The import path
+warns once, at the top of the file; the name warns at every call site, which is
+where the money is spent. Same device the package already uses for
+`experimental_` on `vigiles/experimental`. ⚠️ The prefix overstates slightly —
+`paid_judged(rubric, { judge: myFn })` runs your function and bills nothing, and
+the `measure*` family takes an injectable `evalDriver`; only the DEFAULT path
+calls a model. `metered_` would be exact but reads a beat slower, and a warning
+that isn't absorbed at a glance isn't a warning. Types are **not** prefixed: a
+type cannot be called, so it cannot bill.
+
+Two consequences worth stating plainly:
+
+- **Free is not fast.** `runHarnessTest` spawns a real `claude` under bubblewrap
+  and can take ~40 seconds. It bills nothing, so it is on the free root, and the
+  import no longer warns you about the wall clock.
+- **The eval-analysis helpers stay free and unprefixed.** `assertSignificant`,
+  `assertNoRegression`, `diffReports`, `cost` / `latency` / `tokens` and friends
+  read a report without running anything, so they are on `vigiles`. Their argument
+  TYPES (`EvalReport`, `CheckReport`, …) are re-exported from both barrels, so you
+  never import `vigiles/eval` for a type alone.
+
+The remaining entry points are deliberate surfaces, not aliases:
+
 - **Authoring** — `vigiles/spec`: the spec builders for `.spec.ts` files.
 - **CC-specific transport** — `scriptModel`, `loadPlugin`, `resolveHarness`,
-  `LoadedPlugin` live in `vigiles/claude-code`, not `vigiles/testing`.
+  `LoadedPlugin` live in `vigiles/claude-code`, not on the root surface.
 - **CC-only measurement** — `measureSelectionMatrix` / `assertNoCollision` live in
   `vigiles/claude-code` too. They read which skill the selector chose (Codex has no
   such event), so they can't sit on the agnostic surface. Everything else measured
-  (`measureTriggerRate`, `measure`, `runEval`) is on `vigiles/testing`.
+  (`paid_measureTriggerRate`, `paid_measure`, `paid_runEval`) is on `vigiles/eval`.
 - **Runner integration** — `vigiles/vitest` / `vigiles/jest`.
 - **Harness selection** — `vigiles/claude-code` / `vigiles/codex` / `vigiles/adapter`.
 
@@ -522,13 +535,13 @@ deliberate surfaces, not aliases:
 harness-agnostic; pick the harness with one option, defaulting to Claude Code:
 
 ```ts
-import { runHarnessTest } from "vigiles/testing";
+import { runHarnessTest } from "vigiles";
 
 await runHarnessTest(spec); // Claude Code (default)
 await runHarnessTest(spec, { adapter: codexAdapter }); // a second harness
 ```
 
-`codexAdapter` comes from `vigiles/codex`. Nothing in `vigiles/testing` changes
+`codexAdapter` comes from `vigiles/codex`. Nothing in `vigiles` changes
 when the harness changes; unused adapters tree-shake out. The CLI can't take an
 import, so it **auto-detects** the harness from the repo. For the full
 adapter/import model and the capability matrix, see

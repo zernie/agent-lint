@@ -15,7 +15,7 @@
  *   node examples/harness/oh-my-claudecode-unit.harness.mjs        # standalone
  *
  * No `claude` needed. External users import from the package:
- * `from "vigiles/unit"`.
+ * `from "vigiles"`.
  */
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";

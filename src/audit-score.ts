@@ -23,7 +23,7 @@
  * design). NB the EXECUTING
  * "do your hooks actually block?" disaster-battery is STILL not an `audit` ring:
  * running arbitrary hooks safely needs cross-platform confinement that isn't
- * shipped yet, so the battery lives in the `vigiles/testing` API via
+ * shipped yet, so the battery lives in the `vigiles` testing API via
  * `guardrail-check`/`assertBlocksDisasters`, where you opt in explicitly.
  *
  * TESTED vs EVALUATED are two rings, not one, because a harness and an eval differ
@@ -111,7 +111,7 @@ const W_UNTESTED = 3;
 /** The command that answers the firing question — named, not alluded to. */
 const MEASURE_FIRING_COMMAND =
   "run `npx vigiles audit` interactively to measure, or add a `*.eval.mjs` " +
-  "(`measureTriggerRate`, vigiles/testing)";
+  "(`paid_measureTriggerRate`, vigiles/eval)";
 
 export interface AuditScoreOptions {
   /**

@@ -44,7 +44,7 @@ when it should?" is a real question — vigiles has no API for it yet.
 
 ⚠️ `runEval` / `measure` / `measureArms` drive Claude Code and take **no**
 `evalDriver` (only `measureTriggerRate` has that seam, and `runEvalWith` is not
-exported from `vigiles/testing`). On a harness other than Claude Code the eval
+exported from `vigiles/eval`). On a harness other than Claude Code the eval
 tier has no public dispatch for a subagent yet — Codex has no subagent dir at all
 (`agentDir: ""`), so in practice this concerns OpenCode.
 

@@ -54,7 +54,7 @@ export const SAMPLE: AuditReport = {
         notMeasured: true,
         findings: [
           "4 surfaces whose firing was never measured",
-          "not measured — run `npx vigiles audit` interactively to measure, or add a `*.eval.mjs` (`measureTriggerRate`, vigiles/testing)",
+          "not measured — run `npx vigiles audit` interactively to measure, or add a `*.eval.mjs` (`paid_measureTriggerRate`, vigiles/eval)",
         ],
       },
     ],

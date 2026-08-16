@@ -2385,7 +2385,7 @@ function formatTriggerNudge(triggerableSkills: number): string {
   const n = triggerableSkills;
   return (
     `ℹ Do your ${String(n)} skill${n === 1 ? "" : "s"} actually fire? The deterministic read can't tell — ` +
-    `run \`audit\` interactively to measure, or test with \`measureTriggerRate\` (vigiles/testing).`
+    `run \`audit\` interactively to measure, or test with \`paid_measureTriggerRate\` (vigiles/eval).`
   );
 }
 
@@ -2689,7 +2689,7 @@ function vigilesWorkflow(
 `
     : "";
   // The test pillar's harness job runs `*.harness.mjs` files that
-  // `import "vigiles/testing"`, so it needs vigiles RESOLVABLE — a package.json +
+  // `import "vigiles"`, so it needs vigiles RESOLVABLE — a package.json +
   // install. A repo with no package.json can't run the JS test tier in CI at all
   // (the import won't resolve even though the CLI itself came from npx), so the
   // harness job is emitted ONLY when a package.json exists (Codex review / #111 /
@@ -2868,7 +2868,7 @@ const STARTER_HARNESS = `/**
  *
  * Guide: https://github.com/zernie/vigiles/blob/main/docs/harness-testing.md
  */
-import { runHook } from "vigiles/testing";
+import { runHook } from "vigiles";
 import assert from "node:assert/strict";
 
 // EXAMPLE — replace with one of YOUR hooks. This PreToolUse Bash guard blocks a
@@ -5714,7 +5714,7 @@ const COMMAND_HELP: Record<Verb, CommandHelp> = {
       "  vigiles audit [dir...]          Lighthouse for your harness — a LOCAL report: rings + what's broken + fixes (a deterministic read; 2+ dirs → leaderboard)",
     detail: [
       "                                 writes vigiles-report.html + .json (auto-gitignored; --out=<dir> · --no-html/--no-json · --no-open · --json for machine output). NOT a CI step — use `vigiles lint` in CI.",
-      "                                 the executing checks (run your hooks · live MCP · do skills fire?) run only interactively — `audit` asks once (remembered); automation uses the vigiles/testing API",
+      "                                 the executing checks (run your hooks · live MCP · do skills fire?) run only interactively — `audit` asks once (remembered); automation uses the vigiles testing API",
       "                                 --serve opens a LIVE local report whose buttons create specs in one click (own repo only; loopback + token-guarded) · --no-serve to skip the prompt",
     ],
   },
@@ -6354,7 +6354,7 @@ function refsHookCommand(): void {
 
 /**
  * Load a compiled-hook program's default export — the SHARED loader, also the
- * public `vigiles/testing` `loadHook` a `.harness.mjs` test uses, so a hook that
+ * public `vigiles` `loadHook` a `.harness.mjs` test uses, so a hook that
  * loads in a test loads identically here (one loader, no drift).
  */
 const loadHookProgram = loadHook;
@@ -7724,7 +7724,7 @@ async function main(): Promise<void> {
       // uses `vigiles lint`). The executing checks (safety battery + live MCP +
       // skill firing) run only on consent: at a TTY `audit` asks once (remembered
       // in `.vigilesrc.json`), headless it stays a read + a one-line nudge. There
-      // is NO execution flag — automation tests the harness via the vigiles/testing
+      // is NO execution flag — automation tests the harness via the vigiles testing
       // API + skills, not the report verb. See the `audit-side-effect-free` rule.
       const dirs = restArgs.length > 0 ? restArgs : ["."];
       const json = args.includes("--json");
@@ -7948,10 +7948,10 @@ async function main(): Promise<void> {
         // linter also executes it). A plain `audit` is a deterministic READ;
         // these run only on consent — ASK once at a TTY (remembered); headless
         // stays a read + a nudge (no execution flag — automation uses the
-        // vigiles/testing API). Resolved AFTER the report (so the read leads) but
+        // vigiles testing API). Resolved AFTER the report (so the read leads) but
         // BEFORE the rule map is routed, so a first-time "yes" enriches THIS run.
         // (The safety battery is NOT here — it needs cross-platform confinement
-        // that isn't shipped, so it lives in the vigiles/testing API.)
+        // that isn't shipped, so it lives in the vigiles testing API.)
         // `surfaces` + `execDecision` were resolved above (the ring needed them);
         // this only turns an `ask` into a prompt and remembers the answer.
         const { execute, note: execNote } = await resolveExecution(

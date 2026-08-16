@@ -375,6 +375,17 @@ jobs:
       - name: Check doc imports
         run: npm run docs:check
 
+      # A subpath that carries a warning in its NAME must carry it on every symbol
+      # behind it: `./eval` → `paid_*`, `./experimental` → `experimental_*`. The path
+      # warns once at the top of a file; the name warns at every call site, which is
+      # where the money is spent. Held by prose it decays — `makeDockerRuntime` sat
+      # unprefixed among six `experimental_` siblings until this step was written, and
+      # ONE missing prefix is worse than none, because the six that comply teach the
+      # reader that an unprefixed name is safe. Types are exempt on purpose: a type is
+      # never called, and the report types are re-exported from the FREE barrel too.
+      - name: Check export prefixes
+        run: npm run exports:check
+
       - name: Lint
         run: npm run lint
 

@@ -85,7 +85,7 @@ export default defineHook({
   >
   > `under` is the **allowlist / coverage** primitive, and an unprovable answer is `false`: a path in another checkout, or an absolute path with no root in sight, matches no repo-relative prefix. A confinement gate (`under(ok) ? allow() : deny()`) therefore fails closed, and a nudge stays quiet. The reverse shape — `under(secret) ? deny() : allow()` — reads that `false` as **allow**, so do not build a denylist on it. When there is genuinely no root, the runtime says so on stderr rather than deciding silently.
   >
-  > Testing a file hook? Build the event with **`fileToolEvents(path)`** (from `vigiles/unit` or `vigiles/testing`), which returns _both_ spellings. Hand-written relative events are what let three shipped hooks stay dead while their tests passed.
+  > Testing a file hook? Build the event with **`fileToolEvents(path)`** (from `vigiles`), which returns _both_ spellings. Hand-written relative events are what let three shipped hooks stay dead while their tests passed.
 
 - **`e.prompt`** (UserPromptSubmit) — the user's prompt text (a plain string).
 - **`e.stopHookActive`** (Stop) — the loop guard; `allow()` when it's `true`.
@@ -332,7 +332,7 @@ Everything else still fails closed. This doesn't soften the tamper guarantee tha
 
 ```ts
 import { it } from "vitest";
-import { loadHook, assertHookDenies, assertHookAllows } from "vigiles/testing";
+import { loadHook, assertHookDenies, assertHookAllows } from "vigiles";
 
 const guard = await loadHook(".vigiles/hooks/guard.mjs");
 
@@ -353,7 +353,7 @@ it("blocks a force-push, even hidden in a compound command", () => {
 **React hooks get their own pair.** A react can't block, so the gate assertions don't apply; use `assertHookNotices(hook, event, matcher?)` and `assertHookSilent(hook, event)`:
 
 ```ts
-import { assertHookNotices, assertHookSilent } from "vigiles/testing";
+import { assertHookNotices, assertHookSilent } from "vigiles";
 
 const warn = await loadHook(".vigiles/hooks/warn-on-failure.mjs");
 const after = (isError) => ({

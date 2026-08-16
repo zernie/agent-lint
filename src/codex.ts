@@ -1,6 +1,6 @@
 /**
  * `vigiles/codex` — the OpenAI Codex harness adapter. Sits beside
- * `vigiles/claude-code`: same harness-agnostic `vigiles/testing` core, a
+ * `vigiles/claude-code`: same harness-agnostic `vigiles` testing core, a
  * different transport (the `codex` binary + the OpenAI **Responses** SSE mock).
  *
  * Pillar 2 (harness testing) is proven here — `startCodexMock` serves the

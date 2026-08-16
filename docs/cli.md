@@ -74,10 +74,10 @@ the same `✓` as one that ran and passed — the classic shape being a file tha
 _defines_ tests (`export default { … }`) and never calls them. Each tier now
 records its own runs, and the runner reports a clean exit with **zero** recorded
 checks as its own state. It is **not** a failure (the exit code is unchanged), and
-a script that never imports `vigiles/testing` cannot report at all, so it stays a
+a script that never imports `vigiles` cannot report at all, so it stays a
 plain pass — silence is the legacy branch, never a verdict. If your harness
 asserts some other way (`node:assert`, a runner's `expect`), call `recordCheck()`
-from `vigiles/testing` so those count.
+from `vigiles` so those count.
 
 **`vigiles eval` asks before fanning out.** A bare `vigiles eval` with no target
 discovers every `*.eval.*` in the tree, and each one runs the **real model on your
@@ -127,7 +127,7 @@ which layers, CI, and the plugin. Run by an agent, in CI, or with piped input
 Passing a single positive layer flag selects only it (`--lint` = the Lint
 layer only); pass both, or neither, for both. `init` also adds `vigiles` to your
 `devDependencies` (moving it out of `dependencies` if it's there) so the
-scaffolded `vigiles.harness.mjs` resolves `vigiles/testing`.
+scaffolded `vigiles.harness.mjs` resolves `vigiles`.
 
 **`--ci-only` — the CI check only, nothing installed.** At a terminal the wizard's
 first question is "gate vs full"; `--ci-only` is the same choice for a headless run
@@ -353,7 +353,7 @@ Harness audit
   ● Safety         100  ██████████████████████
   ◑ Tested          88  ███████████████████░░░  · advisory (not graded)
   ? Evaluated  not measured                      · advisory (not graded)
-       └ 6 surfaces whose firing was never measured; not measured — run `npx vigiles audit` interactively to measure, or add a `*.eval.mjs` (`measureTriggerRate`, vigiles/testing)
+       └ 6 surfaces whose firing was never measured; not measured — run `npx vigiles audit` interactively to measure, or add a `*.eval.mjs` (`paid_measureTriggerRate`, vigiles/eval)
 
 Harness health: B (95/100)
 ```
@@ -368,7 +368,7 @@ grade; an n/a category is excluded, never a false 0. The first five are
 capability check over a unit's declared tool-set. (The **executing** "do your
 hooks actually block?" disaster-battery is NOT a ring: running arbitrary hooks
 safely needs cross-platform confinement that isn't shipped yet — so it lives in
-the [`vigiles/testing` API](harness-testing.md) via `guardrail-check` /
+the [`vigiles` testing API](harness-testing.md) via `guardrail-check` /
 `assertBlocksDisasters`, where you opt in explicitly.)
 
 **Tested and Evaluated are two rings, not one number.** A harness
@@ -417,7 +417,7 @@ they actually **block** (the #1 verified hook pain: a guard that _looks_ like it
 blocks and silently doesn't). Because running arbitrary hooks safely needs
 cross-platform confinement that isn't shipped yet, it's **not** part of the
 zero-config report; you run it where you opt in explicitly — `guardrail-check` /
-`assertBlocksDisasters` from `vigiles/unit`, or via the `test-harness` skill.
+`assertBlocksDisasters` from `vigiles`, or via the `test-harness` skill.
 
 Each deterministic finding carries its **fix inline** under the report — the
 cross-reference cause + a one-line correction (`FIX` a dead-end, `DIFFERENTIATE` a
@@ -541,7 +541,7 @@ a human to consent (there's **no execution flag** — see below):
   one-line nudge; never hangs, never silently executes.
 - **No execution flag.** `audit` is a local report — it runs the executing checks
   only when a human can consent. For automation, test the harness through the
-  [`vigiles/testing` API](harness-testing.md) (`measureTriggerRate`, `guardrail-check`)
+  [vigiles testing API](harness-testing.md) (`paid_measureTriggerRate` on `vigiles/eval`, `guardrail-check` on `vigiles`)
   - skills — the layered tiers that exist for exactly that. The deterministic read is
     identical on every OS; there's deliberately no `--measure`/`--fast`.
 
@@ -675,7 +675,7 @@ different contracts** — the classic gate-vs-report split (think `eslint .` /
   (leaderboard), and writes the HTML report — all a safe read. Two **executing**
   checks (live MCP resolution + "do skills fire?") run only on the interactive
   consent (`audit-side-effect-free`); for automation, run those — and the safety
-  battery — through the `vigiles/testing` API.
+  battery — through the `vigiles` testing API.
 
 They deliberately **share one implementation** of the few deterministic
 structural detectors they have in common (untested-surface, dangling-ref,
@@ -701,13 +701,13 @@ deterministic + every-commit).
 | MCP tool exists on **live** server                          |    –     |     –     |      ✓ own-repo¹      |
 | Trigger recall/precision (does a skill fire?)               |    –     |     –     |          ✓²           |
 | Adoptability preview (broken refs in your instruction file) |    –     |     –     |          ✓⁴           |
-| Safety battery (does a hook block?) — `vigiles/testing`     |    –     |     –     |          –⁵           |
+| Safety battery (does a hook block?) — `vigiles`             |    –     |     –     |          –⁵           |
 | Config severities + CI exit codes                           |    ✓     | read-only |       read-only       |
 | **Cost tier**                                               | free/det | free/det  |     **model/sub**     |
 
 The two executing checks share **one consent**: a plain `audit` is a read; at a
 TTY it **asks once** (remembered in `.vigilesrc.json`). There is no execution flag
-— for automation use the `vigiles/testing` API, not the report verb.
+— for automation use the `vigiles` testing API, not the report verb.
 
 ¹ Live MCP **starts your servers** (connects to real backends), so it's **own-repo
 only**; a foreign plugin's servers are never spawned.
@@ -718,7 +718,7 @@ then verifies every reference deterministically. Claude Code only in v1; never w
 anything to the repo. Runs on your subscription ($0 metered).
 ⁵ The safety battery (run your hooks against the disaster catalog) is **not** an
 `audit` check — it needs cross-platform confinement that isn't shipped, so it lives
-in the `vigiles/testing` API (`guardrail-check`/`assertBlocksDisasters`).
+in the `vigiles` testing API (`guardrail-check`/`assertBlocksDisasters`).
 
 **Where each runs:**
 
@@ -739,7 +739,7 @@ them (a deterministic read), so it's safe on any repo, even one wired to prod. O
 opt-in, live MCP starts servers own-repo only, and the trigger-rate stubs skill
 bodies so no procedure runs. (The safety battery — which executes arbitrary hooks
 and so needs cross-platform confinement that isn't shipped — is not here; it's a
-`vigiles/testing` capability you invoke explicitly.)
+`vigiles` testing capability you invoke explicitly.)
 
 For how all five verbs (`audit` / `lint` / `test` / `eval` / `init`) fit together —
 and why measuring "do my skills fire?" from an agent uses `init`, not `audit` — see

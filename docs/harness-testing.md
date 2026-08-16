@@ -25,7 +25,7 @@ code (`2` = block). `runHook` drives exactly that — no harness binary, no mode
 so a hook's logic is testable in milliseconds, in any runner:
 
 ```ts
-import { runHook, assertHookBlocked } from "vigiles/unit";
+import { runHook, assertHookBlocked } from "vigiles";
 
 const r = runHook(
   '"$GUARD"',
@@ -82,7 +82,7 @@ shell out to. `runScript` runs any program and reports **what it did**: exit
 code, **both** streams, and (when confined) what it wrote and what it reached.
 
 ```ts
-import { runScript } from "vigiles/unit";
+import { runScript } from "vigiles";
 
 const r = runScript("bash scripts/check-links.sh", { cwd: repoDir });
 assert.equal(r.exitCode, 0);
@@ -121,7 +121,7 @@ can't synthesize, because _you_ hand it the event JSON. It proves the hook's
 both).
 
 ```ts
-import { runHook, assertHookAllowed } from "vigiles/unit";
+import { runHook, assertHookAllowed } from "vigiles";
 
 const r = runHook(hookCmd, {
   hook_event_name: "PreToolUse",
@@ -149,11 +149,7 @@ model turns are fixed, no key, no cost. The unit under test is the _assembled_
 plugin: hooks + settings + instruction file + skills together.
 
 ```ts
-import {
-  runHarnessTest,
-  assertHookFired,
-  assertOutputContains,
-} from "vigiles/integration";
+import { runHarnessTest, assertHookFired, assertOutputContains } from "vigiles";
 
 const r = await runHarnessTest({
   plugin: "./", // load THIS repo's real hooks + instruction file + skills
@@ -181,8 +177,8 @@ the success track, `vigiles:err` on the error track — and `assertAgentOk` /
 `assertAgentErr` / `assertAgentResult` parse and validate it against the contract.
 
 ```ts
-import { result } from "vigiles";
-import { assertAgentOk, assertAgentResult } from "vigiles/testing";
+import { result } from "vigiles/spec";
+import { assertAgentOk, assertAgentResult } from "vigiles";
 
 // The worker's contract: success = the files it changed + a summary.
 const implementer = result(
@@ -222,7 +218,7 @@ inside that surface** — not eyeballed, and not handed to a model judge. The ch
 vocabulary is the seam:
 
 ```ts
-import { wrote, didNotWrite, notTool, assertChecks } from "vigiles/testing";
+import { wrote, didNotWrite, notTool, assertChecks } from "vigiles";
 
 assertChecks(r, [
   wrote("out.txt"), // produced the artifact it promised
@@ -251,14 +247,14 @@ skill-authoring pain, and a property only a real model decides. The deterministi
 tiers prove the _wiring_; this proves the _activation_.
 
 ```ts
+import { paid_measureTriggerRate } from "vigiles/eval"; // `paid_` = a real model runs
 import {
-  measureTriggerRate,
   formatTriggerRateReport,
   skillResolved,
   assertTriggerRate,
-} from "vigiles/testing";
+} from "vigiles";
 
-const report = await measureTriggerRate({
+const report = await paid_measureTriggerRate({
   skillsDir: ".claude/skills", // loose repo skills — auto-packaged
   stubSkillBodies: true, // measure SELECTION only (stub bodies → much cheaper)
   prompts: ["…≥10 varied tasks the skill should handle…"], // recall
@@ -324,7 +320,7 @@ to usually hold — and not enough to claim it breaks often. Hence the `sonnet`
 floor. Run the same set on both and compare:
 
 ```ts
-import { compareContainment, formatContainment } from "vigiles/testing";
+import { compareContainment, formatContainment } from "vigiles";
 
 console.log(formatContainment(compareContainment(weakRuns, strongRuns)));
 ```
@@ -350,9 +346,10 @@ N trials × arm and aggregates **mean ± se** with **significance**, so you can 
 a real gap from sampling noise:
 
 ```ts
-import { runEval, formatEvalReport } from "vigiles/testing";
+import { paid_runEval } from "vigiles/eval"; // `paid_` = a real model runs
+import { formatEvalReport } from "vigiles";
 
-const report = await runEval({
+const report = await paid_runEval({
   fixture: { "src/billing.ts": "export function chargeCard() {}" },
   arms: {
     vanilla: {},
@@ -487,9 +484,9 @@ export default { "never runs": () => assert.equal(1, 2) }; // exits 0, asserts n
 — which an exit code alone cannot tell from a real pass. The tiers (`runHook`,
 `runHarnessTest`, `runEval`, the in-process compiled-hook assertions) count
 themselves, so an ordinary harness needs no extra call; if yours asserts some
-other way, `recordCheck()` from `vigiles/testing` reports those. It is **not** a
+other way, `recordCheck()` from `vigiles` reports those. It is **not** a
 failure — it never turns a build red — and a script that doesn't import
-`vigiles/testing` cannot report at all, so it stays a plain pass.
+`vigiles` cannot report at all, so it stays a plain pass.
 
 **The composite action** encapsulates the per-tier setup (bubblewrap, the egress
 connector) so you don't re-derive it:
@@ -560,7 +557,7 @@ sandbox) is per-harness. Pick yours:
 ## See also
 
 - [Testing API reference](testing-api.md) — every predicate, check, matcher, and option (hand-written).
-- [API reference (generated)](https://zernie.github.io/vigiles/api/) — the exhaustive symbol-level reference for every entry point, incl. `vigiles/testing`.
+- [API reference (generated)](https://zernie.github.io/vigiles/api/) — the exhaustive symbol-level reference for every entry point, incl. the `vigiles` root and `vigiles/eval`.
 - [Compiled hooks](compiled-hooks.md) — author a hook that can't be wrong (a pure typed function vigiles compiles); the gate instrument beside these test tiers.
 - [Verifying your instruction files](verifying-instruction-files.md) — the linting layer.
 - [`docs/harnesses.md`](harnesses.md) — how you pick a harness (by import) + the capability matrix.

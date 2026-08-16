@@ -18,15 +18,11 @@
  *   npx vigiles eval examples/harness/from-promptfoo.mjs   # needs claude + model auth
  *
  * Real model → real work (but $0 beyond your subscription, apiKeySource "none").
- * External users import from the package: `from "vigiles/testing"`.
+ * External users import from the package: `from "vigiles/eval"` for the paid
+ * runners (`paid_measure`), `from "vigiles"` for the free checks.
  */
-import {
-  measure,
-  output,
-  judged,
-  cost,
-  assertRates,
-} from "../../dist/testing.js";
+import { measure, judged } from "../../dist/eval.js";
+import { output, cost, assertRates } from "../../dist/test.js";
 
 // measure() takes ONE MeasureSpec — checks + trials live inside it, not a 2nd arg.
 const report = await measure({

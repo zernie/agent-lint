@@ -1,8 +1,9 @@
 import { defineConfig, configDefaults } from "vitest/config";
 
 // Vitest is the primary runner. Test tiers are encoded in the FILENAME so the
-// capability level is legible and routed to its own project (mirrors the tiered
-// import paths vigiles/unit · /integration · /e2e):
+// capability level is legible and routed to its own project. Tiers live HERE, not
+// in the exports map — the package splits its imports on COST (`vigiles` free /
+// `vigiles/eval` paid), never on tier:
 //   - `unit`        — `src/**/*.test.ts` MINUS the suffixed tiers: pure, no caps.
 //   - `integration` — `src/**/*.integration.test.ts`: needs bwrap, no network.
 //   - `e2e`         — `src/**/*.e2e.test.ts`: needs real egress / model / network

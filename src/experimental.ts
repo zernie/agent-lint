@@ -41,7 +41,7 @@ export {
 
 export {
   experimental_dockerRuntime,
-  makeDockerRuntime,
+  experimental_makeDockerRuntime,
   type DockerExec,
   type NetProbe,
 } from "./services-docker.js";

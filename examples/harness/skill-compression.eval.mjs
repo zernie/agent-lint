@@ -34,7 +34,8 @@
  *   node examples/harness/skill-compression.eval.mjs 6      # standalone
  *
  * Real model → real cost. Needs the `claude` CLI + model auth and a built dist/.
- * External users import from the package: `from "vigiles/testing"`.
+ * External users import from the package: `from "vigiles/eval"` (the paid
+ * runners) and `from "vigiles"` (the free checks).
  *
  * FINDING (2026-06-17, real haiku, 3 trials/arm, on the Pro/Max subscription —
  * apiKeySource:"none", $0.1057 total). The cost-metric capture works end-to-end:

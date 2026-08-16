@@ -2,9 +2,11 @@
  * e2e tier — allowlisted REAL egress (`egress: { allow }`).
  *
  * These need a routable rootless sandbox (bwrap + slirp4netns/pasta + nft) AND
- * real outbound network — the top of the pyramid. The import path declares it:
- * everything comes from [`vigiles/e2e`](./e2e.ts) (here the in-repo `./e2e.js`
- * barrel), not the bare `vigiles/unit`. Gated by `egressRoutes()` so they run for
+ * real outbound network. The import path no longer says so: the barrels split on
+ * COST, not on capability, so `runHook` and `egressRoutes` both come from the
+ * free root surface ([`vigiles`](./test.ts), here the in-repo `./test.js`
+ * barrel). What routes this file to the expensive tier is its `.e2e.test.ts`
+ * NAME, read by the vitest `e2e` project. Gated by `egressRoutes()` so they run for
  * real where egress actually routes and skip honestly where it can't (e.g. a
  * GitHub-hosted runner whose slirp4netns never attaches `tap0`) instead of
  * failing red — see research/egress-sandbox-tooling.md (pasta is the fix that
@@ -16,7 +18,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtempSync, writeFileSync } from "node:fs";
 
-import { runHook, egressRoutes } from "./e2e.js";
+import { runHook, egressRoutes } from "./test.js";
 
 const egressOk = egressRoutes();
 

@@ -22,17 +22,16 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-// One report per public entry point. `.` and `./spec` resolve to the same module
-// (the spec builders), so the root is reported once as `vigiles`. Keyed by the
-// report name; `dts` is the built type-entry the export maps to.
+// One report per public entry point, keyed by the report name; `dts` is the
+// built type-entry the export maps to. Every subpath now resolves to its own
+// module — the old aliasing (`.` + `./spec` on one file, `./e2e` on
+// `./integration`) is gone, so the map here is 1:1 with package.json `exports`.
 const ENTRIES = [
-  { name: "vigiles", dts: "dist/core/spec.d.ts" }, // "." + "./spec"
+  { name: "vigiles", dts: "dist/test.d.ts" }, // "." — the free testing surface
+  { name: "vigiles-spec", dts: "dist/core/spec.d.ts" }, // "./spec"
+  { name: "vigiles-eval", dts: "dist/eval-surface.d.ts" }, // "./eval" — spends money
   { name: "vigiles-linting", dts: "dist/linting.d.ts" },
-  { name: "vigiles-testing", dts: "dist/testing.d.ts" },
-  { name: "vigiles-unit", dts: "dist/unit.d.ts" },
   { name: "vigiles-hook", dts: "dist/hook.d.ts" },
-  { name: "vigiles-integration", dts: "dist/integration.d.ts" },
-  { name: "vigiles-e2e", dts: "dist/e2e.d.ts" },
   { name: "vigiles-claude-code", dts: "dist/claude-code.d.ts" },
   { name: "vigiles-codex", dts: "dist/codex.d.ts" },
   { name: "vigiles-adapter", dts: "dist/adapter.d.ts" },

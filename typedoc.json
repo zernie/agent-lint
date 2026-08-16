@@ -2,9 +2,10 @@
   "$schema": "https://typedoc.org/schema.json",
   "name": "vigiles API reference",
   "entryPoints": [
+    "src/test.ts",
+    "src/eval-surface.ts",
     "src/core/spec.ts",
     "src/linting.ts",
-    "src/testing.ts",
     "src/hook.ts",
     "src/adapter.ts",
     "src/claude-code.ts",
