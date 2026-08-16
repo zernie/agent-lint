@@ -39,58 +39,6 @@ model at that tier.
 stdin, exit code → allow/deny). A **hook** has a _decision_; a **script** has
 _effects_ — so `ScriptRunResult` deliberately carries no `decision` field.
 
-### And one that asks about the tests themselves
-
-| Your question                                       | Runner         | Result           | Cost |
-| --------------------------------------------------- | -------------- | ---------------- | ---- |
-| **would my test notice if the check were deleted?** | `runMutations` | `MutationReport` | free |
-
-Every runner above reports that a check passed. None can tell a watched assertion
-from a vacuous one — both print `✓`. `runMutations` plants a defect in the thing a
-test watches, runs that test, and requires it to fail **with the message that
-names the defect**:
-
-```ts
-import { runMutations, formatMutationReport } from "vigiles/testing";
-
-const report = runMutations({
-  cwd: repoRoot,
-  cases: [
-    {
-      name: "year",
-      disables: "the year comparison",
-      edits: [[checker, "rec.year !== ourYear", "false"]],
-      test: harness,
-      expect: "a wrong year was not reported",
-    },
-  ],
-});
-console.log(formatMutationReport(report));
-```
-
-Five verdicts, and only the first is proof:
-
-| verdict           | what happened                                                                  |
-| ----------------- | ------------------------------------------------------------------------------ |
-| `killed`          | red, and it printed your `expect`                                              |
-| `wrong-assertion` | red, but a **neighbour** caught it — two defects share one assertion           |
-| `survived`        | green with the defect planted: the assertion is vacuous, or absent             |
-| `unjudgeable`     | the test was **already red** before the run, so "red" says nothing here        |
-| `not-applied`     | the edit did not land — `find` matched 0 or many, or the replacement was equal |
-
-🔴 **It rewrites the files in `edits` and restores them** — in a `finally` _and_ on
-SIGINT/SIGTERM, so an interrupted run cannot leave a neutered checker behind for
-the next run to measure and call healthy. Commit first. A named `test` file that
-does not exist, and an empty `cases` list, both **throw before anything is
-touched**: a runner with nothing to run would otherwise report success, which is
-the one claim this API exists to prevent.
-
-This is not Stryker/mutmut/PIT. Those generate mutants from operators over
-production code and score a suite by kill ratio; here the mutations are
-hand-authored and each names the assertion that must catch it — the right shape
-when the subject is a checker, a hook or an instruction file rather than
-general-purpose code. Use the generated-operator tools where they apply.
-
 **Both streams, always.** `ScriptRunResult`, `HookRunResult` and
 `HarnessTestResult` all carry `stdout` **and** `stderr`. That matters more than
 it looks: advisory output — including vigiles's own compiled-hook `notice()` —
