@@ -75,7 +75,7 @@ declare module "vigiles/generated" {
   /** All enabled linter rules across all detected linters. */
   export type LinterRule = EslintRule;
 
-  /** 21 npm scripts from package.json. */
+  /** 22 npm scripts from package.json. */
   export type NpmScript = 
     | "build"
     | "build:core"
@@ -97,6 +97,7 @@ declare module "vigiles/generated" {
     | "api:check"
     | "docs:check"
     | "exports:check"
+    | "experimental:check"
     | "docs:api";
 
   /** 371 project files. */
@@ -938,6 +939,7 @@ declare module "vigiles/spec" {
       | "api:check"
       | "docs:check"
       | "exports:check"
+      | "experimental:check"
       | "docs:api";
   }
 }

@@ -2,8 +2,8 @@
  * Type-level constraint: TYPED COMPOSITION — "your multi-agent pipeline doesn't
  * compile if the handoffs don't line up." The SHIPPED `agent()` / `result()`
  * builders now carry each agent's `result()` ok/err SHAPE at the type level (a
- * `TypedAgentSpec`), so a typed `pipe`/`then` cross-references one step's `ok`
- * against the next step's `needs` AT `tsc` TIME — a missing field, a wrong field
+ * `TypedAgentSpec`), so a typed `experimental_pipe`/`then` cross-references one step's `ok`
+ * against the next step's `experimental_needs` AT `tsc` TIME — a missing field, a wrong field
  * type, or an out-of-order step is a compile error.
  *
  * Compiled with `tsc --noEmit` (npm run test:types); it asserts types, it is not
@@ -13,11 +13,11 @@
 import {
   agent,
   result,
-  start,
-  andThen,
-  pipe,
-  pipeStep,
-  needs,
+  experimental_start,
+  experimental_andThen,
+  experimental_pipe,
+  experimental_pipeStep,
+  experimental_needs,
 } from "../../dist/core/spec.js";
 
 // ---------------------------------------------------------------------------
@@ -53,10 +53,13 @@ const reviewer = agent({
 //   planner.ok ⊇ implementer.needs, implementer.ok ⊇ reviewer.needs.
 // ---------------------------------------------------------------------------
 
-const good = pipe(
+const good = experimental_pipe(
   planner,
-  pipeStep(implementer, needs({ plan: "string", files: "string[]" })),
-  pipeStep(reviewer, needs({ diff: "string" })),
+  experimental_pipeStep(
+    implementer,
+    experimental_needs({ plan: "string", files: "string[]" }),
+  ),
+  experimental_pipeStep(reviewer, experimental_needs({ diff: "string" })),
 );
 
 // The carried final type is precise — the pipeline's `ok` is reviewer's `ok`.
@@ -64,12 +67,15 @@ const _approved: "boolean" = good.ok.approved;
 void _approved;
 
 // The same chain via the explicit start/andThen fold MUST also compile.
-const goodFold = andThen(
-  andThen(
-    start(planner),
-    pipeStep(implementer, needs({ plan: "string", files: "string[]" })),
+const goodFold = experimental_andThen(
+  experimental_andThen(
+    experimental_start(planner),
+    experimental_pipeStep(
+      implementer,
+      experimental_needs({ plan: "string", files: "string[]" }),
+    ),
   ),
-  pipeStep(reviewer, needs({ diff: "string" })),
+  experimental_pipeStep(reviewer, experimental_needs({ diff: "string" })),
 );
 void goodFold;
 
@@ -84,11 +90,17 @@ const reviewerNeedsScan = agent({
   output: result({ approved: "boolean" }, { reason: "string" }),
 });
 
-void pipe(
+void experimental_pipe(
   planner,
-  pipeStep(implementer, needs({ plan: "string", files: "string[]" })),
+  experimental_pipeStep(
+    implementer,
+    experimental_needs({ plan: "string", files: "string[]" }),
+  ),
   // @ts-expect-error MISSING FIELD: implementer.ok has no `securityScan`.
-  pipeStep(reviewerNeedsScan, needs({ securityScan: "string" })),
+  experimental_pipeStep(
+    reviewerNeedsScan,
+    experimental_needs({ securityScan: "string" }),
+  ),
 );
 
 // ---------------------------------------------------------------------------
@@ -96,11 +108,14 @@ void pipe(
 // (`string[]`, but implementer produces `diff: "string"`).
 // ---------------------------------------------------------------------------
 
-void pipe(
+void experimental_pipe(
   planner,
-  pipeStep(implementer, needs({ plan: "string", files: "string[]" })),
+  experimental_pipeStep(
+    implementer,
+    experimental_needs({ plan: "string", files: "string[]" }),
+  ),
   // @ts-expect-error TYPE MISMATCH: implementer produces diff:"string", reviewer needs diff:"string[]".
-  pipeStep(reviewer, needs({ diff: "string[]" })),
+  experimental_pipeStep(reviewer, experimental_needs({ diff: "string[]" })),
 );
 
 // ---------------------------------------------------------------------------
@@ -109,10 +124,10 @@ void pipe(
 // typed pipe rejects the inverted handoff.
 // ---------------------------------------------------------------------------
 
-void pipe(
+void experimental_pipe(
   planner,
   // @ts-expect-error ORDER ERROR: reviewer needs `diff`, but planner.ok has none (implementer hasn't run).
-  pipeStep(reviewer, needs({ diff: "string" })),
+  experimental_pipeStep(reviewer, experimental_needs({ diff: "string" })),
 );
 
 // ---------------------------------------------------------------------------
@@ -122,4 +137,4 @@ void pipe(
 // ---------------------------------------------------------------------------
 
 const bare = agent({ name: "bare", description: "no result contract" });
-void start(bare);
+void experimental_start(bare);
