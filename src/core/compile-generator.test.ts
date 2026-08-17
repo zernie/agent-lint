@@ -10,6 +10,9 @@ import {
   compileGenerator,
   compileGeneratorSkill,
 } from "./compile-generator.js";
+import { compileSkill } from "./compile.js";
+import { experimental_skill } from "./spec.js";
+import { claudeCodeDialect } from "../adapters/claude-code/dialect.js";
 import { readFrontmatter, frontmatterScalar } from "./frontmatter-read.js";
 
 const SRC = `
@@ -130,4 +133,48 @@ test("compileGeneratorSkill verifies gate refs and errors clearly without genSki
 
   const none = compileGeneratorSkill("export default 1;");
   assert.ok(none.errors.some((e) => /genSkill/.test(e.message)));
+});
+
+test("a skill can declare a disallowed-tools FENCE, and it uses the skill's key", () => {
+  const { markdown, errors } = compileSkill(
+    experimental_skill({
+      name: "fenced",
+      description: "Has a fence.",
+      tools: ["Read", "Grep"],
+      disallowedTools: ["Bash", "WebFetch"],
+      body: "b",
+    }),
+    { specFile: "skills/fenced/SKILL.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  assert.deepEqual(errors, []);
+  // 🔴 HYPHENATED. `disallowedTools:` is the SUBAGENT key, read by a different
+  // parser; emitting it on a skill produces a key nothing looks at — inert, in the
+  // direction that reads as protection. This assertion is the whole point of the
+  // test, so it checks the exact bytes rather than a loose /disallowed/i.
+  assert.match(markdown, /\ndisallowed-tools: \[Bash, WebFetch\]\n/);
+  assert.doesNotMatch(markdown, /\ndisallowedTools:/);
+  // The fence does not replace the allowlist — both are present, because they
+  // answer different questions (pre-approval vs removal).
+  assert.match(markdown, /\nallowed-tools: \[Read, Grep\]\n/);
+});
+
+test("a disallowed-tools entry that is a typo of a real tool is an ERROR, not a fence", () => {
+  const { errors } = compileSkill(
+    experimental_skill({
+      name: "typo-fence",
+      description: "Fence with a typo.",
+      // "Wrte" removes nothing: the real tool is still callable while the file
+      // reads as though Write were blocked.
+      disallowedTools: ["Wrte"],
+      body: "b",
+    }),
+    {
+      specFile: "skills/typo-fence/SKILL.md.spec.ts",
+      dialect: claudeCodeDialect,
+    },
+  );
+  assert.ok(
+    errors.some((e) => /Wrte/.test(e.message) && /Write/.test(e.message)),
+    `expected a typo report naming both the typo and the real tool, got ${JSON.stringify(errors)}`,
+  );
 });

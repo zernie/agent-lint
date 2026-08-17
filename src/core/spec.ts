@@ -692,6 +692,25 @@ export interface SkillSpec {
    */
   readonly tools?: readonly string[];
   /**
+   * Tools this skill may NEVER use — rendered to the `disallowed-tools:`
+   * frontmatter key (hyphenated for skills; a subagent's key is `disallowedTools:`,
+   * and they are read by different parsers, so the spelling is not interchangeable).
+   *
+   * 🔴 This is NOT the symmetric twin of `tools` and the asymmetry is the whole
+   * reason it exists. `allowed-tools:` on a skill is a PRE-APPROVAL — it waives the
+   * permission prompt for what it lists and removes nothing from the pool, so a
+   * skill that declares only `Read` can still call `Bash`. `disallowed-tools:` is
+   * the only key measured to actually take a tool away. A skill without it inherits
+   * every tool the session grants, which is why `audit` reports each such skill as
+   * holding all three lethal-trifecta legs — including skills whose `tools` list
+   * looks tightly scoped.
+   *
+   * Entries are checked like a subagent's: a close typo of a real tool name blocks
+   * nothing and is reported, because a fence with a misspelled name reads as
+   * protection while granting everything.
+   */
+  readonly disallowedTools?: readonly string[];
+  /**
    * Declare this skill's purity floor — compile rejects a tool contract looser
    * than it. `"pure"` allows only read-only tools; `"bounded"` also allows
    * decidable side-effecting tools (Write, Edit, …) but bars `Bash` /

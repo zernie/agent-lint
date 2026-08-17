@@ -836,6 +836,14 @@ function renderSkillFrontmatter(
       // ambiguous scalar, so the restriction was lost on the CC round-trip. (#107)
       fm.push(`allowed-tools: [${spec.tools.join(", ")}]`);
     }
+    if (spec.disallowedTools && spec.disallowedTools.length > 0) {
+      // 🔴 `disallowed-tools`, HYPHENATED — that is a skill's fence. A subagent's
+      // key is `disallowedTools:` (camelCase) and a different reader parses it, so
+      // writing the agent spelling here emits a key nothing looks at: inert, and
+      // inert in the direction that reads as protection. Same class as the #107
+      // defect two lines up, where `tools:` on a skill silently lost the contract.
+      fm.push(`disallowed-tools: [${spec.disallowedTools.join(", ")}]`);
+    }
   }
   fm.push("", "---");
   return fm.join("\n");
@@ -990,6 +998,19 @@ export function compileSkill(
       spec.purity,
     )) {
       errors.push({ type: "purity-violation", message: v.message });
+    }
+  }
+
+  // A fence entry that is a close typo of a real tool blocks NOTHING while reading
+  // as protection — the same high-precision check a subagent's `disallowedTools`
+  // gets. Skipped without a dialect, like the purity check above, because the tool
+  // catalog is what a typo is measured against.
+  if (spec.disallowedTools && options.dialect) {
+    for (const issue of disallowedToolIssues(
+      spec.disallowedTools,
+      options.dialect,
+    )) {
+      errors.push({ type: "unknown-tool", message: issue.message });
     }
   }
 

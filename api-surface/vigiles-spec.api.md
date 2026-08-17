@@ -407,6 +407,7 @@ export interface SkillSpec {
     readonly context?: "fork";
     readonly description: string;
     readonly disableModelInvocation?: boolean;
+    readonly disallowedTools?: readonly string[];
     readonly inputs?: readonly SkillInput[];
     readonly maxInlineCodeLines?: number;
     readonly name: string;
