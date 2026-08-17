@@ -21,7 +21,23 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # 🔴 20 → 22 on 2026-08-16, because the release job DIED on this line and took a
+          # major with it. `semantic-release` refuses to start on Node 20:
+          #
+          #   [semantic-release]: node version ^22.14.0 || >= 24.10.0 is required. Found v20.20.2.
+          #
+          # It fails BEFORE analysing a single commit, so `fix(release)!:` in #152 — the commit
+          # that repaired the preset so `!` means major at all — never became v16.0.0. npm sat
+          # at 15.4.1 while `main` carried breaking changes, which is the exact condition #152
+          # existed to end.
+          #
+          # ⚠️ THE REAL DEFECT IS NOT THIS NUMBER. `semantic-release` is not in package.json at
+          # all, so `npx semantic-release` resolves the newest published version on every run.
+          # The release pipeline therefore changes behaviour with no commit to this repository:
+          # run 132 passed at 19:30 and run 133 failed at 21:24 on the same config, because a
+          # release in between dropped Node 20. Bumping the runtime unblocks today and leaves
+          # that open — pinning the tool as a devDependency is the fix that closes it.
+          node-version: "22"
           cache: "npm"
 
       - run: npm ci
