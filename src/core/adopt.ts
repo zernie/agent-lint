@@ -19,7 +19,7 @@
  * `strengthen`'s separate, later job; adoption is lossless transcription.
  */
 
-import { parseIntegrityHeader } from "./integrity.js";
+import { findIntegrityHeader, parseIntegrityHeader } from "./integrity.js";
 import {
   readFrontmatter,
   frontmatterScalar,
@@ -303,10 +303,17 @@ function splitFrontmatterBody(markdown: string): {
   fm: FrontmatterRead;
   body: string;
 } {
-  const fm = readFrontmatter(markdown);
-  if (fm.block === null) return { fm, body: markdown.replace(/^\uFEFF/, "") };
-  const m = FRONTMATTER_CONSUME_RE.exec(markdown);
-  return { fm, body: m ? markdown.slice(m[0].length) : markdown };
+  // Strip the integrity header FIRST, wherever it sits. FRONTMATTER_CONSUME_RE above knows
+  // only the pre-2026-08-17 placement (a comment BEFORE the frontmatter); once the header
+  // moved below the frontmatter it landed inside what this function calls "the body", so a
+  // round-trip adopt \u2192 compile \u2192 re-adopt grew a stamp into the spec's body on every pass.
+  // Delegating keeps ONE site that knows where the header can be \u2014 which is the entire point
+  // of findIntegrityHeader, and this caller is the one the move missed.
+  const source = findIntegrityHeader(markdown)?.withoutHeader ?? markdown;
+  const fm = readFrontmatter(source);
+  if (fm.block === null) return { fm, body: source.replace(/^\uFEFF/, "") };
+  const m = FRONTMATTER_CONSUME_RE.exec(source);
+  return { fm, body: m ? source.slice(m[0].length) : source };
 }
 
 /** The first non-empty, non-heading paragraph — the CC fallback for a skill's

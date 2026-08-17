@@ -10,6 +10,7 @@ import {
   compileGenerator,
   compileGeneratorSkill,
 } from "./compile-generator.js";
+import { readFrontmatter, frontmatterScalar } from "./frontmatter-read.js";
 
 const SRC = `
 import { skill, act, checkpoint, finish, cmd } from "vigiles";
@@ -101,7 +102,18 @@ test("compileGeneratorSkill renders frontmatter + body + integrity hash", () => 
     specFile: "skills/x/SKILL.md.spec.ts",
   });
   assert.equal(errors.length, 0, JSON.stringify(errors));
-  assert.match(markdown, /^<!-- vigiles:sha256:[a-f0-9]+ compiled from/);
+  // Frontmatter first, stamp below it — and asserted through a READER, because the
+  // defect this encodes was invisible to a text match: every field was still present
+  // in the file, just no longer in a block any parser would recognise.
+  assert.match(markdown, /^---\r?\n/);
+  const fm = readFrontmatter(markdown);
+  assert.notEqual(
+    fm.block,
+    null,
+    "a frontmatter reader must find a block here",
+  );
+  assert.equal(frontmatterScalar(fm, "name"), "ship-pr");
+  assert.match(markdown, /\n<!-- vigiles:sha256:[a-f0-9]+ compiled from/);
   assert.match(markdown, /name: ship-pr/);
   assert.match(markdown, /description: Open a PR once tests pass/);
   assert.match(markdown, /disable-model-invocation: true/);

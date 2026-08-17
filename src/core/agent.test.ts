@@ -20,6 +20,7 @@ import {
   guidance,
 } from "./spec.js";
 import { compileAgent, compileSkill, adoptDiff } from "./compile.js";
+import { readFrontmatter, frontmatterScalar } from "./frontmatter-read.js";
 import { claudeCodeDialect } from "../adapters/claude-code/dialect.js";
 import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
 
@@ -41,7 +42,24 @@ test("compileAgent renders frontmatter (name/description/model/tools) + hash", (
     { specFile: "agents/reviewer.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.deepEqual(errors, []);
-  assert.match(markdown, /^<!-- vigiles:sha256:[a-f0-9]+ compiled from/);
+  // The frontmatter — not the stamp — leads the file, and a READER must find the
+  // contract inside it. Asserting the text merely appears is what let the old
+  // placement ship: `name: reviewer` was present in both versions, while a `^---`
+  // parser found no frontmatter at all in the broken one.
+  assert.match(markdown, /^---\r?\n/);
+  const fm = readFrontmatter(markdown);
+  assert.notEqual(
+    fm.block,
+    null,
+    "a frontmatter reader must find a block here",
+  );
+  assert.equal(frontmatterScalar(fm, "name"), "reviewer");
+  assert.equal(
+    frontmatterScalar(fm, "description"),
+    "Review a diff for correctness.",
+  );
+  // The stamp still exists — below the frontmatter, which is the whole change.
+  assert.match(markdown, /\n<!-- vigiles:sha256:[a-f0-9]+ compiled from/);
   assert.match(markdown, /\nname: reviewer\n/);
   assert.match(markdown, /\ndescription: Review a diff for correctness\.\n/);
   assert.match(markdown, /\nmodel: sonnet\n/);

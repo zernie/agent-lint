@@ -29,8 +29,12 @@ export interface FrontmatterRead {
 // Frontmatter is the very first thing in the file. Anchoring at the start — not
 // `(?:^|\n)` — means a `---` horizontal rule in the BODY is never mistaken for
 // frontmatter (which matters for the malformed-YAML verdict). A leading BOM is
-// stripped first; an optional leading HTML comment is allowed too — vigiles
-// stamps a compiled file with `<!-- vigiles:sha256:… -->` before the `---`.
+// stripped first; an optional leading HTML comment is allowed too, which is what
+// lets this reader still parse files compiled BEFORE 2026-08-17, when vigiles put
+// the `<!-- vigiles:sha256:… -->` stamp above the `---` and thereby hid the
+// frontmatter from every stricter reader. Since then the stamp goes BELOW the
+// frontmatter (placeIntegrityHeader), so this branch is backward compatibility,
+// not a description of what the compiler emits today.
 const BLOCK_RE = /^\uFEFF?(?:<!--[\s\S]*?-->\s*)?---\r?\n([\s\S]*?)\r?\n---/;
 
 /** A YAML block-scalar indicator: `>`/`|` with optional chomp (`+`/`-`) + indent digit. */
