@@ -25,7 +25,8 @@ import {
 
 import {
   verifyToolContract,
-  confidentToolIssues,
+  scoredIssues,
+  advisoryIssues,
   disallowedToolIssues,
 } from "./core/tool-contract.js";
 import { editDistance } from "./core/edit-distance.js";
@@ -536,6 +537,9 @@ export function scanAgents(
     // including every side-effecting one — pass the wildcard sentinel so
     // effectSurface correctly classifies it as `"unrestricted"`.
     const surface = effectSurface(tools ?? ["*"], dialect);
+    // Classify ONCE; the scored and advisory halves are two views of one result,
+    // so they cannot disagree about what the vocabulary said.
+    const vocabIssues = tools ? verifyToolContract(tools, dialect) : [];
     out.push({
       name: basename(path, ".md"),
       path: ctx
@@ -543,12 +547,16 @@ export function scanAgents(
         : path,
       tools,
       // Cross-reference the declared rail against the dialect catalog — the moat.
-      // Auditing third-party plugins → only the HIGH-CONFIDENCE issues (never-
-      // available + close typos); a bare unrecognized tool is likely plugin/MCP-
-      // provided, not a defect (the TaskCreate/TaskGet lesson). See tool-contract.ts.
-      toolIssues: tools
-        ? confidentToolIssues(verifyToolContract(tools, dialect))
-        : [],
+      // The SCORED half only: a tool the platform withholds unconditionally, or a
+      // name one edit from a real one (no two real names are that close, so that
+      // is a typo). Everything else the vocabulary has an opinion about goes to
+      // `toolNotes` — surfaced, never graded. See core/vocabulary.ts.
+      toolIssues: tools ? scoredIssues(vocabIssues) : [],
+      // Advisory: a real tool the platform withholds only under a condition
+      // vigiles cannot see (`Agent` at the depth limit), and a name that is
+      // simply not in our capture — which may mean the catalog is stale, not
+      // that the contract is wrong.
+      toolNotes: tools ? advisoryIssues(vocabIssues) : [],
       // The MCP half of the moat: an `mcp__server__tool` whose server isn't in the
       // plugin's declared set can't resolve. High-precision (gated on a declared
       // set, built-ins allowlisted, plugin-namespaced form skipped). See mcp-tool.ts.

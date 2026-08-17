@@ -25,7 +25,8 @@ import type { HarnessDialect } from "./core/dialect.js";
 import type { ToolIssue } from "./core/tool-contract.js";
 import {
   verifyHookEvents,
-  confidentHookEventIssues,
+  scoredIssues,
+  advisoryIssues,
   type HookEventIssue,
 } from "./core/hook-events.js";
 import { verifyMcpServers, type McpIssue } from "./core/mcp-config.js";
@@ -146,6 +147,12 @@ export interface ScanAgent {
   readonly toolIssues: readonly ToolIssue[];
   /** MCP tool entries naming a server the plugin doesn't declare (can't resolve). */
   readonly mcpToolIssues: readonly McpToolIssue[];
+  /**
+   * ADVISORY tool findings — a real tool withheld only under a condition vigiles
+   * cannot see, or a name not in its capture. Surfaced via `vocabularyNotes`,
+   * never scored. Optional: absence is not a claim of zero.
+   */
+  readonly toolNotes?: readonly ToolIssue[];
   /** `disallowedTools:` block-list entries that are typos of a real tool (block nothing). */
   readonly disallowedToolIssues: readonly ToolIssue[];
   /**
@@ -174,6 +181,62 @@ export interface ScanAgent {
 }
 
 /** A lethal-trifecta finding tagged with the surface (subagent/skill) that holds it. */
+/**
+ * Gather the advisory half of the vocabulary findings for the report. Kept in
+ * one place so hook events and subagent tools present identically — the two used
+ * to answer the same question with different policies.
+ */
+export function collectVocabularyNotes(
+  hookEventIssues: readonly HookEventIssue[],
+  agents: readonly ScanAgent[],
+): VocabularyNote[] {
+  return [
+    ...advisoryIssues(hookEventIssues).map((i) => ({
+      where: `hook event "${i.event}"`,
+      message: i.message,
+    })),
+    ...agents.flatMap((a) => groupAgentToolNotes(a)),
+  ];
+}
+
+/**
+ * One agent's advisory tool notes, with the `conditional` ones GROUPED by the
+ * condition they share. A delegating subagent legitimately declares eight
+ * foreground-only tools; printing the same sentence eight times is noise, and
+ * noise is what this whole change exists to stop producing. Unrecognised names
+ * stay one-per-tool — each carries its own did-you-mean.
+ */
+function groupAgentToolNotes(agent: ScanAgent): VocabularyNote[] {
+  const notes = advisoryIssues(agent.toolNotes ?? []);
+  const byCondition = new Map<string, string[]>();
+  const out: VocabularyNote[] = [];
+  for (const i of notes) {
+    if (i.verdict === "conditional" && i.condition !== undefined) {
+      const at = byCondition.get(i.condition) ?? [];
+      at.push(i.tool);
+      byCondition.set(i.condition, at);
+      continue;
+    }
+    out.push({ where: agent.path, message: i.message });
+  }
+  for (const [condition, tools] of byCondition)
+    out.push({
+      where: agent.path,
+      message:
+        `${tools.join(", ")} ${tools.length === 1 ? "is a real tool" : "are real tools"}, ` +
+        `but the platform removes ${tools.length === 1 ? "it" : "them"} ${condition}. ` +
+        `vigiles cannot see that condition from the file, so this is a note, not a defect.`,
+    });
+  return out;
+}
+
+/** One advisory vocabulary finding, tagged with the surface that carries it. */
+export interface VocabularyNote {
+  /** Where it was found — a hook event key, or an agent's path. */
+  readonly where: string;
+  readonly message: string;
+}
+
 export interface ScanTrifectaFinding {
   readonly path: string;
   readonly kind: "subagent" | "skill";
@@ -300,6 +363,18 @@ export interface ScanReport {
   readonly skillRefIssues?: readonly string[];
   /** Hooks registered under an event name the harness doesn't define (typo / dead). */
   readonly hookEventIssues: readonly HookEventIssue[];
+  /**
+   * ADVISORY vocabulary findings — names vigiles could not confirm, and real
+   * names the platform withholds only under a condition it cannot see. Surfaced
+   * and NEVER scored, which is the point: the two failure modes this replaced
+   * were silence (which reads as approval and hides vigiles's own staleness) and
+   * an error (which blames the user for our gap). Neither is a verdict, so these
+   * get a third channel instead of a grade.
+   *
+   * OPTIONAL because absence is not a claim: a producer predating this field
+   * reports nothing rather than reporting zero.
+   */
+  readonly vocabularyNotes?: readonly VocabularyNote[];
   /** Skills/agents missing a required frontmatter field (name; agents also description). */
   readonly frontmatterIssues: readonly FrontmatterIssue[];
   /** Agent frontmatter fields with an invalid value (a typo of a real model/color). */
@@ -522,9 +597,8 @@ export function scanPlugin(
   // object keys only and returns [] for an array. We don't interpret a format we
   // don't own.
   const eventNames = hookEventNames(loaded.settings.hooks);
-  const hookEventIssues = confidentHookEventIssues(
-    verifyHookEvents(eventNames, dialect),
-  );
+  const allHookEventIssues = verifyHookEvents(eventNames, dialect);
+  const hookEventIssues = scoredIssues(allHookEventIssues);
   const instructions: ScanInstructions | null =
     loaded.files[lay.instructionFile] !== undefined
       ? {
@@ -593,6 +667,7 @@ export function scanPlugin(
       }),
     ).map(formatSkillRefIssue),
     hookEventIssues,
+    vocabularyNotes: collectVocabularyNotes(allHookEventIssues, agents),
     frontmatterIssues: remap(frontmatterIssuesFor(loaded.files, cls)),
     frontmatterValueIssues: remap(frontmatterValueIssuesFor(loaded.files, cls)),
     skillMetaIssues: remap(skillMetaIssuesFor(loaded.files, cls)),
@@ -931,6 +1006,17 @@ export function formatScanReport(r: ScanReport): string {
     ...section(
       "Hook events",
       r.hookEventIssues.map((i) => `  ✗ ${i.message}`),
+    ),
+  );
+
+  // Advisory, never scored — a name vigiles cannot confirm, or a real one the
+  // platform withholds only under a condition it cannot see. Printed with `·`
+  // rather than `✗` so it reads as a note about vigiles's knowledge, not a
+  // defect in the repo being audited.
+  out.push(
+    ...section(
+      "Vocabulary notes (advisory, not graded)",
+      (r.vocabularyNotes ?? []).map((n) => `  · ${n.where}: ${n.message}`),
     ),
   );
 

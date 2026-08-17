@@ -532,17 +532,19 @@ test("scanPlugin reports the instruction file on any repo (spec-managed vs hand-
 
 test("scanPlugin flags a never-available agent tool, suppresses unrecognized plugin tools", () => {
   const dir = makeTmpDir("scan-toolcontract");
-  // A real-world shape (wshobson agent-teams): a never-available tool (Agent)
-  // mixed with plugin-provided tools (TeamCreate, TaskGet) vigiles can't know.
+  // A real-world shape (wshobson agent-teams): an unconditionally-withheld tool
+  // (AskUserQuestion) mixed with a plugin-provided tool (TeamCreate) vigiles
+  // can't know, plus `Agent` and `TaskGet`, which ARE real and must not score —
+  // `Agent` is the tool a lead exists to use.
   write(
     dir,
     "agents/lead.md",
-    "---\nname: lead\ntools: Read, Bash, Agent, TeamCreate, TaskGet\n---\nbody\n",
+    "---\nname: lead\ntools: Read, Bash, Agent, TeamCreate, TaskGet, AskUserQuestion\n---\nbody\n",
   );
   const agent = scanPlugin(dir).agents.find((a) => a.name === "lead");
-  assert.equal(agent?.toolIssues.length, 1, "only the never-available tool");
+  assert.equal(agent?.toolIssues.length, 1, "only the withheld tool scores");
   assert.equal(agent?.toolIssues[0].kind, "never-available");
-  assert.equal(agent?.toolIssues[0].tool, "Agent");
+  assert.equal(agent?.toolIssues[0].tool, "AskUserQuestion");
   // the report leads with the ✗ + the actionable message
   assert.match(
     formatScanReport(scanPlugin(dir)),
@@ -578,7 +580,9 @@ test("scanPlugin flags a typo'd hook event, suppresses a framework/custom event"
     JSON.stringify({
       name: "x",
       hooks: {
-        // a typo of PreToolUse → flagged; a han-style custom event → suppressed
+        // a typo of PreToolUse → scored; a custom/unknown event → advisory, so
+        // it is reported but never costs a grade (`TeammateIdle` has since
+        // become a REAL Claude Code event, which is the whole point)
         PreToolUSe: [
           { matcher: "Edit", hooks: [{ type: "command", command: "echo a" }] },
         ],
@@ -1983,5 +1987,108 @@ test("…while the same skill under Claude Code is still reported and still scor
     (safetyScore(r) ?? 100) < 100,
     "an unfenced Claude Code skill still costs Safety",
   );
+  cleanupTmpDir(dir);
+});
+
+test("advisory vocabulary notes REACH the report (computed-then-dropped guard)", () => {
+  // The first cut of this feature classified names correctly and then threw the
+  // advisory half away, because `scan` stored only the scored issues. The
+  // detector tests all passed and `OnFileSave` was still silent in the output —
+  // so this asserts the WIRING, not the classification.
+  const dir = makeTmpDir("scan-vocab-notes");
+  write(
+    dir,
+    ".claude-plugin/plugin.json",
+    JSON.stringify({
+      name: "x",
+      hooks: {
+        OnFileSave: [{ hooks: [{ type: "command", command: "echo a" }] }],
+      },
+    }),
+  );
+  write(
+    dir,
+    "agents/p.md",
+    "---\nname: p\ndescription: Probe agent\ntools: Agent, NotARealTool\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+
+  const notes = r.vocabularyNotes ?? [];
+  assert.equal(
+    notes.length,
+    3,
+    "one unknown event + one conditional + one unknown tool",
+  );
+  assert.ok(notes.some((n) => /OnFileSave/.test(n.message)));
+  assert.ok(notes.some((n) => /^Agent is a real tool/.test(n.message)));
+  assert.ok(notes.some((n) => /NotARealTool/.test(n.message)));
+
+  // …and they must be visible in the rendered report, not just on the object.
+  const text = formatScanReport(r);
+  assert.match(text, /Vocabulary notes \(advisory, not graded\)/);
+  assert.match(text, /OnFileSave/);
+  assert.match(text, /vigiles is out of date — not your config/);
+
+  // …while contributing NOTHING to the graded findings.
+  assert.deepEqual(r.hookEventIssues, []);
+  assert.deepEqual(r.agents.find((a) => a.name === "p")?.toolIssues, []);
+  cleanupTmpDir(dir);
+});
+
+test("a clean plugin produces NO vocabulary notes (the silent half)", () => {
+  const dir = makeTmpDir("scan-vocab-clean");
+  write(
+    dir,
+    ".claude-plugin/plugin.json",
+    JSON.stringify({
+      name: "x",
+      hooks: {
+        PreToolUse: [{ hooks: [{ type: "command", command: "echo a" }] }],
+      },
+    }),
+  );
+  write(
+    dir,
+    "agents/p.md",
+    "---\nname: p\ndescription: Probe agent\ntools: Read, Grep\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  assert.deepEqual(r.vocabularyNotes, []);
+  assert.doesNotMatch(formatScanReport(r), /Vocabulary notes/);
+  cleanupTmpDir(dir);
+});
+
+test("conditional tool notes are GROUPED by condition, not repeated per tool", () => {
+  // A delegating subagent legitimately declares many foreground-only tools.
+  // Eight identical paragraphs is noise from a tool whose pitch is precision —
+  // this is the Citadel shape, where ungrouped output was 8 lines per agent.
+  const dir = makeTmpDir("scan-vocab-group");
+  write(
+    dir,
+    "agents/orch.md",
+    "---\nname: orch\ndescription: Orchestrator subagent\n" +
+      "tools: Read, Agent, CronCreate, CronDelete, CronList, TaskCreate, TaskList\n---\nbody\n",
+  );
+  const notes = scanPlugin(dir).vocabularyNotes ?? [];
+  // 6 conditional tools across 3 distinct conditions + Agent's own = 3 lines.
+  assert.equal(notes.length, 3, notes.map((n) => n.message).join("\n"));
+  assert.ok(
+    notes.some((n) =>
+      /CronCreate, CronDelete, CronList are real tools/.test(n.message),
+    ),
+  );
+  assert.ok(notes.some((n) => /^Agent is a real tool/.test(n.message)));
+  // every declared conditional tool is still named somewhere — grouping must
+  // compress the prose, never drop a tool.
+  const all = notes.map((n) => n.message).join(" ");
+  for (const t of [
+    "Agent",
+    "CronCreate",
+    "CronDelete",
+    "CronList",
+    "TaskCreate",
+    "TaskList",
+  ])
+    assert.match(all, new RegExp(`\\b${t}\\b`));
   cleanupTmpDir(dir);
 });

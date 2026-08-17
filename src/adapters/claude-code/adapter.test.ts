@@ -51,6 +51,50 @@ test("conformance kit catches a broken adapter", () => {
   assert.ok(r.failures.some((m) => m.includes("builtinAgentTools")));
 });
 
+test("conformance kit catches a dialect that contradicts ITSELF", () => {
+  // The exact state that shipped for months: `Agent` claimed as both declarable
+  // and never-available, while its own alias `Task` sat in the built-in catalog.
+  // Nothing compared the two lists, so nothing noticed. This pins the WIRING —
+  // `dialectVocabularyProblems` has its own unit tests, but they would all pass
+  // with the call removed from the kit.
+  const contradictory: HarnessAdapter = {
+    ...claudeCodeAdapter,
+    dialect: {
+      ...claudeCodeAdapter.dialect,
+      builtinAgentTools: ["Read", "Agent"],
+      neverAvailableTools: ["Agent"],
+      sideEffectingTools: [],
+      subagentToolVocabulary: undefined,
+      hookEventVocabulary: undefined,
+    },
+  };
+  const r = checkAdapterConformance(contradictory);
+  assert.equal(r.ok, false);
+  assert.ok(
+    r.failures.some((m) => m.includes("dialect self-contradiction")),
+    `expected a self-contradiction failure, got: ${r.failures.join(" | ")}`,
+  );
+});
+
+test("conformance kit catches flat lists that drift from the vocabulary", () => {
+  const drifted: HarnessAdapter = {
+    ...claudeCodeAdapter,
+    dialect: {
+      ...claudeCodeAdapter.dialect,
+      // The vocabulary still declares `Agent` as declarable; the projection lost it.
+      builtinAgentTools: claudeCodeAdapter.dialect.builtinAgentTools.filter(
+        (t) => t !== "Agent",
+      ),
+    },
+  };
+  const r = checkAdapterConformance(drifted);
+  assert.equal(r.ok, false);
+  assert.ok(
+    r.failures.some((m) => m.includes("subagentToolVocabulary")),
+    `expected a projection failure, got: ${r.failures.join(" | ")}`,
+  );
+});
+
 test("conformance catches a shell-hook adapter that can't inject context", () => {
   // The exact class of gap that let Codex's inject support sit unverified: a
   // shellHooks adapter whose hookProtocol declares NO injectable events (so an

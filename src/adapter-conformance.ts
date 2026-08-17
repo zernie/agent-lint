@@ -14,6 +14,10 @@ import type { HarnessAdapter } from "./core/adapter.js";
 import { compileAgent } from "./core/compile.js";
 import { agent } from "./core/spec.js";
 import { loadPlugin } from "./plugin-loader.js";
+import {
+  dialectVocabularyProblems,
+  vocabularyProjectionProblems,
+} from "./core/vocabulary-consistency.js";
 
 export interface ConformanceResult {
   readonly ok: boolean;
@@ -44,6 +48,30 @@ export function checkAdapterConformance(
     adapter.dialect.builtinAgentTools.length > 0,
     "dialect has no builtinAgentTools",
   );
+  // The dialect's several name lists describe ONE vocabulary from different
+  // angles, and nothing used to check they agreed — which is how `Agent` came to
+  // sit in `neverAvailableTools` while its own alias `Task` sat in the built-in
+  // catalog, undetected, for every consumer of the adapter. Cheap, total, and it
+  // runs for every adapter including third-party ones.
+  for (const problem of dialectVocabularyProblems(adapter.dialect))
+    need(false, `dialect self-contradiction: ${problem}`);
+  // When a dialect ships the richer vocabulary AND the flat lists, the flat ones
+  // must be exactly its projections — else the two drift apart again, one level
+  // down.
+  if (adapter.dialect.subagentToolVocabulary !== undefined)
+    for (const problem of vocabularyProjectionProblems(
+      adapter.dialect.subagentToolVocabulary,
+      adapter.dialect.builtinAgentTools,
+      adapter.dialect.neverAvailableTools,
+    ))
+      need(false, `subagentToolVocabulary: ${problem}`);
+  if (adapter.dialect.hookEventVocabulary !== undefined)
+    for (const problem of vocabularyProjectionProblems(
+      adapter.dialect.hookEventVocabulary,
+      adapter.dialect.hookEvents,
+      [],
+    ))
+      need(false, `hookEventVocabulary: ${problem}`);
   need(
     adapter.dialect.instructionTargets.length > 0,
     "dialect has no instructionTargets",

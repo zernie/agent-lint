@@ -148,7 +148,11 @@ test("compileAgent flags tools that are never available to a subagent", () => {
     agent({
       name: "a",
       description: "d",
-      tools: ["Read", "Agent", "ExitPlanMode"], // last two never reach a subagent
+      // Unconditionally removed by the platform's first filter, whatever the
+      // list says. `Agent`/`ExitPlanMode` are deliberately NOT here: the vendor
+      // removes those only under a condition, so they are legitimate to declare
+      // — see the next test.
+      tools: ["Read", "AskUserQuestion", "Workflow"],
       body: "b",
     }),
     { specFile: "a.md.spec.ts", dialect: claudeCodeDialect },
@@ -156,6 +160,25 @@ test("compileAgent flags tools that are never available to a subagent", () => {
   assert.equal(errors.length, 2);
   assert.ok(
     errors.every((e) => /never available to a subagent/.test(e.message)),
+  );
+});
+
+test("compileAgent accepts Agent — the docs' own delegating example compiles", () => {
+  // `tools: Agent(worker, researcher), Read, Bash` ships in the vendor docs and
+  // failed to compile until 2026-08-17, because vigiles had the 2.1.63 rename
+  // backwards and treated the current name as never-available.
+  const { errors } = compileAgent(
+    agent({
+      name: "coordinator",
+      description: "Coordinates work across specialized agents",
+      tools: ["Agent", "Read", "Bash"],
+      body: "b",
+    }),
+    { specFile: "coordinator.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  assert.deepEqual(
+    errors.filter((e) => e.type === "unknown-tool"),
+    [],
   );
 });
 
