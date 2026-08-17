@@ -10,6 +10,7 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
+import { findIntegrityHeader } from "./integrity.js";
 import { resolve } from "node:path";
 import { globSync } from "glob";
 
@@ -83,13 +84,13 @@ export function collectDocumentedCommands(
     const fullPath = resolve(basePath, mdFile);
     try {
       const content = readFileSync(fullPath, "utf-8");
-      const specMatch = content.match(
-        /^<!-- vigiles:sha256:[a-f0-9]+ compiled from (.+) -->/,
-      );
-      if (!specMatch) continue;
+      // Ask integrity.ts where the header is — a compiled SKILL.md carries it AFTER its
+      // frontmatter, so an `^`-anchored match here silently skipped every skill.
+      const found = findIntegrityHeader(content);
+      if (!found) continue;
 
       // Try to load the spec's compiled JS from dist/
-      const specFile = specMatch[1];
+      const specFile = found.specFile;
       const jsPath = resolve(
         basePath,
         "dist",

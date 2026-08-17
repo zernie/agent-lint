@@ -333,6 +333,7 @@ import {
 import {
   checkIntegrity,
   ejectMarkdown,
+  findIntegrityHeader,
   parseIntegrityHeader,
   REQUIRE_INSTRUCTIONS_SPEC_DISABLE,
 } from "./core/integrity.js";
@@ -2018,12 +2019,16 @@ function vigilesDepSpec(): string {
   return Number.isFinite(major) && major > 0 ? `^${String(major)}` : "latest";
 }
 
-/** True when the file's first line carries a vigiles integrity hash (i.e. it
- * is a compiled artifact we own, safe to overwrite — not hand-written prose). */
+/** True when the file carries a vigiles integrity hash (i.e. it is a compiled artifact we own,
+ * safe to overwrite — not hand-written prose).
+ *
+ * 🔴 This used to read the FIRST LINE only. A compiled SKILL.md carries the header after its
+ * frontmatter, so the first line is `---` and this returned false — vigiles would have treated
+ * its own compiled skill as hand-written prose and refused to overwrite it. The whole-file read
+ * is the cost of not encoding the header's position in a fourth place. */
 function targetHasHash(absPath: string): boolean {
   try {
-    const first = readFileSync(absPath, "utf-8").split("\n", 1)[0];
-    return first.includes("vigiles:sha256");
+    return findIntegrityHeader(readFileSync(absPath, "utf-8")) !== null;
   } catch {
     return false;
   }

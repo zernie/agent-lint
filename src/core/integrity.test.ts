@@ -7,9 +7,14 @@ import {
   checkIntegrity,
   parseIntegrityHeader,
   ejectMarkdown,
+  findIntegrityHeader,
+  placeIntegrityHeader,
   REQUIRE_INSTRUCTIONS_SPEC_DISABLE,
 } from "./integrity.js";
 import { sha256short } from "./hash.js";
+import { addHash } from "./compile.js";
+import { experimental_skill } from "./spec.js";
+const { input } = experimental_skill;
 
 /** Build a compiled-file string with a VALID header for `body`. */
 function compiled(body: string, spec = "CLAUDE.md.spec.ts"): string {
@@ -84,5 +89,126 @@ describe("ejectMarkdown", () => {
     expect(out?.markdown.split(REQUIRE_INSTRUCTIONS_SPEC_DISABLE).length).toBe(
       2,
     );
+  });
+});
+
+/**
+ * Where the integrity header sits relative to YAML frontmatter.
+ *
+ * 🔴 THE DEFECT THESE PIN. `addHash` prepended the header to every compiled file, including
+ * SKILL.md — whose frontmatter must be the first thing in the file or the harness cannot read the
+ * skill's name, description or tools. `ejectMarkdown`'s docstring in this very module had said so
+ * since it was written; the compiler two modules over did the opposite.
+ *
+ * Measured 2026-08-17 on five real skills: after compiling, a `^---` reader found NO frontmatter.
+ * That one line was the ENTIRE diff against the hand-written original — body byte-identical,
+ * section order untouched — so it was the whole reason a compiled skill could not be adopted.
+ */
+describe("integrity header placement", () => {
+  const FM = "---\nname: demo\nallowed-tools: [Read]\n---\n";
+  const BODY = "# Demo\n\nSome instructions.\n";
+
+  it("goes AFTER frontmatter, leaving `---` as the first line", () => {
+    const out = placeIntegrityHeader(FM + BODY, "abc123", "SKILL.md.spec.ts");
+    expect(out.startsWith("---\n")).toBe(true);
+    expect(out).toContain(
+      "<!-- vigiles:sha256:abc123 compiled from SKILL.md.spec.ts -->",
+    );
+    // The property that actually matters: a reader anchored at `^---` still finds the block.
+    expect(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/.exec(out)?.[1]).toContain(
+      "name: demo",
+    );
+  });
+
+  it("still goes FIRST when the file has no frontmatter", () => {
+    const out = placeIntegrityHeader(BODY, "abc123", "CLAUDE.md.spec.ts");
+    expect(out.startsWith("<!-- vigiles:sha256:abc123")).toBe(true);
+  });
+
+  it("round-trips: a stamped frontmatter file verifies as intact", () => {
+    const content = FM + BODY;
+    const stamped = placeIntegrityHeader(
+      content,
+      sha256short(content),
+      "s.spec.ts",
+    );
+    expect(checkIntegrity(stamped).intact).toBe(true);
+    expect(parseIntegrityHeader(stamped)?.specFile).toBe("s.spec.ts");
+  });
+
+  it("a hand-edit under the header is still caught", () => {
+    const content = FM + BODY;
+    const stamped = placeIntegrityHeader(
+      content,
+      sha256short(content),
+      "s.spec.ts",
+    );
+    expect(
+      checkIntegrity(stamped.replace("Some instructions.", "Tampered.")).intact,
+    ).toBe(false);
+  });
+
+  // Backward compatibility is not optional: every SKILL.md compiled before this fix carries the
+  // header FIRST and its frontmatter second. Those files must keep verifying, or upgrading vigiles
+  // would report every previously-compiled skill as hand-edited.
+  it("reads the OLD layout — header first, frontmatter second", () => {
+    const content = FM + BODY;
+    const old = `<!-- vigiles:sha256:${sha256short(content)} compiled from s.spec.ts -->\n\n${content}`;
+    const found = findIntegrityHeader(old);
+    expect(found?.specFile).toBe("s.spec.ts");
+    expect(found?.withoutHeader).toBe(content);
+    expect(checkIntegrity(old).intact).toBe(true);
+  });
+
+  it("finds nothing in plain markdown", () => {
+    expect(findIntegrityHeader(FM + BODY)).toBeNull();
+    expect(findIntegrityHeader(BODY)).toBeNull();
+  });
+});
+
+/**
+ * The output boundary refuses a stringified object.
+ *
+ * 🔴 Measured 2026-08-17: `input({ name, description })` — the object form a reader reasonably
+ * guesses — compiled with no error and wrote `argument-hint: <[object Object]>` into a shipped
+ * SKILL.md. Types cannot stop it for a user's spec: `vigiles compile` runs `.spec.ts` through
+ * tsx, which transpiles and erases types without checking them.
+ */
+describe("addHash refuses stringified objects", () => {
+  it("throws when the compiled body carries [object Object]", () => {
+    expect(() =>
+      addHash(
+        "# Skill\n\n- `$1` **[object Object]** — undefined\n",
+        "s.spec.ts",
+      ),
+    ).toThrow(/\[object Object\]/);
+  });
+
+  it("stays quiet on ordinary content", () => {
+    expect(() =>
+      addHash("# Skill\n\nOrdinary prose.\n", "s.spec.ts"),
+    ).not.toThrow();
+  });
+});
+
+/** `input()` is the boundary where that object actually enters. */
+describe("input() refuses a non-string call", () => {
+  it("throws on the object form, and names the real signature", () => {
+    // @ts-expect-error — the point is that TS would catch this and tsx does not.
+    expect(() => input({ name: "p", description: "d" })).toThrow(
+      /input\(name, hint/,
+    );
+  });
+
+  it("throws on an empty hint rather than rendering a blank argument", () => {
+    expect(() => input("p", "  ")).toThrow(/two strings/);
+  });
+
+  it("accepts the documented call", () => {
+    expect(input("pattern", "regex to search for")).toEqual({
+      name: "pattern",
+      hint: "regex to search for",
+      required: undefined,
+    });
   });
 });

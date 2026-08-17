@@ -10,6 +10,7 @@ import { globSync } from "glob";
 import { resolve, dirname, basename } from "node:path";
 
 import { sha256short, assertNever } from "./hash.js";
+import { findIntegrityHeader, placeIntegrityHeader } from "./integrity.js";
 import { fencedLineFlags } from "./markdown.js";
 import { fileDefinesSymbol, langForFile } from "./symbols.js";
 
@@ -44,32 +45,48 @@ const DEFAULT_TARGET = "CLAUDE.md";
 // Hash utilities
 // ---------------------------------------------------------------------------
 
-const HASH_RE =
-  /^<!-- vigiles:sha256:([a-f0-9]+) compiled from (.+) -->\r?\n\r?\n?/;
+// The header's position and format now live in ONE place — `./integrity.js`. The local
+// `HASH_RE` that used to sit here was one of four independent copies of "the header is the first
+// line", and that duplication is what let the placement invariant drift unnoticed (see the block
+// comment on FRONTMATTER_RE in integrity.ts).
 
 /** @internal Compute SHA-256 hash of content (excluding any existing hash line). */
 export function computeHash(content: string): string {
-  const body = content.replace(HASH_RE, "");
-  return sha256short(body);
+  return sha256short(findIntegrityHeader(content)?.withoutHeader ?? content);
 }
 
 /** @internal Prepend a hash comment to compiled content. */
 export function addHash(content: string, specFile: string): string {
-  const hash = computeHash(content);
-  return `<!-- vigiles:sha256:${hash} compiled from ${specFile} -->\n\n${content}`;
+  // 🔴 THE LAST GATE BEFORE A COMPILED FILE IS WRITTEN. Every compile path returns through here
+  // (four call sites), which makes it the one place a whole class of defect can be stopped.
+  //
+  // `[object Object]` in output means a spec passed an object where the API takes a string, and
+  // JS stringified it instead of complaining — types cannot stop this for a user's spec, because
+  // `vigiles compile` runs `.spec.ts` through tsx: transpiled, types erased, never checked.
+  // Observed 2026-08-17 from `input({ name, description })`, which shipped
+  // `argument-hint: <[object Object]>` into a SKILL.md with no error anywhere.
+  //
+  // Hard error, not a warning: the string never appears legitimately (measured — zero
+  // occurrences across every `.md` in this repository), and a file carrying it is broken in a
+  // way its author cannot see by reading the spec.
+  if (content.includes("[object Object]")) {
+    throw new Error(
+      `Compiled output for ${specFile} contains "[object Object]" — a spec value was an object ` +
+        `where a string was expected, and JavaScript stringified it. Check the arguments to ` +
+        `input()/file()/cmd() and friends: they take strings, not option objects.`,
+    );
+  }
+  return placeIntegrityHeader(content, computeHash(content), specFile);
 }
 
 /** @internal Check if a file's hash matches its content. Returns null if no hash found. */
 export function verifyHash(
   content: string,
 ): { valid: boolean; specFile: string } | null {
-  const match = content.match(HASH_RE);
-  if (!match) return null;
-  const expectedHash = match[1];
-  const specFile = match[2];
-  const body = content.replace(HASH_RE, "");
-  const actualHash = sha256short(body);
-  return { valid: actualHash === expectedHash, specFile };
+  const found = findIntegrityHeader(content);
+  if (!found) return null;
+  const actualHash = sha256short(found.withoutHeader);
+  return { valid: actualHash === found.hash, specFile: found.specFile };
 }
 
 // ---------------------------------------------------------------------------
@@ -1401,10 +1418,13 @@ export function adoptDiff(
   }
 
   // Simple line-based diff
-  const currentLines = currentContent.replace(HASH_RE, "").split("\n");
-  const compiledLines = (compiledContent ?? "")
-    .replace(HASH_RE, "")
-    .split("\n");
+  const currentLines = (
+    findIntegrityHeader(currentContent)?.withoutHeader ?? currentContent
+  ).split("\n");
+  const compiledLines = (() => {
+    const c = compiledContent ?? "";
+    return (findIntegrityHeader(c)?.withoutHeader ?? c).split("\n");
+  })();
 
   const currentSet = new Set(currentLines);
   const compiledSet = new Set(compiledLines);
