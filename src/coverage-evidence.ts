@@ -83,6 +83,8 @@
  */
 import { readFrontmatter, frontmatterScalar } from "./core/frontmatter-read.js";
 
+import { scriptRefPattern } from "./core/source-refs.js";
+
 /**
  * How a covered surface was decided to be covered.
  *
@@ -120,9 +122,20 @@ export function prepareTest(path: string): PreparedTest {
   return { path };
 }
 
-/** A path that looks like a script, inside a `command` string. Both twins used
- * to declare this separately; it lives here now so they cannot drift on it. */
-const SCRIPT_RE = /[\w./${}@-]+\.(?:sh|mjs|cjs|js|ts|py|rb)/g;
+/**
+ * A path that looks like a script, inside a `command` string. Both twins used to
+ * declare this separately; the extension vocabulary and the trailing boundary
+ * now live in `core/source-refs.ts`, shared with the hook scanner, so the three
+ * cannot drift and none can omit the boundary (without it, `hooks.json` matched
+ * as `hooks.js`).
+ *
+ * ⚠️ This one scans a SERIALIZED settings blob rather than a shell parse, so it
+ * cannot tell an operand from inline program text the way `commandWords` can.
+ * It stays a regex because every hit is gated on the file EXISTING before it
+ * becomes a surface — a stray match is dropped, never reported — so the failure
+ * mode here is under-counting, not accusation.
+ */
+const SCRIPT_RE = scriptRefPattern();
 
 /**
  * Is this filename one the PAID real-model runner would actually run?

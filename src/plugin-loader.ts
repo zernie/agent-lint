@@ -36,6 +36,11 @@ import { parse as parseToml } from "@iarna/toml";
 import { assertNever } from "./core/hash.js";
 import type { PluginLayout } from "./core/layout.js";
 import { entryOf, walkableRoot } from "./fs-walk.js";
+import {
+  intraRefPattern,
+  startsAtSeparator,
+  stripFullLineComments,
+} from "./core/source-refs.js";
 
 export interface LoadedPlugin {
   /** A `.claude/settings.json`-shaped object with hooks resolved. */
@@ -434,12 +439,11 @@ function hasMcp(root: string, layout: PluginLayout): boolean {
 
 // A plugin-relative path reference to a file under a standard surface dir, with a
 // known extension — e.g. a hook script that `cat`s `skills/using-superpowers/SKILL.md`.
-const INTRA_REF_EXTS = "md|sh|cmd|mjs|cjs|js|ts|py|rb|txt|json";
+// The extension vocabulary and BOTH token boundaries live in core/source-refs.ts,
+// so this and its browser twin (scan-files.ts) cannot disagree on them and
+// neither can omit one. See that module for the two boundary defects.
 function intraRefRe(layout: PluginLayout): RegExp {
-  return new RegExp(
-    `(?:${layout.intraRefDirs.join("|")})/[A-Za-z0-9._/-]+\\.(?:${INTRA_REF_EXTS})`,
-    "g",
-  );
+  return intraRefPattern(layout.intraRefDirs);
 }
 
 // Shell vars that root a path OUTSIDE the plugin (the user's project / home), so
@@ -460,9 +464,17 @@ const NON_PLUGIN_VARS = new Set([
  * gmickel/flow-next false positive) or a project var (`$CLAUDE_PROJECT_DIR/…`)
  * is NOT a plugin ref. A bare ref (`cat skills/…`) or one after a plugin-root
  * var (`${PLUGIN_ROOT}/skills/…`, obra/superpowers) IS.
+ *
+ * 🔴 THE FIRST QUESTION IS WHETHER THE MATCH STARTS AT A PATH BOUNDARY AT ALL.
+ * "Not preceded by a slash" used to be read as "bare reference", which made
+ * `claude-agents/fable-advisor.md` a bare reference to `agents/fable-advisor.md`
+ * — a resolving path reported broken (`fcakyon/claude-codex-settings`,
+ * 2026-08-17). A preceding path-segment character means the match landed inside
+ * a longer name, which is not a reference to anything.
  */
 function isPluginRooted(content: string, idx: number): boolean {
-  if (idx === 0 || content[idx - 1] !== "/") return true; // bare / after quote-space
+  if (idx === 0) return true;
+  if (content[idx - 1] !== "/") return startsAtSeparator(content, idx);
   // The path component immediately before the separating slash.
   const seg = /([^\s"'`(=:/]*)$/.exec(content.slice(0, idx - 1))?.[1] ?? "";
   const varName = /^\$\{?(\w+)\}?$/.exec(seg)?.[1];
@@ -478,29 +490,6 @@ function isPluginRooted(content: string, idx: number): boolean {
 // A path in an executable hook/helper script (incl. extensionless ones like
 // obra/superpowers' `hooks/session-start`) IS a real file op — those we scan.
 const DOC_SOURCE_RE = /\.(?:md|markdown|mdx|txt|rst)$/i;
-
-// A `.sh`/`.bash`/`.cmd` SCRIPT's own `#`-led comments are prose, not code — a
-// usage comment (`# bash skills/<plugin>/hooks/setup.sh`, written as it would be
-// invoked from the REPO CHECKOUT root) is not a real file operation any more than
-// a path mentioned in a doc file is (issue #110). Narrowly scoped to the shell/cmd
-// shapes that conventionally use `#` for a comment (unlike e.g. `.mjs`/`.js`).
-const SCRIPT_COMMENT_RE = /\.(?:sh|bash|cmd)$/i;
-
-/**
- * Drop FULL-LINE `#` comments (including the shebang, which also starts with
- * `#`) from a `.sh`/`.bash`/`.cmd` script's content before it's scanned for
- * intra-plugin refs — a line whose first non-whitespace character is `#` is
- * prose, never a real command. Full-line only: a `#` inside a quoted string
- * mid-line is left alone, so a genuine ref on a real code line is never
- * dropped. Mirrors `hookBlockIssues`' `stripFullLineComments` discipline
- * (core/hook-block-ineffective.ts).
- */
-function stripShellComments(content: string): string {
-  return content
-    .split("\n")
-    .filter((line) => !line.trimStart().startsWith("#"))
-    .join("\n");
-}
 
 /**
  * Intra-plugin file references that don't resolve — the partial-vendor / broken-
@@ -558,9 +547,10 @@ function executableSources(
     if (!walkableRoot(dir, root)) continue; // the walk's entry point, see fs-walk
     for (const [path, content] of Object.entries(readTree(dir, root))) {
       if (DOC_SOURCE_RE.test(path)) continue; // skip prose
-      sources[path] = SCRIPT_COMMENT_RE.test(path)
-        ? stripShellComments(content)
-        : content;
+      // A full-line comment is prose in EVERY language, not only in shell —
+      // both remaining corpus false positives here came out of JSDoc. See
+      // core/source-refs.ts.
+      sources[path] = stripFullLineComments(path, content);
     }
   }
   return sources;
