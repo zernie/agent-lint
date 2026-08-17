@@ -30,7 +30,11 @@
  */
 import { basename, dirname } from "./posix-path.js";
 
-import type { PluginLayout } from "./core/layout.js";
+import {
+  AGENT_FILE_LEAF_RE,
+  agentSurfaceName,
+  type PluginLayout,
+} from "./core/layout.js";
 import type {
   CoverageDecision,
   CoverageTier,
@@ -150,10 +154,15 @@ function discoverAgents(
   const out: Surface[] = [];
   if (!layout.agentDir) return out;
   const prefixes = surfacePrefixes(layout.agentDir, layout.materializeRoot);
-  for (const path of matchSurface(files, prefixes, "[^/]+\\.md")) {
+  // Same depth rule as the scan classifier — quoted from AGENT_FILE_LEAF_RE, not
+  // respelled. This discoverer feeds the `Tested` metric; when it disagreed with
+  // the classifier, `audit` printed a subagent count and an untested-surface
+  // count derived from two different sets of files.
+  for (const path of matchSurface(files, prefixes, AGENT_FILE_LEAF_RE)) {
     if (path.endsWith(".spec.ts")) continue;
     const content = files[path];
-    const name = basename(path, ".md");
+    const name =
+      agentSurfaceName(path, layout.agentDir) ?? basename(path, ".md");
     const dir = dirname(path);
     out.push({
       kind: "agent",

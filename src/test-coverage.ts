@@ -62,12 +62,16 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, sep } from "node:path";
 import { testFileExt } from "./core/test-file-ext.js";
 import { assertNever } from "./core/assert-never.js";
 import { canRunTypeScript, detectNodeCaps } from "./ts-runner-caps.js";
 import { globSync } from "glob";
-import type { PluginLayout } from "./core/layout.js";
+import {
+  AGENT_FILE_LEAF_RE,
+  agentSurfaceName,
+  type PluginLayout,
+} from "./core/layout.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
 import {
   countEvidence,
@@ -369,14 +373,36 @@ function discoverAgents(
   layout: PluginLayout,
 ): Surface[] {
   const out: Surface[] = [];
+  // The glob is a COARSE FETCH — deliberately wider than the rule — and
+  // AGENT_FILE_LEAF_RE decides. Spelling the depth rule a second time in glob
+  // dialect is exactly how these two discoverers drifted from the scan
+  // classifier in the first place, so only one dialect is authoritative and the
+  // other is allowed to over-match.
   const found = globSync(
-    surfaceGlobs(layout.agentDir, "*.md", layout.materializeRoot),
+    surfaceGlobs(layout.agentDir, "**/*.md", layout.materializeRoot),
     { cwd: basePath, ignore },
   );
+  const prefixes = layout.materializeRoot
+    ? [layout.agentDir, `${layout.materializeRoot}/${layout.agentDir}`]
+    : [layout.agentDir];
+  const isAgentFile = layout.agentDir
+    ? new RegExp(
+        `^(?:${[...new Set(prefixes)]
+          .map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+          .join("|")})/${AGENT_FILE_LEAF_RE}$`,
+      )
+    : null;
   for (const path of found.sort()) {
     if (path.endsWith(".spec.ts")) continue;
+    // Both the depth rule and the scoped name are written in POSIX (`/`), so
+    // normalize ONCE and derive both from the same string. Normalizing for one
+    // and not the other is how a Windows checkout would match the pattern and
+    // then fail to find `agents/` when naming — silently falling back to a
+    // basename, re-introducing the collision the scoped name exists to prevent.
+    const rel = path.split(sep).join("/");
+    if (isAgentFile && !isAgentFile.test(rel)) continue;
     const content = read(join(basePath, path));
-    const name = basename(path, ".md");
+    const name = agentSurfaceName(rel, layout.agentDir) ?? basename(rel, ".md");
     const dir = dirname(path);
     out.push({
       kind: "agent",

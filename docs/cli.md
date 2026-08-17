@@ -491,6 +491,16 @@ plugins lives in `bench/leaderboard/` (`run.mjs` + the generated `RESULTS.md`).
 (The leaderboard is the multi-dir form and does not run the executing checks or
 write an HTML report — those are the single-dir audit.)
 
+**A marketplace whose members are all external** (each `source` is a git/url
+object, so nothing is on disk) expands to no members — so `audit` falls back to
+auditing **that directory itself**, as a plugin. This matters because a repo can be
+both: a `marketplace.json` listing external members can sit beside a `plugin.json`
+naming its own directory, with real skills, agents and hooks in it. The marketplace
+listing describes _other_ directories, and never suppresses the one you pointed at.
+If the directory really has no surface of its own you get the ordinary "nothing to
+audit" outcome — **exit 2**, plus a line naming the external members and suggesting
+you clone one and scan that.
+
 #### `audit` is a local report, not a CI step
 
 Like Lighthouse, `audit` is something you **run on your machine** to see your

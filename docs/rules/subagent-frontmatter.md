@@ -20,10 +20,10 @@ the `audit` trigger tier / `measureTriggerRate`, don't assert it structurally.)
 
 Two kinds of subagent-frontmatter defect, one rule:
 
-| Kind             | Surface       | Example failure                                                 |
-| ---------------- | ------------- | --------------------------------------------------------------- |
-| Missing required | `agents/*.md` | a subagent that's pure prose (no `---` block) → won't register  |
-| Invalid value    | `agents/*.md` | `model: sonet` / `color: yelow` → silently falls back / ignored |
+| Kind             | Surface          | Example failure                                                 |
+| ---------------- | ---------------- | --------------------------------------------------------------- |
+| Missing required | `agents/**/*.md` | a subagent that's pure prose (no `---` block) → won't register  |
+| Invalid value    | `agents/**/*.md` | `model: sonet` / `color: yelow` → silently falls back / ignored |
 
 The **invalid-value** half cross-references the `model:` against the alias set
 (`inherit`/`sonnet`/`opus`/`haiku`) and `color:` against the color enum, flagging
@@ -52,7 +52,19 @@ frontmatter at all** — they never register.
 
 ## Scope
 
-`agents/*.md` + `.claude/agents/*.md`. Deterministic, model-free.
+`agents/**/*.md` + `.claude/agents/**/*.md` — **recursively**, because the harness
+reads them that way: _"Plugin `agents/` directories are also scanned recursively …
+a file at `agents/review/security.md` in plugin `my-plugin` registers as
+`my-plugin:review:security`"_
+([sub-agents docs](https://code.claude.com/docs/en/sub-agents)). A subagent in a
+subfolder is reported under that scoped name (`review:security`); a top-level one
+keeps its bare filename.
+
+Two dirs that merely _contain_ the word are excluded, since the harness does not
+load subagents from either: `skills/<x>/agents/…` (skill-internal worker docs) and
+`commands/**/agents/…` (a command namespaced `/agents:…`).
+
+Deterministic, model-free.
 
 ## Why
 
