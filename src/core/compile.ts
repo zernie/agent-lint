@@ -57,6 +57,25 @@ export function computeHash(content: string): string {
 
 /** @internal Prepend a hash comment to compiled content. */
 export function addHash(content: string, specFile: string): string {
+  // 🔴 THE LAST GATE BEFORE A COMPILED FILE IS WRITTEN. Every compile path returns through here
+  // (four call sites), which makes it the one place a whole class of defect can be stopped.
+  //
+  // `[object Object]` in output means a spec passed an object where the API takes a string, and
+  // JS stringified it instead of complaining — types cannot stop this for a user's spec, because
+  // `vigiles compile` runs `.spec.ts` through tsx: transpiled, types erased, never checked.
+  // Observed 2026-08-17 from `input({ name, description })`, which shipped
+  // `argument-hint: <[object Object]>` into a SKILL.md with no error anywhere.
+  //
+  // Hard error, not a warning: the string never appears legitimately (measured — zero
+  // occurrences across every `.md` in this repository), and a file carrying it is broken in a
+  // way its author cannot see by reading the spec.
+  if (content.includes("[object Object]")) {
+    throw new Error(
+      `Compiled output for ${specFile} contains "[object Object]" — a spec value was an object ` +
+        `where a string was expected, and JavaScript stringified it. Check the arguments to ` +
+        `input()/file()/cmd() and friends: they take strings, not option objects.`,
+    );
+  }
   return placeIntegrityHeader(content, computeHash(content), specFile);
 }
 

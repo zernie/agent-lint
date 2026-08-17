@@ -624,6 +624,27 @@ function input(
   hint: string,
   opts: { required?: boolean } = {},
 ): SkillInput {
+  // 🔴 The types say `string`, and for a USER's spec nothing enforces that: `vigiles compile`
+  // loads `.spec.ts` through tsx, which transpiles and erases types without checking them.
+  // (vigiles's OWN specs are cross-checked by a separate `tsc --noEmit` over a generated
+  // registry — that safety net does not travel to the people compiling their own specs.)
+  //
+  // Measured 2026-08-17: calling `input({ name, description })` — the object form a reader
+  // reasonably guesses — compiled with NO error and wrote this into the shipped SKILL.md:
+  //
+  //     argument-hint: <[object Object]>
+  //     - `$1` **[object Object]** — undefined
+  //
+  // A wrong call became a wrong file, silently. Refusing here makes the mistake loud at the
+  // moment it is made, and the message carries the real signature because "expected string"
+  // alone does not tell the caller what to write instead.
+  const bad = (v: unknown) => typeof v !== "string" || v.trim() === "";
+  if (bad(name) || bad(hint)) {
+    throw new TypeError(
+      `input() takes two strings: input(name, hint, opts?) — e.g. input("pattern", "regex to search for").\n` +
+        `  got name=${JSON.stringify(name)}, hint=${JSON.stringify(hint)}`,
+    );
+  }
   return { name, hint, required: opts.required };
 }
 

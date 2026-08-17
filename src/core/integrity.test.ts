@@ -12,6 +12,9 @@ import {
   REQUIRE_INSTRUCTIONS_SPEC_DISABLE,
 } from "./integrity.js";
 import { sha256short } from "./hash.js";
+import { addHash } from "./compile.js";
+import { experimental_skill } from "./spec.js";
+const { input } = experimental_skill;
 
 /** Build a compiled-file string with a VALID header for `body`. */
 function compiled(body: string, spec = "CLAUDE.md.spec.ts"): string {
@@ -160,5 +163,52 @@ describe("integrity header placement", () => {
   it("finds nothing in plain markdown", () => {
     expect(findIntegrityHeader(FM + BODY)).toBeNull();
     expect(findIntegrityHeader(BODY)).toBeNull();
+  });
+});
+
+/**
+ * The output boundary refuses a stringified object.
+ *
+ * 🔴 Measured 2026-08-17: `input({ name, description })` — the object form a reader reasonably
+ * guesses — compiled with no error and wrote `argument-hint: <[object Object]>` into a shipped
+ * SKILL.md. Types cannot stop it for a user's spec: `vigiles compile` runs `.spec.ts` through
+ * tsx, which transpiles and erases types without checking them.
+ */
+describe("addHash refuses stringified objects", () => {
+  it("throws when the compiled body carries [object Object]", () => {
+    expect(() =>
+      addHash(
+        "# Skill\n\n- `$1` **[object Object]** — undefined\n",
+        "s.spec.ts",
+      ),
+    ).toThrow(/\[object Object\]/);
+  });
+
+  it("stays quiet on ordinary content", () => {
+    expect(() =>
+      addHash("# Skill\n\nOrdinary prose.\n", "s.spec.ts"),
+    ).not.toThrow();
+  });
+});
+
+/** `input()` is the boundary where that object actually enters. */
+describe("input() refuses a non-string call", () => {
+  it("throws on the object form, and names the real signature", () => {
+    // @ts-expect-error — the point is that TS would catch this and tsx does not.
+    expect(() => input({ name: "p", description: "d" })).toThrow(
+      /input\(name, hint/,
+    );
+  });
+
+  it("throws on an empty hint rather than rendering a blank argument", () => {
+    expect(() => input("p", "  ")).toThrow(/two strings/);
+  });
+
+  it("accepts the documented call", () => {
+    expect(input("pattern", "regex to search for")).toEqual({
+      name: "pattern",
+      hint: "regex to search for",
+      required: undefined,
+    });
   });
 });
