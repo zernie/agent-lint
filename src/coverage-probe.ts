@@ -50,12 +50,20 @@
  *    file is named by anyone. That API contract is the feature — it is how you
  *    test a hook you did not write, verbatim as its plugin ships it.
  *
- *  - **The in-process tier CAN, and currently reports nothing.** `loadHook(file)`
- *    resolves the path itself, and `harness-assert.ts` / `load-hook.ts` contain
- *    ZERO `recordSurfaceProbe` calls — so the tier where attribution needs no
- *    parsing at all is the tier that attributes nothing. That is a real gap and a
- *    better source of truth than any parse, but it ADDS a source; it cannot
- *    retire this one while `runHook(command)` remains public.
+ *  - **The in-process tier CAN — and since 2026-08-13 it DOES.** ⚠️ This bullet
+ *    used to read *"`harness-assert.ts` / `load-hook.ts` contain ZERO
+ *    `recordSurfaceProbe` calls — the tier where attribution needs no parsing at
+ *    all is the tier that attributes nothing"*, and that is no longer true:
+ *    `runCountedHookProgram` in harness-assert.ts records a `command` probe for a
+ *    hook it is about to evaluate, when `loadHook` knew the file. Verified by
+ *    count, not by memory — `harness-assert.ts` has the call, `load-hook.ts`
+ *    still does not, and deliberately so (loading a hook is not running it; see
+ *    that function's note). Left corrected rather than deleted because a header
+ *    that advertises a gap somebody already closed sends the next reader to build
+ *    a second recorder.
+ *
+ *    It did not retire this parser, as predicted: it ADDS a source, and
+ *    `runHook(command)` is still public.
  *
  * So parsing stays, and the lesson taken instead is about DIRECTION. The scan was
  * a deny-list — skip what we recognise, attribute what is left — so every gap in

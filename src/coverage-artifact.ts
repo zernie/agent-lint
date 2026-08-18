@@ -46,6 +46,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, posix, relative, resolve } from "node:path";
 
 import type { ProbeOrigin, SurfaceProbe } from "./check-count.js";
+import { isColocatedTest } from "./coverage-evidence.js";
 import type { Surface, SurfaceKind } from "./test-coverage.js";
 
 /** Bumped when the record shape changes in a non-additive way. */
@@ -63,6 +64,44 @@ export const COVERAGE_ARTIFACT_FILE = "coverage.json";
  */
 export type CoverageTierName = "harness" | "eval";
 
+/**
+ * How a RECORD came to name its surface.
+ *
+ * The three {@link ProbeOrigin} values are what the run REPORTED about itself
+ * from inside its own process — a command line it executed, a transcript it got
+ * back. `colocated` is the fourth and is different in kind: nothing inside the
+ * test said it. The RUNNER observed that the script it just executed is the
+ * surface's colocated test, by the same {@link isColocatedTest} rule that is
+ * already willing to credit that file for merely existing.
+ *
+ * 🔴 THE SPLIT IS THE POINT, AND IT IS WHY THIS IS NOT ON {@link ProbeOrigin}.
+ * `ProbeOrigin` is the wire vocabulary: `parseCheckReport` reads it out of a
+ * scratch file the CHILD writes. Putting `colocated` there would let a harness
+ * hand-write `{"how":"colocated","ref":"…"}` and mint execution coverage for a
+ * surface by declaring it — which is `vigiles:covers` returning through the back
+ * door, the tier this file's header records being deleted for exactly that. Kept
+ * off `ProbeOrigin`, a script cannot spell it at all: `toProbe` has no branch
+ * that produces it, so the only producer in the program is {@link recordsFrom}.
+ */
+export type RunAttribution = ProbeOrigin | "colocated";
+
+/**
+ * Every {@link RunAttribution}, as data — the artifact's validator reads it, so
+ * the accepted set and the type cannot drift apart into a record shape the
+ * program can produce and the reader silently discards. The `satisfies` is the
+ * lock: drop a member and this stops compiling.
+ */
+const ATTRIBUTIONS = new Set<string>([
+  "command",
+  "fired",
+  "dispatched",
+  "colocated",
+] satisfies RunAttribution[]);
+
+function isAttribution(value: unknown): value is RunAttribution {
+  return typeof value === "string" && ATTRIBUTIONS.has(value);
+}
+
 /** One surface, exercised by one script, at one moment, against one version. */
 export interface CoverageRun {
   readonly kind: SurfaceKind;
@@ -70,8 +109,8 @@ export interface CoverageRun {
   readonly path: string;
   readonly name: string;
   readonly tier: CoverageTierName;
-  /** How the run named it — see {@link ProbeOrigin}. */
-  readonly how: ProbeOrigin;
+  /** How the run named it — see {@link RunAttribution}. */
+  readonly how: RunAttribution;
   /** The script file that did the exercising. */
   readonly by: string;
   /** ISO-8601 timestamp of the run. */
@@ -374,6 +413,18 @@ export interface ScriptRunRecord {
   /** The script file that ran. */
   readonly file: string;
   readonly probes: readonly SurfaceProbe[];
+  /**
+   * How many checks the run REPORTED, or `undefined` when it reported nothing.
+   *
+   * The distinction is load-bearing and is not this file's invention — see
+   * `statusFor` in run-scripts.ts. `undefined` means the script never imported
+   * vigiles and therefore *could not* report; that silence is the legacy branch
+   * and is never a verdict. A positive number is the script saying, through the
+   * library, that it made an observation. Only the second is evidence, which is
+   * why {@link recordsFrom} attributes colocation on `> 0` rather than on
+   * "it exited 0".
+   */
+  readonly checks?: number;
 }
 
 /**
@@ -409,17 +460,100 @@ export interface ScriptRunRecord {
  * CLI would destroy a real result. A skip must not write, because it did not
  * finish. Both follow from "a skip is not an execution"; only the direction of
  * the conclusion differs.
+ *
+ * ## 🔴 A RUN WITH NO PROBES IS NO LONGER DISCARDED
+ *
+ * The second clause used to be `surfaces.length > 0`: a passing run that named no
+ * surface contributed nothing. That threw away the ordinary case. MEASURED on a
+ * 52-surface consumer repo, 23 of its 27 covered surfaces were carried by a
+ * colocated `*.harness.mjs` that `vigiles test` RUNS on every push — and every one
+ * of them reported `colocated` evidence, *"this says the file EXISTS, not that it
+ * ran"*, because a harness asserting through `node:assert` reports a CHECK COUNT
+ * and no probe. The run happened, the runner watched it happen, and the metric
+ * described it as a directory listing.
+ *
+ * So a passing run that reported at least one CHECK is kept even with no probes:
+ * {@link recordsFrom} can attribute it by where the script sits. `checks` travels
+ * with it because "exited 0" is not the bar — see {@link ScriptRunRecord.checks}.
  */
 export function runsFromResults(
   results: readonly {
     readonly file: string;
     readonly status: string;
+    readonly checks?: number;
     readonly surfaces?: readonly SurfaceProbe[];
   }[],
 ): ScriptRunRecord[] {
   return results
-    .filter((r) => r.status === "pass" && (r.surfaces?.length ?? 0) > 0)
-    .map((r) => ({ file: r.file, probes: r.surfaces ?? [] }));
+    .filter(
+      (r) =>
+        r.status === "pass" &&
+        ((r.surfaces?.length ?? 0) > 0 || (r.checks ?? 0) > 0),
+    )
+    .map((r) => ({
+      file: r.file,
+      probes: r.surfaces ?? [],
+      ...(r.checks === undefined ? {} : { checks: r.checks }),
+    }));
+}
+
+/**
+ * The surface a RUN's own script is the colocated test of, or `null`.
+ *
+ * This is the fourth attribution ({@link RunAttribution}), and the only one the
+ * script does not report about itself. The runner knows two facts the script
+ * cannot: which file it just executed, and which surfaces this repo has. Put
+ * together by {@link isColocatedTest} — the SAME predicate that already grants
+ * `colocated` evidence for that file merely existing — they say which surface the
+ * run was about.
+ *
+ * ## The bar is a REPORTED CHECK, not exit zero
+ *
+ * 🔴 WITHOUT THAT, THIS WOULD BE THE ORIGINAL DEFECT WEARING THE STRONGER LABEL.
+ * Measured 2026-08-17 on a two-skill fixture: `touch
+ * .claude/skills/argument-arc/argument-arc.harness.mjs` — a ZERO-BYTE file —
+ * drops the untested count by one, and `vigiles test` then RUNS it and prints
+ * `✓ … passed`. An empty script exits 0. Attributing on "it ran and exited 0"
+ * would promote that file from `colocated` ("the file EXISTS, not that it ran")
+ * to "MEASURED BY A RUN", which is strictly worse than the hole being closed:
+ * the same emptiness, now wearing execution's name.
+ *
+ * A zero-byte file cannot report a check — it never imports vigiles — so its
+ * `checks` is `undefined` and it earns nothing here, falling back to colocation
+ * exactly as before. This is `statusFor`'s distinction reused, not a new one:
+ * silence is the legacy branch, `0` is `vacuous` (never a `pass`, so it never
+ * reaches this function), and a positive count is the script saying through the
+ * library that it observed something.
+ *
+ * ⚠️ WHAT THIS STILL CANNOT SEE, stated rather than implied: a harness that
+ * asserts entirely on its own and never imports vigiles reports nothing, so it is
+ * indistinguishable here from the empty file. It keeps its colocated credit and
+ * gains no execution credit. That is deliberate and it is `check-count.ts`'s
+ * standing decision — force-loading the counter into every child was considered
+ * and rejected there, because it would report `0` for a blameless hand-rolled
+ * harness. The cost is a missed upgrade; the alternative was a false one.
+ *
+ * 🔴 AMBIGUITY RESOLVES TO NOTHING, the same rule {@link only} applies to probes.
+ * Two surfaces in one directory can both claim a script when one name prefixes
+ * the other (`foo` and `foo.bar` both match `foo.bar.harness.mjs`, since
+ * colocation asks only that the basename START with `<name>.`). Exactly one of
+ * them is what the test is about, and nothing here can say which — so crediting
+ * both would INVENT a record, which is the failure the rest of this file spends
+ * its length refusing.
+ */
+function colocatedSurface(
+  run: ScriptRunRecord,
+  surfaces: readonly Surface[],
+  alreadyProbed: ReadonlySet<string>,
+): Surface | null {
+  if ((run.checks ?? 0) <= 0) return null;
+  const matches = surfaces.filter(
+    (s) =>
+      s.path !== run.file &&
+      !alreadyProbed.has(s.path) &&
+      isColocatedTest(s, run.file),
+  );
+  return matches.length === 1 ? (matches[0] ?? null) : null;
 }
 
 /**
@@ -428,6 +562,12 @@ export function runsFromResults(
  * run); a surface it cannot read is skipped — an unhashable record could never
  * be checked for staleness and would therefore be permanent, unfalsifiable
  * coverage.
+ *
+ * Two sources of attribution, in one pass: the probes a run reported, and — for a
+ * run that reported a check — the surface its own script is colocated with
+ * ({@link colocatedSurface}). The dedupe key already carries `how`, so a run that
+ * BOTH probed a surface and sits beside it records once per attribution and the
+ * report can still say which kinds of evidence exist.
  */
 export function recordsFrom(
   opts: ResolveOptions & {
@@ -440,15 +580,39 @@ export function recordsFrom(
 ): CoverageRun[] {
   const out: CoverageRun[] = [];
   const seen = new Set<string>();
-  const pairs = opts.runs.flatMap((run) =>
-    run.probes.flatMap((probe) =>
-      resolveProbe(probe, opts.surfaces, opts).map((surface) => ({
-        run,
-        probe,
-        surface,
-      })),
-    ),
-  );
+  const pairs: {
+    run: ScriptRunRecord;
+    probe: { how: RunAttribution };
+    surface: Surface;
+  }[] = [];
+  for (const run of opts.runs) {
+    const probed = new Set<string>();
+    for (const probe of run.probes)
+      for (const surface of resolveProbe(probe, opts.surfaces, opts)) {
+        pairs.push({ run, probe, surface });
+        probed.add(surface.path);
+      }
+    // 🔴 COLOCATION IS THE FALLBACK ATTRIBUTION, NOT AN ADDITIONAL ONE, and
+    // skipping what this run already named is what keeps it from DOWNGRADING the
+    // record. MEASURED 2026-08-17 on a 52-surface repo the first time this tier
+    // ran: `.claude/hooks/paper-lint.mjs` went from `command` — the harness
+    // literally executed that path — to `colocated`, and three `fired` skill
+    // activations went the same way. The cause is one key: `mergeRuns` dedupes on
+    // (surface, tier, script) and does NOT include `how`, so a second attribution
+    // of the same pair does not sit beside the first, it REPLACES it — and with
+    // both records stamped the same `at`, `held.at <= run.at` hands the win to
+    // whichever was pushed last.
+    //
+    // The ordering is the same one this file already applies one level up: a
+    // direct observation of the surface being exercised outranks an inference
+    // from where a file sits. Emitting both and teaching the merge to keep the
+    // stronger was the alternative; it costs a wider key, a second record per
+    // pair, and a ranking function — to store a fact that adds nothing, since
+    // both resolve to the same `executed` evidence.
+    const beside = colocatedSurface(run, opts.surfaces, probed);
+    if (beside)
+      pairs.push({ run, probe: { how: "colocated" }, surface: beside });
+  }
   for (const { run, probe, surface } of pairs) {
     const key = `${surface.path}\u0000${run.file}\u0000${probe.how}`;
     if (seen.has(key)) continue;
@@ -599,7 +763,7 @@ function isCoverageRun(value: unknown): value is CoverageRun {
     typeof r.path === "string" &&
     typeof r.name === "string" &&
     (r.tier === "harness" || r.tier === "eval") &&
-    (r.how === "command" || r.how === "fired" || r.how === "dispatched") &&
+    isAttribution(r.how) &&
     typeof r.by === "string" &&
     typeof r.at === "string" &&
     typeof r.sha === "string"
