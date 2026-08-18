@@ -532,17 +532,19 @@ test("scanPlugin reports the instruction file on any repo (spec-managed vs hand-
 
 test("scanPlugin flags a never-available agent tool, suppresses unrecognized plugin tools", () => {
   const dir = makeTmpDir("scan-toolcontract");
-  // A real-world shape (wshobson agent-teams): a never-available tool (Agent)
-  // mixed with plugin-provided tools (TeamCreate, TaskGet) vigiles can't know.
+  // A real-world shape (wshobson agent-teams): an unconditionally-withheld tool
+  // (AskUserQuestion) mixed with a plugin-provided tool (TeamCreate) vigiles
+  // can't know, plus `Agent` and `TaskGet`, which ARE real and must not score —
+  // `Agent` is the tool a lead exists to use.
   write(
     dir,
     "agents/lead.md",
-    "---\nname: lead\ntools: Read, Bash, Agent, TeamCreate, TaskGet\n---\nbody\n",
+    "---\nname: lead\ntools: Read, Bash, Agent, TeamCreate, TaskGet, AskUserQuestion\n---\nbody\n",
   );
   const agent = scanPlugin(dir).agents.find((a) => a.name === "lead");
-  assert.equal(agent?.toolIssues.length, 1, "only the never-available tool");
+  assert.equal(agent?.toolIssues.length, 1, "only the withheld tool scores");
   assert.equal(agent?.toolIssues[0].kind, "never-available");
-  assert.equal(agent?.toolIssues[0].tool, "Agent");
+  assert.equal(agent?.toolIssues[0].tool, "AskUserQuestion");
   // the report leads with the ✗ + the actionable message
   assert.match(
     formatScanReport(scanPlugin(dir)),
@@ -578,7 +580,9 @@ test("scanPlugin flags a typo'd hook event, suppresses a framework/custom event"
     JSON.stringify({
       name: "x",
       hooks: {
-        // a typo of PreToolUse → flagged; a han-style custom event → suppressed
+        // a typo of PreToolUse → scored; a custom/unknown event → advisory, so
+        // it is reported but never costs a grade (`TeammateIdle` has since
+        // become a REAL Claude Code event, which is the whole point)
         PreToolUSe: [
           { matcher: "Edit", hooks: [{ type: "command", command: "echo a" }] },
         ],
@@ -1004,6 +1008,172 @@ test("scanPlugin does not treat a commands/agents/ dir as subagents", () => {
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin reads agents/ SUBDIRECTORIES, scoping the name by subfolder", () => {
+  // The vendor documents this and vigiles read only the top level. Verbatim from
+  // https://code.claude.com/docs/en/sub-agents (re-fetched 2026-08-18):
+  //   "Plugin `agents/` directories are also scanned recursively. Unlike project
+  //    and user scopes, a subfolder inside a plugin's `agents/` directory becomes
+  //    part of the scoped identifier: a file at `agents/review/security.md` in
+  //    plugin `my-plugin` registers as `my-plugin:review:security`."
+  // Measured on rsmdt/the-startup @ 88d447c7: 16 agent files on disk, 2 read —
+  // and the plugin was still graded B (80/100) over that 12.5%.
+  const dir = makeTmpDir("scan-recursive-agents");
+  write(
+    dir,
+    "agents/top.md",
+    "---\nname: top\ndescription: A top-level agent for the recursion probe.\ntools: Read\n---\nbody\n",
+  );
+  write(
+    dir,
+    "agents/review/security.md",
+    "---\nname: security\ndescription: Reviews a diff for security defects.\ntools: Read\n---\nbody\n",
+  );
+  write(
+    dir,
+    "agents/review/deep/perf.md",
+    "---\nname: perf\ndescription: Reviews a diff for performance defects.\ntools: Read\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  assert.deepEqual(
+    r.agents.map((a) => a.name),
+    ["review:deep:perf", "review:security", "top"],
+  );
+  cleanupTmpDir(dir);
+});
+
+test("a nested agent's own defects are reported, not just its existence", () => {
+  // The point of reading the subdirectory is the findings inside it: on
+  // rsmdt/the-startup, 12 real malformed-frontmatter defects sat in the 87.5% of
+  // the surface that was never opened.
+  const dir = makeTmpDir("scan-recursive-agent-defects");
+  write(dir, "agents/team/broken.md", "# Broken\nno frontmatter at all\n");
+  const r = scanPlugin(dir);
+  assert.deepEqual(
+    r.agents.map((a) => a.name),
+    ["team:broken"],
+  );
+  assert.ok(
+    r.frontmatterIssues.some((i) => i.path.endsWith("agents/team/broken.md")),
+    "a nested agent missing name/description must be flagged",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("recursion does not leak through the two nesting traps, even at depth", () => {
+  // The silent half. Recursion widened the agent pattern, so re-prove that the
+  // skill-internal and command-namespaced exclusions still hold — and hold when
+  // the trap dir itself is nested, which the pre-recursion pattern never had to
+  // survive.
+  const dir = makeTmpDir("scan-recursive-agents-traps");
+  write(dir, "skills/skill-creator/agents/analyzer.md", "# Analyzer\nprose\n");
+  write(
+    dir,
+    "skills/skill-creator/agents/sub/comparator.md",
+    "# Comparator\nprose\n",
+  );
+  write(dir, "commands/agents/spawn.md", "# spawn\nprose\n");
+  write(dir, "commands/agents/sub/status.md", "# status\nprose\n");
+  write(
+    dir,
+    "agents/reviewer.md",
+    "---\nname: reviewer\ndescription: Review a diff for correctness\ntools: Read\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  assert.deepEqual(
+    r.agents.map((a) => a.name),
+    ["reviewer"],
+  );
+  assert.equal(r.frontmatterIssues.length, 0);
+  cleanupTmpDir(dir);
+});
+
+test("a SKILL.md nested under agents/ is counted ONCE, as an agent", () => {
+  // Reading `agents/` recursively made this shape reachable for the first time:
+  // the file matches the skill pattern (it always did) AND now the agent pattern,
+  // so without the mirror exclusion it would be counted as both — two surfaces
+  // from one file, graded twice. The harness reads skills from the plugin's own
+  // `skills/` dir and every `.md` under `agents/` recursively, so it is an agent.
+  const dir = makeTmpDir("scan-skill-under-agents");
+  write(
+    dir,
+    "agents/team/skills/helper/SKILL.md",
+    "---\nname: helper\ndescription: A skill nested underneath the agents dir.\n---\nbody\n",
+  );
+  write(
+    dir,
+    "agents/real.md",
+    "---\nname: real\ndescription: A genuine top-level agent alongside it.\ntools: Read\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  assert.deepEqual(
+    r.agents.map((a) => a.name),
+    ["real", "team:skills:helper:SKILL"],
+  );
+  assert.deepEqual(
+    r.skills.map((s) => s.name),
+    [],
+    "must not ALSO be a skill",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("a plugin's own skills/ is untouched by that mirror exclusion", () => {
+  // The silent half: the exclusion is scoped to a skills dir sitting UNDER
+  // agents/, so an ordinary plugin's skills must be entirely unaffected.
+  const dir = makeTmpDir("scan-skill-normal");
+  write(
+    dir,
+    "skills/deployer/SKILL.md",
+    "---\nname: deployer\ndescription: Deploys the application to production safely.\n---\nbody\n",
+  );
+  // A skill that itself ships an `agents/` subdir — the shape the OTHER
+  // exclusion exists for. It must stay a skill, and its worker doc must stay
+  // neither a skill nor an agent.
+  write(
+    dir,
+    "skills/skill-creator/SKILL.md",
+    "---\nname: skill-creator\ndescription: Creates new skills end to end for this repo.\n---\nbody\n",
+  );
+  write(dir, "skills/skill-creator/agents/analyzer.md", "# Analyzer\nprose\n");
+  const r = scanPlugin(dir);
+  assert.deepEqual(
+    r.skills.map((s) => s.name),
+    ["deployer", "skill-creator"],
+  );
+  assert.deepEqual(
+    r.agents.map((a) => a.name),
+    [],
+  );
+  cleanupTmpDir(dir);
+});
+
+test("the coverage discoverer sees exactly the agents the scan classifier does", () => {
+  // 🔴 The reason AGENT_FILE_LEAF_RE exists. THREE places independently spelled
+  // the agent-file depth rule: this classifier and the two coverage discoverers.
+  // Fixing only the classifier would have made `audit` print a subagent count
+  // and an untested-surface count computed over different sets of files — a new
+  // internal disagreement, introduced by the fix for the old one.
+  const dir = makeTmpDir("scan-recursive-agents-coverage");
+  for (const p of [
+    "agents/top.md",
+    "agents/a/one.md",
+    "agents/a/b/two.md",
+    "agents/c/three.md",
+  ]) {
+    write(
+      dir,
+      p,
+      "---\nname: x\ndescription: An agent for the coverage-agreement probe.\ntools: Read\n---\nbody\n",
+    );
+  }
+  const r = scanPlugin(dir);
+  assert.equal(r.agents.length, 4);
+  // `untested` counts surfaces with no vigiles test; none of these has one, so
+  // it must equal the agent count. If the discoverers disagree, so do these.
+  assert.equal(r.untested, r.agents.length);
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin still flags a real top-level subagent missing frontmatter", () => {
   // Guard the other direction: the nested-agents exclusion must NOT silence a
   // genuine top-level agents/ file that really is missing name/description.
@@ -1075,6 +1245,93 @@ test("scanPlugin surfaces a dangling ref from a hook script, but ignores prose m
   assert.ok(text.includes("structural issue")); // counted in the verdict
   // shown once (as a ✗), not duplicated in the free-text Warnings block
   assert.ok(!text.includes("intra-plugin file(s) that don't exist"));
+  cleanupTmpDir(dir);
+});
+
+test("scanPlugin: the reference extractor does not accuse a file that is present", () => {
+  // The disk half of the boundary + comment fixes (dogfood 2026-08-17). Three
+  // planted false-accusation shapes and one control, in one plugin so the
+  // control proves the detector is still on.
+  const dir = makeTmpDir("scan-refs");
+  write(dir, ".claude-plugin/plugin.json", '{"name":"p","version":"0.1.0"}');
+  write(dir, "hooks/hooks.json", '{"hooks":{}}');
+  // 1. `.json` truncated to `.js` — the file is right there.
+  write(dir, "hooks/a.js", 'load("./hooks.json"); // see hooks/hooks.json\n');
+  // 2. the surface dir matched inside a longer name.
+  write(dir, "claude-agents/adv.md", "---\nname: adv\ndescription: adv\n---\n");
+  write(
+    dir,
+    "hooks/b.js",
+    'new URL("../claude-agents/adv.md", import.meta.url);\n',
+  );
+  // 3. a path named only in a full-line JSDoc comment.
+  write(
+    dir,
+    "hooks/c.js",
+    "/**\n * `git log -- hooks/never-existed.mjs` is refused.\n */\nrun();\n",
+  );
+  // 4. CONTROL — a genuinely missing ref on a real code line, reported under
+  //    the name the author actually wrote.
+  write(dir, "hooks/d.js", 'const p = "hooks/gone.json";\nload(p);\n');
+  assert.deepEqual(scanPlugin(dir).danglingRefs, ["hooks/gone.json"]);
+  cleanupTmpDir(dir);
+});
+
+test("scanPlugin: an inline `node -e` hook is not reported as a missing script", () => {
+  // ayghri/i-have-adhd + microsoft/power-platform-skills: a character run cut
+  // out of the JavaScript payload was reported as the hook's script name, and
+  // rendered as that name in the report, while the real .mjs sat on disk. Nine
+  // such findings across the 32-repo corpus.
+  const dir = makeTmpDir("scan-node-e");
+  write(dir, ".claude-plugin/plugin.json", '{"name":"p","version":"0.1.0"}');
+  write(dir, "hooks/always-on.mjs", "console.log(1)\n");
+  const inline =
+    'node -e "(async()=>{const root=process.env.CLAUDE_PLUGIN_ROOT;' +
+    "if(root)await import(require('node:url').pathToFileURL(" +
+    "require('node:path').join(root,'hooks','always-on.mjs')).href)})()\"";
+  write(
+    dir,
+    "hooks/hooks.json",
+    JSON.stringify({
+      hooks: {
+        SessionStart: [{ hooks: [{ type: "command", command: inline }] }],
+      },
+    }),
+  );
+  const r = scanPlugin(dir);
+  assert.deepEqual(r.hooks, []); // no script token at all…
+  assert.equal(r.inlineHooks, 1); // …it is an inline one-liner, and says so
+  cleanupTmpDir(dir);
+});
+
+test("scanPlugin: a hook script on the RIGHT of && is still existence-checked", () => {
+  // The control for the extractor choice: `leafArgvSource` drops this leaf by
+  // design, so reusing it here would have traded a false positive for a miss.
+  const dir = makeTmpDir("scan-and-hook");
+  write(dir, ".claude-plugin/plugin.json", '{"name":"p","version":"0.1.0"}');
+  write(
+    dir,
+    "hooks/hooks.json",
+    JSON.stringify({
+      hooks: {
+        SessionStart: [
+          {
+            hooks: [
+              {
+                type: "command",
+                command: 'cd "$CLAUDE_PLUGIN_ROOT" && node hooks/gone.mjs',
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+  const r = scanPlugin(dir);
+  assert.deepEqual(
+    r.hooks.map((h) => [h.script, h.status]),
+    [["hooks/gone.mjs", "missing"]],
+  );
   cleanupTmpDir(dir);
 });
 
@@ -1986,5 +2243,108 @@ test("…while the same skill under Claude Code is still reported and still scor
     (safetyScore(r) ?? 100) < 100,
     "an unfenced Claude Code skill still costs Safety",
   );
+  cleanupTmpDir(dir);
+});
+
+test("advisory vocabulary notes REACH the report (computed-then-dropped guard)", () => {
+  // The first cut of this feature classified names correctly and then threw the
+  // advisory half away, because `scan` stored only the scored issues. The
+  // detector tests all passed and `OnFileSave` was still silent in the output —
+  // so this asserts the WIRING, not the classification.
+  const dir = makeTmpDir("scan-vocab-notes");
+  write(
+    dir,
+    ".claude-plugin/plugin.json",
+    JSON.stringify({
+      name: "x",
+      hooks: {
+        OnFileSave: [{ hooks: [{ type: "command", command: "echo a" }] }],
+      },
+    }),
+  );
+  write(
+    dir,
+    "agents/p.md",
+    "---\nname: p\ndescription: Probe agent\ntools: Agent, NotARealTool\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+
+  const notes = r.vocabularyNotes ?? [];
+  assert.equal(
+    notes.length,
+    3,
+    "one unknown event + one conditional + one unknown tool",
+  );
+  assert.ok(notes.some((n) => /OnFileSave/.test(n.message)));
+  assert.ok(notes.some((n) => /^Agent is a real tool/.test(n.message)));
+  assert.ok(notes.some((n) => /NotARealTool/.test(n.message)));
+
+  // …and they must be visible in the rendered report, not just on the object.
+  const text = formatScanReport(r);
+  assert.match(text, /Vocabulary notes \(advisory, not graded\)/);
+  assert.match(text, /OnFileSave/);
+  assert.match(text, /vigiles is out of date — not your config/);
+
+  // …while contributing NOTHING to the graded findings.
+  assert.deepEqual(r.hookEventIssues, []);
+  assert.deepEqual(r.agents.find((a) => a.name === "p")?.toolIssues, []);
+  cleanupTmpDir(dir);
+});
+
+test("a clean plugin produces NO vocabulary notes (the silent half)", () => {
+  const dir = makeTmpDir("scan-vocab-clean");
+  write(
+    dir,
+    ".claude-plugin/plugin.json",
+    JSON.stringify({
+      name: "x",
+      hooks: {
+        PreToolUse: [{ hooks: [{ type: "command", command: "echo a" }] }],
+      },
+    }),
+  );
+  write(
+    dir,
+    "agents/p.md",
+    "---\nname: p\ndescription: Probe agent\ntools: Read, Grep\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  assert.deepEqual(r.vocabularyNotes, []);
+  assert.doesNotMatch(formatScanReport(r), /Vocabulary notes/);
+  cleanupTmpDir(dir);
+});
+
+test("conditional tool notes are GROUPED by condition, not repeated per tool", () => {
+  // A delegating subagent legitimately declares many foreground-only tools.
+  // Eight identical paragraphs is noise from a tool whose pitch is precision —
+  // this is the Citadel shape, where ungrouped output was 8 lines per agent.
+  const dir = makeTmpDir("scan-vocab-group");
+  write(
+    dir,
+    "agents/orch.md",
+    "---\nname: orch\ndescription: Orchestrator subagent\n" +
+      "tools: Read, Agent, CronCreate, CronDelete, CronList, TaskCreate, TaskList\n---\nbody\n",
+  );
+  const notes = scanPlugin(dir).vocabularyNotes ?? [];
+  // 6 conditional tools across 3 distinct conditions + Agent's own = 3 lines.
+  assert.equal(notes.length, 3, notes.map((n) => n.message).join("\n"));
+  assert.ok(
+    notes.some((n) =>
+      /CronCreate, CronDelete, CronList are real tools/.test(n.message),
+    ),
+  );
+  assert.ok(notes.some((n) => /^Agent is a real tool/.test(n.message)));
+  // every declared conditional tool is still named somewhere — grouping must
+  // compress the prose, never drop a tool.
+  const all = notes.map((n) => n.message).join(" ");
+  for (const t of [
+    "Agent",
+    "CronCreate",
+    "CronDelete",
+    "CronList",
+    "TaskCreate",
+    "TaskList",
+  ])
+    assert.match(all, new RegExp(`\\b${t}\\b`));
   cleanupTmpDir(dir);
 });

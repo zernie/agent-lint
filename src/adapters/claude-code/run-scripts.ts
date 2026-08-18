@@ -124,13 +124,26 @@ import type { NodeCaps } from "../../ts-runner-caps.js";
  * type stripping. Throws a clear, actionable error when neither is available.
  * Pure — exported for testing.
  *
+ * `entry` interposes a program that takes the script as its ARGUMENT instead of
+ * running the script as the program. `vigiles eval` passes one: an eval file
+ * describes its eval rather than running it (see `src/eval-define.ts`), so
+ * something has to import the description and execute what it declares. Harness
+ * scripts pass nothing and are launched exactly as before.
+ *
  * 🔴 The disjunction below is `canRunTypeScript` — keep them together. When they
  * drifted, the tool recommended a `.ts` file and then refused to run it.
  */
-export function interpreterArgs(file: string, caps: NodeCaps): string[] {
-  if (!TS_EXT.test(file)) return [file];
-  if (caps.tsx) return ["--import", "tsx", file];
-  if (caps.stripTypes) return ["--experimental-strip-types", file];
+export function interpreterArgs(
+  file: string,
+  caps: NodeCaps,
+  entry?: string,
+): string[] {
+  // The TS flags are chosen from FILE's extension even when `entry` runs — a
+  // JavaScript entry importing a `.ts` eval still needs the loader installed.
+  const tail = entry === undefined ? [file] : [entry, file];
+  if (!TS_EXT.test(file)) return tail;
+  if (caps.tsx) return ["--import", "tsx", ...tail];
+  if (caps.stripTypes) return ["--experimental-strip-types", ...tail];
   throw new Error(
     `Cannot run TypeScript test script "${file}": install tsx ` +
       `(npm i -D tsx) or use Node >= 22.6, or author it as a .mjs file.`,
@@ -195,8 +208,19 @@ function readCheckReport(
   }
 }
 
+/** Extra wiring for {@link runScripts}. */
+export interface RunScriptsOptions {
+  /**
+   * A program to run INSTEAD of each script, with the script's path as its one
+   * argument. `vigiles eval` passes `dist/eval-entry.js`; `vigiles test` passes
+   * nothing. See {@link interpreterArgs}.
+   */
+  readonly entry?: string;
+}
+
 /**
- * Run each script as `node <file>`, inheriting stdio so the script's own report
+ * Run each script as `node <file>` (or `node <entry> <file>`, see
+ * {@link RunScriptsOptions}), inheriting stdio so the script's own report
  * streams to the console. `env` is merged over `process.env` for every child
  * (e.g. `VIGILES_TRIALS`). Returns the per-file exit codes + check counts.
  *
@@ -214,6 +238,7 @@ export function runScripts(
   files: readonly string[],
   cwd: string,
   env: NodeJS.ProcessEnv = {},
+  opts: RunScriptsOptions = {},
 ): ScriptRunResult[] {
   const caps = detectNodeCaps(cwd);
   const results: ScriptRunResult[] = [];
@@ -222,7 +247,7 @@ export function runScripts(
     files.forEach((file, i) => {
       let argv: string[];
       try {
-        argv = interpreterArgs(file, caps);
+        argv = interpreterArgs(file, caps, opts.entry);
       } catch (e) {
         console.error(`✗ ${file}: ${(e as Error).message}`);
         results.push({ file, code: 1, status: "fail" });

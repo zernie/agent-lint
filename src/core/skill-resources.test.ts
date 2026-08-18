@@ -373,3 +373,44 @@ describe("skillResourceIssues", () => {
     ).toHaveLength(1);
   });
 });
+
+describe("skillResourceIssues — a link's TEXT is not a reference (dogfood 2026-08-17)", () => {
+  it("does not flag a code span inside a link's text when the DESTINATION resolves", () => {
+    // microsoft/power-platform-skills: the destination is 23KB and present in a
+    // sibling skill; the backtick span is the label for it. Reported as a
+    // missing bundled resource — an accusation against a correct link.
+    const body =
+      "See [`references/api.md` § Lookups](../b/references/api.md#lookups) for the pattern.";
+    expect(run(body, existsOnly())).toEqual([]);
+  });
+
+  it("does not flag it even when the destination is one this detector skips", () => {
+    // rohitg00/pro-workflow: `[`references/models-2026.md`](../../references/models-2026.md)`.
+    // The `../` destination is deliberately out of scope (it leaves the skill
+    // dir), and "out of scope" must mean silence, not fall back to the label.
+    const body =
+      "See [`references/models-2026.md`](../../references/models-2026.md) for prices.";
+    expect(run(body, existsOnly())).toEqual([]);
+  });
+
+  it("STILL flags a bare inline bundle path that is not inside any link", () => {
+    // The other half. Without this the fix above is indistinguishable from
+    // deleting the inline-path check.
+    const found = run("Run `scripts/missing.sh` first.", existsOnly());
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ ref: "scripts/missing.sh", kind: "path" });
+  });
+
+  it("STILL flags a link whose destination is a missing bundled file", () => {
+    const found = run("Read [the API](references/api.md) now.", existsOnly());
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ ref: "references/api.md", kind: "link" });
+  });
+
+  it("does not read link syntax that lives inside a code span", () => {
+    // rsmdt/the-startup documents a checklist FORMAT; there is no link on the
+    // line, and `phase-N.md` is a metavariable that will never exist.
+    const body = "Parse lines matching: `- [ ] [Phase N: Title](phase-N.md)`";
+    expect(run(body, existsOnly())).toEqual([]);
+  });
+});

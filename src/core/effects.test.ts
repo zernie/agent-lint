@@ -33,8 +33,9 @@ test("Grep and Glob are read-only", () => {
   assert.equal(classifyToolEffect("Glob", d), "read-only");
 });
 
-test("LS is read-only", () => {
-  assert.equal(classifyToolEffect("LS", d), "read-only");
+test("ToolSearch and LSP are read-only — they only report state", () => {
+  assert.equal(classifyToolEffect("ToolSearch", d), "read-only");
+  assert.equal(classifyToolEffect("LSP", d), "read-only");
 });
 
 test("Write is side-effecting", () => {
@@ -45,9 +46,8 @@ test("Bash is side-effecting (conservatively — undecidable at tool-name level)
   assert.equal(classifyToolEffect("Bash", d), "side-effecting");
 });
 
-test("Edit and MultiEdit are side-effecting", () => {
+test("Edit is side-effecting", () => {
   assert.equal(classifyToolEffect("Edit", d), "side-effecting");
-  assert.equal(classifyToolEffect("MultiEdit", d), "side-effecting");
 });
 
 test("WebFetch and WebSearch are side-effecting", () => {
@@ -64,10 +64,30 @@ test("TodoWrite is side-effecting", () => {
   assert.equal(classifyToolEffect("TodoWrite", d), "side-effecting");
 });
 
-test("NotebookEdit, BashOutput, KillBash are side-effecting", () => {
+test("NotebookEdit and PowerShell are side-effecting", () => {
   assert.equal(classifyToolEffect("NotebookEdit", d), "side-effecting");
-  assert.equal(classifyToolEffect("BashOutput", d), "side-effecting");
-  assert.equal(classifyToolEffect("KillBash", d), "side-effecting");
+  // PowerShell is Bash's Windows sibling — a shell, so conservatively effectful.
+  assert.equal(classifyToolEffect("PowerShell", d), "side-effecting");
+});
+
+test("Monitor is side-effecting — it runs a script, despite reading like an observer", () => {
+  // The vendor: "Claude writes a small script, runs it in the background", and it
+  // can open a WebSocket. Execution plus network. Getting this wrong would let a
+  // spawning/executing tool pass the lethal-trifecta check it should fail.
+  assert.equal(classifyToolEffect("Monitor", d), "side-effecting");
+});
+
+test("Agent (and its Task alias) are side-effecting — they spawn", () => {
+  assert.equal(classifyToolEffect("Agent", d), "side-effecting");
+  assert.equal(classifyToolEffect("Task", d), "side-effecting");
+});
+
+test("tools that no longer exist classify as unknown, not read-only", () => {
+  // BashOutput / KillBash / MultiEdit / LS appear nowhere in the vendor docs.
+  // "unknown" is the honest bucket — it keeps purity at `unrestricted` rather
+  // than silently declaring a name we cannot place harmless.
+  for (const gone of ["BashOutput", "KillBash", "MultiEdit", "LS"])
+    assert.equal(classifyToolEffect(gone, d), "unknown", gone);
 });
 
 test("a Tool(restriction) suffix is stripped before classifying — Bash(git:*) → side-effecting", () => {

@@ -4,69 +4,92 @@
  * (`PreToolUse`, `SessionStart`, …); a TYPO (`PreToolUSe`) means the hook
  * silently never fires — a dead registration no generic JSON linter catches.
  *
- * Like the tool catalog, the event set is NOT closed in practice: frameworks
- * extend it (TheBushidoCollective/han ships a custom runtime with `TeammateIdle`,
- * `WorktreeRemove`, … in its own `hooks.json`). So the audit path (scan/lint) is
- * HIGH-PRECISION — `confidentHookEventIssues` keeps only a close typo
- * (a did-you-mean within edit distance 2), never a bare unrecognized event that
- * may be a custom/future one. ONE detector (one-detector-no-drift): scan + the
- * `hook-events` lint rule call the same code. Dialect injected (core ⊄ adapter).
+ * The event set is NOT closed in practice: the vendor keeps adding events, and
+ * frameworks ship custom runtimes with their own (TheBushidoCollective/han fires
+ * `TeammateIdle`, `WorktreeRemove`, … from its own `hooks.json` — both of which
+ * have since become real Claude Code events). This check used to handle that by
+ * reporting an unknown event ONLY when it sat within edit distance 2 of a known
+ * one. That is not a confidence signal, and it failed both ways at once:
+ * `Setup`, a documented event, was accused of never firing and told to become
+ * `Stop`; twenty-one other documented events drew nothing, because they happened
+ * to be further than two characters from anything in a nine-name list.
+ *
+ * Now every name is CLASSIFIED against the dialect's vocabulary
+ * (`core/vocabulary.ts`) and every verdict is reported — with the severity
+ * coming from the verdict rather than from the caller. An event vigiles doesn't
+ * hold is an `advisory` that names vigiles's own capture as the thing that may
+ * be stale; it is surfaced and never scored, so a newer or custom event cannot
+ * cost anyone a grade. ONE detector (one-detector-no-drift): scan + the
+ * `hook-events` lint rule + compiled-hook `on:` validation call the same code.
+ * Dialect injected (core ⊄ adapter).
  */
 import type { HarnessDialect } from "./dialect.js";
-import { editDistance } from "./edit-distance.js";
+import {
+  classify,
+  termIssue,
+  vocabularyFromLists,
+  type HarnessVocabulary,
+  type IssueSeverity,
+  type TermVerdict,
+} from "./vocabulary.js";
 
 export interface HookEventIssue {
   readonly event: string;
-  /** Closest known event (did-you-mean), or null. */
+  /** Which vocabulary verdict produced this — the input to every policy. */
+  readonly verdict: TermVerdict["kind"];
+  /** Closest known event (did-you-mean), or null. Message decoration only. */
   readonly suggestion: string | null;
+  /** `"scored"` counts toward the grade; `"advisory"` never does. */
+  readonly severity: IssueSeverity;
   readonly message: string;
 }
 
-/** Closest known hook event by edit distance (≤ 2) — a confidence signal. */
-function closestEvent(event: string, dialect: HarnessDialect): string | null {
-  let best: string | null = null;
-  let bestDistance = Infinity;
-  for (const known of dialect.hookEvents) {
-    const d = editDistance(event.toLowerCase(), known.toLowerCase());
-    if (d < bestDistance) {
-      bestDistance = d;
-      best = known;
-    }
-  }
-  return bestDistance <= 2 ? best : null;
-}
-
 /**
- * The HIGH-CONFIDENCE subset (what scan / lint act on): only an unrecognized
- * event that's a close typo of a real one. A bare unknown (no near match) is
- * likely a framework/custom event, not a defect — never flagged when auditing.
+ * The event vocabulary this dialect verifies against — its declared one, else a
+ * synthesised one built from the flat `hookEvents` list so an adapter that
+ * predates vocabularies keeps working.
  */
-export function confidentHookEventIssues(
-  issues: readonly HookEventIssue[],
-): HookEventIssue[] {
-  return issues.filter((i) => i.suggestion !== null);
+export function hookEventVocabulary(
+  dialect: HarnessDialect,
+): HarnessVocabulary {
+  return (
+    dialect.hookEventVocabulary ??
+    vocabularyFromLists(
+      `${dialect.name} hook event`,
+      `${dialect.name} adapter (no recorded capture)`,
+      dialect.hookEvents,
+    )
+  );
 }
 
 /**
- * Verify hook-event names against the dialect catalog. Returns one issue per
- * unrecognized event. Like the tool-contract check, a suggestion (edit distance
- * ≤ 2) is the confidence signal that an unknown is really a typo of a real event.
+ * Verify hook-event names against the dialect vocabulary. Returns one issue per
+ * name that isn't plainly available, each already carrying its severity — see
+ * {@link scoredIssues} / {@link advisoryIssues} to split them.
  */
 export function verifyHookEvents(
   events: readonly string[],
   dialect: HarnessDialect,
 ): HookEventIssue[] {
-  const known = new Set(dialect.hookEvents);
+  const vocab = hookEventVocabulary(dialect);
   const issues: HookEventIssue[] = [];
   for (const event of events) {
-    if (known.has(event)) continue;
-    const near = closestEvent(event, dialect);
-    const hint = near ? ` Did you mean "${near}"?` : "";
+    const issue = termIssue(
+      vocab,
+      classify(vocab, event),
+      "Hook event",
+      "a hook here never fires",
+    );
+    if (issue === null) continue;
     issues.push({
       event,
-      suggestion: near,
-      message: `Unknown hook event "${event}" — a hook here never fires. Valid events: ${dialect.hookEvents.join(", ")}.${hint}`,
+      verdict: issue.verdict,
+      suggestion: issue.suggestion,
+      severity: issue.severity,
+      message: issue.message,
     });
   }
   return issues;
 }
+
+export { scoredIssues, advisoryIssues, authoringIssues } from "./vocabulary.js";

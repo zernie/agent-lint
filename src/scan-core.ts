@@ -25,9 +25,11 @@ import {
 
 import {
   verifyToolContract,
-  confidentToolIssues,
+  scoredIssues,
+  advisoryIssues,
   disallowedToolIssues,
 } from "./core/tool-contract.js";
+import type { HookEventIssue } from "./core/hook-events.js";
 import { editDistance } from "./core/edit-distance.js";
 import { readFrontmatter, frontmatterScalar } from "./core/frontmatter-read.js";
 import {
@@ -45,6 +47,8 @@ import {
   skillTrifectaIssue,
 } from "./core/lethal-trifecta.js";
 import { skillResourceIssues } from "./core/skill-resources.js";
+import { commandWords } from "./core/bash-effects.js";
+import { scriptWordPattern } from "./core/source-refs.js";
 import { skillMissingFence } from "./core/skill-missing-fence.js";
 import type { SkillRefSource } from "./skill-refs.js";
 import {
@@ -56,7 +60,11 @@ import {
   parseAgentTools,
   parseAgentToolList,
 } from "./adapters/claude-code/agent-tools.js";
-import type { PluginLayout } from "./core/layout.js";
+import {
+  AGENT_FILE_LEAF_RE,
+  agentSurfaceName,
+  type PluginLayout,
+} from "./core/layout.js";
 import type { HarnessDialect } from "./core/dialect.js";
 import type { HookRegistration } from "./core/hook-normalize.js";
 import type { HookScriptEntry } from "./core/hook-block-ineffective.js";
@@ -72,16 +80,42 @@ import type {
   ScanSkillResourceFinding,
   ScanSkillFenceFinding,
   ScanDelegationFinding,
+  VocabularyNote,
 } from "./scan.js";
 
-// A script-path token inside a hook command. The token class is `\S` MINUS the
-// glob metacharacters `*` and `?` (dogfood D1): a real, resolvable hook path
-// never contains them, but a command that merely MENTIONS a glob — e.g.
+// A script-path token, matched against a WHOLE shell WORD. The token class is
+// `\S` MINUS the glob metacharacters `*` and `?` (dogfood D1): a real, resolvable
+// hook path never contains them, but a command that merely MENTIONS a glob — e.g.
 // `find . -name "*.js"` in a hook body — would otherwise have `"*.js"` grabbed as
 // a "script" and reported MISSING (a false positive). Shell vars / braces /
-// quotes / slashes ARE kept (`${CLAUDE_PLUGIN_ROOT}/hooks/x.sh`, `"$HOME"/y.sh`),
-// since resolveScript expands + strips those; only glob patterns are dropped.
-const SCRIPT_RE = /[^\s*?]+\.(?:sh|mjs|cjs|js|ts|py|rb)\b/g;
+// slashes ARE kept (`${CLAUDE_PLUGIN_ROOT}/hooks/x.sh`), since resolveScript
+// expands those. See core/source-refs.ts for the boundary rules.
+const SCRIPT_WORD_RE = scriptWordPattern();
+
+/**
+ * The script-path operands a hook `command` names.
+ *
+ * 🔴 THE COMMAND IS SHELL, SO IT IS PARSED AS SHELL. This used to run
+ * `SCRIPT_RE` over the raw command string, which cannot tell an operand from
+ * the text of an inline program. Against the standard portable-plugin idiom
+ * `node -e "…await import(…join(root,'hooks','always-on.mjs'))…"` it produced
+ * the script name
+ * `import(require(node:url).pathToFileURL(require(node:path).join(root,hooks,always-on.mjs`
+ * and reported it MISSING, while `hooks/always-on.mjs` sat on disk. Nine such
+ * findings across the 32-repo dogfood corpus (2026-08-17), contributing to two
+ * `F/0` grades.
+ *
+ * `commandWords` returns the words a shell would resolve, with inline program
+ * text subtracted, so the report cannot name a fragment of a JavaScript
+ * expression. A command that does not parse as shell yields `null`, and the
+ * caller treats it as an inline one-liner rather than guessing — abstaining is
+ * the direction that cannot accuse.
+ */
+function scriptTokens(command: string): string[] | null {
+  const words = commandWords(command);
+  if (words === null) return null;
+  return words.filter((w) => SCRIPT_WORD_RE.test(w));
+}
 
 // The scalar fields scan reads from a skill/agent `---` block, via the shared
 // lenient reader (core/frontmatter-read.ts) — a real YAML parse with a regex
@@ -155,6 +189,14 @@ export interface SurfaceClassifier {
   readonly isSkill: (f: string) => boolean;
   readonly isAgent: (f: string) => boolean;
   readonly isCommand: (f: string) => boolean;
+  /**
+   * The subagent identity for a path `isAgent` accepts — the layout-scoped name
+   * from {@link agentSurfaceName}. Lives here because the classifier is already
+   * the one thing holding the layout's surface dirs; a caller deriving the name
+   * itself would need the layout too, and would be free to derive a different
+   * one. Null for a path this classifier does not call an agent.
+   */
+  readonly agentName: (f: string) => string | null;
 }
 
 function escapeRe(s: string): string {
@@ -169,18 +211,21 @@ export function makeClassifier(layout: PluginLayout): SurfaceClassifier {
   const agent = at(layout.agentDir);
   const command = at(layout.commandDir);
   const skillRe = skill ? new RegExp(`${skill}[^/]+/SKILL\\.md$`) : null;
-  const agentRe = agent ? new RegExp(`${agent}[^/]+\\.md$`) : null;
+  const agentRe = agent ? new RegExp(`${agent}${AGENT_FILE_LEAF_RE}$`) : null;
   const commandRe = command ? new RegExp(`${command}.+\\.md$`) : null;
-  // A subagent lives at the plugin's TOP-LEVEL `agents/` dir (e.g. `agents/foo.md`
-  // or `.claude/agents/foo.md`), never recursively under ANOTHER surface dir. Two
-  // real-world nesting traps are excluded as false positives:
+  // A subagent lives under the plugin's `agents/` dir AT ANY DEPTH (the harness
+  // reads it recursively — see AGENT_FILE_LEAF_RE for the vendor's wording and
+  // the measurement), but never under ANOTHER surface dir. Two real-world
+  // nesting traps are excluded as false positives:
   //   - `skills/<x>/agents/…` — skill-internal worker docs (Anthropic's skill-creator)
   //   - `commands/agents/…`   — a COMMAND namespaced `/agents:…` (ruvnet/claude-flow),
   //     incl. a `README.md`; these are commands, not dispatchable subagents.
   // Flagging either as a subagent missing frontmatter is a false positive (it
-  // mis-graded a real plugin F). A genuine top-level `agents/foo.md` still
-  // matches. Both excluded dirs are read from the layout (adapter-agnostic). See
-  // scan.test.ts for the regressions.
+  // mis-graded a real plugin F). A genuine `agents/foo.md` — or `agents/x/foo.md`
+  // — still matches. Both excluded dirs are read from the layout
+  // (adapter-agnostic), and both patterns already tolerate depth on BOTH sides of
+  // the `agents/` segment, so the recursion above does not leak through them.
+  // See scan.test.ts for the regressions.
   const nestedUnder = [
     layout.skillDir &&
       `${escapeRe(layout.skillDir)}/.+/${escapeRe(layout.agentDir)}/`,
@@ -195,10 +240,29 @@ export function makeClassifier(layout: PluginLayout): SurfaceClassifier {
     (agentRe?.test(f) ?? false) &&
     !f.endsWith(".spec.ts") &&
     !(nestedAgentRe?.test(f) ?? false);
+  // The MIRROR of the rule above, and it exists because reading `agents/`
+  // recursively made a new shape reachable: `agents/<x>/skills/<y>/SKILL.md` now
+  // matches the agent pattern, and it always matched the skill pattern, so the
+  // one file would be counted as BOTH — inflating two surface counts and grading
+  // it twice. The harness resolves this the same way the existing exclusion
+  // does: it reads skills from the plugin's OWN `skills/` dir, and reads every
+  // `.md` under `agents/` recursively — so this file is a subagent, and is not a
+  // skill. Excluding it here (rather than excluding it from agents) is what keeps
+  // the two classifiers disjoint AND agreeing with the harness.
+  const nestedSkillRe =
+    layout.skillDir && layout.agentDir
+      ? new RegExp(
+          `(?:^|/)${escapeRe(layout.agentDir)}/(?:.+/)?${escapeRe(layout.skillDir)}/`,
+        )
+      : null;
+  const isSkill = (f: string): boolean =>
+    (skillRe?.test(f) ?? false) && !(nestedSkillRe?.test(f) ?? false);
   return {
-    isSkill: (f) => skillRe?.test(f) ?? false,
+    isSkill,
     isAgent,
     isCommand: (f) => commandRe?.test(f) ?? false,
+    agentName: (f) =>
+      isAgent(f) ? agentSurfaceName(f, layout.agentDir) : null,
   };
 }
 
@@ -559,19 +623,29 @@ export function scanAgents(
     // including every side-effecting one — pass the wildcard sentinel so
     // effectSurface correctly classifies it as `"unrestricted"`.
     const surface = effectSurface(tools ?? ["*"], dialect);
+    // Classify ONCE; the scored and advisory halves are two views of one result,
+    // so they cannot disagree about what the vocabulary said.
+    const vocabIssues = tools ? verifyToolContract(tools, dialect) : [];
     out.push({
-      name: basename(path, ".md"),
+      // The layout-scoped identity, NOT the basename — see `agentSurfaceName`
+      // for why recursion makes a basename unsafe here. Identical to the
+      // basename for a top-level agent, so no existing report moves.
+      name: cls.agentName(path) ?? basename(path, ".md"),
       path: ctx
         ? reportedSurfacePath(path, ctx.sources?.[path], ctx.root)
         : path,
       tools,
       // Cross-reference the declared rail against the dialect catalog — the moat.
-      // Auditing third-party plugins → only the HIGH-CONFIDENCE issues (never-
-      // available + close typos); a bare unrecognized tool is likely plugin/MCP-
-      // provided, not a defect (the TaskCreate/TaskGet lesson). See tool-contract.ts.
-      toolIssues: tools
-        ? confidentToolIssues(verifyToolContract(tools, dialect))
-        : [],
+      // The SCORED half only: a tool the platform withholds unconditionally, or a
+      // name one edit from a real one (no two real names are that close, so that
+      // is a typo). Everything else the vocabulary has an opinion about goes to
+      // `toolNotes` — surfaced, never graded. See core/vocabulary.ts.
+      toolIssues: tools ? scoredIssues(vocabIssues) : [],
+      // Advisory: a real tool the platform withholds only under a condition
+      // vigiles cannot see (`Agent` at the depth limit), and a name that is
+      // simply not in our capture — which may mean the catalog is stale, not
+      // that the contract is wrong.
+      toolNotes: tools ? advisoryIssues(vocabIssues) : [],
       // The MCP half of the moat: an `mcp__server__tool` whose server isn't in the
       // plugin's declared set can't resolve. High-precision (gated on a declared
       // set, built-ins allowlisted, plugin-namespaced form skipped). See mcp-tool.ts.
@@ -685,7 +759,7 @@ function eventsByScript(
 ): Map<string, string> {
   const map = new Map<string, string>();
   for (const reg of regs) {
-    for (const tok of reg.command.match(SCRIPT_RE) ?? []) {
+    for (const tok of scriptTokens(reg.command) ?? []) {
       if (!map.has(tok)) map.set(tok, reg.event);
     }
   }
@@ -709,7 +783,7 @@ export function scanHooks(
   const byScript = new Map<string, ScanHook>();
   let inline = 0;
   for (const cmd of commands) {
-    const found = cmd.match(SCRIPT_RE);
+    const found = scriptTokens(cmd);
     if (!found || found.length === 0) {
       inline++;
       continue;
@@ -1006,12 +1080,15 @@ export function collectHookBlockEntries(
     // A wrapper command runs MORE than one script (`node run.cjs guard.mjs`),
     // so resolve EVERY candidate and inspect each — reading only the first
     // (the wrapper) would miss the guard's block logic. Candidates: extensioned
-    // script tokens (SCRIPT_RE) PLUS path-like words with NO extension
+    // script-shaped words PLUS path-like words with NO extension
     // (`bash hooks/guard`, `${ROOT}/hooks/session-start`) that resolve to a file.
-    const candidates = new Set<string>(cmd.match(SCRIPT_RE) ?? []);
-    for (const word of cmd.split(/\s+/)) {
-      const w = word.replace(/^["']+|["']+$/g, "");
-      if (w.startsWith("-")) continue; // a flag, not a path
+    // Words the SHELL would resolve — not a split on whitespace, which cannot
+    // see quoting and cannot tell `node -e '<program>'` from an operand.
+    const words = commandWords(cmd) ?? [];
+    const candidates = new Set<string>(
+      words.filter((w) => SCRIPT_WORD_RE.test(w)),
+    );
+    for (const w of words) {
       if (w.includes("/") || w.includes(pluginRootToken)) candidates.add(w);
     }
     const resolvedPaths: string[] = [];
@@ -1064,4 +1141,61 @@ export function summarizePurity(agents: readonly ScanAgent[]): {
     },
     { pure: 0, bounded: 0, unrestricted: 0 },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Vocabulary notes — the advisory half of the findings
+// ---------------------------------------------------------------------------
+// These live HERE, not in scan.ts, because both engines produce them and only
+// this module is node-free. Importing them from scan.ts pulled the node-only
+// graph (down to `@ast-grep/napi`'s native .node binding) into the browser
+// bundle and broke the site build — the gate that owns this invariant.
+
+/**
+ * Gather the advisory half of the vocabulary findings for the report. Kept in
+ * one place so hook events and subagent tools present identically — the two used
+ * to answer the same question with different policies.
+ */
+export function collectVocabularyNotes(
+  hookEventIssues: readonly HookEventIssue[],
+  agents: readonly ScanAgent[],
+): VocabularyNote[] {
+  return [
+    ...advisoryIssues(hookEventIssues).map((i) => ({
+      where: `hook event "${i.event}"`,
+      message: i.message,
+    })),
+    ...agents.flatMap((a) => groupAgentToolNotes(a)),
+  ];
+}
+
+/**
+ * One agent's advisory tool notes, with the `conditional` ones GROUPED by the
+ * condition they share. A delegating subagent legitimately declares eight
+ * foreground-only tools; printing the same sentence eight times is noise, and
+ * noise is what this whole change exists to stop producing. Unrecognised names
+ * stay one-per-tool — each carries its own did-you-mean.
+ */
+function groupAgentToolNotes(agent: ScanAgent): VocabularyNote[] {
+  const notes = advisoryIssues(agent.toolNotes ?? []);
+  const byCondition = new Map<string, string[]>();
+  const out: VocabularyNote[] = [];
+  for (const i of notes) {
+    if (i.verdict === "conditional" && i.condition !== undefined) {
+      const at = byCondition.get(i.condition) ?? [];
+      at.push(i.tool);
+      byCondition.set(i.condition, at);
+      continue;
+    }
+    out.push({ where: agent.path, message: i.message });
+  }
+  for (const [condition, tools] of byCondition)
+    out.push({
+      where: agent.path,
+      message:
+        `${tools.join(", ")} ${tools.length === 1 ? "is a real tool" : "are real tools"}, ` +
+        `but the platform removes ${tools.length === 1 ? "it" : "them"} ${condition}. ` +
+        `vigiles cannot see that condition from the file, so this is a note, not a defect.`,
+    });
+  return out;
 }

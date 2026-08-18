@@ -30,7 +30,11 @@
  */
 import { basename, dirname } from "./posix-path.js";
 
-import type { PluginLayout } from "./core/layout.js";
+import {
+  AGENT_FILE_LEAF_RE,
+  agentSurfaceName,
+  type PluginLayout,
+} from "./core/layout.js";
 import type {
   CoverageDecision,
   CoverageTier,
@@ -41,6 +45,7 @@ import {
   declaredSurfaceName,
   evidenceFor,
   hookScriptRefs,
+  isColocatedTest,
   isEvalScript,
   prepareTest,
   type PreparedTest,
@@ -150,10 +155,15 @@ function discoverAgents(
   const out: Surface[] = [];
   if (!layout.agentDir) return out;
   const prefixes = surfacePrefixes(layout.agentDir, layout.materializeRoot);
-  for (const path of matchSurface(files, prefixes, "[^/]+\\.md")) {
+  // Same depth rule as the scan classifier — quoted from AGENT_FILE_LEAF_RE, not
+  // respelled. This discoverer feeds the `Tested` metric; when it disagreed with
+  // the classifier, `audit` printed a subagent count and an untested-surface
+  // count derived from two different sets of files.
+  for (const path of matchSurface(files, prefixes, AGENT_FILE_LEAF_RE)) {
     if (path.endsWith(".spec.ts")) continue;
     const content = files[path];
-    const name = basename(path, ".md");
+    const name =
+      agentSurfaceName(path, layout.agentDir) ?? basename(path, ".md");
     const dir = dirname(path);
     out.push({
       kind: "agent",
@@ -222,10 +232,17 @@ function discoverTests(files: Record<string, string>): PreparedTest[] {
   return out;
 }
 
-/** Mirror of test-coverage.ts `isColocated` — named after the surface, beside it. */
+/**
+ * Named after the surface, beside it — the SHARED rule, no longer a copy of it.
+ *
+ * 🔴 THIS WAS A MIRROR, and its own docstring said so. Two bodies, one promise
+ * that they stay equal, kept by whoever remembers — and this file's header
+ * already records the last time a coverage change landed in one engine and not
+ * the other. It now calls `isColocatedTest`, which the disk detector and the
+ * run-record builder call too.
+ */
 function isColocated(surface: Surface, testPath: string): boolean {
-  if (!basename(testPath).startsWith(`${surface.name}.`)) return false;
-  return dirname(testPath) === dirname(surface.path);
+  return isColocatedTest(surface, testPath);
 }
 
 /** Mirror of test-coverage.ts `coverageOf` — strongest evidence across tests. */

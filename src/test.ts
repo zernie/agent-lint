@@ -208,6 +208,22 @@ export type {
   ContainmentVerdict,
 } from "./trigger-containment.js";
 
+// --- declaring an eval (free: a description cannot spend) ---
+// `defineEval` is on the FREE barrel and not on `vigiles/eval`, and that is the
+// point rather than an oversight: after this shape an eval file needs nothing
+// that bills. It describes the run; `vigiles eval` performs it. The paid runners
+// moved out of an eval author's vocabulary entirely.
+export { defineEval } from "./eval-define.js";
+export type {
+  EvalDefinition,
+  EvalDefinitionInput,
+  EvalHooks,
+  EvalKind,
+  EvalMeasurements,
+  EvalReports,
+  SelectionMatrixSpec,
+} from "./eval-define.js";
+
 // --- free analysis OVER eval results (the coupling from cost #1) ---
 // These read a report that `vigiles/eval` produced. They spend nothing, so they
 // live here and carry no `paid_` prefix; their argument types are defined over

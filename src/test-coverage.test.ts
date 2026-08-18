@@ -19,6 +19,7 @@ import { isAbsolute, join } from "node:path";
 import {
   coverageEvidenceCounts,
   findUntestedSurfaces,
+  coverageCaveats,
   formatUntestedReport,
   skillTestNudge,
   evalTierQuestion,
@@ -1588,4 +1589,91 @@ test("an EXPLICIT `testExtension: ts` survives with no runner — the field exis
     }),
     "ts",
   );
+});
+
+// ── one list of caveats, so a renderer cannot carry half of them ─────────────
+// `audit` builds its own fact block from this report and used to print neither
+// qualifier, so the note explaining a silent migration was itself silent for
+// anyone who runs `audit` rather than `lint`. Both renderers now read this one
+// list; a third caveat added here reaches both or neither.
+
+test("coverageCaveats collects the qualifiers, and is empty when there are none", () => {
+  const dirty = makeTmpDir("cov-caveats-dirty");
+  write(dirty, ".claude/skills/foo/SKILL.md", skill("foo"));
+  write(
+    dirty,
+    ".claude/skills/foo/foo.harness.mjs",
+    "// vigiles:covers skills/foo\n",
+  );
+  const withMarker = coverageCaveats(findUntestedSurfaces({ basePath: dirty }));
+  assert.equal(withMarker.length, 1);
+  assert.match(withMarker[0] ?? "", /retired `vigiles:covers` marker/);
+  // Everything the lint renderer shows about caveats comes from here.
+  for (const line of withMarker)
+    assert.ok(
+      formatUntestedReport(findUntestedSurfaces({ basePath: dirty })).includes(
+        line,
+      ),
+    );
+  cleanupTmpDir(dirty);
+
+  const clean = makeTmpDir("cov-caveats-clean");
+  write(clean, ".claude/skills/foo/SKILL.md", skill("foo"));
+  write(clean, ".claude/skills/foo/foo.harness.mjs", "// an ordinary test\n");
+  assert.deepEqual(
+    coverageCaveats(findUntestedSurfaces({ basePath: clean })),
+    [],
+  );
+  cleanupTmpDir(clean);
+});
+
+// ── the other half of the 15.x migration: the suffix that stopped counting ────
+// `*.test.*` left DEFAULT_TEST_GLOBS because a default vitest/jest run collects
+// it and a skill test spends money. The rename was announced to nobody: the
+// finding prints the SURFACE path and suggests adding a file, so an author with
+// `foo.test.mjs` already on disk is told to write the test they wrote.
+
+test("a `<surface>.test.*` beside an UNTESTED surface is named, with the reason", () => {
+  const dir = makeTmpDir("cov-retired-suffix");
+  write(dir, ".claude/skills/foo/SKILL.md", skill("foo"));
+  write(dir, ".claude/skills/foo/foo.test.mjs", "// a skill test, misnamed\n");
+  const report = findUntestedSurfaces({ basePath: dir });
+  // Unchanged: the name grants no coverage. This is about SAYING so.
+  assert.equal(report.untested.length, 1);
+  assert.deepEqual(report.retiredTestNames, [
+    {
+      path: ".claude/skills/foo/foo.test.mjs",
+      surface: ".claude/skills/foo/SKILL.md",
+    },
+  ]);
+  const text = formatUntestedReport(report);
+  assert.match(text, /foo\.test\.mjs/);
+  assert.match(text, /vitest\/jest/);
+  cleanupTmpDir(dir);
+});
+
+test("…and says nothing when the surface IS covered — a stray unit test is not our business", () => {
+  const dir = makeTmpDir("cov-retired-suffix-covered");
+  write(dir, ".claude/skills/foo/SKILL.md", skill("foo"));
+  write(dir, ".claude/skills/foo/foo.harness.mjs", "// the real one\n");
+  write(dir, ".claude/skills/foo/foo.test.mjs", "// somebody's unit test\n");
+  const report = findUntestedSurfaces({ basePath: dir });
+  assert.equal(report.untested.length, 0);
+  assert.deepEqual(report.retiredTestNames, []);
+  assert.deepEqual(coverageCaveats(report), []);
+  cleanupTmpDir(dir);
+});
+
+test("…and nothing at all in a repo with no such file", () => {
+  const dir = makeTmpDir("cov-retired-suffix-none");
+  write(dir, ".claude/skills/foo/SKILL.md", skill("foo"));
+  // Named after the surface, sitting beside it, and NOT a runnable test name —
+  // the suffix is the whole reason this finding exists, so it has to be load-bearing.
+  write(dir, ".claude/skills/foo/foo.notes.md", "not a test\n");
+  write(dir, ".claude/skills/foo/foo.test.fixture.json", "{}\n");
+  const report = findUntestedSurfaces({ basePath: dir });
+  assert.equal(report.untested.length, 1);
+  assert.deepEqual(report.retiredTestNames, []);
+  assert.doesNotMatch(formatUntestedReport(report), /vitest\/jest/);
+  cleanupTmpDir(dir);
 });

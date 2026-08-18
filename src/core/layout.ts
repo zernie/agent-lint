@@ -49,7 +49,12 @@ export interface PluginLayout {
   // subagent rules gate on `capabilities.subagents`).
   /** Skills dir, holding the nested `<dir>/<name>/SKILL.md`, e.g. `skills`. */
   readonly skillDir: string;
-  /** Subagents dir, holding flat `<dir>/<name>.md`, e.g. `agents` (`""` = none). */
+  /**
+   * Subagents dir, holding `<dir>/<name>.md` at ANY depth, e.g. `agents`
+   * (`""` = none). The depth rule, and the identifier that depth implies, are
+   * stated once in {@link AGENT_FILE_LEAF_RE} and {@link agentSurfaceName} —
+   * read those before writing a fourth thing that walks this dir.
+   */
   readonly agentDir: string;
   /** Slash-commands dir, holding flat `<dir>/<name>.md`, e.g. `commands`. */
   readonly commandDir: string;
@@ -76,4 +81,83 @@ export interface PluginLayout {
   readonly mcpManifestKey: string;
   /** Dirs scanned for dangling intra-plugin file references. */
   readonly intraRefDirs: readonly string[];
+}
+
+/**
+ * How DEEP a harness reads its {@link PluginLayout.agentDir} — the one statement
+ * of that rule, as a RegExp source fragment matching the part of a path AFTER
+ * `<agentDir>/`. Anchor-free on purpose, so each caller can bound it its own way
+ * (`(?:^|/)agents/` + this + `$` in the scan classifier; `^<prefix>/` + this +
+ * `$` in the coverage discoverers).
+ *
+ * 🔴 IT USED TO SAY `[^/]+`, in THREE independent places, and the vendor
+ * documents the opposite. Verbatim from `https://code.claude.com/docs/en/sub-agents`:
+ *
+ * > Claude Code scans `.claude/agents/` and `~/.claude/agents/` **recursively**,
+ * > so you can organize definitions into subfolders such as `agents/review/` or
+ * > `agents/research/`.
+ *
+ * > **Plugin `agents/` directories are also scanned recursively.** Unlike project
+ * > and user scopes, a subfolder inside a plugin's `agents/` directory becomes
+ * > part of the scoped identifier: a file at `agents/review/security.md` in
+ * > plugin `my-plugin` registers as `my-plugin:review:security`.
+ *
+ * Measured 2026-08-18 on `rsmdt/the-startup` @ `88d447c7`: 16 agent files under
+ * `plugins/team/agents/`, 2 read. The plugin was still GRADED — B (80/100) over
+ * 12.5% of its subagents — so the number was not merely incomplete, it was
+ * flattering. Twelve real malformed-frontmatter defects sat in the unread 87.5%.
+ *
+ * The three readers are the scan classifier (`makeClassifier`, scan-core.ts) and
+ * the two coverage discoverers (`test-coverage.ts`, `test-coverage-files.ts`).
+ * They disagreed silently because each spelled the rule itself; they now quote
+ * this. A fourth reader that hard-codes a depth is the defect coming back.
+ */
+export const AGENT_FILE_LEAF_RE = "(?:.+/)?[^/]+\\.md";
+
+/**
+ * A subagent's identity, per the same docs paragraph: the path under
+ * `<agentDir>/` with `/` → `:` and the `.md` dropped, so plugin
+ * `agents/review/security.md` is `review:security` (the scoped identifier minus
+ * its plugin prefix, which the scan of a single plugin dir does not know).
+ *
+ * 🔴 NOT COSMETIC — it is what keeps recursion from introducing a defect of its
+ * own. A basename cannot be unique once the dir is read recursively:
+ * `agents/a/review.md` and `agents/b/review.md` would both be "review", and the
+ * delegation graph keys agents BY NAME (`pathByName`, `delegatesTo`), so one
+ * would silently swallow the other's path and neither would delegate to its
+ * namesake. A path-derived name is unique by construction, so that collision has
+ * nowhere to live. Degenerates to today's basename for a top-level agent, which
+ * is why no existing report changes.
+ *
+ * Returns null when `path` holds no `<agentDir>/` segment (not an agent file).
+ */
+export function agentSurfaceName(
+  path: string,
+  agentDir: string,
+): string | null {
+  if (!agentDir) return null;
+  const marker = `${agentDir}/`;
+  // The FIRST occurrence sitting at a real path boundary — start-of-path or just
+  // after a `/`. Both halves matter and one of them is easy to get wrong:
+  // requiring the boundary stops `my-agents/x.md` being read as `agents/x.md`,
+  // and CONTINUING the search past a non-boundary hit is what keeps this
+  // agreeing with the classifier, whose `(?:^|/)agents/` skips the same way.
+  // Taking `indexOf` once and rejecting it would return null for
+  // `myagents/x/agents/y.md` — a path the classifier calls an agent — so the two
+  // would disagree about the very file they are both looking at.
+  let at = -1;
+  for (
+    let i = path.indexOf(marker);
+    i !== -1;
+    i = path.indexOf(marker, i + 1)
+  ) {
+    if (i === 0 || path[i - 1] === "/") {
+      at = i;
+      break;
+    }
+  }
+  if (at === -1) return null;
+  const tail = path.slice(at + marker.length);
+  if (tail === "" || !tail.endsWith(".md")) return null;
+  return tail.slice(0, -".md".length).split("/").join(":");
 }

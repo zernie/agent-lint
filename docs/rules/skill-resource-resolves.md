@@ -68,6 +68,24 @@ still applies (`## Examples: …` stays skipped), and the wider net stops there:
 mid-paragraph mention with no directive is still not checked, because flagging
 every backticked bundle path is what cries wolf on teaching skills.
 
+**A link's TEXT is not a reference.** Candidates come from a markdown _parse_
+(markdown-it), not from regexes over each line, so the destination and the label
+can be told apart:
+
+```md
+See [`references/api.md` § Lookups](../add-dataverse/references/api.md#lookups)
+```
+
+The destination is what the agent follows, and it resolves. The backtick span is
+its human-readable label. A line-oriented scan could not see that the span sat
+inside a link, and reported the label as a missing bundled resource — an
+accusation against a correct link (measured on `microsoft/power-platform-skills`
+and `rohitg00/pro-workflow`, 2026-08-17). A code span nested in a link's or an
+image's text is therefore not a candidate at all. For the same reason, link
+syntax that lives _inside_ a code span is not a link: `` `- [ ] [Phase N](phase-N.md)` ``
+documents a checklist format, and `phase-N.md` is a metavariable that will never
+exist.
+
 The detector prefers **missing a real ref over a false positive** — a noisy
 resource check would teach users to ignore it. A skill whose body is inherently
 full of illustrative bundle-path examples (a skill-authoring tutorial) can opt out

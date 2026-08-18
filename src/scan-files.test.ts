@@ -204,6 +204,92 @@ describe("scanFiles parity for a SINGLE-SKILL-AT-ROOT repo (the shape no vendore
 });
 
 /**
+ * 🔴 THE SAME BLIND SPOT AS THE SINGLE-SKILL BRANCH ABOVE, one surface over.
+ *
+ * Not one of the four vendored plugins ships an agent in a SUBDIRECTORY —
+ * measured: `test/dogfood/**\/agents/*\/*.md` is empty. So when the agent-file
+ * depth rule was widened to read `agents/` recursively (the harness documents it
+ * as recursive; vigiles read only the top level), the byte-parity gate above
+ * could not see the change at all: the input never reached the code.
+ *
+ * That matters here more than elsewhere, because the two engines reach the
+ * untested count through DIFFERENT discoverers — `scanPlugin` via
+ * `test-coverage.ts` (globSync on disk), `scanFiles` via
+ * `test-coverage-files.ts` (regex over a file map). Both used to spell the depth
+ * rule for themselves. They now quote `AGENT_FILE_LEAF_RE`, and this is the case
+ * that would notice if only one of them stopped.
+ */
+describe("scanFiles parity for NESTED agents (the shape no vendored fixture has)", () => {
+  const files = {
+    ".claude-plugin/plugin.json":
+      '{"name":"nested-agents-repo","version":"0.1.0","description":"x"}',
+    "agents/top.md":
+      "---\nname: top\ndescription: A top-level agent for the parity probe.\ntools: Read\n---\nbody\n",
+    "agents/review/security.md":
+      "---\nname: security\ndescription: Reviews a diff for security defects.\ntools: Read\n---\nbody\n",
+    "agents/review/deep/perf.md":
+      "---\nname: perf\ndescription: Reviews a diff for performance defects.\ntools: Read\n---\nbody\n",
+  } as const;
+
+  it("produces an identical AuditReport for a repo with nested agents", () => {
+    const tmp = makeTmpDir("parity-nested-agents");
+    const abs = join(tmp, "nested-agents-repo");
+    for (const [rel, body] of Object.entries(files)) {
+      mkdirSync(dirname(join(abs, rel)), { recursive: true });
+      writeFileSync(join(abs, rel), body);
+    }
+
+    const diskReport = scanPlugin(abs);
+    const fileReport = scanFiles(
+      readDirToMap(abs),
+      undefined,
+      undefined,
+      basename(abs),
+    );
+
+    const diskAudit = normalizeRoot(buildAuditReport(diskReport, OPTS), abs);
+    const fileAudit = buildAuditReport(fileReport, OPTS);
+    expect(fileAudit).toEqual(diskAudit);
+    expect(stabilize(fileReport)).toEqual(
+      stabilize(normalizeRoot(diskReport, abs)),
+    );
+    cleanupTmpDir(tmp);
+  });
+
+  it("…and BOTH engines really see all three, not zero in agreement", () => {
+    // Parity is agreement, not correctness — the sibling describe learned this
+    // the same way. Pin the absolute number in each engine so the pair cannot
+    // pass by being wrong together.
+    const tmp = makeTmpDir("parity-nested-agents-abs");
+    const abs = join(tmp, "nested-agents-repo");
+    for (const [rel, body] of Object.entries(files)) {
+      mkdirSync(dirname(join(abs, rel)), { recursive: true });
+      writeFileSync(join(abs, rel), body);
+    }
+    const expected = ["review:deep:perf", "review:security", "top"];
+    expect(scanPlugin(abs).agents.map((a) => a.name)).toEqual(expected);
+    expect(
+      scanFiles(
+        readDirToMap(abs),
+        undefined,
+        undefined,
+        basename(abs),
+      ).agents.map((a) => a.name),
+    ).toEqual(expected);
+    // The untested count is the half that runs through the two SEPARATE
+    // coverage discoverers, so pin it too: three agents, no colocated tests.
+    expect(buildAuditReport(scanPlugin(abs), OPTS).inventory.untested).toBe(3);
+    expect(
+      buildAuditReport(
+        scanFiles(readDirToMap(abs), undefined, undefined, basename(abs)),
+        OPTS,
+      ).inventory.untested,
+    ).toBe(3);
+    cleanupTmpDir(tmp);
+  });
+});
+
+/**
  * 🔴 THE TWO-SCOPE SHAPE — the second shape no vendored fixture has.
  *
  * Every plugin under test/dogfood/ carries surfaces at exactly ONE level, so the
@@ -360,6 +446,54 @@ describe("scanFiles — dangling-ref false positives (issue #110)", () => {
       repoName,
     ).danglingRefs;
     expect(dangling).toEqual(["skills/real-missing/SKILL.md"]);
+  });
+
+  it("reads hooks/hooks.json as .json — not as a missing hooks/.js (dogfood 2026-08-17)", () => {
+    // The browser HALF of the boundary fix. Both twins carried the same
+    // unbounded extension alternation; fixing only the disk one would have left
+    // the demo engine accusing microsoft/power-platform-skills forever.
+    const map = {
+      "hooks/hooks.json": "{}",
+      "hooks/h.js": 'load("./hooks.json"); // registered in hooks/hooks.json\n',
+    };
+    expect(scanFiles(map, undefined, undefined, repoName).danglingRefs).toEqual(
+      [],
+    );
+  });
+
+  it("does not read the tail of `claude-agents/` as a reference to `agents/`", () => {
+    const map = {
+      "agents/real.md": "---\nname: real\ndescription: real\n---\n",
+      "hooks/h.js": 'new URL("../../claude-agents/adv.md", import.meta.url);\n',
+    };
+    expect(scanFiles(map, undefined, undefined, repoName).danglingRefs).toEqual(
+      [],
+    );
+  });
+
+  it("does not read a full-line JSDoc mention as a file operation", () => {
+    const map = {
+      "hooks/h.js": [
+        "/**",
+        " * `git log -- hooks/never-existed.mjs` is refused for a word in a search.",
+        " */",
+        "run();",
+      ].join("\n"),
+    };
+    expect(scanFiles(map, undefined, undefined, repoName).danglingRefs).toEqual(
+      [],
+    );
+  });
+
+  it("still flags a genuinely missing .json ref on a code line, under its REAL name", () => {
+    // The other half of every case above: the boundary and the comment rule
+    // must not have turned the detector off.
+    const map = {
+      "hooks/h.js": 'const p = "hooks/gone.json";\nload(p);\n',
+    };
+    expect(scanFiles(map, undefined, undefined, repoName).danglingRefs).toEqual(
+      ["hooks/gone.json"],
+    );
   });
 
   it("without a repoName, falls back to BROWSER_ROOT's basename for the echo check", () => {

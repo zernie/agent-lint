@@ -56,7 +56,7 @@
         "notMeasured": true,
         "findings": [
           "3 surfaces whose firing was never measured",
-          "not measured — run `npx vigiles audit` interactively to measure, or add a `*.eval.mjs` (`paid_measureTriggerRate`, vigiles/eval)"
+          "not measured — run `npx vigiles audit` interactively to measure, or add a `*.eval.mjs` (`export default defineEval({ measureTriggerRate: … })`, vigiles)"
         ]
       }
     ],
@@ -86,7 +86,7 @@
     {
       "surface": "reviewer",
       "action": "fix",
-      "rationale": "Unknown tool \"Grepp\" — use a built-in tool (Read, Write, Edit, MultiEdit, Bash, BashOutput, KillBash, Grep, Glob, LS, WebSearch, WebFetch, NotebookEdit, TodoWrite, Task, Skill) or an MCP tool (mcp__server__tool). Did you mean \"Grep\"?",
+      "rationale": "Tool \"Grepp\" matches no known name — the subagent never gets it. Did you mean \"Grep\"?",
       "fix": "In \"reviewer\", change the tool \"Grepp\" to \"Grep\" — as written it isn't a real tool, so it's dropped and the agent can't use it.",
       "detector": "subagent-tool-contract",
       "confidence": "likely"
