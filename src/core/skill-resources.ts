@@ -34,6 +34,15 @@
  * `MD_HEADING`) and carries no illustrative cue (example / e.g. / such as /
  * would be / template / →). See `inlinePathIsUsed`.
  *
+ * CANDIDATES COME FROM THE PARSE, THE GATE READS THE PROSE. Every candidate is
+ * a `MarkdownRef` from `core/markdown.ts` — a link's DESTINATION or a code span
+ * that is not inside a link's text. The line is then consulted only to decide
+ * whether the surrounding prose DIRECTS the agent at the file. Before that
+ * split, a second regex scanned each line for backtick spans without knowing it
+ * was standing inside a link, and reported the link's LABEL as a missing
+ * resource while its destination resolved (measured on
+ * `microsoft/power-platform-skills` and `rohitg00/pro-workflow`, 2026-08-17).
+ *
  * ESCAPE HATCH: a SKILL.md carrying `<!-- vigiles-disable skill-resource-resolves -->`
  * anywhere in its body opts OUT of this check entirely (mirrors `orphans.ts`'s
  * `vigiles-disable orphan-docs`) — for a skill whose body is inherently full of
@@ -46,7 +55,8 @@
  * it bundles clean in a browser (path ops come from the node-free `posix-path`).
  */
 import { resolve } from "../posix-path.js";
-import { fencedLineFlags } from "./markdown.js";
+import { markdownRefs } from "./markdown.js";
+import type { MarkdownRef } from "./markdown.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -96,15 +106,6 @@ export interface SkillResourceOptions {
 // these is unambiguously a local bundled resource, even without a `./`.
 const BUNDLE_DIRS = ["scripts", "references", "assets"] as const;
 const BUNDLE_PREFIX = new RegExp(`^(?:${BUNDLE_DIRS.join("|")})/`);
-
-// A markdown inline link `[text](target)` — we read its target.
-const MD_LINK = /\[[^\]]*\]\(([^)\s]+)\)/g;
-
-// An inline-code path mention: a backtick span whose whole content is a single
-// path token. We only treat it as a ref when it is a bundle-dir-prefixed path
-// with an extension (the high-confidence shape); a bare `scripts` or a generic
-// `foo.ts` mention is NOT flagged.
-const INLINE_SPAN = /`([^`\n]+)`/g;
 
 // A path must carry a file extension to be a resource reference. A bare word or
 // a directory name (`scripts/lib`) is undecidable prose — skipped.
@@ -281,38 +282,35 @@ interface Candidate {
   readonly line: number;
 }
 
-/** Collect candidate bundled-resource refs from one body line, skipping fences. */
-function candidatesInLine(line: string, lineNo: number): Candidate[] {
-  const out: Candidate[] = [];
-  // A markdown link is EXPLICIT follow-me syntax (`[text](target)`) — the link IS
-  // the reference — so it's real UNLESS the line is an illustrative example.
-  // Suppress it ONLY on an illustrative cue; do NOT also require a use directive,
-  // or a plain `Resources: [API](references/api.md)` (no verb) goes unchecked
-  // (Codex review — that under-detection). A BARE inline backtick path is noisier
-  // (often just a mention), so it still needs BOTH a use directive AND no cue.
-  const illustrative = ILLUSTRATIVE_CUE.test(line);
-  // Markdown links: a relative path target that passes the local-resource gate.
-  if (!illustrative) {
-    for (const m of line.matchAll(MD_LINK)) {
-      const resolved = localResourceTarget(m[1]);
-      if (resolved !== null) {
-        out.push({ ref: m[1].trim(), resolved, kind: "link", line: lineNo });
-      }
-    }
+/**
+ * Turn one structural markdown reference into a candidate, or `null`.
+ *
+ * `line` is the raw source line, used ONLY by the prose gate — the candidate
+ * itself comes from {@link markdownRefs}, never from the characters. That split
+ * is load-bearing: the gate reads prose because prose is what it judges, while
+ * a REFERENCE is a thing the parser found.
+ */
+function candidateFor(ref: MarkdownRef, line: string): Candidate | null {
+  if (ref.kind === "link") {
+    // A markdown link is EXPLICIT follow-me syntax — the DESTINATION is the
+    // reference — so it's real UNLESS the line is an illustrative example.
+    // Suppress it ONLY on an illustrative cue; do NOT also require a use
+    // directive, or a plain `Resources: [API](references/api.md)` (no verb)
+    // goes unchecked (Codex review — that under-detection).
+    if (ILLUSTRATIVE_CUE.test(line)) return null;
+    const resolved = localResourceTarget(ref.value);
+    if (resolved === null) return null;
+    return { ref: ref.value.trim(), resolved, kind: "link", line: ref.line };
   }
-  // Inline-code path mentions: only the high-confidence bundle-dir-prefixed form,
-  // and only when the prose directs the agent to use it (the noisier shape).
-  if (inlinePathIsUsed(line)) {
-    for (const m of line.matchAll(INLINE_SPAN)) {
-      const token = m[1].trim();
-      if (!isInlineBundlePath(token)) continue;
-      const resolved = localResourceTarget(token);
-      if (resolved !== null) {
-        out.push({ ref: token, resolved, kind: "path", line: lineNo });
-      }
-    }
-  }
-  return out;
+  // A bare inline backtick path is noisier (often just a mention), so it needs
+  // BOTH a use directive AND no cue, and only in the high-confidence
+  // bundle-dir-prefixed form.
+  if (!inlinePathIsUsed(line)) return null;
+  const token = ref.value.trim();
+  if (!isInlineBundlePath(token)) return null;
+  const resolved = localResourceTarget(token);
+  if (resolved === null) return null;
+  return { ref: token, resolved, kind: "path", line: ref.line };
 }
 
 /**
@@ -356,23 +354,20 @@ export function skillResourceIssues(
   const seen = new Set<string>();
 
   const lines = skillBody.split("\n");
-  const fenced = fencedLineFlags(skillBody);
-  for (let i = 0; i < lines.length; i++) {
-    if (fenced[i]) continue;
-
-    for (const c of candidatesInLine(lines[i], i + 1)) {
-      if (resolvesAnywhere(c.resolved)) continue;
-      // De-dupe the same missing file referenced several times in the body.
-      const key = `${c.kind}:${c.resolved}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      findings.push({
-        ref: c.ref,
-        resolved: c.resolved,
-        kind: c.kind,
-        line: c.line,
-      });
-    }
+  for (const ref of markdownRefs(skillBody)) {
+    const c = candidateFor(ref, lines[ref.line - 1] ?? "");
+    if (c === null) continue;
+    if (resolvesAnywhere(c.resolved)) continue;
+    // De-dupe the same missing file referenced several times in the body.
+    const key = `${c.kind}:${c.resolved}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    findings.push({
+      ref: c.ref,
+      resolved: c.resolved,
+      kind: c.kind,
+      line: c.line,
+    });
   }
   return findings;
 }

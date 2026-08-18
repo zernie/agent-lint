@@ -21,6 +21,24 @@ import MarkdownIt from "markdown-it";
 const md = new MarkdownIt();
 
 /**
+ * A SECOND parser, used only by {@link markdownRefs}, with link handling turned
+ * down to "report exactly what the author wrote":
+ *
+ * - `normalizeLink` is neutered because the default percent-ENCODES the
+ *   destination. A detector downstream reads `%NN` as the signature of a URL or
+ *   of a documentation example about escaping spaces, and skips it; letting
+ *   markdown-it encode on the way in would manufacture that signature for any
+ *   destination holding a space or a non-ASCII character.
+ * - `validateLink` is opened because the default silently REFUSES to build a
+ *   link token for schemes it distrusts (`javascript:`, `data:`), which would
+ *   turn "a destination this tool declines to resolve" into "no destination at
+ *   all". Skipping by scheme is the caller's job and it already does it.
+ */
+const mdRefs = new MarkdownIt();
+mdRefs.normalizeLink = (url: string): string => url;
+mdRefs.validateLink = (): boolean => true;
+
+/**
  * A boolean per source line (0-based): `true` when the line lies inside a fenced
  * code block (` ``` ` or `~~~`), the delimiter lines included — matching the
  * scope of the hand-rolled `FENCE` regexes this replaces. Indented code blocks
@@ -85,4 +103,118 @@ export function fencedCodeBlocks(src: string): FencedBlock[] {
     out.push({ body: tok.content.replace(/\n$/, ""), start: tok.map[0] + 2 });
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Structural references (links + code spans)
+// ---------------------------------------------------------------------------
+
+/**
+ * How a reference appeared in the markdown.
+ *
+ * `link` is a DESTINATION — the thing the reader follows: an inline link's
+ * target, or an image's `src`. `code` is a bare backtick span standing on its
+ * own in prose.
+ */
+export type MarkdownRefKind = "link" | "code";
+
+/** One reference recovered from markdown STRUCTURE. */
+export interface MarkdownRef {
+  readonly kind: MarkdownRefKind;
+  /**
+   * For `link`, the destination exactly as written. For `code`, the span's
+   * content. Never the display text of a link — see {@link markdownRefs}.
+   */
+  readonly value: string;
+  /** 1-based source line the reference sits on. */
+  readonly line: number;
+}
+
+/**
+ * Every reference a markdown body makes, taken from the PARSE rather than from
+ * the characters.
+ *
+ * 🔴 WHY THIS EXISTS: A LINK'S TEXT IS NOT A REFERENCE. The detector this
+ * replaces ran two regexes over each line — one for `[..](..)`, one for
+ * `` `..` `` — and the second one could not see that it was standing inside the
+ * first. Measured 2026-08-17 on `microsoft/power-platform-skills`:
+ *
+ *     See [`references/dataverse-reference.md` § Setting Lookups](../add-dataverse/references/dataverse-reference.md#setting-lookups)
+ *
+ * The DESTINATION resolves — the file is 23KB and present. The backtick span in
+ * the link's TEXT is a human-readable label for it. vigiles reported the label
+ * as a missing bundled resource, i.e. it accused a correct link of being broken
+ * by reading the half of it that is display. The same shape cost
+ * `rohitg00/pro-workflow` a second false accusation.
+ *
+ * So a code span nested inside a link's (or an image's) text is NOT emitted.
+ * The destination is right there, it is what the agent follows, and it is
+ * returned instead. The bug is not fixed here so much as made unsayable: a
+ * caller of this function is never handed link text at all.
+ *
+ * Fenced and indented code blocks contribute nothing ({@link fencedLineFlags}
+ * decides which lines those are, so no caller re-derives it).
+ *
+ * ⚠️ ONE LINE AT A TIME, and the reason is the line number. Callers report a
+ * reference by source line, and markdown-it's inline tokens carry no line
+ * information — only the enclosing block does — so a paragraph-wide parse would
+ * point every reference in a paragraph at the paragraph's first line. Parsing
+ * each line's inline content keeps the number exact. The cost is a construct
+ * split across two source lines (a link whose `](` sits on the next line),
+ * which is not recovered — the regexes this replaces did not recover it either.
+ */
+export function markdownRefs(src: string): MarkdownRef[] {
+  const lines = src.split("\n");
+  const fenced = fencedLineFlags(src);
+  const out: MarkdownRef[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    // Cheap reject: no link syntax and no backtick means no reference, and most
+    // lines of a real corpus are that.
+    if (fenced[i] || (!line.includes("`") && !line.includes("]("))) continue;
+    for (const tok of mdRefs.parseInline(line, {})) {
+      refsInInline(tok.children ?? [], i + 1, out);
+    }
+  }
+  return out;
+}
+
+/** Which attribute carries the DESTINATION, per inline token type. */
+const DESTINATION_ATTR: Record<string, string | undefined> = {
+  link_open: "href",
+  image: "src",
+};
+
+/**
+ * Walk ONE line's inline token stream, appending its references.
+ *
+ * `linkDepth` is the whole point: markdown-it emits `link_open` … `link_close`
+ * around the link's TEXT, so a `code_inline` seen while the depth is non-zero
+ * is display, and its destination has already been recorded.
+ */
+function refsInInline(
+  children: readonly {
+    type: string;
+    content: string;
+    attrGet: (n: string) => string | null;
+  }[],
+  line: number,
+  out: MarkdownRef[],
+): void {
+  let linkDepth = 0;
+  for (const child of children) {
+    if (child.type === "link_close") {
+      linkDepth--;
+      continue;
+    }
+    if (child.type === "link_open") linkDepth++;
+    // An image's alt text is a nested inline stream markdown-it keeps in
+    // `children`; it is display, exactly like link text, so only the `src` is
+    // taken and the alt is not descended into.
+    const destAttr = DESTINATION_ATTR[child.type];
+    const dest = destAttr === undefined ? null : child.attrGet(destAttr);
+    if (dest) out.push({ kind: "link", value: dest, line });
+    else if (child.type === "code_inline" && linkDepth === 0)
+      out.push({ kind: "code", value: child.content, line });
+  }
 }

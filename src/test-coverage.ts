@@ -75,6 +75,7 @@ import {
   evidenceFor,
   formatEvidence,
   hookScriptRefs,
+  isColocatedTest,
   isEvalScript,
   prepareTest,
   type CoverageEvidence,
@@ -478,11 +479,7 @@ function discoverTests(
  * to remove.
  */
 function isColocated(surface: Surface, testPath: string): boolean {
-  if (!basename(testPath).startsWith(`${surface.name}.`)) return false;
-  // A root `SKILL.md` (single-skill-dir target) lives at ".", and globSync returns
-  // top-level files without a "./" prefix — so `dirname` is "." on both sides and
-  // the comparison holds without a special case.
-  return dirname(testPath) === dirname(surface.path);
+  return isColocatedTest(surface, testPath);
 }
 
 /**

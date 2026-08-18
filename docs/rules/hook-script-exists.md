@@ -36,6 +36,21 @@ The shared resolver already excludes the cases that aren't real misses:
 A relative hook path (`./hooks/x.sh`) resolves against the **plugin root**, not the
 scanner's cwd.
 
+**The command is parsed as shell, not scanned as text.** Script operands come from
+a real shell parse (mvdan-sh), so the standard portable-plugin idiom
+
+```json
+"command": "node -e \"(async()=>{ await import(join(root,'hooks','always-on.mjs')) })()\""
+```
+
+is read as what it is — an inline one-liner whose `-e` argument is a _program_,
+not a path. Scanning the raw string instead cut a character run out of that
+JavaScript and reported it as the hook's missing script, under a name the author
+never wrote; that produced nine false "MISSING" findings across a 32-repo sweep
+(2026-08-17) and contributed to two `F/0` grades. A script named on the right of
+`&&` (`cd "$ROOT" && node hooks/x.mjs`) is still checked: it has to exist whether
+or not it runs.
+
 ## Configuration
 
 ```json

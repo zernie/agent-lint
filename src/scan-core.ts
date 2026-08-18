@@ -46,6 +46,8 @@ import {
   skillTrifectaIssue,
 } from "./core/lethal-trifecta.js";
 import { skillResourceIssues } from "./core/skill-resources.js";
+import { commandWords } from "./core/bash-effects.js";
+import { scriptWordPattern } from "./core/source-refs.js";
 import { skillMissingFence } from "./core/skill-missing-fence.js";
 import type { SkillRefSource } from "./skill-refs.js";
 import {
@@ -76,14 +78,39 @@ import type {
   VocabularyNote,
 } from "./scan.js";
 
-// A script-path token inside a hook command. The token class is `\S` MINUS the
-// glob metacharacters `*` and `?` (dogfood D1): a real, resolvable hook path
-// never contains them, but a command that merely MENTIONS a glob — e.g.
+// A script-path token, matched against a WHOLE shell WORD. The token class is
+// `\S` MINUS the glob metacharacters `*` and `?` (dogfood D1): a real, resolvable
+// hook path never contains them, but a command that merely MENTIONS a glob — e.g.
 // `find . -name "*.js"` in a hook body — would otherwise have `"*.js"` grabbed as
 // a "script" and reported MISSING (a false positive). Shell vars / braces /
-// quotes / slashes ARE kept (`${CLAUDE_PLUGIN_ROOT}/hooks/x.sh`, `"$HOME"/y.sh`),
-// since resolveScript expands + strips those; only glob patterns are dropped.
-const SCRIPT_RE = /[^\s*?]+\.(?:sh|mjs|cjs|js|ts|py|rb)\b/g;
+// slashes ARE kept (`${CLAUDE_PLUGIN_ROOT}/hooks/x.sh`), since resolveScript
+// expands those. See core/source-refs.ts for the boundary rules.
+const SCRIPT_WORD_RE = scriptWordPattern();
+
+/**
+ * The script-path operands a hook `command` names.
+ *
+ * 🔴 THE COMMAND IS SHELL, SO IT IS PARSED AS SHELL. This used to run
+ * `SCRIPT_RE` over the raw command string, which cannot tell an operand from
+ * the text of an inline program. Against the standard portable-plugin idiom
+ * `node -e "…await import(…join(root,'hooks','always-on.mjs'))…"` it produced
+ * the script name
+ * `import(require(node:url).pathToFileURL(require(node:path).join(root,hooks,always-on.mjs`
+ * and reported it MISSING, while `hooks/always-on.mjs` sat on disk. Nine such
+ * findings across the 32-repo dogfood corpus (2026-08-17), contributing to two
+ * `F/0` grades.
+ *
+ * `commandWords` returns the words a shell would resolve, with inline program
+ * text subtracted, so the report cannot name a fragment of a JavaScript
+ * expression. A command that does not parse as shell yields `null`, and the
+ * caller treats it as an inline one-liner rather than guessing — abstaining is
+ * the direction that cannot accuse.
+ */
+function scriptTokens(command: string): string[] | null {
+  const words = commandWords(command);
+  if (words === null) return null;
+  return words.filter((w) => SCRIPT_WORD_RE.test(w));
+}
 
 // The scalar fields scan reads from a skill/agent `---` block, via the shared
 // lenient reader (core/frontmatter-read.ts) — a real YAML parse with a regex
@@ -672,7 +699,7 @@ function eventsByScript(
 ): Map<string, string> {
   const map = new Map<string, string>();
   for (const reg of regs) {
-    for (const tok of reg.command.match(SCRIPT_RE) ?? []) {
+    for (const tok of scriptTokens(reg.command) ?? []) {
       if (!map.has(tok)) map.set(tok, reg.event);
     }
   }
@@ -696,7 +723,7 @@ export function scanHooks(
   const byScript = new Map<string, ScanHook>();
   let inline = 0;
   for (const cmd of commands) {
-    const found = cmd.match(SCRIPT_RE);
+    const found = scriptTokens(cmd);
     if (!found || found.length === 0) {
       inline++;
       continue;
@@ -993,12 +1020,15 @@ export function collectHookBlockEntries(
     // A wrapper command runs MORE than one script (`node run.cjs guard.mjs`),
     // so resolve EVERY candidate and inspect each — reading only the first
     // (the wrapper) would miss the guard's block logic. Candidates: extensioned
-    // script tokens (SCRIPT_RE) PLUS path-like words with NO extension
+    // script-shaped words PLUS path-like words with NO extension
     // (`bash hooks/guard`, `${ROOT}/hooks/session-start`) that resolve to a file.
-    const candidates = new Set<string>(cmd.match(SCRIPT_RE) ?? []);
-    for (const word of cmd.split(/\s+/)) {
-      const w = word.replace(/^["']+|["']+$/g, "");
-      if (w.startsWith("-")) continue; // a flag, not a path
+    // Words the SHELL would resolve — not a split on whitespace, which cannot
+    // see quoting and cannot tell `node -e '<program>'` from an operand.
+    const words = commandWords(cmd) ?? [];
+    const candidates = new Set<string>(
+      words.filter((w) => SCRIPT_WORD_RE.test(w)),
+    );
+    for (const w of words) {
       if (w.includes("/") || w.includes(pluginRootToken)) candidates.add(w);
     }
     const resolvedPaths: string[] = [];
