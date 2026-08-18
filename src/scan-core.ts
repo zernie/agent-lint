@@ -59,7 +59,11 @@ import {
   parseAgentTools,
   parseAgentToolList,
 } from "./adapters/claude-code/agent-tools.js";
-import type { PluginLayout } from "./core/layout.js";
+import {
+  AGENT_FILE_LEAF_RE,
+  agentSurfaceName,
+  type PluginLayout,
+} from "./core/layout.js";
 import type { HarnessDialect } from "./core/dialect.js";
 import type { HookRegistration } from "./core/hook-normalize.js";
 import type { HookScriptEntry } from "./core/hook-block-ineffective.js";
@@ -184,6 +188,14 @@ export interface SurfaceClassifier {
   readonly isSkill: (f: string) => boolean;
   readonly isAgent: (f: string) => boolean;
   readonly isCommand: (f: string) => boolean;
+  /**
+   * The subagent identity for a path `isAgent` accepts — the layout-scoped name
+   * from {@link agentSurfaceName}. Lives here because the classifier is already
+   * the one thing holding the layout's surface dirs; a caller deriving the name
+   * itself would need the layout too, and would be free to derive a different
+   * one. Null for a path this classifier does not call an agent.
+   */
+  readonly agentName: (f: string) => string | null;
 }
 
 function escapeRe(s: string): string {
@@ -198,18 +210,21 @@ export function makeClassifier(layout: PluginLayout): SurfaceClassifier {
   const agent = at(layout.agentDir);
   const command = at(layout.commandDir);
   const skillRe = skill ? new RegExp(`${skill}[^/]+/SKILL\\.md$`) : null;
-  const agentRe = agent ? new RegExp(`${agent}[^/]+\\.md$`) : null;
+  const agentRe = agent ? new RegExp(`${agent}${AGENT_FILE_LEAF_RE}$`) : null;
   const commandRe = command ? new RegExp(`${command}.+\\.md$`) : null;
-  // A subagent lives at the plugin's TOP-LEVEL `agents/` dir (e.g. `agents/foo.md`
-  // or `.claude/agents/foo.md`), never recursively under ANOTHER surface dir. Two
-  // real-world nesting traps are excluded as false positives:
+  // A subagent lives under the plugin's `agents/` dir AT ANY DEPTH (the harness
+  // reads it recursively — see AGENT_FILE_LEAF_RE for the vendor's wording and
+  // the measurement), but never under ANOTHER surface dir. Two real-world
+  // nesting traps are excluded as false positives:
   //   - `skills/<x>/agents/…` — skill-internal worker docs (Anthropic's skill-creator)
   //   - `commands/agents/…`   — a COMMAND namespaced `/agents:…` (ruvnet/claude-flow),
   //     incl. a `README.md`; these are commands, not dispatchable subagents.
   // Flagging either as a subagent missing frontmatter is a false positive (it
-  // mis-graded a real plugin F). A genuine top-level `agents/foo.md` still
-  // matches. Both excluded dirs are read from the layout (adapter-agnostic). See
-  // scan.test.ts for the regressions.
+  // mis-graded a real plugin F). A genuine `agents/foo.md` — or `agents/x/foo.md`
+  // — still matches. Both excluded dirs are read from the layout
+  // (adapter-agnostic), and both patterns already tolerate depth on BOTH sides of
+  // the `agents/` segment, so the recursion above does not leak through them.
+  // See scan.test.ts for the regressions.
   const nestedUnder = [
     layout.skillDir &&
       `${escapeRe(layout.skillDir)}/.+/${escapeRe(layout.agentDir)}/`,
@@ -224,10 +239,29 @@ export function makeClassifier(layout: PluginLayout): SurfaceClassifier {
     (agentRe?.test(f) ?? false) &&
     !f.endsWith(".spec.ts") &&
     !(nestedAgentRe?.test(f) ?? false);
+  // The MIRROR of the rule above, and it exists because reading `agents/`
+  // recursively made a new shape reachable: `agents/<x>/skills/<y>/SKILL.md` now
+  // matches the agent pattern, and it always matched the skill pattern, so the
+  // one file would be counted as BOTH — inflating two surface counts and grading
+  // it twice. The harness resolves this the same way the existing exclusion
+  // does: it reads skills from the plugin's OWN `skills/` dir, and reads every
+  // `.md` under `agents/` recursively — so this file is a subagent, and is not a
+  // skill. Excluding it here (rather than excluding it from agents) is what keeps
+  // the two classifiers disjoint AND agreeing with the harness.
+  const nestedSkillRe =
+    layout.skillDir && layout.agentDir
+      ? new RegExp(
+          `(?:^|/)${escapeRe(layout.agentDir)}/(?:.+/)?${escapeRe(layout.skillDir)}/`,
+        )
+      : null;
+  const isSkill = (f: string): boolean =>
+    (skillRe?.test(f) ?? false) && !(nestedSkillRe?.test(f) ?? false);
   return {
-    isSkill: (f) => skillRe?.test(f) ?? false,
+    isSkill,
     isAgent,
     isCommand: (f) => commandRe?.test(f) ?? false,
+    agentName: (f) =>
+      isAgent(f) ? agentSurfaceName(f, layout.agentDir) : null,
   };
 }
 
@@ -570,7 +604,10 @@ export function scanAgents(
     // so they cannot disagree about what the vocabulary said.
     const vocabIssues = tools ? verifyToolContract(tools, dialect) : [];
     out.push({
-      name: basename(path, ".md"),
+      // The layout-scoped identity, NOT the basename — see `agentSurfaceName`
+      // for why recursion makes a basename unsafe here. Identical to the
+      // basename for a top-level agent, so no existing report moves.
+      name: cls.agentName(path) ?? basename(path, ".md"),
       path: ctx
         ? reportedSurfacePath(path, ctx.sources?.[path], ctx.root)
         : path,

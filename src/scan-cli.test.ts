@@ -303,13 +303,47 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
       }),
     );
     const r = run(`audit ${join(root, "curated")}`);
-    assert.equal(r.exitCode, 0);
-    assert.match(
-      r.stdout,
-      /Marketplace "curated": 2 plugin\(s\), all external/,
+    // Exit 2, not 0. This directory was NOT measured, and this repo's own rule
+    // is that 1 means "I measured, and it's bad" while 2 means "I could not do
+    // what you asked". At exit 0 an unscanned repo was byte-indistinguishable
+    // from a clean one, which is how a suppressed audit went unnoticed.
+    assert.equal(r.exitCode, 2);
+    const out = r.stdout + r.stderr;
+    assert.match(out, /marketplace "curated": 2 plugin\(s\), all external/i);
+    assert.match(out, /[Cc]lone a member plugin/);
+    assert.doesNotMatch(out, /no structural issues found/);
+    assert.doesNotMatch(out, /nothing was loaded/);
+  });
+
+  it("a directory that is BOTH a plugin and an external-member marketplace is still audited", () => {
+    // nyldn/claude-octopus shape: `.claude-plugin/` holds a `marketplace.json`
+    // whose only member points at a url, AND a `plugin.json` naming this very
+    // directory — which also ships real surfaces. The marketplace listing is a
+    // statement about OTHER directories; it must not suppress this one.
+    mk(
+      "selfmarket/.claude-plugin/marketplace.json",
+      JSON.stringify({
+        name: "selfmarket",
+        plugins: [
+          { name: "me", source: { source: "url", url: "https://x/me.git" } },
+        ],
+      }),
     );
-    assert.doesNotMatch(r.stdout, /no structural issues found/);
-    assert.doesNotMatch(r.stdout, /nothing was loaded/);
+    mk(
+      "selfmarket/.claude-plugin/plugin.json",
+      JSON.stringify({ name: "me", version: "0.1.0", description: "me" }),
+    );
+    mk(
+      "selfmarket/agents/worker.md",
+      "---\nname: worker\ndescription: A worker subagent used by this fixture.\ntools: Read\n---\nbody\n",
+    );
+    const r = run(`audit ${join(root, "selfmarket")}`);
+    assert.equal(r.exitCode, 0);
+    // The surfaces are reported, and a grade is produced.
+    assert.match(r.stdout, /Agents \(1\)/);
+    assert.match(r.stdout, /Harness health: [A-F]/);
+    // And it is NOT mistaken for a curated marketplace with nothing to scan.
+    assert.doesNotMatch(r.stdout + r.stderr, /nothing to audit/i);
   });
 
   it("--json emits the versioned AuditReport (harness + inventory)", () => {
@@ -1122,6 +1156,22 @@ describe("`nothing to audit here` is a distinct outcome, not a grade of F", () =
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it("a path that does not EXIST says so, instead of 'no surface was found'", () => {
+    // A directory that isn't there and a directory with nothing in it are
+    // different facts, and only one of them is about the repo's harness. The
+    // exit code was already 2; the wording made a typo'd dir in a multi-dir
+    // leaderboard run read as a legitimately empty repo.
+    const missing = join(tmpdir(), "vigiles-definitely-absent-xyz123");
+    const r = run(`audit ${missing}`);
+    assert.equal(r.exitCode, 2, r.stdout + r.stderr);
+    assert.match(r.stderr, /does not exist/);
+    assert.doesNotMatch(
+      r.stderr,
+      /no claude-code surface .* was found there/,
+      "a nonexistent path was never looked at, so nothing was 'found there'",
+    );
   });
 });
 

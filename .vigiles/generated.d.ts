@@ -101,7 +101,7 @@ declare module "vigiles/generated" {
     | "experimental:check"
     | "docs:api";
 
-  /** 385 project files. */
+  /** 386 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -272,6 +272,7 @@ declare module "vigiles/generated" {
     | "src/core/inline.ts"
     | "src/core/integrity.test.ts"
     | "src/core/integrity.ts"
+    | "src/core/layout.test.ts"
     | "src/core/layout.ts"
     | "src/core/lethal-trifecta.test.ts"
     | "src/core/lethal-trifecta.ts"
@@ -729,6 +730,7 @@ declare module "vigiles/spec" {
       | "src/core/inline.ts"
       | "src/core/integrity.test.ts"
       | "src/core/integrity.ts"
+      | "src/core/layout.test.ts"
       | "src/core/layout.ts"
       | "src/core/lethal-trifecta.test.ts"
       | "src/core/lethal-trifecta.ts"

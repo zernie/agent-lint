@@ -1005,6 +1005,172 @@ test("scanPlugin does not treat a commands/agents/ dir as subagents", () => {
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin reads agents/ SUBDIRECTORIES, scoping the name by subfolder", () => {
+  // The vendor documents this and vigiles read only the top level. Verbatim from
+  // https://code.claude.com/docs/en/sub-agents (re-fetched 2026-08-18):
+  //   "Plugin `agents/` directories are also scanned recursively. Unlike project
+  //    and user scopes, a subfolder inside a plugin's `agents/` directory becomes
+  //    part of the scoped identifier: a file at `agents/review/security.md` in
+  //    plugin `my-plugin` registers as `my-plugin:review:security`."
+  // Measured on rsmdt/the-startup @ 88d447c7: 16 agent files on disk, 2 read —
+  // and the plugin was still graded B (80/100) over that 12.5%.
+  const dir = makeTmpDir("scan-recursive-agents");
+  write(
+    dir,
+    "agents/top.md",
+    "---\nname: top\ndescription: A top-level agent for the recursion probe.\ntools: Read\n---\nbody\n",
+  );
+  write(
+    dir,
+    "agents/review/security.md",
+    "---\nname: security\ndescription: Reviews a diff for security defects.\ntools: Read\n---\nbody\n",
+  );
+  write(
+    dir,
+    "agents/review/deep/perf.md",
+    "---\nname: perf\ndescription: Reviews a diff for performance defects.\ntools: Read\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  assert.deepEqual(
+    r.agents.map((a) => a.name),
+    ["review:deep:perf", "review:security", "top"],
+  );
+  cleanupTmpDir(dir);
+});
+
+test("a nested agent's own defects are reported, not just its existence", () => {
+  // The point of reading the subdirectory is the findings inside it: on
+  // rsmdt/the-startup, 12 real malformed-frontmatter defects sat in the 87.5% of
+  // the surface that was never opened.
+  const dir = makeTmpDir("scan-recursive-agent-defects");
+  write(dir, "agents/team/broken.md", "# Broken\nno frontmatter at all\n");
+  const r = scanPlugin(dir);
+  assert.deepEqual(
+    r.agents.map((a) => a.name),
+    ["team:broken"],
+  );
+  assert.ok(
+    r.frontmatterIssues.some((i) => i.path.endsWith("agents/team/broken.md")),
+    "a nested agent missing name/description must be flagged",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("recursion does not leak through the two nesting traps, even at depth", () => {
+  // The silent half. Recursion widened the agent pattern, so re-prove that the
+  // skill-internal and command-namespaced exclusions still hold — and hold when
+  // the trap dir itself is nested, which the pre-recursion pattern never had to
+  // survive.
+  const dir = makeTmpDir("scan-recursive-agents-traps");
+  write(dir, "skills/skill-creator/agents/analyzer.md", "# Analyzer\nprose\n");
+  write(
+    dir,
+    "skills/skill-creator/agents/sub/comparator.md",
+    "# Comparator\nprose\n",
+  );
+  write(dir, "commands/agents/spawn.md", "# spawn\nprose\n");
+  write(dir, "commands/agents/sub/status.md", "# status\nprose\n");
+  write(
+    dir,
+    "agents/reviewer.md",
+    "---\nname: reviewer\ndescription: Review a diff for correctness\ntools: Read\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  assert.deepEqual(
+    r.agents.map((a) => a.name),
+    ["reviewer"],
+  );
+  assert.equal(r.frontmatterIssues.length, 0);
+  cleanupTmpDir(dir);
+});
+
+test("a SKILL.md nested under agents/ is counted ONCE, as an agent", () => {
+  // Reading `agents/` recursively made this shape reachable for the first time:
+  // the file matches the skill pattern (it always did) AND now the agent pattern,
+  // so without the mirror exclusion it would be counted as both — two surfaces
+  // from one file, graded twice. The harness reads skills from the plugin's own
+  // `skills/` dir and every `.md` under `agents/` recursively, so it is an agent.
+  const dir = makeTmpDir("scan-skill-under-agents");
+  write(
+    dir,
+    "agents/team/skills/helper/SKILL.md",
+    "---\nname: helper\ndescription: A skill nested underneath the agents dir.\n---\nbody\n",
+  );
+  write(
+    dir,
+    "agents/real.md",
+    "---\nname: real\ndescription: A genuine top-level agent alongside it.\ntools: Read\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  assert.deepEqual(
+    r.agents.map((a) => a.name),
+    ["real", "team:skills:helper:SKILL"],
+  );
+  assert.deepEqual(
+    r.skills.map((s) => s.name),
+    [],
+    "must not ALSO be a skill",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("a plugin's own skills/ is untouched by that mirror exclusion", () => {
+  // The silent half: the exclusion is scoped to a skills dir sitting UNDER
+  // agents/, so an ordinary plugin's skills must be entirely unaffected.
+  const dir = makeTmpDir("scan-skill-normal");
+  write(
+    dir,
+    "skills/deployer/SKILL.md",
+    "---\nname: deployer\ndescription: Deploys the application to production safely.\n---\nbody\n",
+  );
+  // A skill that itself ships an `agents/` subdir — the shape the OTHER
+  // exclusion exists for. It must stay a skill, and its worker doc must stay
+  // neither a skill nor an agent.
+  write(
+    dir,
+    "skills/skill-creator/SKILL.md",
+    "---\nname: skill-creator\ndescription: Creates new skills end to end for this repo.\n---\nbody\n",
+  );
+  write(dir, "skills/skill-creator/agents/analyzer.md", "# Analyzer\nprose\n");
+  const r = scanPlugin(dir);
+  assert.deepEqual(
+    r.skills.map((s) => s.name),
+    ["deployer", "skill-creator"],
+  );
+  assert.deepEqual(
+    r.agents.map((a) => a.name),
+    [],
+  );
+  cleanupTmpDir(dir);
+});
+
+test("the coverage discoverer sees exactly the agents the scan classifier does", () => {
+  // 🔴 The reason AGENT_FILE_LEAF_RE exists. THREE places independently spelled
+  // the agent-file depth rule: this classifier and the two coverage discoverers.
+  // Fixing only the classifier would have made `audit` print a subagent count
+  // and an untested-surface count computed over different sets of files — a new
+  // internal disagreement, introduced by the fix for the old one.
+  const dir = makeTmpDir("scan-recursive-agents-coverage");
+  for (const p of [
+    "agents/top.md",
+    "agents/a/one.md",
+    "agents/a/b/two.md",
+    "agents/c/three.md",
+  ]) {
+    write(
+      dir,
+      p,
+      "---\nname: x\ndescription: An agent for the coverage-agreement probe.\ntools: Read\n---\nbody\n",
+    );
+  }
+  const r = scanPlugin(dir);
+  assert.equal(r.agents.length, 4);
+  // `untested` counts surfaces with no vigiles test; none of these has one, so
+  // it must equal the agent count. If the discoverers disagree, so do these.
+  assert.equal(r.untested, r.agents.length);
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin still flags a real top-level subagent missing frontmatter", () => {
   // Guard the other direction: the nested-agents exclusion must NOT silence a
   // genuine top-level agents/ file that really is missing name/description.

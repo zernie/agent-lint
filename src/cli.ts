@@ -89,6 +89,7 @@ import {
   scanPlugin,
   formatScanReport,
   inspectMarketplace,
+  type MarketplaceInfo,
   verifyLiveMcpTools,
   formatMcpContractReport,
   preferCompiledHooksMessage,
@@ -5773,15 +5774,47 @@ function printHelpEntry(v: Verb): void {
  * The loud "there is nothing here to audit" block. Deliberately says WHAT was
  * looked at and WHY it found nothing, because the commonest cause is that the
  * target isn't the directory the operator thinks it is.
+ *
+ * Two causes are named apart from the generic one, because they are the two the
+ * generic wording actively MISDESCRIBES:
+ *
+ *   - the path does not exist — "no surface was found there" reads as a verdict
+ *     on a real directory, so a typo'd dir in a multi-dir leaderboard run looked
+ *     like a legitimately empty repo. One `existsSync` separates them.
+ *   - the path is a CURATED marketplace — it has members, they are all external,
+ *     and the useful next step is to clone one. This advice used to live in a
+ *     branch that pre-empted the audit entirely (see the `audit` case); it
+ *     belongs here, where the directory has genuinely been looked at first.
  */
-function formatNothingToAudit(root: string, harness: string): string {
-  return [
+function formatNothingToAudit(
+  root: string,
+  harness: string,
+  market?: MarketplaceInfo | null,
+): string {
+  if (!existsSync(root)) {
+    return [
+      `✗ vigiles audit: ${root} does not exist`,
+      "  Nothing was scanned — this is NOT a grade, and NOT an empty repo.",
+      "  Check the path, and that a flag didn't swallow it",
+      "  (flags take values with `=`: `--out=dir`, never `--out dir`).",
+    ].join("\n");
+  }
+  const lines = [
     `✗ vigiles audit: nothing to audit in ${root}`,
     `  No instruction file and no ${harness} surface (skills / subagents / hooks / commands / MCP) was found there.`,
     "  This is NOT a grade — there was nothing to measure, so no score is reported.",
+  ];
+  if (market && market.onDisk.length === 0 && market.total > 0) {
+    lines.push(
+      `  It is the marketplace "${market.name}": ${String(market.total)} plugin(s), all external (url/git sources, not on disk).`,
+      "  Clone a member plugin and scan that, or scan a marketplace that vendors its plugins in-tree.",
+    );
+  }
+  lines.push(
     "  Check that the path is the repo you meant, and that a flag didn't swallow it",
     "  (flags take values with `=`: `--out=dir`, never `--out dir`).",
-  ].join("\n");
+  );
+  return lines.join("\n");
 }
 
 /** `vigiles <verb> --help` — that verb's entry plus its complete flag list. */
@@ -7742,33 +7775,37 @@ async function main(): Promise<void> {
       // under one marketplace.json) expands into its members and ranks them.
       const market =
         dirs.length === 1 ? inspectMarketplace(resolve(dirs[0])) : null;
+      // A marketplace whose members are all EXTERNAL expands to nothing, and the
+      // fallback below already says what to do about that: the target is the
+      // directory itself.
+      //
+      // 🔴 THERE USED TO BE A BRANCH HERE that printed "nothing to scan" and
+      // returned at exit 0 whenever the expansion came back empty — before
+      // looking at the directory at all. A `marketplace.json` is a statement
+      // about OTHER directories; it says nothing about this one, and a directory
+      // is free to be a plugin AND ship a marketplace listing external members.
+      // Measured 2026-08-18 on `nyldn/claude-octopus` @ `57cfb9b0` (3,979 stars):
+      // the branch suppressed the whole audit — 59 skills, 50 subagents — because
+      // `.claude-plugin/` held a `marketplace.json` NEXT TO the `plugin.json`
+      // naming that same directory. It now grades D (60/100), and the check that
+      // this branch is really gone is that deleting the `marketplace.json` gives
+      // the byte-identical report: the file no longer changes the outcome at all.
+      //
+      // (An earlier journal recorded that delete-one-file experiment as B (85/100).
+      // That was measured before `agents/` was read recursively, when all 50 of
+      // this plugin's subagents lived in subdirectories and none were visible. Both
+      // numbers are real; they differ by the other fix, not by this one.)
+      //
+      // Exit 0 was the other half: a repo that was never scanned exited
+      // byte-identically to a repo that was scanned and found clean, so an
+      // automated leaderboard dropped it silently and CI went green. A genuinely
+      // curated marketplace now reaches the `score.empty` branch below, which
+      // carries `market` into its explanation and exits 2 — this repo's own rule
+      // that 1 is "I measured, and it's bad" and 2 is "I could not do what you
+      // asked". Nothing was measured here, so it is a 2.
       const targets =
         market && market.onDisk.length > 0 ? [...market.onDisk] : dirs;
-      if (market && market.onDisk.length === 0 && market.total > 0) {
-        // A CURATED marketplace — every member is an external git/url plugin, so
-        // there's nothing on disk to scan. Say so honestly instead of falling
-        // through to a misleading "empty machine / no structural issues" report
-        // (obra/superpowers-marketplace, anthropics/claude-plugins-community).
-        if (json) {
-          console.log(
-            JSON.stringify(
-              buildMarketplaceReport(market, {
-                vigilesVersion: getVersion(),
-                dir: resolve(dirs[0]),
-              }),
-              null,
-              2,
-            ),
-          );
-        } else {
-          console.log(
-            `Marketplace "${market.name}": ${String(market.total)} plugin(s), all external ` +
-              `(url/git sources, not on disk).\n` +
-              `Nothing to scan here — clone a member plugin and scan that, or scan a ` +
-              `marketplace that vendors its plugins in-tree.`,
-          );
-        }
-      } else if (targets.length > 1) {
+      if (targets.length > 1) {
         // Multiple targets → rank them (the leaderboard engine). `--md` emits the
         // publishable Markdown table (a README / gist / the leaderboard site).
         const scores = rankPlugins(targets);
@@ -7917,8 +7954,26 @@ async function main(): Promise<void> {
         // `score.empty: true`), so a machine consumer keeps its contract; the
         // human-readable explanation goes to stderr either way.
         if (sc.empty) {
-          if (json) console.log(JSON.stringify(auditReportBase, null, 2));
-          console.error(formatNothingToAudit(root, adapter.name));
+          // A curated marketplace lands here now that the early return is gone:
+          // it really has nothing of its own to audit, which is what this branch
+          // is for. `--json` keeps emitting the `kind:"marketplace"` envelope for
+          // exactly that case, so the discriminant still describes what it always
+          // described — a marketplace with no on-disk members — and no longer
+          // doubles as "a directory we declined to look at".
+          if (json)
+            console.log(
+              JSON.stringify(
+                market && market.onDisk.length === 0 && market.total > 0
+                  ? buildMarketplaceReport(market, {
+                      vigilesVersion: getVersion(),
+                      dir: root,
+                    })
+                  : auditReportBase,
+                null,
+                2,
+              ),
+            );
+          console.error(formatNothingToAudit(root, adapter.name, market));
           process.exit(2);
         }
         const plan = optimize(report);
