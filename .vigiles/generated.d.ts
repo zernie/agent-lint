@@ -101,7 +101,7 @@ declare module "vigiles/generated" {
     | "experimental:check"
     | "docs:api";
 
-  /** 371 project files. */
+  /** 372 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -198,6 +198,7 @@ declare module "vigiles/generated" {
     | "src/cli.test.ts"
     | "src/cli.ts"
     | "src/codex.ts"
+    | "src/colocated-execution.test.ts"
     | "src/community-skills.test.ts"
     | "src/community-skills.ts"
     | "src/core/CLAUDE.md"
@@ -641,6 +642,7 @@ declare module "vigiles/spec" {
       | "src/cli.test.ts"
       | "src/cli.ts"
       | "src/codex.ts"
+      | "src/colocated-execution.test.ts"
       | "src/community-skills.test.ts"
       | "src/community-skills.ts"
       | "src/core/CLAUDE.md"
