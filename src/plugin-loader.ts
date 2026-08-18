@@ -473,7 +473,10 @@ const NON_PLUGIN_VARS = new Set([
  * a longer name, which is not a reference to anything.
  */
 function isPluginRooted(content: string, idx: number): boolean {
-  if (idx === 0) return true;
+  // No `idx === 0` case: start-of-content IS a boundary, and that rule belongs
+  // to `startsAtSeparator` (`idx <= 0 → true`), which the next line reaches with
+  // `content[-1] === undefined`. Restating it here would be a second copy of a
+  // boundary this module deliberately does not own.
   if (content[idx - 1] !== "/") return startsAtSeparator(content, idx);
   // The path component immediately before the separating slash.
   const seg = /([^\s"'`(=:/]*)$/.exec(content.slice(0, idx - 1))?.[1] ?? "";

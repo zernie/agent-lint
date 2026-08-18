@@ -101,7 +101,7 @@ declare module "vigiles/generated" {
     | "experimental:check"
     | "docs:api";
 
-  /** 371 project files. */
+  /** 373 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -314,6 +314,8 @@ declare module "vigiles/generated" {
     | "src/core/skill-missing-fence.ts"
     | "src/core/skill-resources.test.ts"
     | "src/core/skill-resources.ts"
+    | "src/core/source-refs.test.ts"
+    | "src/core/source-refs.ts"
     | "src/core/spec.test.ts"
     | "src/core/spec.ts"
     | "src/core/symbols.test.ts"
@@ -757,6 +759,8 @@ declare module "vigiles/spec" {
       | "src/core/skill-missing-fence.ts"
       | "src/core/skill-resources.test.ts"
       | "src/core/skill-resources.ts"
+      | "src/core/source-refs.test.ts"
+      | "src/core/source-refs.ts"
       | "src/core/spec.test.ts"
       | "src/core/spec.ts"
       | "src/core/symbols.test.ts"

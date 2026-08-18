@@ -405,7 +405,8 @@ const NON_PLUGIN_VARS = new Set([
  *  a match preceded by a path-segment character landed INSIDE a longer name
  *  (`claude-agents/`) and refers to nothing. */
 function isPluginRooted(content: string, idx: number): boolean {
-  if (idx === 0) return true;
+  // Start-of-content is handled by `startsAtSeparator` itself (`idx <= 0`), not
+  // by a guard here — see the twin in plugin-loader.ts.
   if (content[idx - 1] !== "/") return startsAtSeparator(content, idx);
   const seg = /([^\s"'`(=:/]*)$/.exec(content.slice(0, idx - 1))?.[1] ?? "";
   const varName = /^\$\{?(\w+)\}?$/.exec(seg)?.[1];
