@@ -101,7 +101,7 @@ declare module "vigiles/generated" {
     | "experimental:check"
     | "docs:api";
 
-  /** 371 project files. */
+  /** 378 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -234,6 +234,8 @@ declare module "vigiles/generated" {
     | "src/core/edit-distance.ts"
     | "src/core/effects.test.ts"
     | "src/core/effects.ts"
+    | "src/core/eval-load-phase.test.ts"
+    | "src/core/eval-load-phase.ts"
     | "src/core/evolve.ts"
     | "src/core/foreign-runner.test.ts"
     | "src/core/foreign-runner.ts"
@@ -347,6 +349,11 @@ declare module "vigiles/generated" {
     | "src/eval-cache.ts"
     | "src/eval-cost.test.ts"
     | "src/eval-cost.ts"
+    | "src/eval-define.test.ts"
+    | "src/eval-define.ts"
+    | "src/eval-entry.test.ts"
+    | "src/eval-entry.ts"
+    | "src/eval-file-shape.test.ts"
     | "src/eval-injected-driver-guard.test.ts"
     | "src/eval-lock-wiring.test.ts"
     | "src/eval-lock.test.ts"
@@ -677,6 +684,8 @@ declare module "vigiles/spec" {
       | "src/core/edit-distance.ts"
       | "src/core/effects.test.ts"
       | "src/core/effects.ts"
+      | "src/core/eval-load-phase.test.ts"
+      | "src/core/eval-load-phase.ts"
       | "src/core/evolve.ts"
       | "src/core/foreign-runner.test.ts"
       | "src/core/foreign-runner.ts"
@@ -790,6 +799,11 @@ declare module "vigiles/spec" {
       | "src/eval-cache.ts"
       | "src/eval-cost.test.ts"
       | "src/eval-cost.ts"
+      | "src/eval-define.test.ts"
+      | "src/eval-define.ts"
+      | "src/eval-entry.test.ts"
+      | "src/eval-entry.ts"
+      | "src/eval-file-shape.test.ts"
       | "src/eval-injected-driver-guard.test.ts"
       | "src/eval-lock-wiring.test.ts"
       | "src/eval-lock.test.ts"

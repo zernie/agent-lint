@@ -56,7 +56,7 @@
         "notMeasured": true,
         "findings": [
           "3 surfaces whose firing was never measured",
-          "not measured — run `npx vigiles audit` interactively to measure, or add a `*.eval.mjs` (`paid_measureTriggerRate`, vigiles/eval)"
+          "not measured — run `npx vigiles audit` interactively to measure, or add a `*.eval.mjs` (`export default defineEval({ measureTriggerRate: … })`, vigiles)"
         ]
       }
     ],
