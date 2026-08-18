@@ -51,6 +51,19 @@ import { verifyMcpServers } from "./core/mcp-config.js";
 import { agentPluginsMcpSources } from "./core/agent-plugins.js";
 import { verifyMcpHookTargets } from "./core/mcp-hook.js";
 import { pluginDirLayoutIssues } from "./core/plugin-dir-layout.js";
+import {
+  assertDistinctScopeKeys,
+  multiScopeWarning,
+  scopeKey,
+  surfaceSource,
+  type SurfaceScope,
+} from "./core/surface-scopes.js";
+
+/** Mirror of plugin-loader.ts `MaterializedSurfaces`. */
+interface MaterializedSurfaces {
+  readonly counts: Record<string, number>;
+  readonly scopes: readonly SurfaceScope[];
+}
 import { hookBlockIssues } from "./core/hook-block-ineffective.js";
 import { hookMatcherIssues } from "./core/hook-matcher.js";
 import { findUntestedSurfacesInFiles } from "./test-coverage-files.js";
@@ -263,13 +276,12 @@ function hasMcp(files: Record<string, string>, layout: PluginLayout): boolean {
 // Surface materialization (mirrors plugin-loader.ts materializeSurfaces)
 // ---------------------------------------------------------------------------
 
-type SurfaceSource =
-  | { readonly kind: "single-skill"; readonly skillName: string }
-  | { readonly kind: "root" }
-  | { readonly kind: "user"; readonly sub: string }
-  | { readonly kind: "none" };
-
-/** Mirror of plugin-loader.ts `surfaceHasLoadable`. */
+/**
+ * Mirror of plugin-loader.ts `surfaceHasLoadable`. The SCOPING DECISION itself is
+ * not mirrored — it lives once, IO-free, in `src/core/surface-scopes.ts`, and both
+ * engines call it. That pair used to be two copies of the same precedence rules,
+ * which is exactly the shape this repo keeps getting bitten by fixing on one side.
+ */
 function surfaceHasLoadable(
   layout: PluginLayout,
   surface: string,
@@ -279,35 +291,6 @@ function surfaceHasLoadable(
   return surface === layout.skillDir
     ? keys.some((k) => basename(k) === "SKILL.md")
     : keys.some((k) => k.endsWith(".md"));
-}
-
-/** Mirror of plugin-loader.ts `classifySurfaceSource`, over the file map. */
-function classifySurfaceSource(
-  files: Record<string, string>,
-  layout: PluginLayout,
-  rootTrees: ReadonlyMap<string, Record<string, string>>,
-  repoName?: string,
-): SurfaceSource {
-  if (layout.skillDir && hasFile(files, "SKILL.md")) {
-    // Disk mirrors the CLI: a nameless root SKILL.md takes the audited dir's
-    // basename. In-browser there's no real dir, so use the repo name when the
-    // caller (runAudit) supplies it, else the synthetic BROWSER_ROOT basename.
-    return {
-      kind: "single-skill",
-      skillName: repoName ?? basename(BROWSER_ROOT),
-    };
-  }
-  const rootHasLoadable = layout.surfaceDirs.some((s) =>
-    surfaceHasLoadable(layout, s, rootTrees.get(s) ?? {}),
-  );
-  const isPluginShaped =
-    hasFile(files, layout.manifestPath) ||
-    hasFile(files, layout.hooksConventionPath);
-  if (rootHasLoadable || isPluginShaped) return { kind: "root" };
-  if (layout.userSurfaceRoot !== undefined) {
-    return { kind: "user", sub: layout.userSurfaceRoot };
-  }
-  return { kind: "none" };
 }
 
 /** The materialization accumulator — surface contents + their on-disk source paths. */
@@ -322,21 +305,66 @@ function materializeSurfaces(
   layout: PluginLayout,
   acc: Materialized,
   repoName?: string,
-): Record<string, number> {
+): MaterializedSurfaces {
   const { out, sources } = acc;
   const counts: Record<string, number> = {};
-  const rootTrees = new Map<string, Record<string, string>>();
-  for (const surface of layout.surfaceDirs) {
-    if (isDirRel(files, surface)) {
-      rootTrees.set(surface, readTreeUnder(files, surface, surface));
+  const scopeTrees = (base: string): Map<string, Record<string, string>> => {
+    const trees = new Map<string, Record<string, string>>();
+    for (const surface of layout.surfaceDirs) {
+      const dirRel = base === "" ? surface : `${base}/${surface}`;
+      trees.set(
+        surface,
+        isDirRel(files, dirRel) ? readTreeUnder(files, dirRel, dirRel) : {},
+      );
     }
-  }
+    return trees;
+  };
+  const hasLoadable = (trees: ReadonlyMap<string, Record<string, string>>) =>
+    layout.surfaceDirs.some((s) =>
+      surfaceHasLoadable(layout, s, trees.get(s) ?? {}),
+    );
   const add = (key: string, content: string, onDisk: string): void => {
     out[key] = content;
     sources[key] = onDisk;
   };
 
-  const source = classifySurfaceSource(files, layout, rootTrees, repoName);
+  const rootTrees = scopeTrees("");
+  const userTrees =
+    layout.userSurfaceRoot !== undefined
+      ? scopeTrees(layout.userSurfaceRoot)
+      : new Map<string, Record<string, string>>();
+
+  /** Mirror of the disk loader's `materializeScope`. */
+  const materializeScope = (
+    scope: SurfaceScope,
+    trees: ReadonlyMap<string, Record<string, string>>,
+  ): void => {
+    for (const surface of layout.surfaceDirs) {
+      const tree = trees.get(surface) ?? {};
+      const dirRel = scope.base === "" ? surface : `${scope.base}/${surface}`;
+      for (const [rel, content] of Object.entries(tree))
+        add(
+          scopeKey(scope, surface, rel),
+          content,
+          join(BROWSER_ROOT, dirRel, rel),
+        );
+      counts[surface] = (counts[surface] ?? 0) + Object.keys(tree).length;
+    }
+  };
+
+  const source = surfaceSource(layout, {
+    hasRootSkillFile: Boolean(layout.skillDir) && hasFile(files, "SKILL.md"),
+    // Disk mirrors the CLI: a nameless root SKILL.md takes the audited dir's
+    // basename. In-browser there's no real dir, so use the repo name when the
+    // caller (runAudit) supplies it, else the synthetic BROWSER_ROOT basename.
+    skillName: repoName ?? basename(BROWSER_ROOT),
+    rootHasLoadable: hasLoadable(rootTrees),
+    isPluginShaped:
+      hasFile(files, layout.manifestPath) ||
+      hasFile(files, layout.hooksConventionPath),
+    userHasLoadable: hasLoadable(userTrees),
+  });
+
   switch (source.kind) {
     case "single-skill": {
       const tree = readTreeUnder(files, "", "");
@@ -348,34 +376,15 @@ function materializeSurfaces(
         );
       }
       counts[layout.skillDir] = Object.keys(tree).length;
-      break;
+      return { counts, scopes: [] };
     }
-    case "root":
-    case "user": {
-      const baseRel = source.kind === "user" ? source.sub : "";
-      for (const surface of layout.surfaceDirs) {
-        const dirRel = baseRel === "" ? surface : `${baseRel}/${surface}`;
-        const tree =
-          source.kind === "root"
-            ? (rootTrees.get(surface) ?? {})
-            : isDirRel(files, dirRel)
-              ? readTreeUnder(files, dirRel, dirRel)
-              : {};
-        for (const [rel, content] of Object.entries(tree)) {
-          add(
-            join(layout.materializeRoot, surface, rel),
-            content,
-            join(BROWSER_ROOT, dirRel, rel),
-          );
-        }
-        counts[surface] = Object.keys(tree).length;
-      }
-      break;
+    case "scopes": {
+      assertDistinctScopeKeys(source.scopes, layout.name);
+      for (const scope of source.scopes)
+        materializeScope(scope, scope.base === "" ? rootTrees : userTrees);
+      return { counts, scopes: source.scopes };
     }
-    case "none":
-      break;
   }
-  return counts;
 }
 
 // ---------------------------------------------------------------------------
@@ -490,12 +499,14 @@ function danglingRefs(
 function pluginWarnings(
   files: Record<string, string>,
   layout: PluginLayout,
-  counts: Record<string, number>,
+  { counts, scopes }: MaterializedSurfaces,
   hooks: unknown,
   materialized: Record<string, string>,
   rootName: string,
 ): string[] {
   const warnings: string[] = [];
+  const multiScope = multiScopeWarning(scopes, counts);
+  if (multiScope !== undefined) warnings.push(multiScope);
   if (counts.agents) {
     warnings.push(
       `plugin defines ${String(counts.agents)} subagent file(s) under agents/ — these run only under a real model; test them at the eval tier (runEval), not the deterministic mock.`,
@@ -560,7 +571,12 @@ export function loadPluginFromFiles(
       layout.instructionFile,
     );
   }
-  const counts = materializeSurfaces(files, layout, { out, sources }, repoName);
+  const surfaces = materializeSurfaces(
+    files,
+    layout,
+    { out, sources },
+    repoName,
+  );
 
   return {
     settings: resolvedHooks ? { hooks: resolvedHooks } : {},
@@ -569,7 +585,7 @@ export function loadPluginFromFiles(
     warnings: pluginWarnings(
       files,
       layout,
-      counts,
+      surfaces,
       resolvedHooks,
       out,
       repoName ?? basename(BROWSER_ROOT),
@@ -725,7 +741,10 @@ export function scanFiles(
       declaredServers,
       dialect,
     ),
-    descriptionOverlaps: descriptionOverlapsFor(loaded.files, cls),
+    descriptionOverlaps: descriptionOverlapsFor(loaded.files, cls, {
+      root: BROWSER_ROOT,
+      sources: loaded.sources,
+    }),
     descriptionBudgetIssues: descriptionBudgetFor(loaded.files, cls),
     trifectaFindings,
     skillResourceIssues: skillResourceFindings,

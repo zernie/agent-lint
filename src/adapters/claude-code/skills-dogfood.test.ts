@@ -52,14 +52,42 @@ test("vigiles plugin: loadPlugin materializes every shipped skill", () => {
   // every skills/<name>/ directory that actually IS a skill (has a SKILL.md;
   // skills/linter-docs/ is a reference-doc dir, not a skill) shows up
   // materialized — no skill silently dropped by a bad manifest path.
-  const onDisk = readdirSync(join(ROOT, "skills"), { withFileTypes: true })
+  //
+  // This repo is itself the two-scope shape (shipped `skills/` + a large local
+  // `.claude/skills/`), which the loader used to read as ONE. So the assertion is
+  // per-scope: every shipped skill under its own key, every dev skill under
+  // `.claude/`, and NEITHER count standing in for the other.
+  const shippedNames = readdirSync(join(ROOT, "skills"), {
+    withFileTypes: true,
+  })
     .filter((d) => d.isDirectory())
-    .filter((d) => existsSync(join(ROOT, "skills", d.name, "SKILL.md"))).length;
-  assert.ok(onDisk > 0, "repo ships at least one skill");
+    .filter((d) => existsSync(join(ROOT, "skills", d.name, "SKILL.md")))
+    .map((d) => d.name);
+  assert.ok(shippedNames.length > 0, "repo ships at least one skill");
+  for (const name of shippedNames) {
+    assert.ok(
+      loaded.files[`skills/${name}/SKILL.md`] !== undefined,
+      `shipped skill ${name} materializes under its own repo-relative key`,
+    );
+  }
+  const devNames = existsSync(join(ROOT, ".claude", "skills"))
+    ? readdirSync(join(ROOT, ".claude", "skills"), { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .filter((d) =>
+          existsSync(join(ROOT, ".claude", "skills", d.name, "SKILL.md")),
+        )
+        .map((d) => d.name)
+    : [];
+  for (const name of devNames) {
+    assert.ok(
+      loaded.files[join(".claude", "skills", name, "SKILL.md")] !== undefined,
+      `project skill ${name} is materialized, not shadowed by the shipped scope`,
+    );
+  }
   assert.equal(
     skills.length,
-    onDisk,
-    `expected all ${String(onDisk)} skills to materialize, got ${String(skills.length)}`,
+    shippedNames.length + devNames.length,
+    `expected ${String(shippedNames.length)} shipped + ${String(devNames.length)} project skills, got ${String(skills.length)}`,
   );
 
   // ${CLAUDE_PLUGIN_ROOT} must be expanded in the loaded settings (a skill/hook

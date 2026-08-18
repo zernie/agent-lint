@@ -76,7 +76,10 @@ function overlapExplanations(report: ScanReport): ScoreExplanation[] {
     symptom: "wrong-skill-fires",
     cause: o.message,
     detector: "description-overlap",
-    fix: `Differentiate the descriptions of "${o.a}" and "${o.b}" (${o.similarity} similar) — the selector picks by description, so near-identical text makes it fire the wrong one.`,
+    // `o.a`/`o.b` are already display LABELS (quoted name, plus the file path
+    // when the caller had one) — a bare name is ambiguous now that both
+    // discovery levels are read and the same name can appear twice.
+    fix: `Differentiate the descriptions of ${o.a} and ${o.b} (${o.similarity} similar) — the selector picks by description, so near-identical text makes it fire the wrong one.`,
     confidence: "possible",
   }));
 }

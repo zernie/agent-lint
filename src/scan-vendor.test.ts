@@ -103,6 +103,33 @@ test("true-positive: madappgang-frontend tester reproduces AskUserQuestion + mal
   );
 });
 
+// TRUE-POSITIVE — the SHADOWING fixture (MIT; see test/dogfood/README.md). Both
+// copies of one skill, from the same commit of the same repo: the `skills/` copy
+// (well-formed) and the `.claude/skills/` copy (a multi-line unquoted
+// `description:` that strict YAML rejects). Until 2026-08 the loader read ONE
+// discovery level, so the broken copy was never opened — vigiles reported this
+// skill clean while naming a file it had not read. Upstream had 50 such pairs and
+// every one of them differed.
+test("true-positive: claude-octopus flow-define exists in BOTH scopes, and the .claude copy's YAML is broken", () => {
+  const r = scanPlugin(vendored("claude-octopus"));
+
+  assert.deepEqual(
+    r.skills.map((sk) => sk.path).sort(),
+    [".claude/skills/flow-define/SKILL.md", "skills/flow-define/SKILL.md"],
+    "both copies are surfaces — neither shadows the other",
+  );
+  assert.ok(
+    r.malformedFrontmatter.some((m) =>
+      m.path.startsWith(".claude/skills/flow-define"),
+    ),
+    "the .claude copy's multi-line unquoted description is invalid YAML",
+  );
+  assert.ok(
+    !r.malformedFrontmatter.some((m) => m.path.startsWith("skills/")),
+    "…and the root copy is well-formed, so the finding is attributed to the right file",
+  );
+});
+
 // FP-GUARD (calibration) — a real MIT hook component (davila7/claude-code-templates)
 // whose description says it "blocks deployments" but is a PostToolUse hook that
 // `exit 2`s. On PostToolUse, exit 2 FEEDS stderr back to the model (a legitimate

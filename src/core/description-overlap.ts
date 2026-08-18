@@ -19,10 +19,22 @@ import { ncd } from "./ncd.js";
 export interface DescribedSurface {
   readonly name: string;
   readonly description: string;
+  /**
+   * Repo-relative path to report the surface at. Optional for callers that have
+   * no path, but REQUIRED in practice to keep the message actionable: since the
+   * loader started reading BOTH discovery levels, a repo that keeps a copy of a
+   * skill in `skills/` and `.claude/skills/` yields two surfaces with the SAME
+   * name, and "skills \"dup\" and \"dup\" have near-identical descriptions" names
+   * neither file. Measured on `nyldn/claude-octopus`: 50 such pairs. The path is
+   * the only thing that distinguishes them.
+   */
+  readonly where?: string;
 }
 
 export interface DescriptionOverlap {
+  /** Display label for the first skill — `"name"`, or `"name" (path)`. */
   readonly a: string;
+  /** Display label for the second skill — `"name"`, or `"name" (path)`. */
   readonly b: string;
   /** 0–1, higher = more alike (1 − NCD), rounded to 2 dp. */
   readonly similarity: number;
@@ -43,6 +55,11 @@ export const OVERLAP_NCD_CUTOFF = 0.2;
  * first. Pure; pass only the surfaces that actually compete for auto-selection
  * (model-invocable, described) so a user-invoked pair isn't a false alarm.
  */
+/** `"name"`, or `"name" (path)` when the caller supplied one. */
+function label(s: DescribedSurface): string {
+  return s.where === undefined ? `"${s.name}"` : `"${s.name}" (${s.where})`;
+}
+
 export function findDescriptionOverlaps(
   surfaces: readonly DescribedSurface[],
   cutoff: number = OVERLAP_NCD_CUTOFF,
@@ -52,13 +69,13 @@ export function findDescriptionOverlaps(
     for (let j = i + 1; j < surfaces.length; j++) {
       const d = ncd(surfaces[i].description, surfaces[j].description);
       if (d >= cutoff) continue;
-      const a = surfaces[i].name;
-      const b = surfaces[j].name;
+      const a = label(surfaces[i]);
+      const b = label(surfaces[j]);
       overlaps.push({
         a,
         b,
         similarity: Math.round((1 - d) * 100) / 100,
-        message: `skills "${a}" and "${b}" have near-identical descriptions (${String(Math.round((1 - d) * 100))}% alike) — the model can't reliably tell them apart, so the wrong one may fire. Differentiate their descriptions.`,
+        message: `skills ${a} and ${b} have near-identical descriptions (${String(Math.round((1 - d) * 100))}% alike) — the model can't reliably tell them apart, so the wrong one may fire. Differentiate their descriptions.`,
       });
     }
   }

@@ -32,6 +32,7 @@ import { editDistance } from "./core/edit-distance.js";
 import { readFrontmatter, frontmatterScalar } from "./core/frontmatter-read.js";
 import {
   findDescriptionOverlaps,
+  type DescribedSurface,
   type DescriptionOverlap,
 } from "./core/description-overlap.js";
 import {
@@ -477,24 +478,46 @@ export function skillRefSources(
 function modelInvocableSkillSurfaces(
   files: Record<string, string>,
   cls: SurfaceClassifier,
-): { name: string; description: string }[] {
-  const surfaces: { name: string; description: string }[] = [];
+  where?: SurfacePathContext,
+): DescribedSurface[] {
+  const surfaces: DescribedSurface[] = [];
   for (const [path, md] of Object.entries(files)) {
     if (!cls.isSkill(path)) continue;
     if (/^\s*disable-model-invocation:\s*true\s*$/m.test(md)) continue;
     const fm = frontmatter(md);
     const description = fm.description ?? firstBodyParagraph(md);
     if (!description || description.length < 20) continue;
-    surfaces.push({ name: fm.name ?? skillName(path), description });
+    surfaces.push({
+      name: fm.name ?? skillName(path),
+      description,
+      // The NAME alone stopped identifying a surface once the loader began
+      // reading both discovery levels: a repo carrying `skills/x` AND
+      // `.claude/skills/x` has two skills called `x`. Report the real path
+      // (never the synthetic key) so the pair is actionable.
+      ...(where
+        ? {
+            where: reportedSurfacePath(path, where.sources?.[path], where.root),
+          }
+        : {}),
+    });
   }
   return surfaces;
+}
+
+/** Where a materialized key really lives — for reporting a surface by path. */
+export interface SurfacePathContext {
+  readonly root: string;
+  readonly sources?: Record<string, string>;
 }
 
 export function descriptionOverlapsFor(
   files: Record<string, string>,
   cls: SurfaceClassifier,
+  where?: SurfacePathContext,
 ): DescriptionOverlap[] {
-  return findDescriptionOverlaps(modelInvocableSkillSurfaces(files, cls));
+  return findDescriptionOverlaps(
+    modelInvocableSkillSurfaces(files, cls, where),
+  );
 }
 
 /**
