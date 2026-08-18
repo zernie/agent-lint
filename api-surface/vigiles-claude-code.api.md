@@ -23,10 +23,10 @@ export function claudeAvailable(): boolean;
 export const claudeCodeAdapter: HarnessAdapter;
 
 // @public
-export type ClaudeCodeBoundedTool = ClaudeCodeReadOnlyTool | "Write" | "Edit" | "MultiEdit" | "NotebookEdit" | "Bash";
+export type ClaudeCodeBoundedTool = ClaudeCodeReadOnlyTool | "Write" | "Edit" | "NotebookEdit" | "Bash" | "PowerShell";
 
 // @public
-export const claudeCodeBuiltinAgentTools: readonly ["Read", "Write", "Edit", "MultiEdit", "Bash", "BashOutput", "KillBash", "Grep", "Glob", "LS", "WebSearch", "WebFetch", "NotebookEdit", "TodoWrite", "Task", "Skill"];
+export const claudeCodeBuiltinAgentTools: readonly ["Read", "Grep", "Glob", "Bash", "PowerShell", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "TodoWrite", "Skill", "ToolSearch", "EnterWorktree", "ExitWorktree", "Monitor", "TaskStop", "SendMessage", "Artifact", "Agent", "Task", "ExitPlanMode", "ListAgents", "LSP", "ShareOnboardingGuide", "CronCreate", "CronDelete", "CronList", "TaskCreate", "TaskGet", "TaskList", "TaskUpdate"];
 
 // @public
 export type ClaudeCodeBuiltinTool = (typeof claudeCodeBuiltinAgentTools)[number];
@@ -56,7 +56,7 @@ export const claudeCodeRuntime: HarnessRuntime;
 export type ClaudeCodeSideEffectingTool = (typeof claudeCodeSideEffectingTools)[number];
 
 // @public
-export const claudeCodeSideEffectingTools: readonly ["Bash", "BashOutput", "KillBash", "Edit", "MultiEdit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Skill", "Task", "TodoWrite"];
+export const claudeCodeSideEffectingTools: readonly ["Bash", "PowerShell", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Skill", "TodoWrite", "Monitor", "SendMessage", "Artifact", "EnterWorktree", "ExitWorktree", "TaskStop", "Agent", "Task", "TaskCreate", "TaskUpdate", "CronCreate", "CronDelete", "ShareOnboardingGuide"];
 
 // @public
 export interface ClaudeCodeToolVocabulary extends ToolVocabulary {
@@ -90,6 +90,7 @@ export function formatSelectionReport(r: SelectionReport): string;
 export interface HarnessDialect {
     readonly builtinAgentTools: readonly string[];
     readonly hookEvents: readonly string[];
+    readonly hookEventVocabulary?: HarnessVocabulary;
     readonly instructionTargets: readonly string[];
     readonly knownMcpServers?: readonly string[];
     readonly mcpToolPattern: RegExp;
@@ -100,6 +101,7 @@ export interface HarnessDialect {
     readonly pluginRootToken: string;
     readonly sideEffectingTools?: readonly string[];
     readonly skillFrontmatter: SkillFrontmatterProfile;
+    readonly subagentToolVocabulary?: HarnessVocabulary;
 }
 
 // @public

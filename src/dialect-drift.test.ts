@@ -139,7 +139,16 @@ describe("dialect freshness vs the INSTALLED claude-code (read-local, ToS-clean)
   // The hook-event check needs a READABLE JS bundle (old `cli.js`). CC ≥ ~2.1.18x
   // ships a native binary with none, so gate on the bundle and SKIP LOUDLY (one
   // self-explaining test, per no-silent-skips) instead of crashing on a missing file.
-  const bundle = pkg ? findClaudeCodeBundle(pkg) : null;
+  //
+  // It ALSO needs `packageIsRunningCC`, which it did not have until 2026-08-17 —
+  // its sibling above applied the stale-leftover reconciliation and this one
+  // didn't. That asymmetry meant the only bundle this ever ran against was
+  // whatever old package happened to be lying around: on the capture box a
+  // leftover 2.1.42 `cli.js` beside a running 2.1.233 native binary, which
+  // reported 15 real events as "renamed/removed in CC?" purely because 2.1.42
+  // predates them. Reconciling here is the same guard `formatDialectDrift`
+  // already applies at runtime, not a weakening of the gate.
+  const bundle = pkg && packageIsRunningCC ? findClaudeCodeBundle(pkg) : null;
   const eventsGate = bundle ? it : it.skip;
 
   eventsGate(

@@ -25,9 +25,11 @@ import {
 
 import {
   verifyToolContract,
-  confidentToolIssues,
+  scoredIssues,
+  advisoryIssues,
   disallowedToolIssues,
 } from "./core/tool-contract.js";
+import type { HookEventIssue } from "./core/hook-events.js";
 import { editDistance } from "./core/edit-distance.js";
 import { readFrontmatter, frontmatterScalar } from "./core/frontmatter-read.js";
 import {
@@ -73,6 +75,7 @@ import type {
   ScanSkillResourceFinding,
   ScanSkillFenceFinding,
   ScanDelegationFinding,
+  VocabularyNote,
 } from "./scan.js";
 
 // A script-path token, matched against a WHOLE shell WORD. The token class is
@@ -563,6 +566,9 @@ export function scanAgents(
     // including every side-effecting one — pass the wildcard sentinel so
     // effectSurface correctly classifies it as `"unrestricted"`.
     const surface = effectSurface(tools ?? ["*"], dialect);
+    // Classify ONCE; the scored and advisory halves are two views of one result,
+    // so they cannot disagree about what the vocabulary said.
+    const vocabIssues = tools ? verifyToolContract(tools, dialect) : [];
     out.push({
       name: basename(path, ".md"),
       path: ctx
@@ -570,12 +576,16 @@ export function scanAgents(
         : path,
       tools,
       // Cross-reference the declared rail against the dialect catalog — the moat.
-      // Auditing third-party plugins → only the HIGH-CONFIDENCE issues (never-
-      // available + close typos); a bare unrecognized tool is likely plugin/MCP-
-      // provided, not a defect (the TaskCreate/TaskGet lesson). See tool-contract.ts.
-      toolIssues: tools
-        ? confidentToolIssues(verifyToolContract(tools, dialect))
-        : [],
+      // The SCORED half only: a tool the platform withholds unconditionally, or a
+      // name one edit from a real one (no two real names are that close, so that
+      // is a typo). Everything else the vocabulary has an opinion about goes to
+      // `toolNotes` — surfaced, never graded. See core/vocabulary.ts.
+      toolIssues: tools ? scoredIssues(vocabIssues) : [],
+      // Advisory: a real tool the platform withholds only under a condition
+      // vigiles cannot see (`Agent` at the depth limit), and a name that is
+      // simply not in our capture — which may mean the catalog is stale, not
+      // that the contract is wrong.
+      toolNotes: tools ? advisoryIssues(vocabIssues) : [],
       // The MCP half of the moat: an `mcp__server__tool` whose server isn't in the
       // plugin's declared set can't resolve. High-precision (gated on a declared
       // set, built-ins allowlisted, plugin-namespaced form skipped). See mcp-tool.ts.
@@ -1071,4 +1081,61 @@ export function summarizePurity(agents: readonly ScanAgent[]): {
     },
     { pure: 0, bounded: 0, unrestricted: 0 },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Vocabulary notes — the advisory half of the findings
+// ---------------------------------------------------------------------------
+// These live HERE, not in scan.ts, because both engines produce them and only
+// this module is node-free. Importing them from scan.ts pulled the node-only
+// graph (down to `@ast-grep/napi`'s native .node binding) into the browser
+// bundle and broke the site build — the gate that owns this invariant.
+
+/**
+ * Gather the advisory half of the vocabulary findings for the report. Kept in
+ * one place so hook events and subagent tools present identically — the two used
+ * to answer the same question with different policies.
+ */
+export function collectVocabularyNotes(
+  hookEventIssues: readonly HookEventIssue[],
+  agents: readonly ScanAgent[],
+): VocabularyNote[] {
+  return [
+    ...advisoryIssues(hookEventIssues).map((i) => ({
+      where: `hook event "${i.event}"`,
+      message: i.message,
+    })),
+    ...agents.flatMap((a) => groupAgentToolNotes(a)),
+  ];
+}
+
+/**
+ * One agent's advisory tool notes, with the `conditional` ones GROUPED by the
+ * condition they share. A delegating subagent legitimately declares eight
+ * foreground-only tools; printing the same sentence eight times is noise, and
+ * noise is what this whole change exists to stop producing. Unrecognised names
+ * stay one-per-tool — each carries its own did-you-mean.
+ */
+function groupAgentToolNotes(agent: ScanAgent): VocabularyNote[] {
+  const notes = advisoryIssues(agent.toolNotes ?? []);
+  const byCondition = new Map<string, string[]>();
+  const out: VocabularyNote[] = [];
+  for (const i of notes) {
+    if (i.verdict === "conditional" && i.condition !== undefined) {
+      const at = byCondition.get(i.condition) ?? [];
+      at.push(i.tool);
+      byCondition.set(i.condition, at);
+      continue;
+    }
+    out.push({ where: agent.path, message: i.message });
+  }
+  for (const [condition, tools] of byCondition)
+    out.push({
+      where: agent.path,
+      message:
+        `${tools.join(", ")} ${tools.length === 1 ? "is a real tool" : "are real tools"}, ` +
+        `but the platform removes ${tools.length === 1 ? "it" : "them"} ${condition}. ` +
+        `vigiles cannot see that condition from the file, so this is a note, not a defect.`,
+    });
+  return out;
 }

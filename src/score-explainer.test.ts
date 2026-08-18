@@ -134,6 +134,8 @@ test("agent tool issue with a suggestion → swap fix; without → remove fix", 
             {
               tool: "Reed",
               kind: "unknown",
+              verdict: "unrecognised",
+              severity: "scored",
               suggestion: "Read",
               message: 'unknown tool "Reed" (did you mean "Read"?)',
             },
@@ -154,6 +156,8 @@ test("agent tool issue with a suggestion → swap fix; without → remove fix", 
             {
               tool: "AskUserQuestion",
               kind: "never-available",
+              verdict: "withheld",
+              severity: "scored",
               suggestion: null,
               message: 'tool "AskUserQuestion" is never available to subagents',
             },
@@ -198,7 +202,9 @@ test("hook on an unknown event → hook-never-runs (with/without suggestion)", (
       hookEventIssues: [
         {
           event: "PreToolUze",
+          verdict: "unrecognised",
           suggestion: "PreToolUse",
+          severity: "scored",
           message:
             'unknown hook event "PreToolUze" (did you mean "PreToolUse"?)',
         },
@@ -217,7 +223,9 @@ test("hook on an unknown event → hook-never-runs (with/without suggestion)", (
       hookEventIssues: [
         {
           event: "Whenever",
+          verdict: "unrecognised",
           suggestion: null,
+          severity: "scored",
           message: 'unknown hook event "Whenever"',
         },
       ],
@@ -297,6 +305,8 @@ test("explainSurface filters to one surface, including overlap pairs", () => {
           {
             tool: "Reed",
             kind: "unknown",
+            verdict: "unrecognised",
+            severity: "scored",
             suggestion: "Read",
             message: "typo",
           },

@@ -170,7 +170,7 @@ export const RULE_META: Record<RuleName, RuleMeta> = {
     surface: ["subagent"],
     defaultSeverity: "warn",
     summary: "A subagent's tools: are all real (no never-available / typo).",
-    detector: "confidentToolIssues",
+    detector: "verifyToolContract / scoredIssues",
     upstreamPrevention:
       "typed agent() vocabulary + compileAgent — an unknown tool is a tsc/compile error",
   },
@@ -200,7 +200,7 @@ export const RULE_META: Record<RuleName, RuleMeta> = {
     surface: ["hook"],
     defaultSeverity: "warn",
     summary: "A hook's event name is one the harness defines (it can fire).",
-    detector: "confidentHookEventIssues",
+    detector: "verifyHookEvents / scoredIssues",
     upstreamPrevention: "compiled hook on: is dialect-validated at compile",
   },
   "hook-script-exists": {
