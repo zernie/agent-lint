@@ -82,6 +82,7 @@
  * impossible there and its count is 0 — see `test-coverage-files.ts`.
  */
 import { readFrontmatter, frontmatterScalar } from "./core/frontmatter-read.js";
+import { basename, dirname } from "./posix-path.js";
 
 import { scriptRefPattern } from "./core/source-refs.js";
 
@@ -115,6 +116,55 @@ export interface CoverableSurface {
  */
 export interface PreparedTest {
   readonly path: string;
+}
+
+/**
+ * Is `testPath` the colocated test OF this surface — NAMED after it, SITTING
+ * BESIDE it?
+ *
+ * 🔴 THIS USED TO BE WRITTEN TWICE, and the second copy said so in its own
+ * comment: `test-coverage-files.ts` carried a function whose docstring was
+ * *"Mirror of test-coverage.ts `isColocated`"*. A mirror is a promise that two
+ * bodies stay equal, kept by whoever remembers — and this file already documents
+ * three separate occasions where a change landed in one report builder and not
+ * the other ({@link declaredSurfaceName}, {@link hookScriptRefs}). The rule now
+ * has ONE body and three callers: the disk detector, the browser twin, and the
+ * runner that turns an executed script into an execution record
+ * (`coverage-artifact.ts`). There is nothing left to mirror wrong.
+ *
+ * That third caller is why this became shared rather than merely deduplicated.
+ * Colocation and execution were answering the same question — *which surface is
+ * this test about?* — with two different pieces of code, so a script vigiles had
+ * just RUN could not be attributed by the very rule that was already willing to
+ * credit it for existing.
+ *
+ * SEPARATORS ARE NORMALISED FIRST, then POSIX semantics apply. The disk detector
+ * feeds paths from `globSync`, which yields `\` on Windows; the browser twin
+ * feeds file-map keys, which are always `/`. Folding `\` to `/` makes one body
+ * correct for both instead of asking each caller to bring its own path module —
+ * which is exactly the seam the mirror lived in.
+ *
+ * ⚠️ THE COST, STATED: a POSIX file whose NAME literally contains a backslash is
+ * now read as a directory boundary. That is not reachable for either input here —
+ * a skill directory or a test filename with a `\` in it does not survive the glob
+ * patterns that discover it in the first place — and it is the same trade
+ * `hookScriptRefs` already makes one function up.
+ */
+export function isColocatedTest(
+  surface: Pick<CoverableSurface, "name" | "path">,
+  testPath: string,
+): boolean {
+  const test = posixly(testPath);
+  const home = posixly(surface.path);
+  if (!basename(test).startsWith(`${surface.name}.`)) return false;
+  // A root `SKILL.md` (single-skill-dir target) lives at ".", and discovery
+  // returns top-level files without a "./" prefix — so `dirname` is "." on both
+  // sides and the comparison holds without a special case.
+  return dirname(test) === dirname(home);
+}
+
+function posixly(p: string): string {
+  return p.replaceAll("\\", "/");
 }
 
 /** Wrap a discovered path. Kept as a function so both twins share one shape. */
