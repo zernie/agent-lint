@@ -75,6 +75,7 @@ export interface HarnessAdapter {
 export interface HarnessDialect {
     readonly builtinAgentTools: readonly string[];
     readonly hookEvents: readonly string[];
+    readonly hookEventVocabulary?: HarnessVocabulary;
     readonly instructionTargets: readonly string[];
     readonly knownMcpServers?: readonly string[];
     readonly mcpToolPattern: RegExp;
@@ -85,6 +86,7 @@ export interface HarnessDialect {
     readonly pluginRootToken: string;
     readonly sideEffectingTools?: readonly string[];
     readonly skillFrontmatter: SkillFrontmatterProfile;
+    readonly subagentToolVocabulary?: HarnessVocabulary;
 }
 
 // @public

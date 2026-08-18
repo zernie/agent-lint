@@ -22,6 +22,8 @@
  * Which SKILL.md frontmatter keys a harness understands — see
  * `HarnessDialect.skillFrontmatter`.
  */
+import type { HarnessVocabulary } from "./vocabulary.js";
+
 export type SkillFrontmatterProfile = "claude-code" | "minimal";
 
 export interface HarnessDialect {
@@ -84,4 +86,30 @@ export interface HarnessDialect {
    * Optional (additive, non-breaking) — absent ⇒ no tool is known-side-effecting.
    */
   readonly sideEffectingTools?: readonly string[];
+  /**
+   * The hook-event catalog as a {@link HarnessVocabulary} — a status and a
+   * recorded vendor capture per term, rather than bare membership in
+   * `hookEvents`. When present it is what `verifyHookEvents` classifies against,
+   * so a name the catalog doesn't hold produces an `unrecognised` ADVISORY
+   * (naming vigiles's capture as the possibly-stale party) instead of the old
+   * behaviour, where an unknown name drew an accusation or silence depending on
+   * its edit distance to the list.
+   *
+   * Optional (additive, non-breaking). Absent ⇒ one is synthesised from
+   * `hookEvents` via `vocabularyFromLists`, so a legacy adapter keeps working
+   * and its unknowns become advisories rather than silence.
+   */
+  readonly hookEventVocabulary?: HarnessVocabulary;
+  /**
+   * The subagent-tool catalog as a {@link HarnessVocabulary}. Same contract as
+   * `hookEventVocabulary`; absent ⇒ synthesised from `builtinAgentTools`
+   * (available) + `neverAvailableTools` (withheld).
+   *
+   * The third status is why this exists: the vendor removes `Agent` only at the
+   * spawn depth limit and `ExitPlanMode` only outside plan mode, and removes
+   * most built-ins from a background subagent but not a foreground one — so
+   * "available to a subagent" is not a property of the name, and a two-way
+   * split had to encode one of those conditions as an unconditional fact.
+   */
+  readonly subagentToolVocabulary?: HarnessVocabulary;
 }

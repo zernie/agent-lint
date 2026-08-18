@@ -31,7 +31,11 @@ import type {
 } from "./spec.js";
 
 import { checkLinterRule, extractLinterName } from "./linters.js";
-import { verifyToolContract, disallowedToolIssues } from "./tool-contract.js";
+import {
+  verifyToolContract,
+  disallowedToolIssues,
+  authoringIssues,
+} from "./tool-contract.js";
 import { purityViolations } from "./effects.js";
 import type { LinterCheckResult } from "./linters.js";
 import type { HarnessDialect, SkillFrontmatterProfile } from "./dialect.js";
@@ -1056,7 +1060,12 @@ function validateAgentTools(
   tools: readonly string[],
   dialect: HarnessDialect,
 ): CompileError[] {
-  return verifyToolContract(tools, dialect).map((issue) => ({
+  // `authoringIssues` drops the `conditional` verdicts: `Agent`, `ExitPlanMode`
+  // and the foreground-only built-ins are REAL tools, legitimate to declare, and
+  // erroring on them is what made `tools: Agent, Read, Bash` — a worked example
+  // in the vendor's own docs — fail to compile. Everything else stays an error,
+  // because authoring your own spec is a closed world.
+  return authoringIssues(verifyToolContract(tools, dialect)).map((issue) => ({
     type: "unknown-tool",
     message: issue.message,
   }));

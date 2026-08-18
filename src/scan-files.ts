@@ -43,10 +43,7 @@ import type { PluginLayout } from "./core/layout.js";
 import type { HarnessDialect } from "./core/dialect.js";
 import type { LoadedPlugin } from "./plugin-loader.js";
 import { normalizeHooks, hookEventNames } from "./core/hook-normalize.js";
-import {
-  verifyHookEvents,
-  confidentHookEventIssues,
-} from "./core/hook-events.js";
+import { verifyHookEvents, scoredIssues } from "./core/hook-events.js";
 import { verifyMcpServers } from "./core/mcp-config.js";
 import { agentPluginsMcpSources } from "./core/agent-plugins.js";
 import { verifyMcpHookTargets } from "./core/mcp-hook.js";
@@ -91,6 +88,7 @@ import {
 // never enter this browser-safe engine's graph. The runtime detectors come from
 // the node-free ./scan-core.js above.
 import type { ScanReport, ScanInstructions } from "./scan.js";
+import { collectVocabularyNotes } from "./scan-core.js";
 
 /**
  * The synthetic absolute root every path in a browser scan resolves against. A
@@ -633,9 +631,8 @@ export function scanFiles(
     exists,
   );
   const eventNames = hookEventNames(loaded.settings.hooks);
-  const hookEventIssues = confidentHookEventIssues(
-    verifyHookEvents(eventNames, dialect),
-  );
+  const allHookEventIssues = verifyHookEvents(eventNames, dialect);
+  const hookEventIssues = scoredIssues(allHookEventIssues);
   const instructions: ScanInstructions | null =
     loaded.files[lay.instructionFile] !== undefined
       ? {
@@ -707,6 +704,7 @@ export function scanFiles(
       }),
     ).map(formatSkillRefIssue),
     hookEventIssues,
+    vocabularyNotes: collectVocabularyNotes(allHookEventIssues, agents),
     frontmatterIssues: remap(frontmatterIssuesFor(loaded.files, cls)),
     frontmatterValueIssues: remap(frontmatterValueIssuesFor(loaded.files, cls)),
     skillMetaIssues: remap(skillMetaIssuesFor(loaded.files, cls)),

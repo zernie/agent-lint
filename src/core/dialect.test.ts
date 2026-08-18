@@ -12,7 +12,16 @@ import { claudeCodeDialect } from "../adapters/claude-code/dialect.js";
 test("the Claude Code dialect has the expected shape", () => {
   assert.equal(claudeCodeDialect.name, "claude-code");
   assert.ok(claudeCodeDialect.builtinAgentTools.includes("Bash"));
-  assert.ok(claudeCodeDialect.neverAvailableTools.includes("ExitPlanMode"));
+  // `ExitPlanMode` is NOT here: the vendor removes it only when the subagent's
+  // permissionMode isn't `plan`, so it is a `conditional` term, not a dead one.
+  assert.ok(claudeCodeDialect.neverAvailableTools.includes("AskUserQuestion"));
+  // The rename the old dialect had backwards: `Agent` is current and declarable,
+  // `Task` is its still-honoured alias. Neither is never-available.
+  assert.ok(claudeCodeDialect.builtinAgentTools.includes("Agent"));
+  assert.ok(!claudeCodeDialect.neverAvailableTools.includes("Agent"));
+  // All 31 documented hook events, not the 9 this held until 2026-08-17.
+  assert.equal(claudeCodeDialect.hookEvents.length, 31);
+  assert.ok(claudeCodeDialect.hookEvents.includes("Setup"));
   assert.ok(claudeCodeDialect.mcpToolPattern.test("mcp__server__do_thing"));
 });
 
