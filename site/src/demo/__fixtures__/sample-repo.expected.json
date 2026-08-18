@@ -100,10 +100,10 @@
       "confidence": "likely"
     },
     {
-      "surface": "deploy ↔ release",
+      "surface": "\"deploy\" (skills/deploy/SKILL.md) ↔ \"release\" (skills/release/SKILL.md)",
       "action": "differentiate",
-      "rationale": "skills \"deploy\" and \"release\" have near-identical descriptions (100% alike) — the model can't reliably tell them apart, so the wrong one may fire. Differentiate their descriptions.",
-      "fix": "Differentiate the descriptions of \"deploy\" and \"release\" (1 similar) — the selector picks by description, so near-identical text makes it fire the wrong one.",
+      "rationale": "skills \"deploy\" (skills/deploy/SKILL.md) and \"release\" (skills/release/SKILL.md) have near-identical descriptions (100% alike) — the model can't reliably tell them apart, so the wrong one may fire. Differentiate their descriptions.",
+      "fix": "Differentiate the descriptions of \"deploy\" (skills/deploy/SKILL.md) and \"release\" (skills/release/SKILL.md) (1 similar) — the selector picks by description, so near-identical text makes it fire the wrong one.",
       "detector": "description-overlap",
       "confidence": "possible"
     }
