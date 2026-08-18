@@ -140,6 +140,62 @@ test("interpreterArgs prefers tsx for TS, else native strip-types", () => {
   );
 });
 
+test("interpreterArgs interposes an ENTRY, keeping the loader flags for the SCRIPT's language", () => {
+  // `vigiles eval` passes an entry because an eval file describes its eval
+  // instead of being a program. The subtle half: a JavaScript entry importing a
+  // TypeScript eval still needs tsx installed, so the flags are chosen from the
+  // SCRIPT's extension, not the entry's.
+  assert.deepEqual(
+    interpreterArgs(
+      "x.eval.mjs",
+      { tsx: false, stripTypes: false },
+      "/d/eval-entry.js",
+    ),
+    ["/d/eval-entry.js", "x.eval.mjs"],
+  );
+  assert.deepEqual(
+    interpreterArgs(
+      "x.eval.ts",
+      { tsx: true, stripTypes: true },
+      "/d/eval-entry.js",
+    ),
+    ["--import", "tsx", "/d/eval-entry.js", "x.eval.ts"],
+  );
+  assert.deepEqual(
+    interpreterArgs(
+      "x.eval.mts",
+      { tsx: false, stripTypes: true },
+      "/d/eval-entry.js",
+    ),
+    ["--experimental-strip-types", "/d/eval-entry.js", "x.eval.mts"],
+  );
+  // The quiet half: no entry → byte-identical to before (harness scripts).
+  assert.deepEqual(
+    interpreterArgs("x.harness.mjs", { tsx: false, stripTypes: false }),
+    ["x.harness.mjs"],
+  );
+});
+
+test("runScripts passes the script to the entry as an argument", () => {
+  const dir = makeTmpDir("entry");
+  try {
+    writeFileSync(
+      join(dir, "entry.cjs"),
+      "console.log('ENTRY GOT ' + process.argv[2]);\n",
+    );
+    writeFileSync(join(dir, "x.eval.mjs"), "process.exit(3);\n"); // must NOT run
+    const [r] = runScripts(
+      ["x.eval.mjs"],
+      dir,
+      {},
+      { entry: join(dir, "entry.cjs") },
+    );
+    assert.equal(r?.code, 0, "the eval file itself must not be the program");
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
 test("interpreterArgs throws an actionable error when TS can't run", () => {
   assert.throws(
     () => interpreterArgs("x.harness.ts", { tsx: false, stripTypes: false }),

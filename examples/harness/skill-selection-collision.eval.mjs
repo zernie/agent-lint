@@ -15,11 +15,8 @@
  * auto-derived from each skill's description here (zero setup); pass your own for
  * a curated benchmark. Real model → real cost; needs `claude` + auth + a built dist/.
  */
-import {
-  measureSelectionMatrix,
-  assertNoCollision,
-  formatSelectionReport,
-} from "../../dist/claude-code.js";
+import { defineEval } from "../../dist/test.js";
+import { assertNoCollision } from "../../dist/claude-code.js";
 import { fileURLToPath } from "node:url";
 
 // A real, pinned vendored plugin with several skills — the case collisions matter.
@@ -27,14 +24,18 @@ const pluginDir = fileURLToPath(
   new URL("../../test/dogfood/superpowers@6fd4507", import.meta.url),
 );
 
-const report = await measureSelectionMatrix(pluginDir, {
-  // no `prompts` → auto-derived from each skill's description (zero setup)
-  trials: Number(process.env.VIGILES_TRIALS || 1),
+export default defineEval({
+  measureSelectionMatrix: {
+    // `measureSelectionMatrix(dir, opts)` takes its directory positionally; a
+    // description has no argument positions, so the directory is a field.
+    pluginDir,
+    // no `prompts` → auto-derived from each skill's description (zero setup)
+    trials: 1,
+  },
+  assert: (report) => {
+    // Gate: no skill may hijack a sibling's prompt more than 20% of the time.
+    // (Loosen maxOffDiagonal, or set maxPluginCollision, to taste.)
+    assertNoCollision(report, { maxOffDiagonal: 0.2 });
+    console.log(`\n✓ no collisions above threshold across ${report.n} run(s).`);
+  },
 });
-
-console.log(formatSelectionReport(report));
-
-// Gate: no skill may hijack a sibling's prompt more than 20% of the time.
-// (Loosen maxOffDiagonal, or set maxPluginCollision, to taste.)
-assertNoCollision(report, { maxOffDiagonal: 0.2 });
-console.log(`\n✓ no collisions above threshold across ${report.n} run(s).`);

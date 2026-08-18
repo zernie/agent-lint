@@ -76,27 +76,33 @@ tests:
 ```
 
 **vigiles** (`summary.eval.mjs`, on your subscription — see the runnable
-[`examples/harness/from-promptfoo.mjs`](../examples/harness/from-promptfoo.mjs)):
+[`examples/harness/from-promptfoo.eval.mjs`](../examples/harness/from-promptfoo.eval.mjs)):
 
 ```javascript
-import { paid_measure, paid_judged } from "vigiles/eval"; // `paid_` = these call a model
-import { output, cost, assertRates } from "vigiles"; // these only read the result
+import { defineEval, output, cost, assertRates } from "vigiles"; // free: a description cannot spend
+import { paid_judged } from "vigiles/eval"; // a Check whose default judge calls a model
 
-const report = await paid_measure({
-  task: "Summarize in.txt in one sentence. Write it to out.txt, then stop.",
-  fixture: { "in.txt": "…" },
-  model: "sonnet",
-  trials: 5,
-  checks: [
-    output(/invoice/i), // icontains
-    paid_judged("A single, accurate one-sentence summary", { min: 0.7 }), // llm-rubric
-    cost({ maxUsd: 0.01 }), // cost
-  ],
+export default defineEval({
+  measure: {
+    task: "Summarize in.txt in one sentence. Write it to out.txt, then stop.",
+    fixture: { "in.txt": "…" },
+    model: "sonnet",
+    trials: 5,
+    checks: [
+      output(/invoice/i), // icontains
+      paid_judged("A single, accurate one-sentence summary", { min: 0.7 }), // llm-rubric
+      cost({ maxUsd: 0.01 }), // cost
+    ],
+  },
+  assert: (report) => assertRates(report, { min: 0.8 }), // each check ≥80% of trials
 });
-assertRates(report, { min: 0.8 }); // each check passes ≥80% of trials
 ```
 
-To A/B a skill against no-skill, wrap it in `paid_measureArms({ arms: { baseline: {}, skill: { pluginDir: "./skills/my-skill" } } })` and read the per-arm delta.
+Like promptfoo's YAML, the file is a **description**: `npx vigiles eval
+summary.eval.mjs` runs it. Unlike a JS file that calls the runner at the top
+level, importing it cannot spend anything.
+
+To A/B a skill against no-skill, declare `measureArms: { arms: { baseline: {}, skill: { pluginDir: "./skills/my-skill" } }, … }` instead and read the per-arm delta.
 
 ## What moves cleanly — and what doesn't yet
 

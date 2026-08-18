@@ -2390,7 +2390,7 @@ function formatTriggerNudge(triggerableSkills: number): string {
   const n = triggerableSkills;
   return (
     `ℹ Do your ${String(n)} skill${n === 1 ? "" : "s"} actually fire? The deterministic read can't tell — ` +
-    `run \`audit\` interactively to measure, or test with \`paid_measureTriggerRate\` (vigiles/eval).`
+    `run \`audit\` interactively to measure, or add a \`*.eval.mjs\` declaring \`measureTriggerRate\` (vigiles).`
   );
 }
 
@@ -5640,7 +5640,12 @@ async function handleRunScripts(
   if (trialsFlag) env.VIGILES_TRIALS = trialsFlag.split("=")[1];
 
   console.log(`Running ${String(files.length)} ${kind} file(s):\n`);
-  const results = runScripts(files, cwd, env);
+  // An eval file DESCRIBES its eval; `dist/eval-entry.js` is what imports the
+  // description and runs what it declares. A harness script is still its own
+  // program (it is free, so "import spends money" never applied to it).
+  const results = runScripts(files, cwd, env, {
+    ...(kind === "eval" ? { entry: resolve(__dirname, "eval-entry.js") } : {}),
+  });
   // Write down WHAT the run exercised, so `lint`/`audit` can answer "tested?"
   // from execution instead of from a matching file name. Not a new verb and not
   // a flag: the run already happened, and this is the runner recording what it

@@ -19,32 +19,30 @@
  * Real model → real cost. Needs the `claude` CLI + model auth + a built dist/.
  * Write-don't-run in a keyless env; this is the artifact that runs where a key is.
  */
-import { measure, formatCheckReport, assertRates } from "../../../dist/eval.js";
+import { assertRates, defineEval } from "../../../dist/test.js";
 import { skill, latency } from "../../../dist/check.js";
 import { fileURLToPath } from "node:url";
-
-const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 5);
 
 // The vigiles plugin root (holds .claude-plugin/) — its skills activate natively.
 const pluginDir = fileURLToPath(new URL("../../../", import.meta.url));
 
-const report = await measure({
-  pluginDir,
-  stubSkillBodies: true, // measure SELECTION only — bodies stubbed, ~18x cheaper
-  task: "Strengthen the vigiles rules in my CLAUDE.md spec: scan the guidance() rules and find existing linter rules that could back them as enforce(). Use the right skill for this.",
-  model: "sonnet", // measure on the model your users actually run
-  trials,
-  checks: [
-    skill("vigiles:strengthen"), // the right skill fired
-    latency({ maxMs: 180000 }), // a stubbed firing run is fast — no procedure runs
-  ],
+export default defineEval({
+  measure: {
+    pluginDir,
+    stubSkillBodies: true, // measure SELECTION only — bodies stubbed, ~18x cheaper
+    task: "Strengthen the vigiles rules in my CLAUDE.md spec: scan the guidance() rules and find existing linter rules that could back them as enforce(). Use the right skill for this.",
+    model: "sonnet", // measure on the model your users actually run
+    trials: 5,
+    checks: [
+      skill("vigiles:strengthen"), // the right skill fired
+      latency({ maxMs: 180000 }), // a stubbed firing run is fast — no procedure runs
+    ],
+  },
+  assert: (report) => {
+    // Gate: the skill fires reliably (and the stubbed run stays fast).
+    assertRates(report, { min: 0.8 });
+    console.log(
+      "\n✓ strengthen fires reliably — measured cheaply with bodies stubbed.",
+    );
+  },
 });
-
-console.log(formatCheckReport(report));
-if (report.n === 0) throw new Error("no runs executed");
-
-// Gate: the skill fires reliably (and the stubbed run stays fast).
-assertRates(report, { min: 0.8 });
-console.log(
-  "\n✓ strengthen fires reliably — measured cheaply with bodies stubbed.",
-);

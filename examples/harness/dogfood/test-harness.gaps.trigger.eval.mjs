@@ -22,7 +22,7 @@
  * selection (a different fix entirely).
  *
  *   npx vigiles eval examples/harness/dogfood/test-harness.gaps.trigger.eval.mjs
- *   node examples/harness/dogfood/test-harness.gaps.trigger.eval.mjs 2
+ *   npx vigiles eval --trials=2 examples/harness/dogfood/test-harness.gaps.trigger.eval.mjs
  *
  * Real model → real cost. Needs the `claude` CLI + model auth + a built dist/.
  *
@@ -31,14 +31,9 @@
  * already know occurred. Read it as pass/fail per case, not as a recall estimate.
  */
 // vigiles:covers skills/test-harness
-import {
-  measureTriggerRate,
-  formatTriggerRateReport,
-} from "../../../dist/eval.js";
+import { defineEval } from "../../../dist/test.js";
 import { skillResolved } from "../../../dist/harness-assert.js";
 import { fileURLToPath } from "node:url";
-
-const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 1);
 
 const pluginDir = fileURLToPath(new URL("../../../", import.meta.url));
 const skill = "vigiles:test-harness";
@@ -59,53 +54,62 @@ const EN = [
   "how do I test a skill",
 ];
 
-const sets = [
-  ["RU (as actually asked)", RU],
-  ["EN (same questions)", EN],
-];
-
-const results = [];
-for (const [label, prompts] of sets) {
-  const report = await measureTriggerRate({
+// 🔴 THIS FILE USED TO CALL THE RUNNER TWICE, IN A `for` LOOP OVER THE TWO SETS —
+// the one shape in the repo that a single-measurement description cannot copy
+// literally. It is ONE run now, over both sets concatenated, and the RU/EN split
+// is recovered in `assert` from `perPrompt`, which reports each prompt by name.
+//
+// Behaviour-preserving for everything this file actually did: same prompts, same
+// trials per prompt, same tokens, and the per-prompt verdict below is the only
+// thing it ever computed (the aggregate per-set rate was printed, never asserted;
+// the table in the FINDING is a recorded measurement, not a computed one). The
+// per-set framing moved from WHEN the runs happen to HOW the results are read —
+// which is where it belonged, because it was always a property of the prompts.
+export default defineEval({
+  measureTriggerRate: {
     pluginDir,
     stubSkillBodies: true,
     minPrompts: 4, // deliberate: named cases, not a rate (see header)
-    prompts,
+    prompts: [...RU, ...EN],
     fired: (t) => skillResolved(t, skill),
-    trials,
-  });
-  console.log(`\n===== ${label} =====`);
-  console.log(formatTriggerRateReport(report));
-  results.push([label, report]);
-}
+    trials: 1,
+  },
 
-// FINDING (2026-08-10). Measured on Sonnet, 2 trials/prompt, whole-harness
-// (5 competing skills), across four descriptions of the same skill:
-//
-//   description                                  RU gaps   EN gaps   authored   FP
-//   original (surfaces only)                        25%       25%       90%      —
-//   + observation vocabulary, 594ch                100%      100%       90%      0%
-//   + observation vocabulary, 460ch (SHIPPED)       75%      100%       90%      0%
-//   + observation vocabulary, 595ch                 88%      100%        —       —
-//
-// Two things this says, and one it does NOT:
-//  - naming the observation vocabulary is what moved the number: 2/8 → 6-8/8.
-//    That difference is large and repeated across two languages.
-//  - RU and EN scored IDENTICALLY (25/25) before the fix, prompt for prompt,
-//    which rules out a language effect: the gap was conceptual.
-//  - it does NOT establish that a longer description beats a shorter one. At
-//    n=8 the 75/88/100 spread is one-to-two runs. The shipped text is the one
-//    that fits the 500-char description budget the linter enforces, because
-//    the evidence cannot distinguish the variants and the budget rule is the
-//    project's own documented heuristic.
-//
-// Isolated-vs-whole-harness caveat still applies UPWARD: 5 competitors is far
-// fewer than a populated user harness, so these rates are an upper bound.
-console.log("\n===== per-prompt verdict =====");
-for (const [label, report] of results) {
-  console.log(`\n${label}`);
-  for (const p of report.perPrompt ?? [])
-    console.log(
-      `  ${p.rate > 0 ? "FIRED " : "MISSED"}  ${String(p.rate)}  ${p.prompt}`,
-    );
-}
+  // FINDING (2026-08-10). Measured on Sonnet, 2 trials/prompt, whole-harness
+  // (5 competing skills), across four descriptions of the same skill:
+  //
+  //   description                                  RU gaps   EN gaps   authored   FP
+  //   original (surfaces only)                        25%       25%       90%      —
+  //   + observation vocabulary, 594ch                100%      100%       90%      0%
+  //   + observation vocabulary, 460ch (SHIPPED)       75%      100%       90%      0%
+  //   + observation vocabulary, 595ch                 88%      100%        —       —
+  //
+  // Two things this says, and one it does NOT:
+  //  - naming the observation vocabulary is what moved the number: 2/8 → 6-8/8.
+  //    That difference is large and repeated across two languages.
+  //  - RU and EN scored IDENTICALLY (25/25) before the fix, prompt for prompt,
+  //    which rules out a language effect: the gap was conceptual.
+  //  - it does NOT establish that a longer description beats a shorter one. At
+  //    n=8 the 75/88/100 spread is one-to-two runs. The shipped text is the one
+  //    that fits the 500-char description budget the linter enforces, because
+  //    the evidence cannot distinguish the variants and the budget rule is the
+  //    project's own documented heuristic.
+  //
+  // Isolated-vs-whole-harness caveat still applies UPWARD: 5 competitors is far
+  // fewer than a populated user harness, so these rates are an upper bound.
+  assert: (report) => {
+    const sets = [
+      ["RU (as actually asked)", RU],
+      ["EN (same questions)", EN],
+    ];
+    console.log("\n===== per-prompt verdict =====");
+    for (const [label, prompts] of sets) {
+      console.log(`\n${label}`);
+      for (const p of report.perPrompt ?? [])
+        if (prompts.includes(p.prompt))
+          console.log(
+            `  ${p.rate > 0 ? "FIRED " : "MISSED"}  ${String(p.rate)}  ${p.prompt}`,
+          );
+    }
+  },
+});

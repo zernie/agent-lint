@@ -14,11 +14,10 @@
  * Commits prefix (the skill's rule)? Expect ~0 without the skill, higher with.
  *
  *   npx vigiles eval --trials=6 examples/harness/skill-outcome.eval.mjs
- *   node examples/harness/skill-outcome.eval.mjs 6      # standalone
  *
  * Real model → real cost. Needs the `claude` CLI + model auth and a built
- * dist/. External users import from the package: `from "vigiles/eval"` (the paid
- * runners) and `from "vigiles"` (the free checks).
+ * dist/. External users import `defineEval` + the free checks from `"vigiles"`;
+ * an eval file declares its measurement and `vigiles eval` runs it.
  *
  * Note: this example delivers the arm difference by telling the agent to read a
  * working-dir SKILL.md — the simplest illustration for a prose-only skill. To
@@ -27,9 +26,7 @@
  * `pluginDir: "/path/to/a/whole/plugin"` instead — that installs it natively via
  * `claude --plugin-dir`. See `src/harness-test.test.ts` and the coverage matrix.
  */
-import { runEval, formatEvalReport } from "../../dist/eval.js";
-
-const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 3);
+import { defineEval } from "../../dist/test.js";
 
 const SKILL = `# commit-message
 
@@ -38,25 +35,25 @@ Conventional Commits type and colon: \`feat:\`, \`fix:\`, \`chore:\`, \`docs:\`,
 \`refactor:\`, or \`test:\`. Example: \`feat: add logout button\`.
 `;
 
-const report = await runEval({
-  name: "skill-outcome: does the commit-message skill change the output?",
-  fixture: {
-    "package.json": JSON.stringify({ name: "app", private: true }),
+export default defineEval({
+  runEval: {
+    name: "skill-outcome: does the commit-message skill change the output?",
+    fixture: {
+      "package.json": JSON.stringify({ name: "app", private: true }),
+    },
+    arms: {
+      no_skill: {},
+      with_skill: { files: { "SKILL.md": SKILL } },
+    },
+    task:
+      "Read SKILL.md if it exists and follow it. Write a one-line commit message " +
+      "for a change that adds a logout button, into the file COMMIT_MSG. Then stop.",
+    measure: (ctx) => {
+      const msg = (ctx.file("COMMIT_MSG") ?? "").trim();
+      const followed = /^(feat|fix|chore|docs|refactor|test)(\(|:)/.test(msg);
+      return { followed };
+    },
+    trials: 3,
+    model: "haiku",
   },
-  arms: {
-    no_skill: {},
-    with_skill: { files: { "SKILL.md": SKILL } },
-  },
-  task:
-    "Read SKILL.md if it exists and follow it. Write a one-line commit message " +
-    "for a change that adds a logout button, into the file COMMIT_MSG. Then stop.",
-  measure: (ctx) => {
-    const msg = (ctx.file("COMMIT_MSG") ?? "").trim();
-    const followed = /^(feat|fix|chore|docs|refactor|test)(\(|:)/.test(msg);
-    return { followed };
-  },
-  trials,
-  model: "haiku",
 });
-
-console.log(formatEvalReport(report));

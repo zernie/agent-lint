@@ -22,6 +22,7 @@
  * deterministic checks of hook *logic*, see `harness-test.ts`.
  */
 import { refuseUnderForeignRunner } from "./core/foreign-runner.js";
+import { refuseDuringEvalLoad } from "./core/eval-load-phase.js";
 import { spawn, execSync } from "node:child_process";
 import {
   mkdtempSync,
@@ -375,6 +376,7 @@ export function resolveSpawnEnv(
 /** The real `claude`-spawning runner (composition root). Exported so other
  *  real-model entries (e.g. the `audit` trigger tier) bind the same runner. */
 export function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
+  refuseDuringEvalLoad("spawning `claude`");
   refuseUnderForeignRunner("spawning `claude`");
   return new Promise((resolvePromise) => {
     const args = [

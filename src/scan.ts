@@ -61,6 +61,7 @@ import {
   type HookMatcherFinding,
 } from "./core/hook-matcher.js";
 import {
+  coverageCaveats,
   coverageEvidenceCounts,
   findUntestedSurfaces,
 } from "./test-coverage.js";
@@ -419,6 +420,27 @@ export interface ScanReport {
    */
   readonly coverageEvidence?: EvidenceCounts;
   /**
+   * The caveats that QUALIFY the coverage numbers above — "measured, but not
+   * this version", "still carrying a marker that stopped counting". Already
+   * formatted, because both renderers print the same sentence and a second
+   * wording is a second thing to keep true.
+   *
+   * Absent when there are none, never `[]`: byte-parity between the disk and
+   * browser engines is asserted field-for-field, and an empty array on one side
+   * against an absent field on the other is a diff where two absent fields are
+   * not.
+   *
+   * ⚠️ THE BROWSER TWIN PRODUCES NONE OF THESE, and only two of the three have
+   * an excuse: "measured, but not this version" needs `.vigiles/coverage.json`
+   * and the retired-marker note needs to read test files, neither of which a
+   * filesystem-free scan has. The retired-SUFFIX note is derivable from the file
+   * map alone and is simply not wired there yet. The parity test cannot see the
+   * gap either way — no vendored fixture carries any of the three inputs, which
+   * is the same blind spot `scan-files.test.ts` documents for the
+   * single-skill-at-root branch.
+   */
+  readonly coverageCaveats?: readonly string[];
+  /**
    * Whether the repo has its OWN test setup (a real `package.json` `test` script or
    * a conventional test dir). When true, the `untested` count — which only counts
    * vigiles-native `.eval.mjs`/`.harness.mjs` — is misleading: the team clearly
@@ -590,6 +612,7 @@ export function scanPlugin(
   // tiers differ in cost, cadence AND in the question they answer, so collapsing
   // them here would make the difference unrecoverable downstream.
   const coverage = findUntestedSurfaces({ basePath: dir, layout: lay });
+  const caveats = coverageCaveats(coverage);
   return {
     dir,
     instructions,
@@ -683,6 +706,7 @@ export function scanPlugin(
     unevaluated: coverage.evals.untested.length,
     evaluable: coverage.total,
     coverageEvidence: coverageEvidenceCounts(coverage),
+    ...(caveats.length > 0 ? { coverageCaveats: caveats } : {}),
     ownTestSignal: ownTestSignalOnDisk(dir),
     puritySummary,
   };
@@ -1086,6 +1110,9 @@ export function formatScanReport(r: ScanReport): string {
     ? formatEvidence(r.coverageEvidence)
     : "";
   if (evidenceLine) facts.push(`  ${evidenceLine}`);
+  // …and what DISQUALIFIES part of it. Same lines `lint` prints, from the same
+  // builder — see `coverageCaveats`. They already carry their own indent.
+  facts.push(...(r.coverageCaveats ?? []));
   // Effect surface: harness-level purity summary across all scanned agents.
   // Informational (higher pure% = more constrained, cheaper to test); shown
   // only when there are agents to summarize (no agents → no summary line).

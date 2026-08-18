@@ -1146,3 +1146,83 @@ describe("the flag registry and the help text can't drift apart", () => {
     );
   });
 });
+
+/**
+ * 🔴 A COVERAGE CAVEAT THAT ONLY `lint` PRINTS IS A CAVEAT NOBODY READS.
+ *
+ * `formatUntestedReport` (the `lint` renderer) gained two qualifier lines — the
+ * retired `vigiles:covers` marker, and a run record older than the text it
+ * measured. `audit` assembles its own fact block from the SAME report and
+ * carried neither, so the note that exists to explain a silent migration was
+ * itself silent for anyone whose habit is `audit`. Measured 2026-08-18 before
+ * the fix: `lint` named the file, `audit` printed `Untested surfaces: 0`.
+ *
+ * Both halves, because an advisory line cannot be noticed missing: it FIRES on a
+ * repo that has the marker, and is SILENT on one that does not.
+ */
+describe("audit carries the coverage caveats, not just lint", () => {
+  const skill = (name: string): string =>
+    `---\nname: ${name}\ndescription: A skill ${name} that does varied work across many different cases here\n---\n\n# ${name}\n`;
+
+  it("names a test file still carrying the retired `vigiles:covers` marker", () => {
+    const root = mkdtempSync(join(tmpdir(), "audit-caveat-"));
+    try {
+      mkdirSync(join(root, ".claude/skills/foo"), { recursive: true });
+      writeFileSync(join(root, ".claude/skills/foo/SKILL.md"), skill("foo"));
+      writeFileSync(
+        join(root, ".claude/skills/foo/foo.harness.mjs"),
+        "// vigiles:covers skills/foo\n",
+      );
+      const r = run(`audit ${root}`);
+      assert.match(r.stdout, /still carry the retired `vigiles:covers` marker/);
+      assert.match(r.stdout, /foo\.harness\.mjs/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("says nothing extra about coverage when there is nothing to say", () => {
+    const root = mkdtempSync(join(tmpdir(), "audit-caveat-clean-"));
+    try {
+      mkdirSync(join(root, ".claude/skills/foo"), { recursive: true });
+      writeFileSync(join(root, ".claude/skills/foo/SKILL.md"), skill("foo"));
+      writeFileSync(
+        join(root, ".claude/skills/foo/foo.harness.mjs"),
+        "console.log('ok');\n",
+      );
+      const r = run(`audit ${root}`);
+      assert.doesNotMatch(r.stdout, /vigiles:covers/);
+      assert.doesNotMatch(r.stdout, /measured, but not this version/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * The same list, one caveat later. `retiredTestNames` was added to
+ * `coverageCaveats` and wired nowhere else; this asserts it reached the product
+ * — `audit`, not just `lint` — because "it is on the shared list, so it must
+ * render" is the reasoning that lost the other two caveats for a release.
+ */
+describe("a newly added coverage caveat reaches audit through the shared list", () => {
+  it("names a `<surface>.test.*` sitting beside an untested skill", () => {
+    const root = mkdtempSync(join(tmpdir(), "audit-retired-suffix-"));
+    try {
+      mkdirSync(join(root, ".claude/skills/foo"), { recursive: true });
+      writeFileSync(
+        join(root, ".claude/skills/foo/SKILL.md"),
+        `---\nname: foo\ndescription: A skill foo that does varied work across many different cases here\n---\n\n# foo\n`,
+      );
+      writeFileSync(
+        join(root, ".claude/skills/foo/foo.test.mjs"),
+        "// a skill test, misnamed\n",
+      );
+      const r = run(`audit ${root}`);
+      assert.match(r.stdout, /foo\.test\.mjs/);
+      assert.match(r.stdout, /vitest\/jest/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

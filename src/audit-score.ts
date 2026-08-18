@@ -111,7 +111,7 @@ const W_UNTESTED = 3;
 /** The command that answers the firing question — named, not alluded to. */
 const MEASURE_FIRING_COMMAND =
   "run `npx vigiles audit` interactively to measure, or add a `*.eval.mjs` " +
-  "(`paid_measureTriggerRate`, vigiles/eval)";
+  "(`export default defineEval({ measureTriggerRate: … })`, vigiles)";
 
 export interface AuditScoreOptions {
   /**
