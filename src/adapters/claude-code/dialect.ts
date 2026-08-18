@@ -8,87 +8,66 @@
  * in its adapter (e.g. `src/adapters/codex/dialect.ts` exporting `codexDialect`).
  */
 import type { HarnessDialect } from "../../core/dialect.js";
+import {
+  claudeCodeAvailableAgentTools,
+  claudeCodeConditionalAgentToolNames,
+  claudeCodeHookEventNames,
+  claudeCodeHookEventVocabulary,
+  claudeCodeSideEffectingAgentTools,
+  claudeCodeSubagentToolVocabulary,
+  claudeCodeWithheldAgentTools,
+} from "./vocabulary.js";
 
 /**
  * The Claude Code built-in subagent tool catalog as a `const` tuple, so a typed
  * authoring surface can derive a LITERAL union (`ClaudeCodeBuiltinTool`) from it.
- * `claudeCodeDialect.builtinAgentTools` references this same array — one source
- * of truth for the runtime catalog AND the compile-time tool vocabulary.
+ *
+ * DERIVED, not authored: it is exactly the vocabulary's declarable terms — the
+ * ones the platform provides outright plus the ones it withholds only under a
+ * condition. Both halves are legitimate to write in a `tools:` line, which is
+ * why `Agent` belongs here and used to sit in `neverAvailableTools` instead.
+ * Because this is a projection rather than a second hand-kept list, the two can
+ * no longer disagree; `vocabularyProjectionProblems` asserts it in the
+ * conformance kit rather than leaving it to care.
  */
 export const claudeCodeBuiltinAgentTools = [
-  "Read",
-  "Write",
-  "Edit",
-  "MultiEdit",
-  "Bash",
-  "BashOutput",
-  "KillBash",
-  "Grep",
-  "Glob",
-  "LS",
-  "WebSearch",
-  "WebFetch",
-  "NotebookEdit",
-  "TodoWrite",
-  "Task",
-  "Skill",
+  ...claudeCodeAvailableAgentTools,
+  ...claudeCodeConditionalAgentToolNames,
 ] as const;
 
 /**
- * The Claude Code side-effecting tools as a `const` tuple (the complement of
- * read-only within `builtinAgentTools`). `claudeCodeDialect.sideEffectingTools`
- * references this; the typed vocabulary derives the read-only / bounded splits.
+ * The Claude Code side-effecting tools (the complement of read-only within
+ * `builtinAgentTools`). Authored in `vocabulary.ts` beside the catalog it
+ * partitions, because a name added to the catalog without a decision here would
+ * silently be classified read-only.
  */
-export const claudeCodeSideEffectingTools = [
-  "Bash",
-  "BashOutput",
-  "KillBash",
-  "Edit",
-  "MultiEdit",
-  "Write",
-  "NotebookEdit",
-  "WebFetch",
-  "WebSearch",
-  "Skill",
-  "Task",
-  "TodoWrite",
-] as const;
+export const claudeCodeSideEffectingTools = claudeCodeSideEffectingAgentTools;
 
 export const claudeCodeDialect: HarnessDialect = {
   name: "claude-code",
   // The tool contract a subagent may declare — the rails it runs on. Anything
   // else must be an MCP tool, else it's a typo / nonexistent tool.
   builtinAgentTools: claudeCodeBuiltinAgentTools,
-  // Tools the platform never exposes to a subagent, whatever the list says — so
-  // a subagent listing one is a guaranteed-dead reference only a compiler catches.
-  neverAvailableTools: [
-    "Agent",
-    "AskUserQuestion",
-    "EnterPlanMode",
-    "ExitPlanMode",
-    "ScheduleWakeup",
-    "WaitForMcpServers",
-  ],
+  // Tools the platform removes UNCONDITIONALLY, whatever the list says — so a
+  // subagent listing one is a guaranteed-dead reference only a compiler catches.
+  // Derived from the vocabulary's `withheld` terms. `Agent` and `ExitPlanMode`
+  // are deliberately absent: the vendor removes both only under a stated
+  // condition (depth limit / `permissionMode: plan`), so they are `conditional`
+  // and reported as a note. Listing them here is what told delegating subagents
+  // to delete the tool they exist to use.
+  neverAvailableTools: claudeCodeWithheldAgentTools,
   mcpToolPattern: /^mcp__[a-z0-9_-]+__[a-z0-9_-]+$/i,
   // Claude Code's own built-in MCP server: the IDE integration provides
   // `mcp__ide__getDiagnostics` / `mcp__ide__executeCode` at runtime without any
   // plugin declaring it, so a contract that lists those must NOT be flagged as
   // referencing an undeclared server (the mcp-tool-resolves allowlist).
   knownMcpServers: ["ide"],
-  // The real Claude Code hook events. (Was wrong: PreSession/PostSession don't
-  // exist; SessionStart/SessionEnd/Stop/SubagentStop/UserPromptSubmit/PreCompact
-  // were missing — verified against the events real plugins register.)
-  hookEvents: [
-    "PreToolUse",
-    "PostToolUse",
-    "UserPromptSubmit",
-    "Notification",
-    "Stop",
-    "SubagentStop",
-    "PreCompact",
-    "SessionStart",
-    "SessionEnd",
-  ],
+  // The real Claude Code hook events — all 31 the vendor documents, derived from
+  // `claudeCodeHookEventNames`. This list held 9 until 2026-08-17; `Setup` was
+  // reported as "never fires" and the other 21 absentees drew nothing at all,
+  // because whether an unknown name was accused or ignored came down to its edit
+  // distance from the 9 we had. See `vocabulary.ts` for the capture.
+  hookEvents: claudeCodeHookEventNames,
   // Events where a block decision is silently ignored ENTIRELY — no veto AND no
   // model feedback (exit 2 there writes stderr only to the user). These are the
   // ONLY events hook-block-ineffective flags as wrong-event. PostToolUse is NOT
@@ -115,11 +94,18 @@ export const claudeCodeDialect: HarnessDialect = {
   // disable-model-invocation, argument-hint, …).
   skillFrontmatter: "claude-code",
   // Tools that produce side effects in Claude Code. The complement — the
-  // read-only tools — are: Read, Grep, Glob, LS, ToolSearch (and LSP/Agent
-  // which are not in the subagent catalog). Bash is side-effecting because
-  // `cat` and `rm -rf` are the same tool at the tool-name level — the
+  // read-only tools — are: Read, Grep, Glob, ToolSearch, LSP, ListAgents,
+  // TaskGet, TaskList, CronList. Bash (and PowerShell) are side-effecting
+  // because `cat` and `rm -rf` are the same tool at the tool-name level — the
   // sandbox is the only closure for subprocess effects.
   sideEffectingTools: claudeCodeSideEffectingTools,
+  // The richer catalogs the flat lists above project from — status per term,
+  // with the vendor capture they were read from. An unknown name resolves
+  // against these to an `unrecognised` ADVISORY that names vigiles as the
+  // possibly-stale party, instead of the silence-or-accusation coin flip that
+  // edit distance used to decide.
+  hookEventVocabulary: claudeCodeHookEventVocabulary,
+  subagentToolVocabulary: claudeCodeSubagentToolVocabulary,
 };
 
 // ---------------------------------------------------------------------------
@@ -151,21 +137,20 @@ export type ClaudeCodeReadOnlyTool = Exclude<
 
 /**
  * Tools a `bounded` CC unit may declare: read-only ∪ the decidable
- * side-effecting tools (Write/Edit/MultiEdit/NotebookEdit) ∪ `Bash` (its
+ * side-effecting tools (Write/Edit/NotebookEdit) ∪ `Bash`/`PowerShell` (whose
  * command is decided at RUNTIME by the gate). Bars MCP / unknown / wildcard —
  * those are simply not in the built-in union, so listing one is a `tsc` error.
  *
- * NOTE: `BashOutput`/`KillBash` are read-only-ish helpers tied to a running
- * Bash; `Bash` is the admitting tool, so they're included via the read-only
- * exclusion path only if read-only — here they stay side-effecting, hence the
- * explicit add of the bounded-decidable set plus `Bash`.
+ * `MultiEdit` was listed here until 2026-08-17. It is not a Claude Code tool —
+ * it appears zero times across the vendor's documentation — so it is gone along
+ * with `BashOutput`, `KillBash` and `LS`.
  */
 export type ClaudeCodeBoundedTool =
   | ClaudeCodeReadOnlyTool
   | "Write"
   | "Edit"
-  | "MultiEdit"
   | "NotebookEdit"
-  | "Bash";
+  | "Bash"
+  | "PowerShell";
 
 export type { HarnessDialect } from "../../core/dialect.js";

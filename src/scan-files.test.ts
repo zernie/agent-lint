@@ -391,6 +391,54 @@ describe("scanFiles — dangling-ref false positives (issue #110)", () => {
     expect(dangling).toEqual(["skills/real-missing/SKILL.md"]);
   });
 
+  it("reads hooks/hooks.json as .json — not as a missing hooks/.js (dogfood 2026-08-17)", () => {
+    // The browser HALF of the boundary fix. Both twins carried the same
+    // unbounded extension alternation; fixing only the disk one would have left
+    // the demo engine accusing microsoft/power-platform-skills forever.
+    const map = {
+      "hooks/hooks.json": "{}",
+      "hooks/h.js": 'load("./hooks.json"); // registered in hooks/hooks.json\n',
+    };
+    expect(scanFiles(map, undefined, undefined, repoName).danglingRefs).toEqual(
+      [],
+    );
+  });
+
+  it("does not read the tail of `claude-agents/` as a reference to `agents/`", () => {
+    const map = {
+      "agents/real.md": "---\nname: real\ndescription: real\n---\n",
+      "hooks/h.js": 'new URL("../../claude-agents/adv.md", import.meta.url);\n',
+    };
+    expect(scanFiles(map, undefined, undefined, repoName).danglingRefs).toEqual(
+      [],
+    );
+  });
+
+  it("does not read a full-line JSDoc mention as a file operation", () => {
+    const map = {
+      "hooks/h.js": [
+        "/**",
+        " * `git log -- hooks/never-existed.mjs` is refused for a word in a search.",
+        " */",
+        "run();",
+      ].join("\n"),
+    };
+    expect(scanFiles(map, undefined, undefined, repoName).danglingRefs).toEqual(
+      [],
+    );
+  });
+
+  it("still flags a genuinely missing .json ref on a code line, under its REAL name", () => {
+    // The other half of every case above: the boundary and the comment rule
+    // must not have turned the detector off.
+    const map = {
+      "hooks/h.js": 'const p = "hooks/gone.json";\nload(p);\n',
+    };
+    expect(scanFiles(map, undefined, undefined, repoName).danglingRefs).toEqual(
+      ["hooks/gone.json"],
+    );
+  });
+
   it("without a repoName, falls back to BROWSER_ROOT's basename for the echo check", () => {
     // Mirrors the single-skill naming fallback (`repoName ?? basename(BROWSER_ROOT)`)
     // — the parity path (scanFiles(map) with no repoName) must still resolve an

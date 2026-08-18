@@ -22,7 +22,12 @@ their exit codes. Most of the churn is in the library API underneath it.
     `agent`, `file`, `cmd`, `ref`, `dir`, `glob`, `result`,
     `delegate`, `railway`). Skill authoring is **not** on this list — see
     `experimental_skill` below.
-  - `vigiles` (the package root) — the free harness-test + check vocabulary.
+  - `vigiles` (the package root) — the free harness-test + check vocabulary,
+    plus `defineEval`, which declares what a `*.eval.mjs` file measures.
+    **`*.eval.*` FILE SHAPE IS A CONTRACT** and it changed in a major release —
+    an eval file DESCRIBES its eval, it does not run one; see
+    [eval files describe their eval](docs/harness-testing.md#eval-files-describe-their-eval)
+    for the migration.
   - `vigiles/eval` — the model-calling measurement API; every runtime export
     carries a `paid_` prefix (`paid_runEval`, `paid_measure`, `paid_measureArms`,
     `paid_measureTriggerRate`, `paid_judge`, `paid_judged`,

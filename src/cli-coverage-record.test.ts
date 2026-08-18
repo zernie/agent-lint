@@ -400,3 +400,54 @@ test("…and the flag is not assumed: the default and an explicit `claude-code` 
     "naming the harness this repo already is must change nothing",
   );
 });
+
+/**
+ * A COLOCATED HARNESS THAT RAN IS RECORDED — end to end, through the real CLI.
+ *
+ * 🔴 THIS IS THE ONLY TEST THAT PROVES `checks` REACHES THE ARTIFACT. The unit
+ * tests in colocated-execution.test.ts hand-build `ScriptRunRecord`s, so every
+ * one of them would still pass if `cli.ts` dropped the field between
+ * `runScripts` and `runsFromResults` — the whole attribution is silently keyed on
+ * a number that travels four hops, and the hops are what break.
+ */
+test("a colocated harness that reported checks is MEASURED BY A RUN", () => {
+  write(
+    ".claude/skills/arc/SKILL.md",
+    "---\nname: arc\ndescription: does the arc\n---\nbody\n",
+  );
+  // Asserts through the counter, the way an ordinary harness does — no probe.
+  write(
+    ".claude/skills/arc/arc.harness.mjs",
+    `import { recordCheck } from ${JSON.stringify(
+      resolve(__dirname, "..", "dist", "check-count.js"),
+    )};\nrecordCheck();\n`,
+  );
+  vigilesTest();
+  assert.ok(
+    recorded()?.includes(".claude/skills/arc/SKILL.md"),
+    "the run happened and the runner watched it — it must not be reported as a directory listing",
+  );
+  assert.match(vigilesLint(), /MEASURED BY A RUN/);
+});
+
+test("…and an EMPTY colocated harness is not, though it also 'passes'", () => {
+  // THE QUIET HALF, and the one that matters more. `touch` → runs → exits 0.
+  // Without the reported-check bar this file would be promoted from "the file
+  // EXISTS" to "MEASURED BY A RUN": the same emptiness wearing the stronger
+  // label, which is worse than the hole being closed.
+  write(".claude/skills/arc/SKILL.md", "---\nname: arc\n---\nbody\n");
+  write(".claude/skills/arc/arc.harness.mjs", "");
+  vigilesTest();
+  // `null` — no artifact at all — is the stronger outcome and the one observed:
+  // a repo with nothing to record must not grow a `.vigiles/coverage.json`. That
+  // is the "absent artifact = today's behaviour, exactly" property.
+  assert.deepEqual(
+    recorded() ?? [],
+    [],
+    "an empty script cannot report a check, so it earns no execution record",
+  );
+  const out = vigilesLint();
+  assert.doesNotMatch(out, /MEASURED BY A RUN/);
+  // …while colocation still credits it, exactly as before this tier existed.
+  assert.match(out, /colocated/);
+});

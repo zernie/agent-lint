@@ -132,17 +132,18 @@ answer. Install OMC natively (`pluginDir`) and measure how reliably its `verify`
 skill fires on prompts about confirming a change works:
 
 ```ts
-import { paid_measureTriggerRate } from "vigiles/eval"; // `paid_` = a real model runs
-import { skillResolved } from "vigiles";
+import { defineEval, skillResolved } from "vigiles";
 
-const report = await paid_measureTriggerRate({
-  pluginDir: "test/dogfood/oh-my-claudecode@deee3a4",
-  prompts: [
-    "I think the pagination fix is done — can you confirm it actually works?",
-    "Before I mark this complete, prove the new endpoint really behaves.",
-  ],
-  fired: (t) => skillResolved(t, "oh-my-claudecode:verify"),
-  trials: 3,
+export default defineEval({
+  measureTriggerRate: {
+    pluginDir: "test/dogfood/oh-my-claudecode@deee3a4",
+    prompts: [
+      "I think the pagination fix is done — can you confirm it actually works?",
+      "Before I mark this complete, prove the new endpoint really behaves.",
+    ],
+    fired: (t) => skillResolved(t, "oh-my-claudecode:verify"),
+    trials: 3,
+  },
 });
 ```
 

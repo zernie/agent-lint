@@ -45,6 +45,7 @@ import {
   declaredSurfaceName,
   evidenceFor,
   hookScriptRefs,
+  isColocatedTest,
   isEvalScript,
   prepareTest,
   type PreparedTest,
@@ -231,10 +232,17 @@ function discoverTests(files: Record<string, string>): PreparedTest[] {
   return out;
 }
 
-/** Mirror of test-coverage.ts `isColocated` — named after the surface, beside it. */
+/**
+ * Named after the surface, beside it — the SHARED rule, no longer a copy of it.
+ *
+ * 🔴 THIS WAS A MIRROR, and its own docstring said so. Two bodies, one promise
+ * that they stay equal, kept by whoever remembers — and this file's header
+ * already records the last time a coverage change landed in one engine and not
+ * the other. It now calls `isColocatedTest`, which the disk detector and the
+ * run-record builder call too.
+ */
 function isColocated(surface: Surface, testPath: string): boolean {
-  if (!basename(testPath).startsWith(`${surface.name}.`)) return false;
-  return dirname(testPath) === dirname(surface.path);
+  return isColocatedTest(surface, testPath);
 }
 
 /** Mirror of test-coverage.ts `coverageOf` — strongest evidence across tests. */

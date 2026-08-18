@@ -43,10 +43,7 @@ import type { PluginLayout } from "./core/layout.js";
 import type { HarnessDialect } from "./core/dialect.js";
 import type { LoadedPlugin } from "./plugin-loader.js";
 import { normalizeHooks, hookEventNames } from "./core/hook-normalize.js";
-import {
-  verifyHookEvents,
-  confidentHookEventIssues,
-} from "./core/hook-events.js";
+import { verifyHookEvents, scoredIssues } from "./core/hook-events.js";
 import { verifyMcpServers } from "./core/mcp-config.js";
 import { agentPluginsMcpSources } from "./core/agent-plugins.js";
 import { verifyMcpHookTargets } from "./core/mcp-hook.js";
@@ -55,6 +52,11 @@ import { hookBlockIssues } from "./core/hook-block-ineffective.js";
 import { hookMatcherIssues } from "./core/hook-matcher.js";
 import { findUntestedSurfacesInFiles } from "./test-coverage-files.js";
 import { countEvidence } from "./coverage-evidence.js";
+import {
+  intraRefPattern,
+  startsAtSeparator,
+  stripFullLineComments,
+} from "./core/source-refs.js";
 import {
   makeClassifier,
   scanAgents,
@@ -86,6 +88,7 @@ import {
 // never enter this browser-safe engine's graph. The runtime detectors come from
 // the node-free ./scan-core.js above.
 import type { ScanReport, ScanInstructions } from "./scan.js";
+import { collectVocabularyNotes } from "./scan-core.js";
 
 /**
  * The synthetic absolute root every path in a browser scan resolves against. A
@@ -382,12 +385,10 @@ function materializeSurfaces(
 // Dangling intra-plugin refs (mirrors plugin-loader.ts danglingRefs)
 // ---------------------------------------------------------------------------
 
-const INTRA_REF_EXTS = "md|sh|cmd|mjs|cjs|js|ts|py|rb|txt|json";
+// Extensions + BOTH token boundaries live in core/source-refs.ts, so this and
+// its disk twin (plugin-loader.ts) cannot disagree and neither can omit one.
 function intraRefRe(layout: PluginLayout): RegExp {
-  return new RegExp(
-    `(?:${layout.intraRefDirs.join("|")})/[A-Za-z0-9._/-]+\\.(?:${INTRA_REF_EXTS})`,
-    "g",
-  );
+  return intraRefPattern(layout.intraRefDirs);
 }
 
 const NON_PLUGIN_VARS = new Set([
@@ -398,9 +399,13 @@ const NON_PLUGIN_VARS = new Set([
   "OLDPWD",
 ]);
 
-/** Mirror of plugin-loader.ts `isPluginRooted`. */
+/** Mirror of plugin-loader.ts `isPluginRooted`, including its boundary test:
+ *  a match preceded by a path-segment character landed INSIDE a longer name
+ *  (`claude-agents/`) and refers to nothing. */
 function isPluginRooted(content: string, idx: number): boolean {
-  if (idx === 0 || content[idx - 1] !== "/") return true;
+  // Start-of-content is handled by `startsAtSeparator` itself (`idx <= 0`), not
+  // by a guard here — see the twin in plugin-loader.ts.
+  if (content[idx - 1] !== "/") return startsAtSeparator(content, idx);
   const seg = /([^\s"'`(=:/]*)$/.exec(content.slice(0, idx - 1))?.[1] ?? "";
   const varName = /^\$\{?(\w+)\}?$/.exec(seg)?.[1];
   if (varName !== undefined) return !NON_PLUGIN_VARS.has(varName);
@@ -408,21 +413,6 @@ function isPluginRooted(content: string, idx: number): boolean {
 }
 
 const DOC_SOURCE_RE = /\.(?:md|markdown|mdx|txt|rst)$/i;
-
-// A `.sh`/`.bash`/`.cmd` SCRIPT's own `#`-led comments are prose, not code — a
-// usage comment (`# bash skills/<plugin>/hooks/setup.sh`, written as it would be
-// invoked from the REPO CHECKOUT root) is not a real file operation any more than
-// a path mentioned in a doc file is (issue #110). Mirror of plugin-loader.ts
-// `SCRIPT_COMMENT_RE`.
-const SCRIPT_COMMENT_RE = /\.(?:sh|bash|cmd)$/i;
-
-/** Mirror of plugin-loader.ts `stripShellComments`. */
-function stripShellComments(content: string): string {
-  return content
-    .split("\n")
-    .filter((line) => !line.trimStart().startsWith("#"))
-    .join("\n");
-}
 
 /** The plugin's executable (non-prose) source-file CONTENTS under the surface dirs. */
 function executableContents(
@@ -436,9 +426,8 @@ function executableContents(
       if (!k.startsWith(`${surface}/`)) continue;
       if (DOC_SOURCE_RE.test(k)) continue;
       if (byteLen(content) > MAX_SKILL_FILE_BYTES) continue;
-      out.push(
-        SCRIPT_COMMENT_RE.test(k) ? stripShellComments(content) : content,
-      );
+      // A full-line comment is prose in EVERY language, not only in shell.
+      out.push(stripFullLineComments(k, content));
     }
   }
   return out;
@@ -642,9 +631,8 @@ export function scanFiles(
     exists,
   );
   const eventNames = hookEventNames(loaded.settings.hooks);
-  const hookEventIssues = confidentHookEventIssues(
-    verifyHookEvents(eventNames, dialect),
-  );
+  const allHookEventIssues = verifyHookEvents(eventNames, dialect);
+  const hookEventIssues = scoredIssues(allHookEventIssues);
   const instructions: ScanInstructions | null =
     loaded.files[lay.instructionFile] !== undefined
       ? {
@@ -716,6 +704,7 @@ export function scanFiles(
       }),
     ).map(formatSkillRefIssue),
     hookEventIssues,
+    vocabularyNotes: collectVocabularyNotes(allHookEventIssues, agents),
     frontmatterIssues: remap(frontmatterIssuesFor(loaded.files, cls)),
     frontmatterValueIssues: remap(frontmatterValueIssuesFor(loaded.files, cls)),
     skillMetaIssues: remap(skillMetaIssuesFor(loaded.files, cls)),

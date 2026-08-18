@@ -40,7 +40,7 @@ import { sha256short, assertNever, type SHA256Hash } from "./hash.js";
 import { stringify as stringifyToml } from "@iarna/toml";
 import type { HarnessDialect } from "./dialect.js";
 import type { HookProtocol } from "./hook-protocol.js";
-import { verifyHookEvents } from "./hook-events.js";
+import { verifyHookEvents, authoringIssues } from "./hook-events.js";
 import { HARNESS_CONFIG_FILES } from "./merge-conflict.js";
 import {
   unknownProviders,
@@ -1047,11 +1047,19 @@ export function compileHookProgram(
       );
     }
   }
-  // A hook registered under an event the harness never fires is dead — reject it.
+  // A hook registered under an event the harness never fires is dead — reject
+  // it. AUTHORING is a closed world (you are writing this hook now, against the
+  // vigiles you have), so an unrecognised event is still an error — the typo
+  // guarantee this exists for. What changed on 2026-08-17 is the catalog it
+  // asks: this used to throw on `Setup`, `PostCompact`, `ConfigChange` and 19
+  // other REAL events, because vigiles held 9 of the vendor's 31. The fix is the
+  // right vocabulary, not a weaker check. A genuinely newer event still fails
+  // here, and now says so — the message names vigiles's capture as the thing
+  // that may be stale, instead of asserting the event does not exist.
   if (opts.dialect) {
-    const issues = verifyHookEvents([on], opts.dialect);
-    if (issues.length > 0) {
-      throw new HookCompileError(issues[0].message);
+    const fatal = authoringIssues(verifyHookEvents([on], opts.dialect));
+    if (fatal.length > 0) {
+      throw new HookCompileError(fatal[0].message);
     }
   }
   // A `needs` entry that isn't a built-in provider never resolves — reject it

@@ -133,6 +133,8 @@ test("a dropped tool → a FIX recommendation (likely) with the swap", () => {
             {
               tool: "Reed",
               kind: "unknown",
+              verdict: "unrecognised",
+              severity: "scored",
               suggestion: "Read",
               message: 'tool "Reed" is not available (did you mean "Read"?)',
             },

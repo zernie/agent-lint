@@ -246,25 +246,29 @@ A skill's whole value is its description **activating on the right task** — th
 skill-authoring pain, and a property only a real model decides. The deterministic
 tiers prove the _wiring_; this proves the _activation_.
 
+`greet.eval.mjs` — a file that **describes** the measurement; `vigiles eval` runs
+it (see [Eval files describe their eval](#eval-files-describe-their-eval)):
+
 ```ts
-import { paid_measureTriggerRate } from "vigiles/eval"; // `paid_` = a real model runs
-import {
-  formatTriggerRateReport,
-  skillResolved,
-  assertTriggerRate,
-} from "vigiles";
+import { defineEval, skillResolved, assertTriggerRate } from "vigiles";
 
-const report = await paid_measureTriggerRate({
-  skillsDir: ".claude/skills", // loose repo skills — auto-packaged
-  stubSkillBodies: true, // measure SELECTION only (stub bodies → much cheaper)
-  prompts: ["…≥10 varied tasks the skill should handle…"], // recall
-  irrelevantPrompts: ["…≥10 unrelated tasks it should ignore…"], // precision
-  fired: (t) => skillResolved(t, "my-plugin:greet"),
-  trials: 2,
+export default defineEval({
+  measureTriggerRate: {
+    skillsDir: ".claude/skills", // loose repo skills — auto-packaged
+    stubSkillBodies: true, // measure SELECTION only (stub bodies → much cheaper)
+    prompts: ["…≥10 varied tasks the skill should handle…"], // recall
+    irrelevantPrompts: ["…≥10 unrelated tasks it should ignore…"], // precision
+    fired: (t) => skillResolved(t, "my-plugin:greet"),
+    trials: 2,
+  },
+  // the report is printed for you — this is the part only you can write
+  assert: (report) =>
+    assertTriggerRate(report, { min: 0.8, maxFalsePositive: 0.1 }),
 });
+```
 
-console.log(formatTriggerRateReport(report)); // trigger-rate: 80% (10 runs)
-assertTriggerRate(report, { min: 0.8, maxFalsePositive: 0.1 });
+```bash
+npx vigiles eval greet.eval.mjs   # trigger-rate: 80% (10 runs)
 ```
 
 `prompts` measures **recall** (does it fire when it should); `irrelevantPrompts`
@@ -346,22 +350,22 @@ N trials × arm and aggregates **mean ± se** with **significance**, so you can 
 a real gap from sampling noise:
 
 ```ts
-import { paid_runEval } from "vigiles/eval"; // `paid_` = a real model runs
-import { formatEvalReport } from "vigiles";
+import { defineEval } from "vigiles";
 
-const report = await paid_runEval({
-  fixture: { "src/billing.ts": "export function chargeCard() {}" },
-  arms: {
-    vanilla: {},
-    gated: { settings: { hooks: { PostToolUse: [refsHook] } } },
+export default defineEval({
+  runEval: {
+    fixture: { "src/billing.ts": "export function chargeCard() {}" },
+    arms: {
+      vanilla: {},
+      gated: { settings: { hooks: { PostToolUse: [refsHook] } } },
+    },
+    task: "Document chargeCard in SKILL.md, referencing it by name.",
+    measure: (ctx) => ({
+      marked: ctx.sh("grep -c vigiles:symbol SKILL.md") !== "0",
+    }),
+    trials: 6,
   },
-  task: "Document chargeCard in SKILL.md, referencing it by name.",
-  measure: (ctx) => ({
-    marked: ctx.sh("grep -c vigiles:symbol SKILL.md") !== "0",
-  }),
-  trials: 6,
 });
-console.log(formatEvalReport(report));
 // vanilla marked=0.00   gated marked=0.50±0.20   ($0.07 · 1.2s/run)
 ```
 
@@ -469,6 +473,82 @@ Two surfaces, both dogfooded in this repo's own [`ci.yml`](../.github/workflows/
 vigiles test            # *.harness.mjs — deterministic, no key (runs in CI free)
 vigiles eval --trials=6 # *.eval.mjs — real model, on a keyed job only
 ```
+
+### Eval files describe their eval
+
+A `*.harness.mjs` is a **program**: it is free, so running it is the point. A
+`*.eval.mjs` is a **description**: it spends real money, so it must not be able
+to run itself.
+
+```js
+import { defineEval, assertRates, skill } from "vigiles";
+
+export default defineEval({
+  measure: {
+    pluginDir: ".",
+    task: "…",
+    checks: [skill("me:greet")],
+    trials: 3,
+  },
+  assert: (report) => assertRates(report, { min: 0.6 }),
+});
+```
+
+Exactly one measurement — `runEval` · `measure` · `measureArms` ·
+`measureTriggerRate` · `measureSelectionMatrix`, keyed by the runner's own name —
+plus two optional hooks: `skipIf()` returns a reason to skip (a loud `⊘ SKIPPED`,
+never a silent green) and `assert(report)` says what the report has to show.
+`vigiles eval` runs the measurement, prints the report with the right formatter,
+fails a run that executed zero trials, and then calls your `assert`.
+
+**Why not just call the runner at the top of the file?** Because in ESM `import`
+IS execution, so the cheapest imaginable question — "does this file even parse?"
+— spends money when asked with `import()`. That happened here, and was paid for.
+No guard can close it: under `node -e 'import(f)'` there is no `process.argv[1]`,
+so nothing distinguishes it from a legitimate runner doing the same import. A
+description has nothing to run, which is a different kind of answer.
+
+Three consequences worth knowing up front:
+
+- **`node x.eval.mjs` now fails loudly** and tells you to run `vigiles eval`. It
+  does not quietly do nothing, which would be the same defect in a new place.
+- **`node --check x.eval.mjs`** is the free syntax check. It never executes.
+- **`trials` comes from the spec**, and `vigiles eval --trials=N` overrides it.
+  No eval file reads `process.argv` or `VIGILES_TRIALS` any more.
+
+#### Migrating an existing eval file (BREAKING, one major version)
+
+Take the runner call out of the module body and make it a key. Everything else
+is deletion. In `x.eval.mjs`, replace
+
+```js
+const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 3);
+const report = await measureTriggerRate({ …spec…, trials });
+console.log(formatTriggerRateReport(report));
+if (report.n === 0) throw new Error("no runs executed");
+assertTriggerRate(report, { min: 0.8 });
+```
+
+with
+
+```js
+export default defineEval({
+  measureTriggerRate: { …spec…, trials: 3 },
+  assert: (report) => assertTriggerRate(report, { min: 0.8 }),
+});
+```
+
+— dropping the `vigiles/eval` import, the trials line, the `format…` print and
+the `report.n === 0` check, because the runner now does all four. The key is the
+runner's own name (`runEval` · `measure` · `measureArms` · `measureTriggerRate` ·
+`measureSelectionMatrix`); declare exactly one. A capability probe that used to
+sit at the top of the file becomes `skipIf()`. `measureSelectionMatrix`'s
+directory argument becomes a `pluginDir` field, and
+`measureTriggerRate(spec, { evalDriver })`'s second argument becomes a top-level
+`evalDriver` key. Run with `vigiles eval x.eval.mjs`; a file left on the old
+shape fails with a message naming this section, never silently.
+
+All 19 eval files in this repository were migrated in the same change.
 
 A skip is **loud** (`⊘ SKIPPED`, tallied separately), never a silent green; pass
 `--no-skip` in a job that asserts the capability is present.
