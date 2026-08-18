@@ -26,7 +26,6 @@ import type { ToolIssue } from "./core/tool-contract.js";
 import {
   verifyHookEvents,
   scoredIssues,
-  advisoryIssues,
   type HookEventIssue,
 } from "./core/hook-events.js";
 import { verifyMcpServers, type McpIssue } from "./core/mcp-config.js";
@@ -87,6 +86,7 @@ import {
   preferCompiledHooksMessage,
   detectOwnTestSignal,
   remapFindingPaths,
+  collectVocabularyNotes,
 } from "./scan-core.js";
 
 // Re-export the pure detectors (and their public types: SurfaceClassifier,
@@ -181,55 +181,6 @@ export interface ScanAgent {
 }
 
 /** A lethal-trifecta finding tagged with the surface (subagent/skill) that holds it. */
-/**
- * Gather the advisory half of the vocabulary findings for the report. Kept in
- * one place so hook events and subagent tools present identically — the two used
- * to answer the same question with different policies.
- */
-export function collectVocabularyNotes(
-  hookEventIssues: readonly HookEventIssue[],
-  agents: readonly ScanAgent[],
-): VocabularyNote[] {
-  return [
-    ...advisoryIssues(hookEventIssues).map((i) => ({
-      where: `hook event "${i.event}"`,
-      message: i.message,
-    })),
-    ...agents.flatMap((a) => groupAgentToolNotes(a)),
-  ];
-}
-
-/**
- * One agent's advisory tool notes, with the `conditional` ones GROUPED by the
- * condition they share. A delegating subagent legitimately declares eight
- * foreground-only tools; printing the same sentence eight times is noise, and
- * noise is what this whole change exists to stop producing. Unrecognised names
- * stay one-per-tool — each carries its own did-you-mean.
- */
-function groupAgentToolNotes(agent: ScanAgent): VocabularyNote[] {
-  const notes = advisoryIssues(agent.toolNotes ?? []);
-  const byCondition = new Map<string, string[]>();
-  const out: VocabularyNote[] = [];
-  for (const i of notes) {
-    if (i.verdict === "conditional" && i.condition !== undefined) {
-      const at = byCondition.get(i.condition) ?? [];
-      at.push(i.tool);
-      byCondition.set(i.condition, at);
-      continue;
-    }
-    out.push({ where: agent.path, message: i.message });
-  }
-  for (const [condition, tools] of byCondition)
-    out.push({
-      where: agent.path,
-      message:
-        `${tools.join(", ")} ${tools.length === 1 ? "is a real tool" : "are real tools"}, ` +
-        `but the platform removes ${tools.length === 1 ? "it" : "them"} ${condition}. ` +
-        `vigiles cannot see that condition from the file, so this is a note, not a defect.`,
-    });
-  return out;
-}
-
 /** One advisory vocabulary finding, tagged with the surface that carries it. */
 export interface VocabularyNote {
   /** Where it was found — a hook event key, or an agent's path. */

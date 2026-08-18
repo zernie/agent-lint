@@ -24,7 +24,18 @@ agent({
   name: "reviewer",
   description: "read-only review",
   purity: "pure",
-  tools: ["Read", "Grep", "Glob", "LS"],
+  tools: ["Read", "Grep", "Glob"],
+});
+
+// `LS` is NOT a Claude Code tool — it left the catalog with `BashOutput`,
+// `KillBash` and `MultiEdit` (2026-08-17). A retired name must fail at tsc time,
+// not merely be absent from the list above: absence proves nothing.
+agent({
+  name: "bad-retired-tool",
+  description: "names a tool that does not exist",
+  purity: "pure",
+  // @ts-expect-error `LS` is not in the built-in catalog
+  tools: ["Read", "LS"],
 });
 
 // bounded + Bash → OK (bounded ADMITS Bash; its command is gated at runtime)

@@ -29,6 +29,7 @@ import {
   advisoryIssues,
   disallowedToolIssues,
 } from "./core/tool-contract.js";
+import type { HookEventIssue } from "./core/hook-events.js";
 import { editDistance } from "./core/edit-distance.js";
 import { readFrontmatter, frontmatterScalar } from "./core/frontmatter-read.js";
 import {
@@ -72,6 +73,7 @@ import type {
   ScanSkillResourceFinding,
   ScanSkillFenceFinding,
   ScanDelegationFinding,
+  VocabularyNote,
 } from "./scan.js";
 
 // A script-path token inside a hook command. The token class is `\S` MINUS the
@@ -1049,4 +1051,61 @@ export function summarizePurity(agents: readonly ScanAgent[]): {
     },
     { pure: 0, bounded: 0, unrestricted: 0 },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Vocabulary notes — the advisory half of the findings
+// ---------------------------------------------------------------------------
+// These live HERE, not in scan.ts, because both engines produce them and only
+// this module is node-free. Importing them from scan.ts pulled the node-only
+// graph (down to `@ast-grep/napi`'s native .node binding) into the browser
+// bundle and broke the site build — the gate that owns this invariant.
+
+/**
+ * Gather the advisory half of the vocabulary findings for the report. Kept in
+ * one place so hook events and subagent tools present identically — the two used
+ * to answer the same question with different policies.
+ */
+export function collectVocabularyNotes(
+  hookEventIssues: readonly HookEventIssue[],
+  agents: readonly ScanAgent[],
+): VocabularyNote[] {
+  return [
+    ...advisoryIssues(hookEventIssues).map((i) => ({
+      where: `hook event "${i.event}"`,
+      message: i.message,
+    })),
+    ...agents.flatMap((a) => groupAgentToolNotes(a)),
+  ];
+}
+
+/**
+ * One agent's advisory tool notes, with the `conditional` ones GROUPED by the
+ * condition they share. A delegating subagent legitimately declares eight
+ * foreground-only tools; printing the same sentence eight times is noise, and
+ * noise is what this whole change exists to stop producing. Unrecognised names
+ * stay one-per-tool — each carries its own did-you-mean.
+ */
+function groupAgentToolNotes(agent: ScanAgent): VocabularyNote[] {
+  const notes = advisoryIssues(agent.toolNotes ?? []);
+  const byCondition = new Map<string, string[]>();
+  const out: VocabularyNote[] = [];
+  for (const i of notes) {
+    if (i.verdict === "conditional" && i.condition !== undefined) {
+      const at = byCondition.get(i.condition) ?? [];
+      at.push(i.tool);
+      byCondition.set(i.condition, at);
+      continue;
+    }
+    out.push({ where: agent.path, message: i.message });
+  }
+  for (const [condition, tools] of byCondition)
+    out.push({
+      where: agent.path,
+      message:
+        `${tools.join(", ")} ${tools.length === 1 ? "is a real tool" : "are real tools"}, ` +
+        `but the platform removes ${tools.length === 1 ? "it" : "them"} ${condition}. ` +
+        `vigiles cannot see that condition from the file, so this is a note, not a defect.`,
+    });
+  return out;
 }

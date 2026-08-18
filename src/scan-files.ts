@@ -83,7 +83,7 @@ import {
 // never enter this browser-safe engine's graph. The runtime detectors come from
 // the node-free ./scan-core.js above.
 import type { ScanReport, ScanInstructions } from "./scan.js";
-import { collectVocabularyNotes } from "./scan.js";
+import { collectVocabularyNotes } from "./scan-core.js";
 
 /**
  * The synthetic absolute root every path in a browser scan resolves against. A

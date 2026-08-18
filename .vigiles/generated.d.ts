@@ -101,7 +101,7 @@ declare module "vigiles/generated" {
     | "experimental:check"
     | "docs:api";
 
-  /** 371 project files. */
+  /** 375 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -145,6 +145,7 @@ declare module "vigiles/generated" {
     | "src/adapters/claude-code/typed-spec.ts"
     | "src/adapters/claude-code/vendor-coverage.test.ts"
     | "src/adapters/claude-code/vendor.test.ts"
+    | "src/adapters/claude-code/vocabulary.ts"
     | "src/adapters/codex/adapter.ts"
     | "src/adapters/codex/codex.test.ts"
     | "src/adapters/codex/dialect.ts"
@@ -326,6 +327,9 @@ declare module "vigiles/generated" {
     | "src/core/types.ts"
     | "src/core/validate.test.ts"
     | "src/core/validate.ts"
+    | "src/core/vocabulary-consistency.ts"
+    | "src/core/vocabulary.test.ts"
+    | "src/core/vocabulary.ts"
     | "src/coverage-artifact.test.ts"
     | "src/coverage-artifact.ts"
     | "src/coverage-evidence.ts"
@@ -588,6 +592,7 @@ declare module "vigiles/spec" {
       | "src/adapters/claude-code/typed-spec.ts"
       | "src/adapters/claude-code/vendor-coverage.test.ts"
       | "src/adapters/claude-code/vendor.test.ts"
+      | "src/adapters/claude-code/vocabulary.ts"
       | "src/adapters/codex/adapter.ts"
       | "src/adapters/codex/codex.test.ts"
       | "src/adapters/codex/dialect.ts"
@@ -769,6 +774,9 @@ declare module "vigiles/spec" {
       | "src/core/types.ts"
       | "src/core/validate.test.ts"
       | "src/core/validate.ts"
+      | "src/core/vocabulary-consistency.ts"
+      | "src/core/vocabulary.test.ts"
+      | "src/core/vocabulary.ts"
       | "src/coverage-artifact.test.ts"
       | "src/coverage-artifact.ts"
       | "src/coverage-evidence.ts"
