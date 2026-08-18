@@ -904,6 +904,28 @@ function staleRunNote(report: UntestedReport): string[] {
   ];
 }
 
+/**
+ * The QUALIFIERS on a coverage number — every caveat that says "this count is
+ * not quite what it looks like", in one list, built once.
+ *
+ * 🔴 THIS EXISTS BECAUSE A CAVEAT COULD BE PRINTED BY ONE COMMAND AND NOT THE
+ * OTHER, AND WAS. Both notes below were added to `formatUntestedReport` (the
+ * `lint` renderer) and neither reached `audit`, which assembles its own fact
+ * block from the same {@link UntestedReport}. Measured 2026-08-18 on a fixture
+ * whose only harness carried the retired `vigiles:covers` marker: `lint` named
+ * the file, `audit` printed `Untested surfaces: 0` and nothing else. The
+ * migration note existed, was unit-tested, and was invisible to anyone whose
+ * habit is `audit` — which is the whole point of a note that explains a silent
+ * migration.
+ *
+ * Collecting them here is the subtraction: a caveat is no longer something a
+ * renderer can choose to carry. Adding a third one reaches both callers or
+ * neither, and "neither" is a compile error rather than a quiet omission.
+ */
+export function coverageCaveats(report: UntestedReport): readonly string[] {
+  return [...staleRunNote(report), ...legacyCoversNote(report)];
+}
+
 export function formatUntestedReport(report: UntestedReport): string {
   // Every coverage number is printed WITH its provenance. "28 covered" and
   // "28 covered, all of it a name appearing in a file" are different facts, and
@@ -911,7 +933,7 @@ export function formatUntestedReport(report: UntestedReport): string {
   const provenance = formatEvidence(coverageEvidenceCounts(report));
   if (report.untested.length === 0) {
     const tail = report.exempt > 0 ? ` (${String(report.exempt)} exempt)` : "";
-    const legacy = [...staleRunNote(report), ...legacyCoversNote(report)];
+    const legacy = coverageCaveats(report);
     const ok =
       `✓ all ${String(report.total)} surface(s) have a test or eval${tail}` +
       (provenance ? `\n  ${provenance}` : "") +
@@ -946,8 +968,7 @@ export function formatUntestedReport(report: UntestedReport): string {
   );
   // What the surfaces that DID pass are resting on.
   if (provenance) lines.push(`  ${provenance}`);
-  lines.push(...staleRunNote(report));
-  lines.push(...legacyCoversNote(report));
+  lines.push(...coverageCaveats(report));
   // Already testing these another way (a promptfoo suite, a home-grown evals
   // file)? Point `testGlobs` at it so it counts toward coverage (issue #113) —
   // and put the file NEXT TO the surface, which is the only placement that

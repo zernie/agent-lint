@@ -19,6 +19,7 @@ import { isAbsolute, join } from "node:path";
 import {
   coverageEvidenceCounts,
   findUntestedSurfaces,
+  coverageCaveats,
   formatUntestedReport,
   skillTestNudge,
   evalTierQuestion,
@@ -1588,4 +1589,40 @@ test("an EXPLICIT `testExtension: ts` survives with no runner — the field exis
     }),
     "ts",
   );
+});
+
+// ── one list of caveats, so a renderer cannot carry half of them ─────────────
+// `audit` builds its own fact block from this report and used to print neither
+// qualifier, so the note explaining a silent migration was itself silent for
+// anyone who runs `audit` rather than `lint`. Both renderers now read this one
+// list; a third caveat added here reaches both or neither.
+
+test("coverageCaveats collects the qualifiers, and is empty when there are none", () => {
+  const dirty = makeTmpDir("cov-caveats-dirty");
+  write(dirty, ".claude/skills/foo/SKILL.md", skill("foo"));
+  write(
+    dirty,
+    ".claude/skills/foo/foo.harness.mjs",
+    "// vigiles:covers skills/foo\n",
+  );
+  const withMarker = coverageCaveats(findUntestedSurfaces({ basePath: dirty }));
+  assert.equal(withMarker.length, 1);
+  assert.match(withMarker[0] ?? "", /retired `vigiles:covers` marker/);
+  // Everything the lint renderer shows about caveats comes from here.
+  for (const line of withMarker)
+    assert.ok(
+      formatUntestedReport(findUntestedSurfaces({ basePath: dirty })).includes(
+        line,
+      ),
+    );
+  cleanupTmpDir(dirty);
+
+  const clean = makeTmpDir("cov-caveats-clean");
+  write(clean, ".claude/skills/foo/SKILL.md", skill("foo"));
+  write(clean, ".claude/skills/foo/foo.harness.mjs", "// an ordinary test\n");
+  assert.deepEqual(
+    coverageCaveats(findUntestedSurfaces({ basePath: clean })),
+    [],
+  );
+  cleanupTmpDir(clean);
 });

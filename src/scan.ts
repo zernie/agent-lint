@@ -61,6 +61,7 @@ import {
   type HookMatcherFinding,
 } from "./core/hook-matcher.js";
 import {
+  coverageCaveats,
   coverageEvidenceCounts,
   findUntestedSurfaces,
 } from "./test-coverage.js";
@@ -393,6 +394,18 @@ export interface ScanReport {
    */
   readonly coverageEvidence?: EvidenceCounts;
   /**
+   * The caveats that QUALIFY the coverage numbers above — "measured, but not
+   * this version", "still carrying a marker that stopped counting". Already
+   * formatted, because both renderers print the same sentence and a second
+   * wording is a second thing to keep true.
+   *
+   * Absent when there are none, never `[]`: the browser twin cannot compute
+   * these (no `.vigiles/coverage.json` without a filesystem), and byte-parity
+   * between the two engines is asserted field-for-field. An empty array on one
+   * side and an absent field on the other is a diff; two absent fields are not.
+   */
+  readonly coverageCaveats?: readonly string[];
+  /**
    * Whether the repo has its OWN test setup (a real `package.json` `test` script or
    * a conventional test dir). When true, the `untested` count — which only counts
    * vigiles-native `.eval.mjs`/`.harness.mjs` — is misleading: the team clearly
@@ -657,6 +670,9 @@ export function scanPlugin(
     unevaluated: coverage.evals.untested.length,
     evaluable: coverage.total,
     coverageEvidence: coverageEvidenceCounts(coverage),
+    ...(coverageCaveats(coverage).length > 0
+      ? { coverageCaveats: coverageCaveats(coverage) }
+      : {}),
     ownTestSignal: ownTestSignalOnDisk(dir),
     puritySummary,
   };
@@ -1049,6 +1065,9 @@ export function formatScanReport(r: ScanReport): string {
     ? formatEvidence(r.coverageEvidence)
     : "";
   if (evidenceLine) facts.push(`  ${evidenceLine}`);
+  // …and what DISQUALIFIES part of it. Same lines `lint` prints, from the same
+  // builder — see `coverageCaveats`. They already carry their own indent.
+  facts.push(...(r.coverageCaveats ?? []));
   // Effect surface: harness-level purity summary across all scanned agents.
   // Informational (higher pure% = more constrained, cheaper to test); shown
   // only when there are agents to summarize (no agents → no summary line).
