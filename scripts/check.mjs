@@ -62,6 +62,7 @@ const PARALLEL = [
     name: "corpus-guards",
     cmd: "node bench/corpus/verify.mjs && node bench/corpus/verify-headroom.mjs",
   },
+  { name: "text-sources", cmd: "node scripts/check-text-sources.mjs" },
   {
     name: "rule-enforcer",
     cmd: "npm ci --prefix rule-enforcer && node rule-enforcer/gate.js",
