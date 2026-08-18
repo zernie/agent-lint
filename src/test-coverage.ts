@@ -988,10 +988,11 @@ function retiredTestNameNote(report: UntestedReport): string[] {
   const more = found.length > 3 ? ` (+${String(found.length - 3)} more)` : "";
   return [
     `  ${String(found.length)} file(s) sit beside an untested surface and are named ` +
-      `after it, but carry a \`.test.\`/\`.spec.\` suffix (${shown}${more}) — that name ` +
-      `is collected by a default vitest/jest run, so vigiles does not count it (a ` +
-      `skill test spawns a model; nothing vigiles recognises may be swept up by ` +
-      `another runner). Rename to \`<surface>.harness.<ext>\` and it counts.`,
+      `after it, but carry a \`.test.\`/\`.spec.\` suffix (${shown}${more}) — the name a ` +
+      `default vitest/jest run collects, which is why it stopped counting in 15.x. A ` +
+      `harness test drives an agent, and under a foreign runner vigiles refuses to ` +
+      `spawn one, so that run FAILS on it rather than testing anything. Rename to ` +
+      `\`<surface>.harness.<ext>\` and it counts here without being swept up there.`,
   ];
 }
 
