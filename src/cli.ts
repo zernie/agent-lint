@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 
 /**
- * vigiles CLI — compile typed specs to instruction files.
+ * vigiles CLI — verify your agent harness is real, and prove it works.
  *
- * Commands:
- *   vigiles init            — scaffold a spec from scratch
- *   vigiles compile         — compile .spec.ts → .md with linter verification
- *   vigiles lint            — verify hashes, report coverage, detect duplicates
- *   vigiles generate types  — emit .d.ts with types from project state
+ * The verbs and their one-liners live in ONE place, `COMMAND_HELP` + `HELP_GROUPS`
+ * near the bottom of this file, and `--help` prints from that table. A second list
+ * here would be a copy that rots — this docblock WAS that copy: it named four
+ * commands and omitted `audit`, `test`, `eval` and `eject`, four of the eight, and
+ * `self-command-refs.test.ts` did not catch it because it guards against refs to
+ * REMOVED commands, not against a list that merely stops growing.
  */
 
 import {
@@ -5585,6 +5586,34 @@ async function handleRunScripts(
   }
 
   if (files.length === 0) {
+    // 🔴 ASKING FOR SOMETHING AND GETTING NOTHING IS A FAILURE; FINDING NOTHING IS NOT.
+    // The two cases were collapsed into one silent exit 0, and the collapse cost a real
+    // repository three days of green CI verifying zero files: a named step ran
+    // `vigiles test .claude/pipeline/skills.harness.mjs` after that file had been split
+    // into one-per-skill, printed "No **/*.harness.* files found" and passed, right next
+    // to a step that was red for the same root cause.
+    //
+    // They are different states. A POSITIONAL argument is a claim that something is there —
+    // when nothing matches it, the path is stale, the glob is wrong, or the run never
+    // reached its target, and every one of those is a defect. Bare discovery finding
+    // nothing is just an empty repository, which is a legitimate place to stand and must
+    // stay quiet.
+    //
+    // This is the default the field settled on: Jest and Vitest FAIL on no tests found and
+    // make you opt in with `--passWithNoTests`; pytest exits 5. `--min=0` remains the
+    // explicit opt-out here, so no new flag is introduced by this change.
+    // `minFlag`, not `minRequired`: 0 is both the DEFAULT and the explicit opt-out, so the
+    // VALUE cannot tell them apart — only the flag's presence can. (Caught by a control:
+    // the first version read `minRequired === 0` and made `--min=0` do nothing.)
+    if (restArgs.length > 0 && minFlag === undefined) {
+      console.error(
+        `✗ vigiles ${kind}: ${String(restArgs.length)} target(s) given and NOTHING matched — ` +
+          `${restArgs.join(", ")}\n` +
+          `  Nothing ran. A stale path, a wrong glob, or a moved file all look like this.\n` +
+          `  If an empty match is expected here, say so with --min=0.`,
+      );
+      process.exit(1);
+    }
     console.log(`No ${defaultGlob} files found.`);
     return;
   }
@@ -5709,41 +5738,48 @@ interface CommandHelp {
 const COMMAND_HELP: Record<Verb, CommandHelp> = {
   init: {
     usage:
-      "  vigiles init [flags]           Setup project (--ci-only for the CI gate only; --lint, --test, --harness=, --strict, --report-only, --no-gha, --force)",
+      "  vigiles init [flags]       Set up this repo — specs, plugin, and CI.",
   },
-  compile: { usage: "  vigiles compile [files...]     Compile .spec.ts → .md" },
+  compile: { usage: "  vigiles compile [files...] Compile .spec.ts → .md" },
   eject: {
     usage:
-      "  vigiles eject [file]           Un-manage a compiled file → plain hand-owned markdown (--keep-spec)",
+      "  vigiles eject [file]       Hand a compiled file back as plain markdown.",
   },
   lint: {
     usage:
-      "  vigiles lint [files...]        Verify references, find gaps in instruction files",
+      "  vigiles lint  [files...]   Gate it in CI. The same checks — but a finding fails the build.",
   },
   audit: {
+    // "Reports everything, fails nothing" states always-exit-0 as the FEATURE it is. The line
+    // it replaces had to end with "NOT a CI step — use `vigiles lint` in CI", and a help text
+    // that must say what a command ISN'T is a description that failed. Deleting that sentence
+    // was the checkable success criterion for this rewrite.
     usage:
-      "  vigiles audit [dir...]          Lighthouse for your harness — a LOCAL report: rings + what's broken + fixes (a deterministic read; 2+ dirs → leaderboard)",
+      "  vigiles audit [dir...]     Grade it on your machine. Reports everything, fails nothing.",
     detail: [
-      "                                 writes vigiles-report.html + .json (auto-gitignored; --out=<dir> · --no-html/--no-json · --no-open · --json for machine output). NOT a CI step — use `vigiles lint` in CI.",
-      "                                 the executing checks (run your hooks · live MCP · do skills fire?) run only interactively — `audit` asks once (remembered); automation uses the vigiles testing API",
-      "                                 --serve opens a LIVE local report whose buttons create specs in one click (own repo only; loopback + token-guarded) · --no-serve to skip the prompt",
+      "  2+ dirs → a leaderboard. Writes vigiles-report.html + .json (auto-gitignored).",
+      "  The executing checks (run your hooks · live MCP · do skills fire?) run only",
+      "  interactively — audit asks once and remembers; automation uses the testing API.",
     ],
   },
   test: {
+    // "Free, no API key" is the CONSEQUENCE; "deterministic" was the mechanism, and a reader
+    // deciding whether to put this in CI needs the cost, not the implementation.
     usage:
-      "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
+      "  vigiles test  [files...]   Against a scripted stand-in model. Free, no API key — every commit.",
   },
   eval: {
     usage:
-      "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N, --min=N, --no-skip)",
+      "  vigiles eval  [files...]   Against a real model. Spends your subscription — on demand.",
     detail: [
-      "                                 --update records each named eval's result to a committed lock (run locally on your subscription)",
-      "                                 --check verifies committed eval results against current inputs WITHOUT a model — the CI staleness gate",
+      "  --update records each named eval's result to a committed lock (run it locally).",
+      "  --check verifies those committed results against current inputs with NO model —",
+      "  the CI-safe half.",
     ],
   },
   generate: {
     usage:
-      "  vigiles generate <kind>       Emit a dev-toolchain artifact: types (.d.ts) · schema (JSON Schema) · harness (harness.gen.ts)",
+      "  vigiles generate <kind>    Emit a dev-toolchain artifact: types · schema · harness",
     detail: [
       "  vigiles generate <kind> --check  Verify the generated file is up to date",
     ],
@@ -5755,19 +5791,39 @@ const COMMAND_HELP: Record<Verb, CommandHelp> = {
 };
 
 /** Display order of the human-facing verbs in the banner's "Commands:" block. */
-const HELP_ORDER: readonly Verb[] = [
-  "init",
-  "compile",
-  "eject",
-  "lint",
-  "audit",
-  "test",
-  "eval",
+/**
+ * The top-level help, as GROUPS. One table, so the printer cannot drift from the
+ * grouping and a new verb cannot quietly land outside both.
+ */
+const HELP_GROUPS: readonly { heading: string; verbs: readonly Verb[] }[] = [
+  {
+    heading: "Set up and manage your specs:",
+    verbs: ["init", "compile", "eject"],
+  },
+  {
+    heading: "Check your harness (reads your files — nothing is executed):",
+    verbs: ["audit", "lint"],
+  },
+  {
+    heading: "Run your harness (drives it and watches what happens):",
+    verbs: ["test", "eval"],
+  },
 ];
 
-function printHelpEntry(v: Verb): void {
+/**
+ * One command's line. `detail` is the per-flag prose and appears ONLY in
+ * `vigiles <verb> --help`, never in the top-level list.
+ *
+ * That split is the second half of this rewrite. `audit`'s entry used to carry four
+ * wrapped lines naming nine flags inline, and that single entry was most of the felt
+ * crowding in a CLI whose verb count (8) is the smallest of every comparable tool
+ * measured — vitest ships 8 verbs and 164 flags, cargo 48 verbs, git 166. None of them
+ * thinned their surface by removing verbs; they tiered the help. This does the same.
+ */
+function printHelpEntry(v: Verb, opts: { detail?: boolean } = {}): void {
   console.log(COMMAND_HELP[v].usage);
-  for (const line of COMMAND_HELP[v].detail ?? []) console.log(line);
+  if (opts.detail)
+    for (const line of COMMAND_HELP[v].detail ?? []) console.log(line);
 }
 
 /**
@@ -5819,31 +5875,40 @@ function formatNothingToAudit(
 
 /** `vigiles <verb> --help` — that verb's entry plus its complete flag list. */
 function printCommandHelp(command: Verb): void {
-  printHelpEntry(command);
+  printHelpEntry(command, { detail: true });
   const flags = knownFlagsFor(command);
   console.log("");
   console.log(`Flags: ${[...flags].sort().join(" ")}`);
   console.log("(`vigiles --help` lists every command.)");
 }
 
+/**
+ * The top-level help, grouped. The grouping is load-bearing, not cosmetic: four verbs
+ * (`audit`, `lint`, `test`, `eval`) all read as "check my stuff", and a flat list left the
+ * reader to work out the difference from four independent sentences. The headings state the
+ * shared trait, which frees each verb's own line to state only what makes it different, so
+ * the four form a 2x2 that survives one pass:
+ *
+ *                    no consequence          has a consequence
+ *   read the files   audit (fails nothing)   lint (fails the build)
+ *   run the harness  test  (free)            eval (spends money)
+ */
 function printUsage(command: string | undefined): void {
-  console.log("vigiles — compile typed specs to instruction files");
-  console.log("");
-  console.log("Commands:");
-  for (const v of HELP_ORDER) printHelpEntry(v);
-  console.log("");
-  console.log("Examples:");
   console.log(
-    "  vigiles init                 Auto-detect project, create specs, wire CI",
-  );
-  console.log("  vigiles compile              Compile all .spec.ts files");
-  console.log(
-    "  vigiles lint                 Verify references, hashes, coverage + suggestions",
+    "vigiles — verify your agent harness is real, and prove it works",
   );
   console.log("");
+  for (const g of HELP_GROUPS) {
+    console.log(g.heading);
+    for (const v of g.verbs) printHelpEntry(v);
+    console.log("");
+  }
   console.log("Plumbing:");
   printHelpEntry("generate");
-  console.log("  vigiles --version             Print the version number");
+  console.log("  vigiles --version          Print the version number");
+  console.log("");
+  console.log("Flags live in `vigiles <command> --help`.");
+  console.log("New here? Start with `vigiles audit .`");
   if (command && command !== "--help") {
     console.log(`\nUnknown command: "${command}"`);
     process.exit(1);

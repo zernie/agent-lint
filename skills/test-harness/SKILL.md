@@ -326,6 +326,20 @@ We do **not** show "% of your subscription" — Anthropic doesn't expose a plan'
 quota, so any percentage would be invented. Tokens + API-equivalent `$` + the
 billed-to line is the honest, complete picture. Keep the user's cost visible, always.
 
+## CI — don't hand-write the steps
+
+These tiers belong in CI, and there is a published Action for it. Run `vigiles init`: it
+writes `.github/workflows/vigiles.yml`, wiring the Action (`zernie/vigiles@v1`) for the jobs
+that can use it plus a plain `npx vigiles test` job for this tier — that one needs
+repo-local `node_modules`, which the Action does not install, so it stays hand-rolled on
+purpose.
+
+If the repo already has a workflow, the Action's inputs are documented in
+[docs/github-action.md](../../docs/github-action.md). Read them there rather than guessing:
+the input list is defined in `action.yml`, and a copy of it here would be a second source of
+truth that goes stale without anything noticing — which is exactly what happened to this
+file's own sibling docs and to a consumer's CI comment, both measured on 2026-08-18.
+
 ## Step 5 — Lock the eval so CI stays honest (you do this automatically)
 
 Real-model evals run on the user's subscription — locally, never in CI. So **as
