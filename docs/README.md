@@ -58,6 +58,7 @@ The docs are grouped by what you're trying to do:
   - `vigiles/spec` — the spec builders (`claude`, `enforce`, `guidance`, `file`, `cmd`, `symbol`, …) and the module-augmentation target for generated types.
   - `vigiles` (the package root) — the free testing surface: the harness/hook runners, the `check` vocabulary and the runner-agnostic assertions.
   - `vigiles/eval` — everything that can spend money, every symbol prefixed `paid_`: `paid_runEval`, `paid_measure`, `paid_measureArms`, `paid_measureTriggerRate`, `paid_judge`, `paid_judged`, `paid_claudeEvalDriver`.
+  - `defineEval` is on the **free** root, not here, and that is the point: a `*.eval.mjs` file DESCRIBES its eval and `vigiles eval` runs it, so importing one cannot spend. See [eval files describe their eval](harness-testing.md#eval-files-describe-their-eval).
   - `vigiles/claude-code`, `vigiles/codex` — the per-harness adapters.
   - `vigiles/adapter` — the adapter-authoring kit.
 - **[API reference (generated) →](https://zernie.github.io/vigiles/api/)** — every exported symbol across all entry points, generated from the source. The hand-written guides here are the human-facing layer; this is the exhaustive symbol-level reference.

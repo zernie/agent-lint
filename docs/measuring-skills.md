@@ -41,23 +41,27 @@ This is `runEval` / `measureArms` — arms × trials → mean ± se, with Welch'
 
 ## Worked example
 
-```typescript
-import { paid_runEval } from "vigiles/eval";
+`skill-cost.eval.mjs` — a description; `npx vigiles eval` runs it:
 
-const report = await paid_runEval({
-  fixture: { "in.txt": "Implement a slug helper." },
-  task: "Read in.txt, write slugify() to slug.js, then explain. Stop.",
-  arms: {
-    baseline: {}, // the task, nothing added
-    skill: { files: { "SKILL.md": THE_SKILL } }, // or: { pluginDir: "./some-plugin" }
+```typescript
+import { defineEval } from "vigiles";
+
+export default defineEval({
+  runEval: {
+    fixture: { "in.txt": "Implement a slug helper." },
+    task: "Read in.txt, write slugify() to slug.js, then explain. Stop.",
+    arms: {
+      baseline: {}, // the task, nothing added
+      skill: { files: { "SKILL.md": THE_SKILL } }, // or: { pluginDir: "./some-plugin" }
+    },
+    measure: (ctx) => ({
+      cost: ctx.usage.costUsd, // the bill
+      outputTokens: ctx.usage.outputTokens, // the target
+      correct: check(ctx), // the blast radius (1/0)
+    }),
+    trials: 3,
+    model: "sonnet",
   },
-  measure: (ctx) => ({
-    cost: ctx.usage.costUsd, // the bill
-    outputTokens: ctx.usage.outputTokens, // the target
-    correct: check(ctx), // the blast radius (1/0)
-  }),
-  trials: 3,
-  model: "sonnet",
 });
 // Read the per-arm delta: lower bill? target moved? correctness intact?
 ```

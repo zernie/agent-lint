@@ -207,38 +207,47 @@ score its output directly against a rubric. No on/off baseline — this is the
 "is it any good?" oracle (what promptfoo/DeepEval lead with), and the right
 default when there's nothing to compare against:
 
-```ts
-import { paid_measure, paid_judged } from "vigiles/eval"; // `paid_` = these call a model
-import { skill, assertRates } from "vigiles";
+An eval file **describes** its eval — it must never run one at the top level,
+because importing such a file spends real money. Write `<name>.eval.mjs`:
 
-const report = await paid_measure({
-  pluginDir: "./",
-  task: "…a task the skill should handle…",
-  checks: [
-    skill("my-plugin:my-skill"), // it fired
-    paid_judged("the answer correctly does X and avoids Y"), // …and the output is good
-  ],
-  trials: 6,
+```ts
+import { defineEval, skill, assertRates } from "vigiles";
+import { paid_judged } from "vigiles/eval"; // a Check whose default judge bills
+
+export default defineEval({
+  measure: {
+    pluginDir: "./",
+    task: "…a task the skill should handle…",
+    checks: [
+      skill("my-plugin:my-skill"), // it fired
+      paid_judged("the answer correctly does X and avoids Y"), // …and the output is good
+    ],
+    trials: 6,
+  },
+  assert: (report) => assertRates(report, { min: 0.8 }), // each check ≥ 80% of trials
 });
-assertRates(report, { min: 0.8 }); // each check passes ≥ 80% of trials
 ```
+
+Run it with `npx vigiles eval <file>` — never `node <file>`, which refuses.
 
 **Eval — relative (`paid_runEval` + `assertSignificant`)** — when the question is
 _lift over no-skill_ (regression, or proving a change isn't noise): A/B the
 change on vs off and gate on significance, not eyeballing:
 
 ```ts
-import { paid_runEval } from "vigiles/eval"; // `paid_` = a real model runs
-import { assertSignificant } from "vigiles";
+import { defineEval, assertSignificant } from "vigiles";
 
-const report = await paid_runEval({
-  arms: { off: {}, on: { pluginDir: "./" } },
-  task: "…a task the harness change should affect…",
-  measure: (ctx) => ({ ok: /* a bare predicate over the trace */ true }),
-  trials: 6,
-  cache: "readwrite",
+export default defineEval({
+  runEval: {
+    arms: { off: {}, on: { pluginDir: "./" } },
+    task: "…a task the harness change should affect…",
+    measure: (ctx) => ({ ok: /* a bare predicate over the trace */ true }),
+    trials: 6,
+    cache: "readwrite",
+  },
+  assert: (report) =>
+    assertSignificant(report, { baseline: "off", arm: "on", metric: "ok" }),
 });
-assertSignificant(report, { baseline: "off", arm: "on", metric: "ok" });
 ```
 
 ### Never hand-roll the runner — it silently eats stderr

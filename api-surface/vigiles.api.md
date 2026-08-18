@@ -363,6 +363,9 @@ export function decideSandbox(opts: {
 }): SandboxDecision;
 
 // @public
+export function defineEval<K extends EvalKind>(def: EvalDefinitionInput<K>): EvalDefinition<K>;
+
+// @public
 export function didNotWrite(path: string): Check<Trace>;
 
 // @public (undocumented)
@@ -421,6 +424,14 @@ export interface EvalArm {
 export function evalChecks<T>(target: T, checks: readonly Check<T>[]): CheckResult[];
 
 // @public
+export type EvalDefinition<K extends EvalKind = EvalKind> = EvalDefinitionInput<K> & {
+    readonly [EVAL_DEFINITION]: true;
+};
+
+// @public
+export type EvalDefinitionInput<K extends EvalKind> = Pick<EvalMeasurements, K> & EvalHooks<K>;
+
+// @public
 export interface EvalDriver {
     readonly experimental?: string;
     readonly harness?: string;
@@ -430,6 +441,25 @@ export interface EvalDriver {
     readonly runError?: (out: RunOut) => string | null;
     // (undocumented)
     readonly runner: AgentRunner;
+}
+
+// @public
+export interface EvalHooks<K extends EvalKind> {
+    readonly assert?: (report: EvalReports[K]) => void | Promise<void>;
+    readonly evalDriver?: EvalDriver;
+    readonly skipIf?: () => string | false | undefined | null;
+}
+
+// @public
+export type EvalKind = keyof EvalMeasurements;
+
+// @public
+export interface EvalMeasurements {
+    readonly measure?: MeasureSpec;
+    readonly measureArms?: ArmsMeasureSpec;
+    readonly measureSelectionMatrix?: SelectionMatrixSpec;
+    readonly measureTriggerRate?: TriggerRateSpec;
+    readonly runEval?: EvalSpec<Metrics>;
 }
 
 // @public (undocumented)
@@ -442,6 +472,20 @@ export interface EvalReport {
     readonly totalCostUsd: number;
     // (undocumented)
     readonly trials: number;
+}
+
+// @public
+export interface EvalReports {
+    // (undocumented)
+    readonly measure: CheckReport;
+    // (undocumented)
+    readonly measureArms: ArmsCheckReport;
+    // (undocumented)
+    readonly measureSelectionMatrix: SelectionReport;
+    // (undocumented)
+    readonly measureTriggerRate: TriggerRateReport;
+    // (undocumented)
+    readonly runEval: EvalReport;
 }
 
 // @public (undocumented)
@@ -900,6 +944,11 @@ export interface ScriptRunResult {
     readonly stderr: string;
     // (undocumented)
     readonly stdout: string;
+}
+
+// @public
+export interface SelectionMatrixSpec extends SelectionMatrixOptions {
+    readonly pluginDir: string;
 }
 
 // @public

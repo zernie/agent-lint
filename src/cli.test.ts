@@ -1959,10 +1959,49 @@ describe("CLI: vigiles test — skips are loud and gateable", () => {
     }
   });
 
+  it("eval: a DESCRIPTION is run through the entry, and an unmigrated file is told what to do", () => {
+    // Re-probing the product, not the unit: `vigiles eval` has to interpose
+    // `dist/eval-entry.js`. Without it the eval file becomes the program again
+    // and every migrated file refuses itself — the defect in a new place.
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-desc-"));
+    const distTest = JSON.stringify(
+      resolve(__dirname, "..", "dist", "test.js"),
+    );
+    try {
+      writeFileSync(
+        join(dir, "good.eval.mjs"),
+        `import { defineEval } from ${distTest};\n` +
+          `export default defineEval({ measure: { task: "t", checks: [] }, skipIf: () => "no model here" });\n`,
+      );
+      const good = run("eval good.eval.mjs", dir);
+      assert.equal(good.exitCode, 0, good.stdout + good.stderr);
+      assert.match(good.stdout, /SKIPPED/); // loud, never a silent green
+
+      // The unmigrated shape: no description at all.
+      writeFileSync(join(dir, "old.eval.mjs"), "export const x = 1;\n");
+      const old = run("eval old.eval.mjs", dir);
+      assert.equal(old.exitCode, 1);
+      assert.match(
+        old.stdout + old.stderr,
+        /export default defineEval/,
+        "an author whose old file stopped working must be told the new shape",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("--min fails loudly when fewer evals ran than required (never a silent 0)", () => {
     const dir = mkdtempSync(join(tmpdir(), "vigiles-min-"));
     try {
-      writeFileSync(join(dir, "a.eval.mjs"), "process.exit(0);\n");
+      // A real (minimal) eval file: it DESCRIBES a measurement and skips, so no
+      // model is touched. `process.exit(0)` in the module body used to stand in
+      // for one — that is the shape eval files no longer have.
+      writeFileSync(
+        join(dir, "a.eval.mjs"),
+        `import { defineEval } from ${JSON.stringify(resolve(__dirname, "..", "dist", "test.js"))};\n` +
+          `export default defineEval({ measure: { task: "t", checks: [] }, skipIf: () => "no model in this test" });\n`,
+      );
       // a glob/path matching nothing → 0 ran → must fail under --min
       const none = run("eval --min=1 no-such-*.eval.mjs", dir);
       assert.equal(none.exitCode, 1);
@@ -2000,17 +2039,31 @@ describe("CLI: vigiles test — skips are loud and gateable", () => {
   it("eval lock e2e: --update writes a lock, --check replays green, an input change goes red", () => {
     const dir = mkdtempSync(join(tmpdir(), "vigiles-locke2e-"));
     try {
-      // A real eval script run by the built CLI, but MODEL-FREE: it drives
-      // `runEvalWith` (from the built dist) with a fake runner, so the whole
+      // A real eval file run by the built CLI, but MODEL-FREE: it DESCRIBES a
+      // trigger-rate eval and hands it a fake `evalDriver`, so the whole
       // --update → --check → stale flow is exercised end to end with no model.
+      //
+      // It used to call `runEvalWith(spec, fake)` in the module body — the shape
+      // that made `import()` spend money, and the reason eval files became
+      // descriptions. `evalDriver` is the PUBLIC injection seam (the one Codex
+      // users are told to use), so the fixture now drives the same lock
+      // machinery through the same door a user would.
+      const distTest = resolve(__dirname, "..", "dist", "test.js");
       const evalJs = resolve(__dirname, "..", "dist", "eval.js");
+      mkdirSync(join(dir, "skills", "greet"), { recursive: true });
+      writeFileSync(
+        join(dir, "skills", "greet", "SKILL.md"),
+        "---\nname: greet\ndescription: greets the user\n---\nhi\n",
+      );
       writeFileSync(
         join(dir, "x.eval.cjs"),
-        `const { runEvalWith } = require(${JSON.stringify(evalJs)});\n` +
+        `const { defineEval } = require(${JSON.stringify(distTest)});\n` +
+          `const { parseClaudeRun } = require(${JSON.stringify(evalJs)});\n` +
           `const fake = () => Promise.resolve({ code: 0, stdout: JSON.stringify({ type: "result", result: "ok", num_turns: 1 }) });\n` +
-          `runEvalWith({ name: "e2e-eval", arms: { run: {} }, task: process.env.E2E_TASK || "task A", trials: 1, model: "claude-sonnet-4-6-20260101", spacingSec: 0, measure: () => ({ ok: 1 }) }, fake)\n` +
-          `  .then(() => process.exit(0))\n` +
-          `  .catch((e) => { console.error(String((e && e.message) || e)); process.exit(1); });\n`,
+          `module.exports = defineEval({\n` +
+          `  measureTriggerRate: { name: "e2e-eval", skillsDir: __dirname + "/skills", prompts: [process.env.E2E_TASK || "task A"], minPrompts: 1, fired: () => true, trials: 1, model: "claude-sonnet-4-6-20260101", spacingSec: 0 },\n` +
+          `  evalDriver: { runner: fake, parse: parseClaudeRun, harness: "claude-code" },\n` +
+          `});\n`,
       );
       const lockFile = join(
         dir,

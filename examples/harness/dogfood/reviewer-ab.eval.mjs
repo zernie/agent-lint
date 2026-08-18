@@ -29,7 +29,7 @@
  * — exactly the kind of honest result this layer exists to surface.
  *
  *   npx vigiles eval examples/harness/dogfood/reviewer-ab.eval.mjs
- *   VIGILES_TRIALS=5 node examples/harness/dogfood/reviewer-ab.eval.mjs
+ *   npx vigiles eval --trials=5 examples/harness/dogfood/reviewer-ab.eval.mjs
  *
  * Real model → real cost. Needs the `claude` CLI + model auth + a built dist/.
  *
@@ -53,70 +53,65 @@
  * thesis, validated on vigiles's OWN contract. (NOTE: all three rows label as
  * "subagent(code-reviewer)" — they're nested checks; order is (1)/(2)/(3) above.)
  */
-import {
-  measureArms,
-  formatCheckReport,
-  compareCheck,
-} from "../../../dist/eval.js";
+import { compareCheck, defineEval } from "../../../dist/test.js";
 import { subagent, tool, output } from "../../../dist/check.js";
 import { fileURLToPath } from "node:url";
 
-const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 3);
 const dir = (p) => fileURLToPath(new URL(p, import.meta.url));
 
-const report = await measureArms({
-  // A planted, unambiguous defect: `add` subtracts.
-  fixture: {
-    "app.js":
-      "function add(a, b) { return a - b; } // should add\nmodule.exports = { add };\n",
+export default defineEval({
+  measureArms: {
+    // A planted, unambiguous defect: `add` subtracts.
+    fixture: {
+      "app.js":
+        "function add(a, b) { return a - b; } // should add\nmodule.exports = { add };\n",
+    },
+    task:
+      "You have a `code-reviewer` subagent. DELEGATE the review of app.js to it " +
+      "via the Task tool — do NOT read or review the file yourself. Then report " +
+      "exactly what the subagent returned.",
+    model: "sonnet",
+    // Force delegation: the LEAD may only spawn a subagent (no Read/Grep of its
+    // own), so it cannot review inline — it MUST dispatch code-reviewer (which has
+    // its own Read). Removes the "lead reviewed it itself" confound the pilot found.
+    allowedTools: ["Task"],
+    trials: 3,
+    arms: {
+      prose: { pluginDir: dir("./reviewer-ab/prose") },
+      spec: { pluginDir: dir("./reviewer-ab/spec") },
+    },
+    // All three read the SUBAGENT's trace/return (the contract lives in the SUB,
+    // not the lead) — possible since the subagent nested-trace fix (namespaced
+    // subagent_type + the sub's returned text are now recovered under --plugin-dir).
+    checks: [
+      // (1) the subagent ran + read the file — fair-A/B guard (both arms).
+      subagent("code-reviewer", [tool("Read")]),
+      // (2) QUALITY — the sub caught the subtract-instead-of-add bug. Stays ~equal.
+      subagent("code-reviewer", [
+        output(/subtract|a - b|minus|should add|wrong operator/i),
+      ]),
+      // (3) PAYOFF — the sub RETURNED a parseable typed block. Only `spec` can pass.
+      subagent("code-reviewer", [output(/```vigiles:(ok|err)/)]),
+    ],
   },
-  task:
-    "You have a `code-reviewer` subagent. DELEGATE the review of app.js to it " +
-    "via the Task tool — do NOT read or review the file yourself. Then report " +
-    "exactly what the subagent returned.",
-  model: "sonnet",
-  // Force delegation: the LEAD may only spawn a subagent (no Read/Grep of its
-  // own), so it cannot review inline — it MUST dispatch code-reviewer (which has
-  // its own Read). Removes the "lead reviewed it itself" confound the pilot found.
-  allowedTools: ["Task"],
-  trials,
-  arms: {
-    prose: { pluginDir: dir("./reviewer-ab/prose") },
-    spec: { pluginDir: dir("./reviewer-ab/spec") },
+  assert: (report) => {
+    for (const [name, r] of Object.entries(report.arms))
+      if (r.n === 0) throw new Error(`arm "${name}": no runs executed`);
+
+    // The significance read (Welch's t over the per-arm rates), prose = baseline:
+    //   check 1 = foundBug (QUALITY) — want NOT significantly worse on `spec`.
+    //   check 2 = typedOutcome (PAYOFF) — want significantly higher on `spec`.
+    const pOf = (cmp) =>
+      cmp && typeof cmp.p === "number" && Number.isFinite(cmp.p)
+        ? `p=${cmp.p.toFixed(3)}`
+        : "p=n/a (needs variance across ≥2 trials)";
+    const quality = compareCheck(report, "prose", "spec", 1);
+    const payoff = compareCheck(report, "prose", "spec", 2);
+    console.log(`\nquality  (foundBug, spec vs prose):    ${pOf(quality)}`);
+    console.log(`payoff   (typedOutcome, spec vs prose): ${pOf(payoff)}`);
+    console.log(
+      "\nVerdict: the spec HELPED iff quality did NOT regress (p high / spec≈prose) " +
+        "AND payoff is a real win (p low, spec≫prose).",
+    );
   },
-  // All three read the SUBAGENT's trace/return (the contract lives in the SUB,
-  // not the lead) — possible since the subagent nested-trace fix (namespaced
-  // subagent_type + the sub's returned text are now recovered under --plugin-dir).
-  checks: [
-    // (1) the subagent ran + read the file — fair-A/B guard (both arms).
-    subagent("code-reviewer", [tool("Read")]),
-    // (2) QUALITY — the sub caught the subtract-instead-of-add bug. Stays ~equal.
-    subagent("code-reviewer", [
-      output(/subtract|a - b|minus|should add|wrong operator/i),
-    ]),
-    // (3) PAYOFF — the sub RETURNED a parseable typed block. Only `spec` can pass.
-    subagent("code-reviewer", [output(/```vigiles:(ok|err)/)]),
-  ],
 });
-
-for (const [name, r] of Object.entries(report.arms)) {
-  if (r.n === 0) throw new Error(`arm "${name}": no runs executed`);
-  console.log(`\n[arm: ${name}]`);
-  console.log(formatCheckReport(r));
-}
-
-// The significance read (Welch's t over the per-arm rates), prose = baseline:
-//   check 1 = foundBug (QUALITY) — want NOT significantly worse on `spec`.
-//   check 2 = typedOutcome (PAYOFF) — want significantly higher on `spec`.
-const pOf = (cmp) =>
-  cmp && typeof cmp.p === "number" && Number.isFinite(cmp.p)
-    ? `p=${cmp.p.toFixed(3)}`
-    : "p=n/a (needs variance across ≥2 trials)";
-const quality = compareCheck(report, "prose", "spec", 1);
-const payoff = compareCheck(report, "prose", "spec", 2);
-console.log(`\nquality  (foundBug, spec vs prose):    ${pOf(quality)}`);
-console.log(`payoff   (typedOutcome, spec vs prose): ${pOf(payoff)}`);
-console.log(
-  "\nVerdict: the spec HELPED iff quality did NOT regress (p high / spec≈prose) " +
-    "AND payoff is a real win (p low, spec≫prose).",
-);

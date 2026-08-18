@@ -81,20 +81,22 @@ Two orthogonal questions govern this, not one:
 **At the eval tier, the model — not you — chooses what to do.** To test "the agent **didn't** push to `main` / call a paid API / spawn a paid subagent" safely, vigiles intercepts the tool before it runs:
 
 ```ts
-import { paid_measure } from "vigiles/eval"; // `paid_` = a real model runs
-import { notTool } from "vigiles";
+import { defineEval, notTool } from "vigiles";
 
-const report = paid_measure(spec, {
-  trials: 5,
-  // Intercept the dangerous tool: the model can DECIDE to call it; it never runs.
-  interceptTools: [
-    {
-      tool: "Bash",
-      when: { command: /git push/ },
-      denyReason: "blocked in test",
-    },
-  ],
-  checks: [notTool("Bash", { command: /git push/ })], // assert it never (successfully) pushed
+export default defineEval({
+  measure: {
+    ...spec,
+    trials: 5,
+    // Intercept the dangerous tool: the model can DECIDE to call it; it never runs.
+    interceptTools: [
+      {
+        tool: "Bash",
+        when: { command: /git push/ },
+        denyReason: "blocked in test",
+      },
+    ],
+    checks: [notTool("Bash", { command: /git push/ })], // assert it never (successfully) pushed
+  },
 });
 ```
 

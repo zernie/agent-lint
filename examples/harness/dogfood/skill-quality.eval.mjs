@@ -11,40 +11,40 @@
  * Real model → real cost. Needs the `claude` CLI + model auth + a built dist/.
  * Write-don't-run in a keyless env; this is the artifact that runs where a key is.
  */
-import { measure, formatCheckReport, assertRates } from "../../../dist/eval.js";
+import { assertRates, defineEval } from "../../../dist/test.js";
 import { skill, judged, cost } from "../../../dist/check.js";
 import { fileURLToPath } from "node:url";
-
-const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 3);
 
 // The vigiles plugin root (holds .claude-plugin/) — its skills activate natively.
 const pluginDir = fileURLToPath(new URL("../../../", import.meta.url));
 
-const report = await measure({
-  pluginDir,
-  // A repo whose CLAUDE.md spec has a guidance() rule that a linter could enforce.
-  fixture: {
-    "CLAUDE.md.spec.ts": `import { claude, guidance } from "vigiles/spec";
-export default claude({ rules: {
-  "no-console": guidance("Don't leave console.log calls in committed code."),
-} });`,
+export default defineEval({
+  measure: {
+    pluginDir,
+    // A repo whose CLAUDE.md spec has a guidance() rule that a linter could enforce.
+    fixture: {
+      "CLAUDE.md.spec.ts": `import { claude, guidance } from "vigiles/spec";
+  export default claude({ rules: {
+    "no-console": guidance("Don't leave console.log calls in committed code."),
+  } });`,
+    },
+    task: "Strengthen the guidance rules in my CLAUDE.md spec — find a real linter rule that could enforce each, instead of leaving it as prose.",
+    model: "sonnet", // measure on the model your users actually run
+    trials: 3,
+    checks: [
+      skill("vigiles:strengthen"), // the right skill fired
+      judged(
+        "1 if the response names a REAL linter rule (e.g. eslint/no-console, ruff/T201) that would enforce the 'no console.log' guidance; 0 if it's vague or invents a rule",
+        { min: 0.6 },
+      ),
+      cost({ maxUsd: 0.1 }), // the run stayed cheap
+    ],
   },
-  task: "Strengthen the guidance rules in my CLAUDE.md spec — find a real linter rule that could enforce each, instead of leaving it as prose.",
-  model: "sonnet", // measure on the model your users actually run
-  trials,
-  checks: [
-    skill("vigiles:strengthen"), // the right skill fired
-    judged(
-      "1 if the response names a REAL linter rule (e.g. eslint/no-console, ruff/T201) that would enforce the 'no console.log' guidance; 0 if it's vague or invents a rule",
-      { min: 0.6 },
-    ),
-    cost({ maxUsd: 0.1 }), // the run stayed cheap
-  ],
+  assert: (report) => {
+    // Gate: every check holds at least 60% of the time.
+    assertRates(report, { min: 0.6 });
+    console.log(
+      "\n✓ strengthen: fires, suggests a real rule, and stays cheap.",
+    );
+  },
 });
-
-console.log(formatCheckReport(report));
-if (report.n === 0) throw new Error("no runs executed");
-
-// Gate: every check holds at least 60% of the time.
-assertRates(report, { min: 0.6 });
-console.log("\n✓ strengthen: fires, suggests a real rule, and stays cheap.");

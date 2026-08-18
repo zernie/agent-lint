@@ -19,6 +19,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { refuseUnderForeignRunner } from "./core/foreign-runner.js";
+import { refuseDuringEvalLoad } from "./core/eval-load-phase.js";
 
 export interface JudgeResult {
   /** Score in [0, 1] (clamped). 0 on any failure to obtain a verdict. */
@@ -61,6 +62,7 @@ function firstJsonObject(s: string): unknown {
 export function judge(opts: JudgeOptions): JudgeResult {
   // BEFORE the `try` below: it catches everything and returns `score: 0`, so a
   // refusal thrown inside would be downgraded to a silent failing grade.
+  refuseDuringEvalLoad("grading with `claude`");
   refuseUnderForeignRunner("grading with `claude`");
   const threshold = opts.threshold ?? 0.5;
   const prompt =

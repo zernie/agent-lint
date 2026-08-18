@@ -31,11 +31,10 @@
  *   - this is how you'd catch either failure mode.
  *
  *   npx vigiles eval --trials=6 examples/harness/skill-compression.eval.mjs
- *   node examples/harness/skill-compression.eval.mjs 6      # standalone
  *
  * Real model → real cost. Needs the `claude` CLI + model auth and a built dist/.
- * External users import from the package: `from "vigiles/eval"` (the paid
- * runners) and `from "vigiles"` (the free checks).
+ * External users import from the package: `defineEval` + the free checks from
+ * `"vigiles"`. An eval file declares its measurement; `vigiles eval` runs it.
  *
  * FINDING (2026-06-17, real haiku, 3 trials/arm, on the Pro/Max subscription —
  * apiKeySource:"none", $0.1057 total). The cost-metric capture works end-to-end:
@@ -49,9 +48,7 @@
  * +11% (762 → 842 tok/run) at +$0.002/run, correctness intact on both (Canberra) —
  * a headline "cuts tokens %" would have lied. Exactly the failure mode this catches.
  */
-import { runEval, formatEvalReport } from "../../dist/eval.js";
-
-const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 3);
+import { defineEval } from "../../dist/test.js";
 
 const CAVEMAN = `# answer-style
 
@@ -66,57 +63,59 @@ const TASK =
   "name the capital city of Australia, then write it alone on the last line " +
   "prefixed with 'ANSWER: '. Write the whole reply to REPLY.txt. Then stop.";
 
-const report = await runEval({
-  name: "skill-compression: does telegraphic style cut tokens without dropping the fact?",
-  arms: {
-    verbose: {},
-    caveman: { files: { "SKILL.md": CAVEMAN } },
+export default defineEval({
+  runEval: {
+    name: "skill-compression: does telegraphic style cut tokens without dropping the fact?",
+    arms: {
+      verbose: {},
+      caveman: { files: { "SKILL.md": CAVEMAN } },
+    },
+    task: TASK,
+    measure: (ctx) => {
+      const reply = ctx.file("REPLY.txt") ?? "";
+      const answer = /ANSWER:\s*([A-Za-z .]+)/i.exec(reply)?.[1]?.trim() ?? "";
+      return {
+        inputTokens: ctx.usage.inputTokens, // the injection cost: skill adds system-prompt tokens
+        outputTokens: ctx.usage.outputTokens, // the optimization target
+        correct: /canberra/i.test(answer) ? 1 : 0, // the fact that must survive
+      };
+    },
+    trials: 3,
+    model: "haiku",
   },
-  task: TASK,
-  measure: (ctx) => {
-    const reply = ctx.file("REPLY.txt") ?? "";
-    const answer = /ANSWER:\s*([A-Za-z .]+)/i.exec(reply)?.[1]?.trim() ?? "";
-    return {
-      inputTokens: ctx.usage.inputTokens, // the injection cost: skill adds system-prompt tokens
-      outputTokens: ctx.usage.outputTokens, // the optimization target
-      correct: /canberra/i.test(answer) ? 1 : 0, // the fact that must survive
-    };
+  assert: (report) => {
+    // The three questions, answered from the arm means (`metrics` = mean per metric):
+    const verbose = report.arms.verbose.metrics;
+    const caveman = report.arms.caveman.metrics;
+
+    // 1. Output side: did telegraphic style actually cut output tokens?
+    const outputSaved =
+      verbose.outputTokens > 0
+        ? ((verbose.outputTokens - caveman.outputTokens) /
+            verbose.outputTokens) *
+          100
+        : 0;
+    console.log(
+      `\ncaveman output-token delta vs verbose: ${outputSaved.toFixed(0)}% ` +
+        `(${verbose.outputTokens.toFixed(0)} → ${caveman.outputTokens.toFixed(0)} tok/run)`,
+    );
+
+    // 2. Input side: did injecting the SKILL.md raise input tokens?
+    // SkillBenchmark finding: a compression skill injects text into the system prompt
+    // every turn, so the net cost delta is (inputDelta + outputDelta). Measure both —
+    // a headline output saving is misleading if the injection cost erases it.
+    const inputDelta = caveman.inputTokens - verbose.inputTokens;
+    console.log(
+      `caveman input-token delta vs verbose: ${inputDelta >= 0 ? "+" : ""}${inputDelta.toFixed(0)} tok/run ` +
+        `(${verbose.inputTokens.toFixed(0)} → ${caveman.inputTokens.toFixed(0)})`,
+    );
+
+    // 3. The behavioural guardrail: a token saving that dropped the answer is not a win.
+    if (caveman.correct < verbose.correct) {
+      throw new Error(
+        `caveman regressed correctness: ${caveman.correct} < ${verbose.correct} ` +
+          `(verbose) — the token saving cost the answer, so it does not count`,
+      );
+    }
   },
-  trials,
-  model: "haiku",
 });
-
-console.log(formatEvalReport(report));
-
-// The three questions, answered from the arm means (`metrics` = mean per metric):
-const verbose = report.arms.verbose.metrics;
-const caveman = report.arms.caveman.metrics;
-
-// 1. Output side: did telegraphic style actually cut output tokens?
-const outputSaved =
-  verbose.outputTokens > 0
-    ? ((verbose.outputTokens - caveman.outputTokens) / verbose.outputTokens) *
-      100
-    : 0;
-console.log(
-  `\ncaveman output-token delta vs verbose: ${outputSaved.toFixed(0)}% ` +
-    `(${verbose.outputTokens.toFixed(0)} → ${caveman.outputTokens.toFixed(0)} tok/run)`,
-);
-
-// 2. Input side: did injecting the SKILL.md raise input tokens?
-// SkillBenchmark finding: a compression skill injects text into the system prompt
-// every turn, so the net cost delta is (inputDelta + outputDelta). Measure both —
-// a headline output saving is misleading if the injection cost erases it.
-const inputDelta = caveman.inputTokens - verbose.inputTokens;
-console.log(
-  `caveman input-token delta vs verbose: ${inputDelta >= 0 ? "+" : ""}${inputDelta.toFixed(0)} tok/run ` +
-    `(${verbose.inputTokens.toFixed(0)} → ${caveman.inputTokens.toFixed(0)})`,
-);
-
-// 3. The behavioural guardrail: a token saving that dropped the answer is not a win.
-if (caveman.correct < verbose.correct) {
-  throw new Error(
-    `caveman regressed correctness: ${caveman.correct} < ${verbose.correct} ` +
-      `(verbose) — the token saving cost the answer, so it does not count`,
-  );
-}
