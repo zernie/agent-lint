@@ -587,6 +587,7 @@ export function scanPlugin(
   // tiers differ in cost, cadence AND in the question they answer, so collapsing
   // them here would make the difference unrecoverable downstream.
   const coverage = findUntestedSurfaces({ basePath: dir, layout: lay });
+  const caveats = coverageCaveats(coverage);
   return {
     dir,
     instructions,
@@ -679,9 +680,7 @@ export function scanPlugin(
     unevaluated: coverage.evals.untested.length,
     evaluable: coverage.total,
     coverageEvidence: coverageEvidenceCounts(coverage),
-    ...(coverageCaveats(coverage).length > 0
-      ? { coverageCaveats: coverageCaveats(coverage) }
-      : {}),
+    ...(caveats.length > 0 ? { coverageCaveats: caveats } : {}),
     ownTestSignal: ownTestSignalOnDisk(dir),
     puritySummary,
   };
