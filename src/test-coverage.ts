@@ -61,7 +61,7 @@
  * a per-tier {@link CoverageTier} alongside the (unchanged) union fields.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { testFileExt } from "./core/test-file-ext.js";
 import { assertNever } from "./core/assert-never.js";
@@ -147,6 +147,14 @@ export interface StaleRun {
   readonly at: string;
 }
 
+/** A test file whose NAME is why it does not count — see `retiredTestNames`. */
+export interface RetiredTestName {
+  /** Repo-relative path of the file that will not count. */
+  readonly path: string;
+  /** Repo-relative path of the untested surface it sits beside. */
+  readonly surface: string;
+}
+
 /** One tier's split of the considered surfaces — covered by THAT tier, or not. */
 export interface CoverageTier {
   readonly covered: readonly Surface[];
@@ -179,6 +187,25 @@ export interface UntestedReport {
    * so a report produced before this field still parses.
    */
   readonly legacyCoversFiles?: readonly string[];
+  /**
+   * Files sitting beside an UNTESTED surface, named after it, and carrying a
+   * suffix a default vitest/jest run collects — `<surface>.test.*`,
+   * `<surface>.spec.*`.
+   *
+   * 🔴 THE OTHER HALF OF THE SAME 15.x MIGRATION, and it was the silent one.
+   * `vigiles:covers` got a note; `*.test.*` leaving {@link DEFAULT_TEST_GLOBS}
+   * did not, on the reasoning recorded there that "the migration is a rename,
+   * and the untested finding prints the exact path". The path it prints is the
+   * SURFACE's, plus a suggestion to add `<surface>.eval.mjs` — so an author
+   * looking at `foo.test.mjs` lying right next to `foo/SKILL.md` is told to
+   * write a test they already wrote, and nothing names the file or the reason.
+   *
+   * Scoped to surfaces that are otherwise UNCOVERED, which is exactly the
+   * position where the count contradicts what the author can see. A stray
+   * `*.test.*` beside a properly covered surface is somebody's ordinary unit
+   * test and none of our business. Optional so an older report still parses.
+   */
+  readonly retiredTestNames?: readonly RetiredTestName[];
   /** Extension a generated test should use — see `core/test-file-ext.ts`.
    *  Optional so a report produced before this field still parses. */
   readonly testExt?: string;
@@ -650,6 +677,7 @@ export function findUntestedSurfaces(
     legacyCoversFiles: tests
       .map((t) => t.path)
       .filter((path) => read(join(basePath, path)).includes(LEGACY_COVERS)),
+    retiredTestNames: retiredTestNamesFor(basePath, union.untested),
     decisions: union.decisions,
     harness: tierOf(considered, split.harness, runIndex, "harness"),
     evals: tierOf(considered, split.evals, runIndex, "eval"),
@@ -904,6 +932,69 @@ function staleRunNote(report: UntestedReport): string[] {
   ];
 }
 
+/** Names a default vitest/jest run collects — the suffixes vigiles will not use. */
+const FOREIGN_RUNNER_SUFFIX = /\.(test|spec)\.(ts|mts|cts|js|mjs|cjs)$/;
+
+/**
+ * The would-be colocated tests that only their NAME disqualifies.
+ *
+ * Same two questions colocation asks — is it named after the surface, is it
+ * sitting beside it — with the third answer inverted: the suffix is one a
+ * default vitest/jest run collects, which is precisely why it left
+ * {@link DEFAULT_TEST_GLOBS}. Reading the directory (rather than globbing the
+ * repo again) keeps the cost at one `readdir` per untested surface and cannot
+ * reach a file that is not beside one.
+ */
+function retiredTestNamesFor(
+  basePath: string,
+  untested: readonly Surface[],
+): RetiredTestName[] {
+  const out: RetiredTestName[] = [];
+  for (const s of untested) {
+    const dir = dirname(s.path);
+    let entries: string[];
+    try {
+      entries = readdirSync(join(basePath, dir));
+    } catch {
+      continue; // a surface whose directory vanished mid-scan is not our finding
+    }
+    for (const entry of entries.sort()) {
+      if (!entry.startsWith(`${s.name}.`)) continue;
+      if (!FOREIGN_RUNNER_SUFFIX.test(entry)) continue;
+      out.push({
+        path: dir === "." ? entry : `${dir}/${entry}`,
+        surface: s.path,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * One line for the author staring at a test they already wrote.
+ *
+ * The count says untested; the directory listing says `foo.test.mjs`. Without
+ * this the two never meet: the finding prints the SURFACE path and suggests a
+ * file to add, so the reader's most likely conclusion is that the tool cannot
+ * see their test — which is true, and the reason is a suffix nobody mentioned.
+ */
+function retiredTestNameNote(report: UntestedReport): string[] {
+  const found = report.retiredTestNames ?? [];
+  if (found.length === 0) return [];
+  const shown = found
+    .slice(0, 3)
+    .map((f) => f.path)
+    .join(", ");
+  const more = found.length > 3 ? ` (+${String(found.length - 3)} more)` : "";
+  return [
+    `  ${String(found.length)} file(s) sit beside an untested surface and are named ` +
+      `after it, but carry a \`.test.\`/\`.spec.\` suffix (${shown}${more}) — that name ` +
+      `is collected by a default vitest/jest run, so vigiles does not count it (a ` +
+      `skill test spawns a model; nothing vigiles recognises may be swept up by ` +
+      `another runner). Rename to \`<surface>.harness.<ext>\` and it counts.`,
+  ];
+}
+
 /**
  * The QUALIFIERS on a coverage number — every caveat that says "this count is
  * not quite what it looks like", in one list, built once.
@@ -923,7 +1014,11 @@ function staleRunNote(report: UntestedReport): string[] {
  * neither, and "neither" is a compile error rather than a quiet omission.
  */
 export function coverageCaveats(report: UntestedReport): readonly string[] {
-  return [...staleRunNote(report), ...legacyCoversNote(report)];
+  return [
+    ...staleRunNote(report),
+    ...legacyCoversNote(report),
+    ...retiredTestNameNote(report),
+  ];
 }
 
 export function formatUntestedReport(report: UntestedReport): string {

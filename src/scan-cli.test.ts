@@ -1198,3 +1198,31 @@ describe("audit carries the coverage caveats, not just lint", () => {
     }
   });
 });
+
+/**
+ * The same list, one caveat later. `retiredTestNames` was added to
+ * `coverageCaveats` and wired nowhere else; this asserts it reached the product
+ * — `audit`, not just `lint` — because "it is on the shared list, so it must
+ * render" is the reasoning that lost the other two caveats for a release.
+ */
+describe("a newly added coverage caveat reaches audit through the shared list", () => {
+  it("names a `<surface>.test.*` sitting beside an untested skill", () => {
+    const root = mkdtempSync(join(tmpdir(), "audit-retired-suffix-"));
+    try {
+      mkdirSync(join(root, ".claude/skills/foo"), { recursive: true });
+      writeFileSync(
+        join(root, ".claude/skills/foo/SKILL.md"),
+        `---\nname: foo\ndescription: A skill foo that does varied work across many different cases here\n---\n\n# foo\n`,
+      );
+      writeFileSync(
+        join(root, ".claude/skills/foo/foo.test.mjs"),
+        "// a skill test, misnamed\n",
+      );
+      const r = run(`audit ${root}`);
+      assert.match(r.stdout, /foo\.test\.mjs/);
+      assert.match(r.stdout, /vitest\/jest/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

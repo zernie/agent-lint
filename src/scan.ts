@@ -399,10 +399,19 @@ export interface ScanReport {
    * formatted, because both renderers print the same sentence and a second
    * wording is a second thing to keep true.
    *
-   * Absent when there are none, never `[]`: the browser twin cannot compute
-   * these (no `.vigiles/coverage.json` without a filesystem), and byte-parity
-   * between the two engines is asserted field-for-field. An empty array on one
-   * side and an absent field on the other is a diff; two absent fields are not.
+   * Absent when there are none, never `[]`: byte-parity between the disk and
+   * browser engines is asserted field-for-field, and an empty array on one side
+   * against an absent field on the other is a diff where two absent fields are
+   * not.
+   *
+   * ⚠️ THE BROWSER TWIN PRODUCES NONE OF THESE, and only two of the three have
+   * an excuse: "measured, but not this version" needs `.vigiles/coverage.json`
+   * and the retired-marker note needs to read test files, neither of which a
+   * filesystem-free scan has. The retired-SUFFIX note is derivable from the file
+   * map alone and is simply not wired there yet. The parity test cannot see the
+   * gap either way — no vendored fixture carries any of the three inputs, which
+   * is the same blind spot `scan-files.test.ts` documents for the
+   * single-skill-at-root branch.
    */
   readonly coverageCaveats?: readonly string[];
   /**
