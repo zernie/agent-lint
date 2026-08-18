@@ -1075,6 +1075,93 @@ test("scanPlugin surfaces a dangling ref from a hook script, but ignores prose m
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin: the reference extractor does not accuse a file that is present", () => {
+  // The disk half of the boundary + comment fixes (dogfood 2026-08-17). Three
+  // planted false-accusation shapes and one control, in one plugin so the
+  // control proves the detector is still on.
+  const dir = makeTmpDir("scan-refs");
+  write(dir, ".claude-plugin/plugin.json", '{"name":"p","version":"0.1.0"}');
+  write(dir, "hooks/hooks.json", '{"hooks":{}}');
+  // 1. `.json` truncated to `.js` — the file is right there.
+  write(dir, "hooks/a.js", 'load("./hooks.json"); // see hooks/hooks.json\n');
+  // 2. the surface dir matched inside a longer name.
+  write(dir, "claude-agents/adv.md", "---\nname: adv\ndescription: adv\n---\n");
+  write(
+    dir,
+    "hooks/b.js",
+    'new URL("../claude-agents/adv.md", import.meta.url);\n',
+  );
+  // 3. a path named only in a full-line JSDoc comment.
+  write(
+    dir,
+    "hooks/c.js",
+    "/**\n * `git log -- hooks/never-existed.mjs` is refused.\n */\nrun();\n",
+  );
+  // 4. CONTROL — a genuinely missing ref on a real code line, reported under
+  //    the name the author actually wrote.
+  write(dir, "hooks/d.js", 'const p = "hooks/gone.json";\nload(p);\n');
+  assert.deepEqual(scanPlugin(dir).danglingRefs, ["hooks/gone.json"]);
+  cleanupTmpDir(dir);
+});
+
+test("scanPlugin: an inline `node -e` hook is not reported as a missing script", () => {
+  // ayghri/i-have-adhd + microsoft/power-platform-skills: a character run cut
+  // out of the JavaScript payload was reported as the hook's script name, and
+  // rendered as that name in the report, while the real .mjs sat on disk. Nine
+  // such findings across the 32-repo corpus.
+  const dir = makeTmpDir("scan-node-e");
+  write(dir, ".claude-plugin/plugin.json", '{"name":"p","version":"0.1.0"}');
+  write(dir, "hooks/always-on.mjs", "console.log(1)\n");
+  const inline =
+    'node -e "(async()=>{const root=process.env.CLAUDE_PLUGIN_ROOT;' +
+    "if(root)await import(require('node:url').pathToFileURL(" +
+    "require('node:path').join(root,'hooks','always-on.mjs')).href)})()\"";
+  write(
+    dir,
+    "hooks/hooks.json",
+    JSON.stringify({
+      hooks: {
+        SessionStart: [{ hooks: [{ type: "command", command: inline }] }],
+      },
+    }),
+  );
+  const r = scanPlugin(dir);
+  assert.deepEqual(r.hooks, []); // no script token at all…
+  assert.equal(r.inlineHooks, 1); // …it is an inline one-liner, and says so
+  cleanupTmpDir(dir);
+});
+
+test("scanPlugin: a hook script on the RIGHT of && is still existence-checked", () => {
+  // The control for the extractor choice: `leafArgvSource` drops this leaf by
+  // design, so reusing it here would have traded a false positive for a miss.
+  const dir = makeTmpDir("scan-and-hook");
+  write(dir, ".claude-plugin/plugin.json", '{"name":"p","version":"0.1.0"}');
+  write(
+    dir,
+    "hooks/hooks.json",
+    JSON.stringify({
+      hooks: {
+        SessionStart: [
+          {
+            hooks: [
+              {
+                type: "command",
+                command: 'cd "$CLAUDE_PLUGIN_ROOT" && node hooks/gone.mjs',
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+  const r = scanPlugin(dir);
+  assert.deepEqual(
+    r.hooks.map((h) => [h.script, h.status]),
+    [["hooks/gone.mjs", "missing"]],
+  );
+  cleanupTmpDir(dir);
+});
+
 test("expandMarketplace expands a marketplace root into member plugin dirs", () => {
   const dir = makeTmpDir("scan-mp");
   write(
