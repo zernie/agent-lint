@@ -416,7 +416,7 @@ BUILD + TOOLING + GENERATED:
       "Markdown code-block ref validator (the opt-in `doc-refs` rule, default off): enforce()/file()/cmd()/ref() calls inside ```ts blocks, with vigiles:ignore opt-out",
     "src/core/doc-refs.test.ts": "Doc-refs validator test suite (node:test)",
     "src/doc-refs-rule.test.ts":
-      "doc-refs WIRING test — drives the built CLI over a fixture with one broken ref across all three tiers: unconfigured (section absent, walk skipped), \"warn\" (prints ℹ, exit untouched), \"error\" (prints ✗, exit 2)",
+      'doc-refs WIRING test — drives the built CLI over a fixture with one broken ref across all three tiers: unconfigured (section absent, walk skipped), "warn" (prints ℹ, exit untouched), "error" (prints ✗, exit 2)',
     "src/core/symbols.ts":
       "Cross-language symbol extractor (ast-grep): defines symbols a file declares (functions/classes/methods/constants) across JS/TS/Python/Ruby/Rust/CSS; fileDefinesSymbol with .d.ts/.rbi fallback",
     "src/core/symbols.test.ts": "Symbol extractor test suite (node:test)",

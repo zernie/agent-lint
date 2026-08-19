@@ -412,16 +412,37 @@ export default claude({
     // via `::error file=,line=::` workflow annotations. A broken `file()` ref in
     // a markdown code block must produce one (it carries file+line) — this is
     // what makes the Action leave per-line feedback, not just a summary blob.
+    //
+    // `doc-refs` is opt-in (default off, measured at 0 true positives — see
+    // docs/rules/doc-refs.md), so the fixture turns it on. The annotation LEVEL
+    // follows the configured severity: a `::error` next to an exit code of 0 is
+    // how an advisory rule gets mistaken for a gate.
     const dir = mkdtempSync(join(tmpdir(), "vig-gha-annot-"));
     try {
       writeFileSync(
         join(dir, "doc.md"),
         '# Doc\n\n```ts\nfile("does/not/exist.ts")\n```\n',
       );
+      const cfg = join(dir, ".vigilesrc.json");
+      writeFileSync(cfg, '{"rules":{"doc-refs":"error"}}');
       const { stdout } = run("lint", dir, { GITHUB_ACTIONS: "true" });
       // The annotation names the file and the exact line (4) of the bad ref.
       assert.match(stdout, /::error file=.*doc\.md,line=4::/);
       assert.match(stdout, /File not found/);
+
+      // At "warn" the same finding annotates as a warning, not an error.
+      writeFileSync(cfg, '{"rules":{"doc-refs":"warn"}}');
+      const warned = run("lint", dir, { GITHUB_ACTIONS: "true" }).stdout;
+      assert.match(warned, /::warning file=.*doc\.md,line=4::/);
+
+      // And with the rule at its DEFAULT (absent), nothing is annotated at all —
+      // the pass does not run.
+      rmSync(cfg, { force: true });
+      const off = run("lint", dir, { GITHUB_ACTIONS: "true" }).stdout;
+      assert.ok(
+        !/doc\.md,line=4/.test(off),
+        `doc-refs is off by default; it must annotate nothing, got:\n${off}`,
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

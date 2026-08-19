@@ -13,9 +13,9 @@ measurement of the rule's own precision, and the number is why.
 Run across two real repositories on 2026-08-19 — the vigiles source tree and a
 large private knowledge base that consumes it:
 
-| repo    | `.md` scanned | builder refs found | errors | true positives |
-| ------- | ------------: | -----------------: | -----: | -------------: |
-| vigiles |           178 |                 25 |      0 |              0 |
+| repo     | `.md` scanned | builder refs found | errors | true positives |
+| -------- | ------------: | -----------------: | -----: | -------------: |
+| vigiles  |           178 |                 25 |      0 |              0 |
 | consumer |         2 404 |                 27 |      8 |          **0** |
 
 All eight errors were false. Seven were **design prose in the consumer repo

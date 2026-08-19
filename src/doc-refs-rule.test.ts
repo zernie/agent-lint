@@ -36,7 +36,7 @@ beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), "vigiles-doc-refs-rule-"));
   writeFileSync(
     join(dir, "CLAUDE.md"),
-    ['# Fixture', '', '```ts', 'cmd("npm run nope");', '```', ''].join("\n"),
+    ["# Fixture", "", "```ts", 'cmd("npm run nope");', "```", ""].join("\n"),
   );
 });
 
@@ -98,6 +98,10 @@ describe("the doc-refs rule", () => {
       /cmd\("npm run nope"\)/,
       "the finding must name the ref it rejected",
     );
-    assert.equal(exitCode, 2, "an explicit error rule belongs in the hard tier");
+    assert.equal(
+      exitCode,
+      2,
+      "an explicit error rule belongs in the hard tier",
+    );
   });
 });
