@@ -28,3 +28,38 @@ jobs:
           requireScope: false
           subjectPattern: ^.+$
           subjectPatternError: "PR title must not be empty after the type prefix."
+
+      # 🔴 THE TITLE ABOVE IS NOT ALWAYS THE STRING THAT REACHES `main`.
+      #
+      # For a pull request with exactly ONE commit, GitHub's squash-merge takes the
+      # COMMIT's subject as the squash title, not the PR's. So a PR can pass the check
+      # above and still land a commit with no conventional prefix — and then
+      # semantic-release finds nothing releasable and cuts no version, silently.
+      #
+      # Measured on #163 (2026-08-19): PR title `feat!: group the CLI help, …`, check
+      # green, and the commit on main reads `CLI clarity, an execution-tier finding, and
+      # the Action's boundary documented (#163)`. Release ran, succeeded, published
+      # nothing. A breaking change sat in main unreleased and the consumer kept
+      # installing the previous major.
+      #
+      # This step closes the gap where it opens: when there is one commit, its subject is
+      # the one that must satisfy the same grammar.
+      - name: The squash title, for a single-commit PR
+        if: github.event.pull_request.commits == 1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          subject=$(gh api "repos/$REPO/pulls/$PR/commits" --jq '.[0].commit.message' | head -1)
+          echo "commit subject: $subject"
+          if ! printf '%s' "$subject" | grep -qE '^(feat|fix|docs|chore|refactor|test|perf|ci|build)(\([^)]+\))?!?: .+'; then
+            echo "::error::This PR has ONE commit, so GitHub's squash default will use the COMMIT subject"
+            echo "::error::as the squash title — not the PR title, which already passed the check above."
+            echo "::error::That subject is: $subject"
+            echo "::error::Fix either side: amend the commit to carry the same conventional prefix, or"
+            echo "::error::set the squash title explicitly when merging. Otherwise semantic-release sees"
+            echo "::error::no releasable change and publishes nothing, with every check green."
+            exit 1
+          fi
