@@ -1888,8 +1888,7 @@ async function runLint(
     // Only the "error" tier gates. At "warn" the findings are printed and
     // annotated, and the exit code is untouched — same contract as every other
     // opt-in rule here.
-    docRefErrors:
-      docRefSeverity === "error" ? docRefReport.errors.length : 0,
+    docRefErrors: docRefSeverity === "error" ? docRefReport.errors.length : 0,
     symbolRefErrors,
     mcpRefErrors,
     files,

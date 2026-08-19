@@ -65,7 +65,7 @@ Out of scope — use other tools:
 2 582 markdown files, 52 builder refs — this pass produced **0 true positives**, and every error it
 had ever raised was false: design prose sketching an API that doesn't exist yet, and a third-party
 `CLAUDE.md` vendored as benchmark data. The cause is structural, not a threshold: a fenced block in
-prose is a *drawing* of config, and the pass read it as config. Turn it on with
+prose is a _drawing_ of config, and the pass read it as config. Turn it on with
 `{"rules": {"doc-refs": "error"}}` where markdown genuinely is the source. Full measurement and the
 known gap: [docs/rules/doc-refs.md](rules/doc-refs.md).
 
