@@ -238,6 +238,7 @@ The per-family tables below give each rule's default severity and what it checks
 | Rule                                  | Default  | What it checks                                                                                                                               |
 | ------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`orphan-docs`](rules/orphan-docs.md) | (opt-in) | A doc in a configured dir (default `docs/`) that no other `.md` references; opt in via the `orphans` config block (instruction files exempt) |
+| [`doc-refs`](rules/doc-refs.md)       | `false`  | `enforce()`/`file()`/`cmd()`/`ref()` quoted in a markdown ```ts fence resolves for real; **off by default** — measured 0 true positives over 2 582 files, because a fence in prose is a drawing of config |
 
 ### Configure
 

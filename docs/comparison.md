@@ -61,6 +61,14 @@ Out of scope — use other tools:
 | Markdown link validity (URLs, paths) | [markdown-link-check](https://github.com/tcort/markdown-link-check)             |
 | Spell / prose / grammar              | [Vale](https://vale.sh/), [alex](https://github.com/get-alex/alex)              |
 
+**Opt-in as of 2026-08-19 (`doc-refs`, default off).** Measured across two real repositories —
+2 582 markdown files, 52 builder refs — this pass produced **0 true positives**, and every error it
+had ever raised was false: design prose sketching an API that doesn't exist yet, and a third-party
+`CLAUDE.md` vendored as benchmark data. The cause is structural, not a threshold: a fenced block in
+prose is a *drawing* of config, and the pass read it as config. Turn it on with
+`{"rules": {"doc-refs": "error"}}` where markdown genuinely is the source. Full measurement and the
+known gap: [docs/rules/doc-refs.md](rules/doc-refs.md).
+
 **What counts as a ref (2026-08-19).** Blocks are PARSED, not pattern-matched. A ref is a call
 whose callee is a bare `enforce` / `file` / `cmd` / `ref` identifier with a string-literal first
 argument. That means a method call on some other object (`ctx.file("OUT")`), a mention inside a

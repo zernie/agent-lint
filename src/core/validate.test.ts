@@ -505,6 +505,8 @@ describe("loadConfig", () => {
       "delegation-trifecta": "warn",
       "hook-block-ineffective": "warn",
       "hook-matcher": "warn",
+      // Off by measurement: 0 true positives over 2 582 markdown files.
+      "doc-refs": false,
     });
   });
 

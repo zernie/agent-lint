@@ -343,6 +343,7 @@ import { adoptMarkdown, adoptSkill, adoptAgent } from "./core/adopt.js";
 import { computeScriptCoverage } from "./core/coverage.js";
 import { findOrphanDocs, formatOrphanReport } from "./core/orphans.js";
 import { findDocRefs, formatDocRefReport } from "./core/doc-refs.js";
+import type { DocRefReport } from "./core/doc-refs.js";
 import { loadHook } from "./load-hook.js";
 
 // ---------------------------------------------------------------------------
@@ -1137,15 +1138,15 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.hookBlockErrors > 0 ||
     report.hookMatcherErrors > 0 ||
     report.symbolRefErrors > 0 ||
-    report.mcpRefErrors > 0
-  )
-    return 2;
-  if (
-    report.duplicatePairs > 0 ||
-    report.orphanCount > 0 ||
+    report.mcpRefErrors > 0 ||
+    // `doc-refs` is opt-in and this counter is only non-zero when the user set
+    // it to "error", so it belongs in the hard tier with every other explicit
+    // error — it used to sit at exit 1 because it fired unasked and could not be
+    // turned off.
     report.docRefErrors > 0
   )
-    return 1;
+    return 2;
+  if (report.duplicatePairs > 0 || report.orphanCount > 0) return 1;
   // Guidance counts are informational, not failures
   return 0;
 }
@@ -1750,11 +1751,28 @@ async function runLint(
   // server naming, or an undeclared MCP server).
   const hookMatcher = checkHookMatcher(config, silent, adapter, scanRoot);
 
-  // 8. Validate vigiles builder calls inside markdown code blocks. Default
-  // is to validate every ref; illustrative blocks opt out via
-  // `<!-- vigiles:ignore -->` (single block) or
-  // `<!-- vigiles:ignore-file -->` (whole file). Same engine as spec.ts.
-  if (!silent) console.log("\nMarkdown code block refs:\n");
+  // 8. Validate vigiles builder calls inside markdown code blocks — the
+  // `doc-refs` rule, DEFAULT OFF. Illustrative blocks opt out via
+  // `<!-- vigiles:ignore -->` (single block) or `<!-- vigiles:ignore-file -->`
+  // (whole file). Same engine as spec.ts.
+  //
+  // 🔴 WHY OFF BY DEFAULT — the measurement, not a preference. Run across two
+  // real repositories on 2026-08-19: 2 582 markdown files, 52 builder refs,
+  // **0 true positives**, and every error it had ever raised was false — a
+  // design note writing `cmd("npm test")` for a package that doesn't have that
+  // script yet, a third-party `CLAUDE.md` captured verbatim as benchmark data.
+  // The cause is structural: a fenced block in prose is a DRAWING of config, and
+  // this pass read it as config. The consumer repo reached a clean `lint` only by
+  // excluding a third of itself, after which the pass walked 604 files and found
+  // 0 refs — fully inert, still paying for the walk. So it is now opt-in, and
+  // when off the walk does not happen at all (that is the whole subtraction).
+  //
+  // ⚠️ Known gap for whoever improves it before flipping this back: the walker
+  // globs without `dot`, so `.claude/**` — where real skills and agents live —
+  // has never been scanned. The rule has never once looked at a deployed
+  // instruction file; every ref it has ever judged was in prose.
+  const docRefSeverity = ruleSeverity(config?.rules?.["doc-refs"]);
+  if (!silent && docRefSeverity) console.log("\nMarkdown code block refs:\n");
   // 🔴 `config.exclude` REACHES THIS PASS. It did not, and that single omission is
   // why `lint` could not exit 0 on a repository that vendors other people's
   // markdown: this walker globs `**/*.md` from the repo root, so a third-party
@@ -1768,12 +1786,23 @@ async function runLint(
   // With no way to reach 0 the step was made `continue-on-error: true`, and a lint
   // whose exit code is discarded gates nothing — after which hand-written CI steps
   // grew to do the gating instead. One unpassed argument, that whole chain.
-  const docRefReport = findDocRefs({
-    basePath: process.cwd(),
-    ignore: config?.exclude,
-  });
-  if (!silent) {
-    for (const line of formatDocRefReport(docRefReport).split("\n")) {
+  const docRefReport: DocRefReport = docRefSeverity
+    ? findDocRefs({ basePath: process.cwd(), ignore: config?.exclude })
+    : {
+        filesScanned: 0,
+        filesIgnored: 0,
+        blocksIgnored: 0,
+        refs: [],
+        errors: [],
+        unverified: 0,
+        placeholders: 0,
+      };
+  if (!silent && docRefSeverity) {
+    const rendered = formatDocRefReport(
+      docRefReport,
+      docRefSeverity === "error" ? "error" : "warn",
+    );
+    for (const line of rendered.split("\n")) {
       console.log(`  ${line}`);
     }
   }
@@ -1782,10 +1811,10 @@ async function runLint(
   // Previously this check reported to stdout only; the inline/spec checks already
   // annotate per-line, so this closes the gap that left doc-ref findings invisible
   // on the PR. CI-only (isGitHubActions); skipped under --json/--summary.
-  if (isGitHubActions() && !silent) {
+  if (isGitHubActions() && !silent && docRefSeverity) {
     for (const e of docRefReport.errors) {
       ghAnnotate(
-        "error",
+        docRefSeverity === "error" ? "error" : "warning",
         `${e.kind}("${e.value}") — ${e.message}`,
         e.file,
         e.line,
@@ -1856,7 +1885,11 @@ async function runLint(
     hookBlockErrors: hookBlock.errors,
     hookMatcherIssues: hookMatcher.issues,
     hookMatcherErrors: hookMatcher.errors,
-    docRefErrors: docRefReport.errors.length,
+    // Only the "error" tier gates. At "warn" the findings are printed and
+    // annotated, and the exit code is untouched — same contract as every other
+    // opt-in rule here.
+    docRefErrors:
+      docRefSeverity === "error" ? docRefReport.errors.length : 0,
     symbolRefErrors,
     mcpRefErrors,
     files,
