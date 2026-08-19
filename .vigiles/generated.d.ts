@@ -101,7 +101,7 @@ declare module "vigiles/generated" {
     | "experimental:check"
     | "docs:api";
 
-  /** 386 project files. */
+  /** 387 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -193,6 +193,7 @@ declare module "vigiles/generated" {
     | "src/cli-flags.test.ts"
     | "src/cli-flags.ts"
     | "src/cli-harness-resolution.test.ts"
+    | "src/cli-help.test.ts"
     | "src/cli-install.e2e.test.ts"
     | "src/cli-nudge-config.test.ts"
     | "src/cli-untested-options.test.ts"
@@ -651,6 +652,7 @@ declare module "vigiles/spec" {
       | "src/cli-flags.test.ts"
       | "src/cli-flags.ts"
       | "src/cli-harness-resolution.test.ts"
+      | "src/cli-help.test.ts"
       | "src/cli-install.e2e.test.ts"
       | "src/cli-nudge-config.test.ts"
       | "src/cli-untested-options.test.ts"

@@ -72,6 +72,35 @@ re-eval. It's a green no-op until you commit your first lock.
 | `fail-on-widen`     | `false`   | With `capability-diff`, fail the run when the PR **widens** the blast radius (maps to `--fail-on-widen`).                                                                                                                 |
 | `github-token`      | _(auto)_  | Token for the PR comment. Defaults to the workflow token (`${{ github.token }}`).                                                                                                                                         |
 
+### Why there is no `command: test`
+
+`test` and `eval` are missing from that list deliberately, and the omission is worth stating
+because the input is a **pass-through** — nothing validates it, so `command: test` becomes
+`vigiles test` and then fails in a way that looks like a vigiles bug.
+
+It fails because the Action runs `npx vigiles@<version> <cmd>` in your working directory and
+**never runs `npm ci`**. Harness files import the library:
+
+```js
+import { runHarnessTest, skip } from "vigiles";
+```
+
+That import needs repo-local `node_modules`, which the Action does not install. `vigiles init`
+knows this: the workflow it generates wires the Action for the jobs that can use it and writes
+a plain `npx vigiles test` job — with its own `npm ci` — for the harness tier.
+
+So the split is not an oversight to route around:
+
+| tier                            | how it runs in CI          | why                                              |
+| ------------------------------- | -------------------------- | ------------------------------------------------ |
+| `lint`, `compile`, `eval-check` | the Action                 | reads files, needs no repo dependencies          |
+| `test`, `eval`                  | a normal job with `npm ci` | executes your harness, which imports the library |
+
+**Pin `version:` in any job you hand-write.** The `latest` default deliberately ignores your
+`package-lock.json`, so CI can lint with one major while your harnesses run against another —
+a split measured in a real consumer on 2026-08-18 (`npm ls vigiles` → `15.2.1 invalid:
+"^16.1.0"`), which is what led a new harness to import a subpath v16 had removed.
+
 ## Output channels
 
 Beyond the `valid` step output, the Action reports **three** ways:
