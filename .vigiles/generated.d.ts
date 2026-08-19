@@ -101,7 +101,7 @@ declare module "vigiles/generated" {
     | "experimental:check"
     | "docs:api";
 
-  /** 390 project files. */
+  /** 391 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -185,6 +185,7 @@ declare module "vigiles/generated" {
     | "src/check-count.ts"
     | "src/check.test.ts"
     | "src/check.ts"
+    | "src/ci-path-filter.test.ts"
     | "src/claude-code.ts"
     | "src/cli-commands.ts"
     | "src/cli-coverage-record.test.ts"
@@ -647,6 +648,7 @@ declare module "vigiles/spec" {
       | "src/check-count.ts"
       | "src/check.test.ts"
       | "src/check.ts"
+      | "src/ci-path-filter.test.ts"
       | "src/claude-code.ts"
       | "src/cli-commands.ts"
       | "src/cli-coverage-record.test.ts"
