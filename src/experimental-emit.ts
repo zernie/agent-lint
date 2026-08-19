@@ -69,9 +69,14 @@ export type EmitFieldSchema =
   | { readonly type: "string" }
   | { readonly type: "number" }
   | { readonly type: "boolean" }
-  | { readonly type: "array"; readonly items: { readonly type: "string" } };
+  | { readonly type: "array"; readonly items: { readonly type: "string" } }
+  // A declared enum. Structurally identical to `EmitTrackSchema` and deliberately kept
+  // separate: that one is the fixed `ok`/`err` discriminator this module owns, this one
+  // is whatever the skill author declared, and collapsing them would let a change to the
+  // discriminator silently widen every author's enum.
+  | { readonly type: "string"; readonly enum: readonly string[] };
 
-/** The `track` discriminator's schema — the only enum this surface emits. */
+/** The `track` discriminator's schema — the enum this module owns, not the author's. */
 export interface EmitTrackSchema {
   readonly type: "string";
   readonly enum: readonly ["ok", "err"];
@@ -110,6 +115,10 @@ export interface ExperimentalEmitTool {
 }
 
 function fieldSchema(type: OutputFieldType): EmitFieldSchema {
+  // An enum reaches the model as a JSON-Schema `enum`, which is the whole point: the
+  // permitted values travel WITH the tool definition instead of living in prose the
+  // model may or may not have read.
+  if (typeof type !== "string") return { type: "string", enum: [...type] };
   switch (type) {
     case "string":
       return { type: "string" };
@@ -252,8 +261,44 @@ export function experimental_parseEmitted(
   options: { readonly name?: string } = {},
 ): ParsedAgentResult {
   const name = options.name ?? DEFAULT_EMIT_TOOL;
-  const calls = toolCalls.filter((c) => isEmitCall(c.name, name));
+  const all = toolCalls.filter((c) => isEmitCall(c.name, name));
+
+  // 🔴 A CALL THAT ERRORED IS NOT AN EMISSION, AND USED TO PARSE AS ONE.
+  //
+  // Measured 2026-08-19: a permission-denied call carrying a perfectly valid payload
+  // returned `{"kind":"ok", …}`, because this function filtered by NAME and never looked
+  // at `ToolCall.isError` — a field that has been on the type all along. The call never
+  // reached the server; the reader reported success. That is the exact shape of defect
+  // this channel exists to remove from the fenced rail, reproduced inside the channel.
+  //
+  // Denial is not hypothetical: it is what a wrong `allowedTools` spelling produces, and
+  // MCP tool names mangle per host (`mcp__plugin_<plugin>_<server>__emit_result` on Claude
+  // Code, two segments on Codex), so mis-spelling it is the likely case, not the exotic one.
+  //
+  // The errored calls get their OWN branch rather than being dropped or counted, because
+  // all three collapses lie in a different direction:
+  //   - counting them → this defect, success for a call nobody received;
+  //   - dropping them silently → "no tool call in the run", which sends the reader to the
+  //     skill's instructions when the fault is in permissions;
+  //   - lumping them with "called twice" → a model that retries a denied call produces a
+  //     true signal under a false name. (Observed: two denials in one run.)
+  // A successful call ALONGSIDE a denied one is one successful emission; the denial is
+  // mentioned, not fatal, because the contract was in fact satisfied.
+  // `isError` is a required boolean on ToolCall, so truthiness is exact here.
+  const errored = all.filter((c) => c.isError);
+  const calls = all.filter((c) => !c.isError);
+
   if (calls.length === 0) {
+    if (errored.length > 0) {
+      return {
+        kind: "malformed",
+        reason:
+          `the \`${name}\` call itself errored or was denied ` +
+          `(${String(errored.length)} attempt${errored.length === 1 ? "" : "s"}); nothing reached the ` +
+          `server, so nothing was emitted. Check the tool's permissions and the exact spelling ` +
+          `in \`allowedTools\` — MCP names are host-mangled.`,
+      };
+    }
     return { kind: "malformed", reason: `no \`${name}\` tool call in the run` };
   }
   if (calls.length > 1) {

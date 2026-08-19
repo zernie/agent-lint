@@ -251,3 +251,118 @@ test("a field type outside the ceiling THROWS rather than serving an unsatisfiab
   assert.equal("actions" in roundTripped.properties, false);
   assert.deepEqual(Object.keys(roundTripped.properties), ["verdict"]);
 });
+
+// ---------------------------------------------------------------------------
+// A call that ERRORED is not an emission — the defect this closes, and the three
+// collapses it deliberately avoids.
+// ---------------------------------------------------------------------------
+
+/** Like `call`, but the host refused it: the payload is present, the server never saw it. */
+function deniedCall(name: string, input: unknown): ToolCall {
+  return {
+    name,
+    input,
+    resultText: "User denied permission for this tool call",
+    isError: true,
+  };
+}
+
+const GOOD = {
+  track: "ok",
+  ok: { verdict: "CUT", count: 3, report: "…" },
+};
+
+test("a DENIED call is malformed, not ok — it used to parse as a success", () => {
+  // Measured 2026-08-19 on the shipped build: this exact input returned
+  // {"kind":"ok","value":{…}}, because the reader filtered by NAME and never looked at
+  // `isError`. The call never reached the server. Reporting success for it is the same
+  // class of lie the emit channel exists to remove from the fenced rail.
+  const r = experimental_parseEmitted(
+    [deniedCall("emit_result", GOOD)],
+    CONTRACT,
+  );
+  assert.equal(r.kind, "malformed");
+  // The reason must send the reader to PERMISSIONS, not to the skill's instructions.
+  assert.match(r.reason, /errored or was denied/);
+  assert.match(r.reason, /allowedTools/);
+  assert.match(r.reason, /nothing reached the/);
+});
+
+test("two denials are named as denials, NOT as `called 2 times`", () => {
+  // A model that retries a denied call produces a true signal under a false name if the
+  // errored calls are counted: "the contract is exactly once" sends the reader hunting a
+  // double-emission bug that does not exist.
+  const r = experimental_parseEmitted(
+    [deniedCall("emit_result", GOOD), deniedCall("emit_result", GOOD)],
+    CONTRACT,
+  );
+  assert.equal(r.kind, "malformed");
+  assert.match(r.reason, /2 attempts/);
+  assert.doesNotMatch(r.reason, /exactly once/);
+});
+
+test("a denial ALONGSIDE a real emission is one emission — the contract was met", () => {
+  // Dropping this to malformed would fail a run that did exactly what was asked, and the
+  // denial is already visible in the trace for anyone who wants it.
+  const r = experimental_parseEmitted(
+    [deniedCall("emit_result", GOOD), call("emit_result", GOOD)],
+    CONTRACT,
+  );
+  assert.equal(r.kind, "ok");
+  assert.deepEqual(r.value, GOOD.ok);
+});
+
+test("no call at all still says NO CALL — denial must not swallow the plain miss", () => {
+  // The third collapse: dropping errored calls silently would turn a permissions fault
+  // into "the skill never emitted", pointing at the instructions instead of the cause.
+  const r = experimental_parseEmitted([], CONTRACT);
+  assert.equal(r.kind, "malformed");
+  assert.match(r.reason, /no `emit_result` tool call in the run/);
+  assert.doesNotMatch(r.reason, /denied/);
+});
+
+// ---------------------------------------------------------------------------
+// ENUM — the one extension to OutputFieldType, and the measurement behind it.
+// ---------------------------------------------------------------------------
+
+const ENUM_CONTRACT = result(
+  { verdict: ["CUT", "MERGE", "KEEP"], count: "number" },
+  { reason: "string" },
+);
+
+test("an enum field reaches the model as a JSON-Schema enum, not as a string", () => {
+  // The permitted values must travel WITH the tool definition. Declared as `string`, the
+  // vocabulary lives only in prose the model may not have read — measured at 3/19 = 16%
+  // compliance, with 3 mutually incomparable invented categories across 3 runs.
+  const { tool } = experimental_emitTool(ENUM_CONTRACT);
+  const ok = tool.inputSchema.properties.ok as EmitObjectSchema;
+  assert.deepEqual(ok.properties.verdict, {
+    type: "string",
+    enum: ["CUT", "MERGE", "KEEP"],
+  });
+});
+
+test("a value outside the enum is malformed, and the reason names the choices", () => {
+  const bad = experimental_parseEmitted(
+    [call("emit_result", { track: "ok", ok: { verdict: "SHIP", count: 1 } })],
+    ENUM_CONTRACT,
+  );
+  assert.equal(bad.kind, "malformed");
+  // Rendered as a choice (`"CUT" | "MERGE" | "KEEP"`), never as `CUT,MERGE,KEEP`, which
+  // reads like one value rather than a set of them.
+  assert.match(bad.reason, /should be "CUT" \| "MERGE" \| "KEEP"/);
+
+  const good = experimental_parseEmitted(
+    [call("emit_result", { track: "ok", ok: { verdict: "CUT", count: 1 } })],
+    ENUM_CONTRACT,
+  );
+  assert.equal(good.kind, "ok");
+});
+
+test("a non-string in an enum field is malformed too — membership implies the type", () => {
+  const r = experimental_parseEmitted(
+    [call("emit_result", { track: "ok", ok: { verdict: 7, count: 1 } })],
+    ENUM_CONTRACT,
+  );
+  assert.equal(r.kind, "malformed");
+});

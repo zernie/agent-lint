@@ -405,12 +405,46 @@ function tested(r: ScanReport): CategoryScore {
           "your own test setup detected — vigiles-native skill coverage is optional",
         ]
       : findings;
+  // 🔴 COVERED BY PLACEMENT ALONE — the execution tier, finally said out loud.
+  //
+  // `colocated` evidence means a test file NAMED after the surface sits BESIDE it. That is
+  // a claim about the filesystem, and the provenance line already admits it ("this says the
+  // file EXISTS, not that it ran"). Nobody reads a provenance line. When `executed` is zero
+  // across the whole corpus, EVERY surface counted here rests on a filename, and the number
+  // above reads as health it has not earned.
+  //
+  // Measured in a real consumer 2026-08-18: 26 colocated, 0 executed — while its CI invoked
+  // exactly those harnesses in a job that never installed the `claude` CLI, so each one
+  // called `skip()` and the step reported success. Coverage looked fine the entire time.
+  //
+  // Deliberately NOT "your CI does not run these": that needs parsing CI config, and the
+  // grep-shaped version accuses a healthy repo, because real workflows invoke harnesses by
+  // GLOB and name no file. This says only what the run records say, so it cannot be wrong
+  // about a repo it has not looked at.
+  //
+  // ⚠️ KNOWN LIMIT, stated rather than hidden: the threshold is CORPUS-WIDE, so ONE recorded
+  // run anywhere silences it for every surface. That is what the data supports — the evidence
+  // this receives is an aggregate tally, not a per-surface verdict — and the same consumer
+  // demonstrates the cost: it read 0 executed / 26 colocated in the morning and 16 / 26 by
+  // evening, after which twenty-six surfaces resting on a filename would no longer be named.
+  // Sharpening this means carrying evidence per surface, which is a change to the producer,
+  // not to this sentence. Until then it catches the state that actually shipped (a corpus
+  // where the tier is entirely absent) and stays quiet the moment the tier exists at all.
+  const ev = r.coverageEvidence;
+  const placementOnly =
+    ev && ev.executed === 0 && ev.colocated > 0
+      ? [
+          ...contextualized,
+          `${String(ev.colocated)} surface(s) counted as covered by PLACEMENT only — ` +
+            `no run on record ever exercised one`,
+        ]
+      : contextualized;
   return {
     key: "Tested",
     score,
     weight: 1,
     advisory: true,
-    findings: contextualized,
+    findings: placementOnly,
   };
 }
 

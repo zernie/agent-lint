@@ -716,3 +716,33 @@ describe("formatAuditScore", () => {
     expect(out).toMatch(/Harness health: A \(100\/100\)/);
   });
 });
+
+/**
+ * The execution tier, asserted. Coverage evidence has two kinds and only one of them is a
+ * measurement: `executed` means a recorded run exercised the surface, `colocated` means a
+ * file with the right name sits in the right place. The report's provenance line has always
+ * said so; nobody reads a provenance line, and a real consumer sat at 26 colocated /
+ * 0 executed while its CI skipped every one of those harnesses and reported success.
+ */
+describe("Tested — coverage that rests on a filename says so", () => {
+  const find = (over: Partial<ScanReport>) =>
+    ring(auditScore(makeReport(over)), "Tested").findings;
+  const placementOnly = (f: readonly string[]) =>
+    f.some((x) => /PLACEMENT only/.test(x));
+
+  it("names the count when NOTHING has an execution record", () => {
+    const f = find({ coverageEvidence: { executed: 0, colocated: 26 } });
+    expect(placementOnly(f)).toBe(true);
+    expect(f.join(" ")).toMatch(/26 surface\(s\)/);
+  });
+
+  it("goes quiet as soon as ONE run is on record — the tier exists, the warning is spent", () => {
+    expect(
+      placementOnly(find({ coverageEvidence: { executed: 1, colocated: 25 } })),
+    ).toBe(false);
+  });
+
+  it("says nothing when the report carries no evidence at all — absent is not zero", () => {
+    expect(placementOnly(find({}))).toBe(false);
+  });
+});
