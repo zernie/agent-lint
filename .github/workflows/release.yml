@@ -12,6 +12,13 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # Bounded 2026-08-19. Every job in this repository was unbounded, so a hung one
+    # ran to GitHub's six-hour ceiling — the one failure mode a green checkmark
+    # cannot show you, because it does not fail, it bills. Sizes are ~3-4x the
+    # MEASURED duration on this repo's own runs, quoted per job so a later edit can
+    # see where the number came from instead of guessing again.
+    # not measured; publishes to npm, so bounded generously but bounded.
+    timeout-minutes: 20
     # Skip release on commits that don't affect the package
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
     steps:

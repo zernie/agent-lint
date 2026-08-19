@@ -9,6 +9,13 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Bounded 2026-08-19. Every job in this repository was unbounded, so a hung one
+    # ran to GitHub's six-hour ceiling — the one failure mode a green checkmark
+    # cannot show you, because it does not fail, it bills. Sizes are ~3-4x the
+    # MEASURED duration on this repo's own runs, quoted per job so a later edit can
+    # see where the number came from instead of guessing again.
+    # measured 5m49s.
+    timeout-minutes: 20
     env:
       # JVM/Go linter pins for the gated real-binary catalog tests
       # (src/core/linters.test.ts — describe.skipIf(!hasBinary(...))). Installing
@@ -219,6 +226,8 @@ jobs:
 
   check:
     runs-on: ubuntu-latest
+    # measured 2m36s.
+    timeout-minutes: 10
     # pull-requests: write lets the dogfooded action post its sticky PR comment.
     permissions:
       contents: read
@@ -306,6 +315,8 @@ jobs:
     # no API key and costs nothing. The eval tier (real model) is run manually
     # via `npm run test:eval`.
     runs-on: ubuntu-latest
+    # measured 45s.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -338,6 +349,8 @@ jobs:
   # catches layout bleed a component-level test can't (no viewport in @vitest/browser).
   site:
     runs-on: ubuntu-latest
+    # measured 3m35s.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -377,6 +390,8 @@ jobs:
   # route, so the job never fails red. See research/egress-sandbox-tooling.md.
   e2e:
     runs-on: ubuntu-latest
+    # measured 1m16s.
+    timeout-minutes: 10
     container:
       image: node:20-bookworm
       options: --privileged --device /dev/net/tun

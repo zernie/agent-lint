@@ -1054,9 +1054,29 @@ export function collectDelegationTrifecta(
       delegatesTo: canDispatch ? allNames.filter((n) => n !== a.name) : [],
     };
   });
-  const pathByName = new Map(agents.map((a) => [a.name, a.path]));
+  // 🔴 A NAME IS NOT AN IDENTITY HERE, and this map used to assume it was.
+  // `new Map(agents.map((a) => [a.name, a.path]))` keeps the LAST entry for a
+  // repeated key, so when the same agent name exists in two discovery scopes —
+  // `agents/foo.md` and `.claude/agents/foo.md`, which Claude registers in
+  // DIFFERENT namespaces — a finding about the first was reported against the
+  // second's file. A lethal-trifecta finding that names the wrong file is worse
+  // than one that names none: it sends the reader to audit innocent code and
+  // leaves the real surface unexamined.
+  //
+  // Until identity is scope-qualified through the whole delegation pipeline (the
+  // proper fix, and a larger one — `finding.name` itself carries only the bare
+  // name), an ambiguous name resolves to NO path rather than to an arbitrary one.
+  // Nothing changes for the overwhelmingly common case of distinct names.
+  const pathByName = new Map<string, string>();
+  const ambiguous = new Set<string>();
+  for (const a of agents) {
+    if (pathByName.has(a.name)) ambiguous.add(a.name);
+    else pathByName.set(a.name, a.path);
+  }
   return delegationTrifectaIssues(nodes, dialect).map((finding) => ({
-    path: pathByName.get(finding.name) ?? "",
+    path: ambiguous.has(finding.name)
+      ? ""
+      : (pathByName.get(finding.name) ?? ""),
     finding,
   }));
 }

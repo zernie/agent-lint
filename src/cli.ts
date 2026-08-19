@@ -1755,7 +1755,23 @@ async function runLint(
   // `<!-- vigiles:ignore -->` (single block) or
   // `<!-- vigiles:ignore-file -->` (whole file). Same engine as spec.ts.
   if (!silent) console.log("\nMarkdown code block refs:\n");
-  const docRefReport = findDocRefs({ basePath: process.cwd() });
+  // 🔴 `config.exclude` REACHES THIS PASS. It did not, and that single omission is
+  // why `lint` could not exit 0 on a repository that vendors other people's
+  // markdown: this walker globs `**/*.md` from the repo root, so a third-party
+  // `CLAUDE.md` captured verbatim as benchmark data was held to the same ref
+  // validation as the repo's own docs — and the one config field documented to
+  // stop exactly that ("vendored or benchmark fixtures the repo's own lint
+  // shouldn't police") was never handed over.
+  //
+  // Measured on a consumer repo 2026-08-19: 9 broken refs, 8 of them inside a
+  // directory the user had explicitly listed in `exclude`, all 9 still reported.
+  // With no way to reach 0 the step was made `continue-on-error: true`, and a lint
+  // whose exit code is discarded gates nothing — after which hand-written CI steps
+  // grew to do the gating instead. One unpassed argument, that whole chain.
+  const docRefReport = findDocRefs({
+    basePath: process.cwd(),
+    ignore: config?.exclude,
+  });
   if (!silent) {
     for (const line of formatDocRefReport(docRefReport).split("\n")) {
       console.log(`  ${line}`);
@@ -5673,7 +5689,7 @@ async function handleRunScripts(
   // An eval file DESCRIBES its eval; `dist/eval-entry.js` is what imports the
   // description and runs what it declares. A harness script is still its own
   // program (it is free, so "import spends money" never applied to it).
-  const results = runScripts(files, cwd, env, {
+  const results = await runScripts(files, cwd, env, {
     ...(kind === "eval" ? { entry: resolve(__dirname, "eval-entry.js") } : {}),
   });
   // Write down WHAT the run exercised, so `lint`/`audit` can answer "tested?"
