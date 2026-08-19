@@ -209,6 +209,8 @@ Custom/NoDirectDbQuery:
 
 ### vigiles enforce() reference
 
+<!-- vigiles:ignore -->
+
 ```typescript
 enforce(
   "rubocop/Custom/NoDirectDbQuery",
