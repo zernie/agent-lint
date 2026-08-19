@@ -49,7 +49,7 @@ Codex has no hook or plugin system. The compile-time verification and CI enforce
 
 ## What vigiles Does and Doesn't Validate in Markdown
 
-vigiles validates vigiles-specific things in `.md` files: `<!-- vigiles:enforce ... -->` comments (inline mode), `vigiles:` YAML frontmatter rules (frontmatter mode), and `enforce("...")` / `file("...")` / `cmd("...")` / `ref("...")` calls inside fenced TS/JS code blocks. Same engines used for `.spec.ts` references.
+vigiles validates vigiles-specific things in `.md` files: `<!-- vigiles:enforce ... -->` comments (inline mode) and `vigiles:` YAML frontmatter rules (frontmatter mode) — both on by default. It can also validate `enforce("...")` / `file("...")` / `cmd("...")` / `ref("...")` calls inside fenced TS/JS code blocks, but that one is **opt-in** (`doc-refs`, default off — see below). Same engines used for `.spec.ts` references.
 
 Out of scope — use other tools:
 
@@ -78,7 +78,7 @@ regex and reported as broken refs; `\b` sits happily after a `.`, and a regex ha
 comment or a string literal. Parsing makes all three inexpressible rather than individually
 excused.
 
-**Scope.** The pass reads `**/*.md` from the repo root and honours the top-level `exclude` in
+**Scope (when enabled).** The pass reads `**/*.md` from the repo root and honours the top-level `exclude` in
 `.vigilesrc.json`, so vendored or benchmark markdown (a third-party `CLAUDE.md` captured verbatim
 as test data) can be kept out of it. Before 2026-08-19 `exclude` was not applied here at all, which
 meant a repository vendoring other people's markdown had no way to reach a clean `lint` — and a
