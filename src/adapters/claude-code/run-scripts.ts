@@ -10,7 +10,8 @@
  * stripping (Node >= 22.6). The scripts import from the built `dist/`, so they
  * also run standalone — the CLI just discovers, runs, and aggregates exit codes.
  */
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import { availableParallelism } from "node:os";
 import { resolve, join } from "node:path";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -211,6 +212,11 @@ function readCheckReport(
 /** Extra wiring for {@link runScripts}. */
 export interface RunScriptsOptions {
   /**
+   * How many scripts may run at once. Omitted → decided from `entry`: `test`
+   * fans out across the cores, `eval` stays at 1. See {@link runScripts}.
+   */
+  readonly concurrency?: number;
+  /**
    * A program to run INSTEAD of each script, with the script's path as its one
    * argument. `vigiles eval` passes `dist/eval-entry.js`; `vigiles test` passes
    * nothing. See {@link interpreterArgs}.
@@ -234,45 +240,106 @@ export interface RunScriptsOptions {
  * record them (`.vigiles/coverage.json`) and coverage can answer "tested?" from
  * execution rather than from a matching file name.
  */
-export function runScripts(
+export async function runScripts(
   files: readonly string[],
   cwd: string,
   env: NodeJS.ProcessEnv = {},
   opts: RunScriptsOptions = {},
-): ScriptRunResult[] {
+): Promise<ScriptRunResult[]> {
   const caps = detectNodeCaps(cwd);
-  const results: ScriptRunResult[] = [];
   const countDir = mkdtempSync(join(tmpdir(), "vigiles-checks-"));
-  try {
-    files.forEach((file, i) => {
+
+  // 🔴 THE DEFAULT IS DECIDED BY `entry`, NOT BY A FLAG, because the two commands
+  // that share this runner have OPPOSITE right answers and the caller already
+  // distinguishes them:
+  //
+  //   `test` passes no entry — every script is a `*.harness.*` file, which is free
+  //   and deterministic BY CONSTRUCTION (the harness tier drives the agent CLI
+  //   against a mock model with no API key, and anything that spends money lives
+  //   behind `vigiles/eval` with a `paid_` prefix). Nothing here can bill, so the
+  //   only reason to serialize was that we always had.
+  //
+  //   `eval` passes an entry — every script spends real model quota. Running those
+  //   N-at-a-time multiplies spend and collides with rate limits, so it stays at 1.
+  //
+  // Measured motivation: 48 harness files in one consumer repo took 1m48s in CI as
+  // a strict queue, on a runner with cores sitting idle.
+  const parallel = Math.max(
+    1,
+    opts.concurrency ?? (opts.entry ? 1 : Math.min(8, availableParallelism())),
+  );
+
+  // Output is BUFFERED per child and printed when that child exits, rather than
+  // inherited. This is the real cost of concurrency and the reason it was not
+  // free: with `stdio: "inherit"` two children write to the same terminal at once
+  // and 48 reports shred into each other. Buffering keeps each report whole and
+  // attributable; what it gives up is live streaming, which only matters when one
+  // script is slow AND alone — i.e. exactly the `eval` case, where parallel is 1
+  // and the buffer is flushed as soon as the single child ends anyway.
+  const runOne = (file: string, i: number): Promise<ScriptRunResult> =>
+    new Promise((resolveRun) => {
       let argv: string[];
       try {
         argv = interpreterArgs(file, caps, opts.entry);
       } catch (e) {
         console.error(`✗ ${file}: ${(e as Error).message}`);
-        results.push({ file, code: 1, status: "fail" });
+        resolveRun({ file, code: 1, status: "fail" });
         return;
       }
       const countFile = join(countDir, `${String(i)}.count`);
-      const res = spawnSync("node", argv, {
+      const child = spawn("node", argv, {
         cwd,
-        stdio: "inherit",
+        stdio: ["ignore", "pipe", "pipe"],
         env: { ...process.env, ...env, [CHECK_COUNT_ENV]: countFile },
       });
-      const code = res.status ?? 1;
-      const report = readCheckReport(countFile);
-      results.push({
-        file,
-        code,
-        status: statusFor(code, report?.checks),
-        checks: report?.checks,
-        ...(report ? { surfaces: report.surfaces } : {}),
+      const chunks: Buffer[] = [];
+      child.stdout.on("data", (c: Buffer) => chunks.push(c));
+      child.stderr.on("data", (c: Buffer) => chunks.push(c));
+      const finish = (code: number): void => {
+        process.stdout.write(Buffer.concat(chunks));
+        const report = readCheckReport(countFile);
+        resolveRun({
+          file,
+          code,
+          status: statusFor(code, report?.checks),
+          checks: report?.checks,
+          ...(report ? { surfaces: report.surfaces } : {}),
+        });
+      };
+      // `error` fires when the process could not be spawned at all; without this
+      // the promise would never settle and the whole run would hang silently —
+      // which is worse than any failure it could report.
+      child.on("error", (e) => {
+        chunks.push(Buffer.from(`✗ ${file}: ${e.message}\n`));
+        finish(1);
+      });
+      child.on("close", (code) => {
+        finish(code ?? 1);
       });
     });
+
+  try {
+    // Results are stored BY INDEX so the reported order is the discovery order,
+    // whatever order the children happen to finish in. A run whose output reorders
+    // itself between invocations reads as flaky even when every result is stable.
+    const results: ScriptRunResult[] = new Array<ScriptRunResult>(files.length);
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        const i = next++;
+        if (i >= files.length) return;
+        results[i] = await runOne(files[i], i);
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(parallel, files.length) }, () => {
+        return worker();
+      }),
+    );
+    return results;
   } finally {
     rmSync(countDir, { recursive: true, force: true });
   }
-  return results;
 }
 
 /**

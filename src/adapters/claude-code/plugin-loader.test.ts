@@ -5,10 +5,11 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join, basename } from "node:path";
 
 import { loadPlugin, resolveHarness } from "./plugin-loader.js";
+import { claudeCodeLayout } from "./layout.js";
 import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 
 function makePlugin(): string {
@@ -533,9 +534,11 @@ test("loadPlugin loads an end-user repo's .claude/skills (no plugin.json)", () =
   }
 });
 
-test("loadPlugin prefers a repo-root skills/ over .claude/skills when both exist", () => {
-  // A plugin/library author's OWN local `.claude/skills` dev skills must not
-  // pollute the audit of what the plugin ships — the repo-root `skills/` wins.
+test("loadPlugin reads BOTH a repo-root skills/ and .claude/skills when both exist", () => {
+  // Claude Code loads both — the plugin copy as `/<plugin>:<name>`, the project
+  // copy as `/<name>` (docs: "loads alongside"). The loader used to read one and
+  // materialize it under the OTHER's canonical key, so a real file was never
+  // opened and its name carried someone else's bytes.
   const root = makeTmpDir("bothshapes");
   try {
     mkdirSync(join(root, "skills", "lib-skill"), { recursive: true });
@@ -547,16 +550,78 @@ test("loadPlugin prefers a repo-root skills/ over .claude/skills when both exist
       join(root, ".claude", "skills", "user-skill", "SKILL.md"),
       "# user\n",
     );
-    const { files } = loadPlugin(root);
+    const { files, sources } = loadPlugin(root);
     assert.equal(
-      files[join(".claude", "skills", "lib-skill", "SKILL.md")],
+      files["skills/lib-skill/SKILL.md"],
       "# lib\n",
-      "the repo-root skill is loaded",
+      "the plugin-scope skill is loaded, keyed where it really lives",
     );
     assert.equal(
       files[join(".claude", "skills", "user-skill", "SKILL.md")],
-      undefined,
-      "the .claude/skills fallback is skipped when repo-root skills/ exists",
+      "# user\n",
+      "the project-scope skill is loaded too — no longer shadowed",
+    );
+    assert.equal(
+      sources["skills/lib-skill/SKILL.md"],
+      join(root, "skills", "lib-skill", "SKILL.md"),
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin: a name in BOTH scopes yields two surfaces, neither overwritten", () => {
+  // The measured case (nyldn/claude-octopus, 2026-08-18): 50 skill names live in
+  // both `skills/` and `.claude/skills/`, and all 50 pairs DIFFER. Under the old
+  // one-or-the-other rule the audit named all fifty and had opened none of them.
+  const root = makeTmpDir("dupname");
+  try {
+    mkdirSync(join(root, "skills", "dup"), { recursive: true });
+    writeFileSync(join(root, "skills", "dup", "SKILL.md"), "# plugin copy\n");
+    mkdirSync(join(root, ".claude", "skills", "dup"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude", "skills", "dup", "SKILL.md"),
+      "# project copy\n",
+    );
+    const { files, sources, warnings } = loadPlugin(root);
+    assert.equal(files["skills/dup/SKILL.md"], "# plugin copy\n");
+    assert.equal(
+      files[join(".claude", "skills", "dup", "SKILL.md")],
+      "# project copy\n",
+    );
+    // Every key names the file it was actually read from — the property whose
+    // absence was the whole defect.
+    for (const [key, onDisk] of Object.entries(sources)) {
+      assert.equal(
+        readFileSync(onDisk, "utf-8"),
+        files[key],
+        `sources[${key}] must be the file the content came from`,
+      );
+    }
+    assert.ok(
+      warnings.some((w) => w.includes("TWO discovery levels")),
+      "a two-scope repo is called out, not silently merged",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin THROWS on a layout whose scopes would collide, rather than dropping one", () => {
+  // The call-site half of `assertDistinctScopeKeys`: the unit test proves the
+  // function fires, this proves the loader actually calls it. A layout with an
+  // empty `materializeRoot` makes the project and plugin scopes mint the same
+  // prefix — the exact silent overwrite this whole change removed. No shipped
+  // layout can reach it, so without this the call could be deleted unnoticed.
+  const root = makeTmpDir("collide-layout");
+  try {
+    mkdirSync(join(root, "skills", "a"), { recursive: true });
+    writeFileSync(join(root, "skills", "a", "SKILL.md"), "# a\n");
+    mkdirSync(join(root, ".claude", "skills", "b"), { recursive: true });
+    writeFileSync(join(root, ".claude", "skills", "b", "SKILL.md"), "# b\n");
+    assert.throws(
+      () => loadPlugin(root, { ...claudeCodeLayout, materializeRoot: "" }),
+      /silently shadow/,
     );
   } finally {
     cleanupTmpDir(root);
@@ -643,9 +708,10 @@ test("loadPlugin falls back to .claude/skills when the root skills/ is EMPTY", (
   }
 });
 
-test("loadPlugin does NOT import project-local .claude/agents into a plugin", () => {
-  // A plugin/library repo (has a shipped root `skills/`) must not materialize a
-  // developer's local `.claude/agents` as if the plugin ships them.
+test("loadPlugin materializes a plugin's project-local .claude/agents too", () => {
+  // A repo with a shipped root `skills/` AND a local `.claude/agents` runs BOTH
+  // in a real session: the subagent under `.claude/agents` is dispatchable by
+  // name. Dropping it audited a machine the author never runs.
   const root = makeTmpDir("plugin-devagents");
   try {
     mkdirSync(join(root, "skills", "foo"), { recursive: true });
@@ -660,22 +726,23 @@ test("loadPlugin does NOT import project-local .claude/agents into a plugin", ()
     );
     const { files } = loadPlugin(root);
     assert.ok(
-      files[join(".claude", "skills", "foo", "SKILL.md")],
-      "the shipped root skill is loaded",
+      files["skills/foo/SKILL.md"],
+      "the shipped root skill is loaded, keyed where it lives",
     );
     assert.ok(
-      !files[join(".claude", "agents", "dev.md")],
-      "a plugin's project-local .claude/agents dev agent is NOT materialized",
+      files[join(".claude", "agents", "dev.md")],
+      "the project-local .claude/agents subagent is materialized too",
     );
   } finally {
     cleanupTmpDir(root);
   }
 });
 
-test("loadPlugin does NOT fall back to .claude for a manifest-backed (hook-only) plugin", () => {
-  // A hook-only plugin has a manifest + hooks but no root surface dirs; its
-  // project-local `.claude/skills` is dev-only and must not be imported as shipped
-  // just because there's no root `skills/`.
+test("loadPlugin reads .claude/skills for a manifest-backed (hook-only) plugin", () => {
+  // A hook-only plugin has a manifest + hooks but no root surface dirs. Its
+  // project-local `.claude/skills` is still a real project skill that loads in a
+  // session, so it is read — and since the root scope contributes no surface
+  // files, nothing competes for the canonical key.
   const root = makeTmpDir("hookonly-plugin");
   try {
     mkdirSync(join(root, ".claude-plugin"), { recursive: true });
@@ -693,17 +760,18 @@ test("loadPlugin does NOT fall back to .claude for a manifest-backed (hook-only)
     );
     const { files } = loadPlugin(root);
     assert.ok(
-      !files[join(".claude", "skills", "dev", "SKILL.md")],
-      "a manifest-backed plugin's project-local .claude/skills is NOT materialized",
+      files[join(".claude", "skills", "dev", "SKILL.md")],
+      "a manifest-backed plugin's project-local .claude/skills IS materialized",
     );
   } finally {
     cleanupTmpDir(root);
   }
 });
 
-test("loadPlugin treats a hooks/hooks.json convention plugin as plugin-shaped (no .claude fallback)", () => {
+test("loadPlugin reads .claude/skills for a hooks/hooks.json convention plugin", () => {
   // A hook-only plugin via the `hooks/hooks.json` convention (no manifest, no root
-  // surfaces) is still a plugin — its project-local `.claude/skills` is dev-only.
+  // surfaces) is still a plugin — and its project-local `.claude/skills` is still
+  // a project skill the session loads.
   const root = makeTmpDir("hooksconv-plugin");
   try {
     mkdirSync(join(root, "hooks"), { recursive: true });
@@ -720,8 +788,8 @@ test("loadPlugin treats a hooks/hooks.json convention plugin as plugin-shaped (n
     );
     const { files } = loadPlugin(root);
     assert.ok(
-      !files[join(".claude", "skills", "dev", "SKILL.md")],
-      "a hooks-convention plugin's project-local .claude/skills is NOT materialized",
+      files[join(".claude", "skills", "dev", "SKILL.md")],
+      "a hooks-convention plugin's project-local .claude/skills IS materialized",
     );
   } finally {
     cleanupTmpDir(root);

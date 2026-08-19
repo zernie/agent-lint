@@ -209,6 +209,8 @@ The module must be importable from `PYTHONPATH`. For a local checker, put it in 
 
 ### vigiles enforce() reference
 
+<!-- vigiles:ignore -->
+
 ```typescript
 enforce(
   "pylint/no-direct-db-query",

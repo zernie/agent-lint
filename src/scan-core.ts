@@ -34,6 +34,7 @@ import { editDistance } from "./core/edit-distance.js";
 import { readFrontmatter, frontmatterScalar } from "./core/frontmatter-read.js";
 import {
   findDescriptionOverlaps,
+  type DescribedSurface,
   type DescriptionOverlap,
 } from "./core/description-overlap.js";
 import {
@@ -541,24 +542,46 @@ export function skillRefSources(
 function modelInvocableSkillSurfaces(
   files: Record<string, string>,
   cls: SurfaceClassifier,
-): { name: string; description: string }[] {
-  const surfaces: { name: string; description: string }[] = [];
+  where?: SurfacePathContext,
+): DescribedSurface[] {
+  const surfaces: DescribedSurface[] = [];
   for (const [path, md] of Object.entries(files)) {
     if (!cls.isSkill(path)) continue;
     if (/^\s*disable-model-invocation:\s*true\s*$/m.test(md)) continue;
     const fm = frontmatter(md);
     const description = fm.description ?? firstBodyParagraph(md);
     if (!description || description.length < 20) continue;
-    surfaces.push({ name: fm.name ?? skillName(path), description });
+    surfaces.push({
+      name: fm.name ?? skillName(path),
+      description,
+      // The NAME alone stopped identifying a surface once the loader began
+      // reading both discovery levels: a repo carrying `skills/x` AND
+      // `.claude/skills/x` has two skills called `x`. Report the real path
+      // (never the synthetic key) so the pair is actionable.
+      ...(where
+        ? {
+            where: reportedSurfacePath(path, where.sources?.[path], where.root),
+          }
+        : {}),
+    });
   }
   return surfaces;
+}
+
+/** Where a materialized key really lives — for reporting a surface by path. */
+export interface SurfacePathContext {
+  readonly root: string;
+  readonly sources?: Record<string, string>;
 }
 
 export function descriptionOverlapsFor(
   files: Record<string, string>,
   cls: SurfaceClassifier,
+  where?: SurfacePathContext,
 ): DescriptionOverlap[] {
-  return findDescriptionOverlaps(modelInvocableSkillSurfaces(files, cls));
+  return findDescriptionOverlaps(
+    modelInvocableSkillSurfaces(files, cls, where),
+  );
 }
 
 /**
@@ -1031,9 +1054,29 @@ export function collectDelegationTrifecta(
       delegatesTo: canDispatch ? allNames.filter((n) => n !== a.name) : [],
     };
   });
-  const pathByName = new Map(agents.map((a) => [a.name, a.path]));
+  // 🔴 A NAME IS NOT AN IDENTITY HERE, and this map used to assume it was.
+  // `new Map(agents.map((a) => [a.name, a.path]))` keeps the LAST entry for a
+  // repeated key, so when the same agent name exists in two discovery scopes —
+  // `agents/foo.md` and `.claude/agents/foo.md`, which Claude registers in
+  // DIFFERENT namespaces — a finding about the first was reported against the
+  // second's file. A lethal-trifecta finding that names the wrong file is worse
+  // than one that names none: it sends the reader to audit innocent code and
+  // leaves the real surface unexamined.
+  //
+  // Until identity is scope-qualified through the whole delegation pipeline (the
+  // proper fix, and a larger one — `finding.name` itself carries only the bare
+  // name), an ambiguous name resolves to NO path rather than to an arbitrary one.
+  // Nothing changes for the overwhelmingly common case of distinct names.
+  const pathByName = new Map<string, string>();
+  const ambiguous = new Set<string>();
+  for (const a of agents) {
+    if (pathByName.has(a.name)) ambiguous.add(a.name);
+    else pathByName.set(a.name, a.path);
+  }
   return delegationTrifectaIssues(nodes, dialect).map((finding) => ({
-    path: pathByName.get(finding.name) ?? "",
+    path: ambiguous.has(finding.name)
+      ? ""
+      : (pathByName.get(finding.name) ?? ""),
     finding,
   }));
 }

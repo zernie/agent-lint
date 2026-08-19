@@ -19,6 +19,7 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
+import ts from "typescript";
 import { resolve } from "node:path";
 import { globSync } from "glob";
 
@@ -80,7 +81,7 @@ const TS_LANGS = new Set(["ts", "typescript", "js", "javascript"]);
 const IGNORE_BLOCK_RE = /^\s{0,3}<!--\s*vigiles:ignore\s*-->\s*$/;
 const IGNORE_FILE_RE = /^\s{0,3}<!--\s*vigiles:ignore-file\s*-->\s*$/m;
 
-const CALL_RE = /\b(enforce|file|cmd|ref)\(\s*["']([^"'\n]+)["']/g;
+const KINDS = new Set(["enforce", "file", "cmd", "ref"]);
 
 const PLACEHOLDER_RE = /[<>]/;
 
@@ -103,6 +104,76 @@ const UNVERIFIABLE_PATTERNS: readonly RegExp[] = [
 interface ExtractResult {
   refs: DocRef[];
   blocksIgnored: number;
+}
+
+/**
+ * The builder calls in one fenced block, found by PARSING it rather than by
+ * matching text.
+ *
+ * 🔴 WHY THIS IS NOT A REGEX ANY MORE. The previous form was
+ * `/\b(enforce|file|cmd|ref)\(\s*["']([^"'\n]+)["']/g`, and four of these six
+ * inputs were classified wrongly (measured 2026-08-19):
+ *
+ *   ctx.file("OUT")          → matched, though it is a method on some other
+ *                              object. A live instance of this sat in a real
+ *                              repository's notes and was reported as a broken
+ *                              ref for weeks.
+ *   obj.cmd("npm test")      → matched, same reason
+ *   // cmd("npm test")       → matched, though it is a comment
+ *   const s = 'cmd("x")'     → matched, though it is a string
+ *   myFile("x")              → correctly skipped
+ *   cmd("npm test")          → correctly matched
+ *
+ * `\b` sits happily after a `.`, so every member call read as a builder call,
+ * and a regex has no notion of comments or string literals at all. Parsing makes
+ * all four INEXPRESSIBLE rather than individually patched: the AST only offers a
+ * call whose callee is a bare identifier, and comments and string bodies are not
+ * call expressions in the first place.
+ *
+ * `typescript` is already a runtime dependency of this package, so this costs no
+ * new install — the parser was in the box the whole time.
+ */
+function callsIn(
+  blockLines: readonly { lineNo: number; text: string }[],
+  file: string,
+): DocRef[] {
+  if (blockLines.length === 0) return [];
+  const src = blockLines.map((b) => b.text).join("\n");
+  const firstLine = blockLines[0].lineNo;
+  const sf = ts.createSourceFile(
+    "block.ts",
+    src,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+    ts.ScriptKind.TS,
+  );
+  const out: DocRef[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+      const kind = node.expression.text;
+      if (KINDS.has(kind)) {
+        const arg = node.arguments[0];
+        // Only a plain string literal is a ref we can resolve. A template with
+        // substitutions, a variable, or a computed value is not something this
+        // pass can check, and guessing at it is how false reports start.
+        if (
+          arg &&
+          (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg))
+        ) {
+          const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
+          out.push({
+            file,
+            line: firstLine + line,
+            kind: kind as DocRefKind,
+            value: arg.text,
+          });
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
 }
 
 /** @internal */ export function extractDocRefs(
@@ -141,16 +212,7 @@ interface ExtractResult {
           if (nextBlockIgnored) {
             blocksIgnored++;
           } else {
-            for (const { lineNo, text } of blockLines) {
-              for (const m of text.matchAll(CALL_RE)) {
-                refs.push({
-                  file,
-                  line: lineNo,
-                  kind: m[1] as DocRefKind,
-                  value: m[2],
-                });
-              }
-            }
+            refs.push(...callsIn(blockLines, file));
           }
         }
         fenceChar = null;

@@ -289,6 +289,63 @@ describe("scanFiles parity for NESTED agents (the shape no vendored fixture has)
   });
 });
 
+/**
+ * 🔴 THE TWO-SCOPE SHAPE — the second shape no vendored fixture has.
+ *
+ * Every plugin under test/dogfood/ carries surfaces at exactly ONE level, so the
+ * both-levels-present branch was executed by neither engine during the byte-parity
+ * comparison, exactly as the single-skill branch wasn't. The loader used to read
+ * one level and materialize it under the OTHER level's canonical key; a divergence
+ * between the two engines here would be invisible for the same reason.
+ *
+ * Measured shape (nyldn/claude-octopus @ 2026-08-18): 61 skills at the repo root,
+ * 57 under `.claude/skills`, 50 names in both — and all 50 pairs DIFFER.
+ */
+describe("scanFiles parity for a TWO-SCOPE repo (root skills/ AND .claude/skills)", () => {
+  const files = {
+    ".claude-plugin/plugin.json": JSON.stringify({ name: "twoscope" }),
+    "skills/dup/SKILL.md":
+      "---\nname: dup\ndescription: The PLUGIN copy, loaded as /twoscope:dup by the harness\n---\n# plugin\n",
+    ".claude/skills/dup/SKILL.md":
+      "---\nname: dup\ndescription: The PROJECT copy, loaded as /dup by the harness\n---\n# project\n",
+    ".claude/agents/dev.md":
+      "---\nname: dev\ndescription: A project-level subagent that used to be dropped\n---\nbody\n",
+  };
+
+  it("produces an identical AuditReport on both engines", () => {
+    const tmp = makeTmpDir("parity-two-scope");
+    const abs = join(tmp, "two-scope-repo");
+    for (const [rel, body] of Object.entries(files)) {
+      mkdirSync(dirname(join(abs, rel)), { recursive: true });
+      writeFileSync(join(abs, rel), body);
+    }
+    const diskReport = scanPlugin(abs);
+    const fileReport = scanFiles(
+      readDirToMap(abs),
+      undefined,
+      undefined,
+      basename(abs),
+    );
+    const diskAudit = normalizeRoot(buildAuditReport(diskReport, OPTS), abs);
+    expect(buildAuditReport(fileReport, OPTS)).toEqual(diskAudit);
+    expect(stabilize(fileReport)).toEqual(
+      stabilize(normalizeRoot(diskReport, abs)),
+    );
+    cleanupTmpDir(tmp);
+  });
+
+  it("…and BOTH copies are actually there — parity is agreement, not correctness", () => {
+    // Without this the parity assertion above passes while both engines drop the
+    // same file, which is precisely how the shadowing bug survived.
+    const report = scanFiles(files, undefined, undefined, "two-scope-repo");
+    expect(report.skills.map((s) => s.path).sort()).toEqual([
+      ".claude/skills/dup/SKILL.md",
+      "skills/dup/SKILL.md",
+    ]);
+    expect(report.agents.map((a) => a.path)).toEqual([".claude/agents/dev.md"]);
+  });
+});
+
 describe("scanFiles — non-plugin and empty inputs", () => {
   it("reports an instruction-only repo (CLAUDE.md, no spec) like scanPlugin would", () => {
     const map = {

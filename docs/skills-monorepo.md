@@ -16,7 +16,7 @@ these as first-class:
 | **Skills library**         | `skills/<name>/SKILL.md` at the repo root, no manifest                                      | a CI-tested skill monorepo       |
 | **Plain Claude Code repo** | `.claude/skills/<name>/SKILL.md` (+ `.claude/agents`, `.claude/settings.json`, `CLAUDE.md`) | a normal user repo, not a plugin |
 
-Point `audit`/`lint` at the repo root and vigiles reads whichever shape it finds.
+Point `audit`/`lint` at the repo root and vigiles reads every shape it finds.
 You can also point it at a **single skill directory** (the dir holding one
 `SKILL.md`) and it scans just that skill.
 
@@ -25,10 +25,24 @@ npx vigiles audit .                      # the whole repo
 npx vigiles audit skills/rca-investigation   # one skill dir
 ```
 
-ℹ️ **Repo-root `skills/` wins over `.claude/skills/`.** If a repo has both, the
-root `skills/` is used — so a plugin author's own local `.claude/skills` dev skills
-never pollute the audit of what the plugin ships. A plain user (no root `skills/`)
-is read from `.claude/skills` as expected.
+ℹ️ **A repo with BOTH `skills/` and `.claude/skills/` is audited as both**, because
+Claude Code loads both:
+
+> Plugin skills use a `plugin-name:skill-name` namespace, so they can't conflict
+> with other levels. For example, `my-plugin/skills/deploy/SKILL.md` becomes
+> `/my-plugin:deploy` and loads alongside a `deploy` skill in your project's
+> `.claude/skills/`.
+> — [Claude Code docs, "Where skills live"](https://code.claude.com/docs/en/skills)
+
+So the same NAME in both places is **two skills**, not one, and vigiles reports two
+surfaces at their two real paths plus a warning that the repo carries two discovery
+levels. (Until 2026-08, vigiles read one location and reported it under the other
+one's path — measured on a real plugin, 50 skill names existed in both trees and
+all 50 pairs differed, so fifty audited "skills" named files that were never opened.)
+
+The deterministic sandbox is a project directory, so it registers the **project**
+scope only; exercise a plugin scope through `pluginDir` (a real `--plugin-dir`
+install), which is what a session does with an installed plugin anyway.
 
 ⚠️ vigiles reads your **project** `.claude/` only. It never scans the machine-global
 `~/.claude/` install — CI results stay reproducible and independent of the runner's

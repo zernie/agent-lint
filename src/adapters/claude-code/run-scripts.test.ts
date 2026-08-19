@@ -5,7 +5,7 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -80,7 +80,7 @@ test("discoverScripts passes an explicit file path through", () => {
   }
 });
 
-test("runScripts reports per-file exit codes and forwards env", () => {
+test("runScripts reports per-file exit codes and forwards env", async () => {
   const dir = makeTmpDir("run-scripts");
   try {
     writeFileSync(join(dir, "ok.mjs"), "process.exit(0);\n");
@@ -90,7 +90,7 @@ test("runScripts reports per-file exit codes and forwards env", () => {
       "process.exit(process.env.VIGILES_TRIALS === '7' ? 0 : 9);\n",
     );
 
-    const results = runScripts(["ok.mjs", "bad.mjs", "env.mjs"], dir, {
+    const results = await runScripts(["ok.mjs", "bad.mjs", "env.mjs"], dir, {
       VIGILES_TRIALS: "7",
     });
     assert.deepEqual(
@@ -176,7 +176,7 @@ test("interpreterArgs interposes an ENTRY, keeping the loader flags for the SCRI
   );
 });
 
-test("runScripts passes the script to the entry as an argument", () => {
+test("runScripts passes the script to the entry as an argument", async () => {
   const dir = makeTmpDir("entry");
   try {
     writeFileSync(
@@ -184,7 +184,7 @@ test("runScripts passes the script to the entry as an argument", () => {
       "console.log('ENTRY GOT ' + process.argv[2]);\n",
     );
     writeFileSync(join(dir, "x.eval.mjs"), "process.exit(3);\n"); // must NOT run
-    const [r] = runScripts(
+    const [r] = await runScripts(
       ["x.eval.mjs"],
       dir,
       {},
@@ -215,13 +215,13 @@ test("detectNodeCaps reports tsx presence from node_modules", () => {
   }
 });
 
-test("runScripts surfaces an error code for an unrunnable TS script", () => {
+test("runScripts surfaces an error code for an unrunnable TS script", async () => {
   const dir = makeTmpDir("run-scripts");
   try {
     // A .ts file with no tsx and (on older node) no strip-types still yields a
     // non-zero result rather than throwing out of runScripts.
     writeFileSync(join(dir, "t.harness.ts"), "export {};\n");
-    const results = runScripts(["t.harness.ts"], dir);
+    const results = await runScripts(["t.harness.ts"], dir);
     assert.equal(results.length, 1);
     assert.equal(typeof results[0]?.code, "number");
   } finally {
@@ -258,7 +258,7 @@ function countModuleUrl(): string {
   return pathToFileURL(resolve(process.cwd(), "dist/check-count.js")).href;
 }
 
-test("runScripts reports 0 checks for a script that loads the API and runs nothing", () => {
+test("runScripts reports 0 checks for a script that loads the API and runs nothing", async () => {
   const dir = makeTmpDir("run-scripts-vacuous");
   try {
     const mod = JSON.stringify(countModuleUrl());
@@ -276,7 +276,7 @@ test("runScripts reports 0 checks for a script that loads the API and runs nothi
     // The legacy shape: never touches vigiles, so it cannot report. Unchanged.
     writeFileSync(join(dir, "legacy.harness.mjs"), "process.exit(0);\n");
 
-    const r = runScripts(
+    const r = await runScripts(
       ["vacuous.harness.mjs", "real.harness.mjs", "legacy.harness.mjs"],
       dir,
     );
@@ -295,7 +295,7 @@ test("runScripts reports 0 checks for a script that loads the API and runs nothi
   }
 });
 
-test("a script's spawned CHILD does not inherit the report path", () => {
+test("a script's spawned CHILD does not inherit the report path", async () => {
   // A harness spawns processes for a living. A child that inherited the count
   // path would write ITS count — usually zero — over the parent's, reporting a
   // sub-process's activity as the file's. The variable is read once and dropped,
@@ -313,7 +313,7 @@ test("a script's spawned CHILD does not inherit the report path", () => {
         `const r = spawnSync(process.execPath, ["-e", probe]);\n` +
         `if (r.status !== 0) process.exit(9); // the child could see the path\n`,
     );
-    const [r] = runScripts(["parent.harness.mjs"], dir);
+    const [r] = await runScripts(["parent.harness.mjs"], dir);
     assert.equal(r?.code, 0, "the spawned child must not see the report path");
     assert.equal(r?.checks, 4, "the parent's own count is what gets reported");
     assert.equal(r?.status, "pass");
@@ -362,13 +362,13 @@ test("anyFailed: a skip never counts as a failure", () => {
   assert.equal(anyFailed([{ file: "c.mjs", code: 2, status: "fail" }]), true);
 });
 
-test("runScripts classifies exit 77 as skip, 0 as pass, else fail", () => {
+test("runScripts classifies exit 77 as skip, 0 as pass, else fail", async () => {
   const dir = makeTmpDir("run-scripts");
   try {
     writeFileSync(join(dir, "ok.mjs"), "process.exit(0);\n");
     writeFileSync(join(dir, "skip.mjs"), "process.exit(77);\n");
     writeFileSync(join(dir, "bad.mjs"), "process.exit(1);\n");
-    const r = runScripts(["ok.mjs", "skip.mjs", "bad.mjs"], dir);
+    const r = await runScripts(["ok.mjs", "skip.mjs", "bad.mjs"], dir);
     assert.deepEqual(
       r.map((x) => x.status),
       ["pass", "skip", "fail"],
@@ -442,7 +442,7 @@ test("decideRunScripts: bare eval over many, at a TTY → CONFIRM", () => {
   );
 });
 
-test("the runner reads back WHICH surfaces a script exercised", () => {
+test("the runner reads back WHICH surfaces a script exercised", async () => {
   // The channel's second job: coverage answers "tested?" from execution, and
   // this is the wire it travels on. The fixture attributes through the tier
   // (runHook derives the hook from the command), not by declaring anything.
@@ -467,13 +467,109 @@ test("the runner reads back WHICH surfaces a script exercised", () => {
       join(dir, "plain.harness.mjs"),
       `import { recordCheck } from ${mod};\nrecordCheck();\n`,
     );
-    const r = runScripts(["attributes.harness.mjs", "plain.harness.mjs"], dir);
+    const r = await runScripts(
+      ["attributes.harness.mjs", "plain.harness.mjs"],
+      dir,
+    );
     assert.deepEqual(r[0].surfaces, [
       { how: "command", ref: "hooks/guard.sh" },
     ]);
     assert.equal(r[0].status, "pass");
     // Reported a count, exercised no identifiable surface. Not a finding.
     assert.deepEqual(r[1].surfaces, []);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+// ── the pool: it must actually overlap, and only where overlap is safe ─────────
+// Both halves, because either alone is worthless here. "It got faster" would not
+// prove overlap (a machine hiccup does that), and "it produced the right results"
+// would not prove it stayed SERIAL for `eval` — where overlap means simultaneous
+// billed model calls. So each script records the number of peers running when it
+// starts, and the assertion is on that number, not on a clock.
+function poolFixture(dir: string, n: number): void {
+  for (let i = 0; i < n; i++) {
+    writeFileSync(
+      join(dir, `s${String(i)}.harness.mjs`),
+      [
+        `import { writeFileSync, readdirSync, mkdirSync, rmSync } from "node:fs";`,
+        `import { join } from "node:path";`,
+        `const live = join(process.cwd(), "live");`,
+        `mkdirSync(live, { recursive: true });`,
+        // 🔴 THE SLOT IS RELEASED ON EXIT, and that is the whole measurement. A
+        // first version only ever CREATED markers, so the count answered "how many
+        // have started so far" — which reaches n under perfectly serial execution
+        // too. It made the concurrency test pass for a reason unrelated to
+        // concurrency. Holding a slot only while running is what makes the number
+        // mean "peers running AT THE SAME MOMENT".
+        `writeFileSync(join(live, "${String(i)}"), "");`,
+        `const peers = readdirSync(live).length;`,
+        `const until = Date.now() + 150;`,
+        `while (Date.now() < until) {}`,
+        `rmSync(join(live, "${String(i)}"));`,
+        `writeFileSync(join(process.cwd(), "peers-${String(i)}"), String(peers));`,
+      ].join("\n"),
+    );
+  }
+}
+const peakPeers = (dir: string, n: number): number =>
+  Math.max(
+    ...Array.from({ length: n }, (_, i) =>
+      Number(readFileSync(join(dir, `peers-${String(i)}`), "utf8")),
+    ),
+  );
+
+test("test tier (no entry) runs scripts concurrently", async () => {
+  const dir = makeTmpDir("run-scripts-pool");
+  try {
+    poolFixture(dir, 4);
+    const files = ["s0", "s1", "s2", "s3"].map((s) => `${s}.harness.mjs`);
+    const results = await runScripts(files, dir, {}, { concurrency: 4 });
+    assert.equal(results.length, 4);
+    assert.ok(
+      results.every((r) => r.code === 0),
+      "every script must still succeed under the pool",
+    );
+    assert.ok(
+      peakPeers(dir, 4) > 1,
+      "at least one script must have observed a peer running — otherwise the pool is serial",
+    );
+    // Discovery order, not completion order: a run that reorders its own output
+    // between invocations reads as flaky even when every result is stable.
+    assert.deepEqual(
+      results.map((r) => r.file),
+      files,
+      "results must stay in discovery order",
+    );
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("eval tier (entry set) stays strictly serial — overlap there is billed twice", async () => {
+  const dir = makeTmpDir("run-scripts-serial");
+  try {
+    poolFixture(dir, 3);
+    // An entry that simply runs the script it is handed, so the only difference
+    // from the tier above is the presence of `entry` itself.
+    writeFileSync(
+      join(dir, "entry.mjs"),
+      `await import(new URL(process.argv[2], "file://" + process.cwd() + "/").href);`,
+    );
+    const files = ["s0", "s1", "s2"].map((s) => `${s}.harness.mjs`);
+    const results = await runScripts(
+      files,
+      dir,
+      {},
+      { entry: join(dir, "entry.mjs") },
+    );
+    assert.equal(results.length, 3);
+    assert.equal(
+      peakPeers(dir, 3),
+      1,
+      "no script may see a peer: `eval` spends real model quota, so the default must be 1",
+    );
   } finally {
     cleanupTmpDir(dir);
   }

@@ -651,7 +651,10 @@ export function scanPlugin(
       declaredServers,
       dialect,
     ),
-    descriptionOverlaps: descriptionOverlapsFor(loaded.files, cls),
+    descriptionOverlaps: descriptionOverlapsFor(loaded.files, cls, {
+      root: resolve(dir),
+      sources: loaded.sources,
+    }),
     descriptionBudgetIssues: descriptionBudgetFor(loaded.files, cls),
     trifectaFindings,
     skillResourceIssues: skillResourceFindings,

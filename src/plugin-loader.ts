@@ -41,6 +41,23 @@ import {
   startsAtSeparator,
   stripFullLineComments,
 } from "./core/source-refs.js";
+import {
+  assertDistinctScopeKeys,
+  multiScopeWarning,
+  scopeKey,
+  surfaceSource,
+  type SurfaceScope,
+} from "./core/surface-scopes.js";
+
+/**
+ * What one materialization pass produced: per-surface file counts, and the
+ * discovery scopes it actually read from. They travel together because the
+ * warnings need both — how much was read, and from how many levels.
+ */
+interface MaterializedSurfaces {
+  readonly counts: Record<string, number>;
+  readonly scopes: readonly SurfaceScope[];
+}
 
 export interface LoadedPlugin {
   /** A `.claude/settings.json`-shaped object with hooks resolved. */
@@ -214,53 +231,38 @@ export function loadPlugin(
     files[layout.instructionFile] = readFileSync(instructions, "utf-8");
     sources[layout.instructionFile] = instructions;
   }
-  const counts = materializeSurfaces(root, layout, files, sources);
+  const surfaces = materializeSurfaces(root, layout, files, sources);
 
   return {
     settings: resolvedHooks ? { hooks: resolvedHooks } : {},
     files,
     sources,
-    warnings: pluginWarnings(root, counts, resolvedHooks, files, layout),
+    warnings: pluginWarnings(root, surfaces, resolvedHooks, files, layout),
   };
 }
 
 /**
- * Materialize every model surface (skills/agents/commands) into `files`, keyed by
- * a canonical `<materializeRoot>/<surface>/…` path, and record each file's real
- * on-disk path in `sources`. Best-effort (headless activation of plugin
- * skills/subagents/commands is not guaranteed; the body is present to read).
+ * Materialize every model surface (skills/agents/commands) into `files`, and
+ * record each file's real on-disk path in `sources`. Best-effort (headless
+ * activation of plugin skills/subagents/commands is not guaranteed; the body is
+ * present to read).
  *
- * Each surface is read from ONE of the two locations the layout knows about,
- * primary-first: `<root>/<surface>` (the published-plugin / skills-library shape)
- * when it exists, ELSE — when the layout declares one — the project-level
- * `<root>/<userSurfaceRoot>/<surface>` (the shape a PLAIN Claude Code user has,
- * not a plugin author). Preferring the primary means a plugin author's own local
- * `.claude/skills` dev skills don't pollute the audit of what their plugin
- * actually ships, while a plain user (no repo-root `skills/`) is still read. Plus
- * the single-skill-directory case (`<root>/SKILL.md`), so pointing at one skill
- * dir works. Whichever location is used normalizes to the same canonical key, so
- * the classifier and every downstream detector see one shape regardless of where
- * it lives on disk. Returns the per-surface counts (drives the surface warnings).
+ * EVERY discovery level present is read — the repo-root `<surface>` (the
+ * published-plugin / skills-library shape) AND the project-level
+ * `<userSurfaceRoot>/<surface>` (the shape a plain Claude Code user has). The
+ * loader used to read one OR the other and materialize the winner under the
+ * loser's canonical key; `src/core/surface-scopes.ts` carries the measurement
+ * that killed that, and the vendor quote that settles which one the harness
+ * loads (both, in different namespaces). The KEY now comes from the scope, so
+ * two files can no longer claim one. Plus the single-skill-directory case
+ * (`<root>/SKILL.md`), so pointing at one skill dir works. Returns the
+ * per-surface counts (drives the surface warnings).
  */
-/**
- * WHERE a repo's model surfaces (skills/agents/commands) live — PARSED from the
- * repo's shape ONCE (parse-don't-validate) so materialization never re-infers it
- * from a pile of ad-hoc booleans (the tangle that spawned repeated edge-case
- * bugs: empty dir, stray file, hook-only plugin, single-skill target). A tagged
- * union, one variant per real shape; a NEW shape is a new variant the exhaustive
- * `switch` below won't compile without handling — the whole point.
- */
-type SurfaceSource =
-  | { readonly kind: "single-skill"; readonly skillName: string } // `<root>/SKILL.md` — the target IS one skill
-  | { readonly kind: "root" } // plugin / library / any root-surface content — read `<root>/<surface>`
-  | { readonly kind: "user"; readonly sub: string } // plain user repo — read `<root>/<sub>/<surface>`
-  | { readonly kind: "none" }; // nothing loadable anywhere
 
 /**
  * A surface holds a LOADABLE file — a `<name>/SKILL.md` for skills, a `.md` for
  * agents/commands. A stray non-surface file (`skills/README.md`, `.gitkeep`) does
- * NOT count, else it would mark the root populated and shadow a plain user's real
- * `.claude/skills`.
+ * NOT count, else an empty-but-present dir would mark a scope populated.
  */
 function surfaceHasLoadable(
   layout: PluginLayout,
@@ -273,43 +275,12 @@ function surfaceHasLoadable(
     : keys.some((k) => k.endsWith(".md"));
 }
 
-/**
- * Classify the repo shape from disk, with EXPLICIT precedence:
- *  1. a `<root>/SKILL.md` → the target IS one skill dir (single-skill).
- *  2. any root-surface with LOADABLE content, OR a plugin manifest / hooks
- *     convention → read the ROOT surfaces. A plugin ships from its manifest even
- *     with no root surface dirs, so its dev `.claude/…` is never a fallback.
- *  3. else, if the layout declares a user-surface root → a plain user repo.
- *  4. else → nothing loadable.
- * Pure over the pre-read `rootTrees` + a few existence checks — one place to test.
- */
-function classifySurfaceSource(
-  root: string,
-  layout: PluginLayout,
-  rootTrees: ReadonlyMap<string, Record<string, string>>,
-): SurfaceSource {
-  if (layout.skillDir && existsSync(join(root, "SKILL.md"))) {
-    return { kind: "single-skill", skillName: basename(root) };
-  }
-  const rootHasLoadable = layout.surfaceDirs.some((s) =>
-    surfaceHasLoadable(layout, s, rootTrees.get(s) ?? {}),
-  );
-  const isPluginShaped =
-    existsSync(join(root, layout.manifestPath)) ||
-    existsSync(join(root, layout.hooksConventionPath));
-  if (rootHasLoadable || isPluginShaped) return { kind: "root" };
-  if (layout.userSurfaceRoot !== undefined) {
-    return { kind: "user", sub: layout.userSurfaceRoot };
-  }
-  return { kind: "none" };
-}
-
 function materializeSurfaces(
   root: string,
   layout: PluginLayout,
   files: Record<string, string>,
   sources: Record<string, string>,
-): Record<string, number> {
+): MaterializedSurfaces {
   const counts: Record<string, number> = {};
   const isDir = (p: string): boolean =>
     existsSync(p) && statSync(p).isDirectory();
@@ -324,16 +295,57 @@ function materializeSurfaces(
    */
   const surfaceTree = (dir: string): Record<string, string> =>
     isDir(dir) && walkableRoot(dir, root) ? readTree(dir, dir) : {};
-  // Read each ROOT-level surface tree once (keys relative to the surface dir).
-  const rootTrees = new Map<string, Record<string, string>>();
-  for (const surface of layout.surfaceDirs)
-    rootTrees.set(surface, surfaceTree(join(root, surface)));
+  /** Every surface tree of one scope, read once, keyed by surface dir. */
+  const scopeTrees = (base: string): Map<string, Record<string, string>> => {
+    const trees = new Map<string, Record<string, string>>();
+    for (const surface of layout.surfaceDirs)
+      trees.set(surface, surfaceTree(join(root, base, surface)));
+    return trees;
+  };
+  const hasLoadable = (trees: ReadonlyMap<string, Record<string, string>>) =>
+    layout.surfaceDirs.some((s) =>
+      surfaceHasLoadable(layout, s, trees.get(s) ?? {}),
+    );
   const add = (key: string, content: string, onDisk: string): void => {
     files[key] = content;
     sources[key] = onDisk;
   };
 
-  const source = classifySurfaceSource(root, layout, rootTrees);
+  // Both candidate scopes are read ONCE, up front, because the decision needs to
+  // know whether each holds anything — and then the same trees are materialized.
+  const rootTrees = scopeTrees("");
+  const userTrees =
+    layout.userSurfaceRoot !== undefined
+      ? scopeTrees(layout.userSurfaceRoot)
+      : new Map<string, Record<string, string>>();
+
+  /** Copy one scope's already-read trees into `files`, keyed by that scope. */
+  const materializeScope = (
+    scope: SurfaceScope,
+    trees: ReadonlyMap<string, Record<string, string>>,
+  ): void => {
+    for (const surface of layout.surfaceDirs) {
+      const tree = trees.get(surface) ?? {};
+      for (const [rel, content] of Object.entries(tree))
+        add(
+          scopeKey(scope, surface, rel),
+          content,
+          join(root, scope.base, surface, rel),
+        );
+      counts[surface] = (counts[surface] ?? 0) + Object.keys(tree).length;
+    }
+  };
+
+  const source = surfaceSource(layout, {
+    hasRootSkillFile: existsSync(join(root, "SKILL.md")),
+    skillName: basename(root),
+    rootHasLoadable: hasLoadable(rootTrees),
+    isPluginShaped:
+      existsSync(join(root, layout.manifestPath)) ||
+      existsSync(join(root, layout.hooksConventionPath)),
+    userHasLoadable: hasLoadable(userTrees),
+  });
+
   switch (source.kind) {
     case "single-skill": {
       // Materialize the WHOLE skill dir under the canonical skills key, so its
@@ -350,36 +362,18 @@ function materializeSurfaces(
         );
       }
       counts[layout.skillDir] = Object.keys(tree).length;
-      break;
+      return { counts, scopes: [] };
     }
-    case "root":
-    case "user": {
-      const base = source.kind === "user" ? join(root, source.sub) : root;
-      for (const surface of layout.surfaceDirs) {
-        const dir = join(base, surface);
-        // Root surfaces were pre-read; user surfaces are read fresh here.
-        const tree =
-          source.kind === "root"
-            ? (rootTrees.get(surface) ?? {})
-            : surfaceTree(dir);
-        for (const [rel, content] of Object.entries(tree)) {
-          add(
-            join(layout.materializeRoot, surface, rel),
-            content,
-            join(dir, rel),
-          );
-        }
-        counts[surface] = Object.keys(tree).length;
-      }
-      break;
+    case "scopes": {
+      assertDistinctScopeKeys(source.scopes, layout.name);
+      for (const scope of source.scopes)
+        materializeScope(scope, scope.base === "" ? rootTrees : userTrees);
+      return { counts, scopes: source.scopes };
     }
-    case "none":
-      break;
     /* v8 ignore next 2 -- exhaustiveness guard, unreachable given SurfaceSource */
     default:
-      assertNever(source);
+      return assertNever(source);
   }
-  return counts;
 }
 
 /**
@@ -391,12 +385,14 @@ function materializeSurfaces(
  */
 function pluginWarnings(
   root: string,
-  counts: Record<string, number>,
+  { counts, scopes }: MaterializedSurfaces,
   hooks: unknown,
   files: Record<string, string>,
   layout: PluginLayout,
 ): string[] {
   const warnings: string[] = [];
+  const multiScope = multiScopeWarning(scopes, counts);
+  if (multiScope !== undefined) warnings.push(multiScope);
   if (counts.agents) {
     warnings.push(
       `plugin defines ${String(counts.agents)} subagent file(s) under agents/ — these run only under a real model; test them at the eval tier (runEval), not the deterministic mock.`,

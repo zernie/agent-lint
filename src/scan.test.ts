@@ -815,9 +815,12 @@ test("scanPlugin flags near-duplicate model-invocable skill descriptions, skips 
   );
   const r = scanPlugin(dir);
   assert.equal(r.descriptionOverlaps.length, 1);
+  // The pair is labelled by name AND path: since the loader reads both discovery
+  // levels, a name alone can name two different files (`skills/x` +
+  // `.claude/skills/x`), and "x and x" identifies neither.
   assert.deepEqual(
     [r.descriptionOverlaps[0].a, r.descriptionOverlaps[0].b].sort(),
-    ["a", "b"],
+    ['"a" (skills/a/SKILL.md)', '"b" (skills/b/SKILL.md)'],
   );
   assert.match(formatScanReport(r), /near-identical/);
   cleanupTmpDir(dir);
