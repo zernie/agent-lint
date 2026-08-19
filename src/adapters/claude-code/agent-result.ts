@@ -49,7 +49,17 @@ function fieldMatches(value: unknown, type: OutputFieldType): boolean {
       return typeof value === "boolean";
     case "string[]":
       return Array.isArray(value) && value.every((v) => typeof v === "string");
+    default:
+      // An enum, declared as a readonly tuple of the permitted literals.
+      return typeof value === "string" && type.includes(value);
   }
+}
+
+/** How a field type reads in a message to a human: `string`, or `"CUT" | "MERGE"`. */
+function typeName(type: OutputFieldType): string {
+  return typeof type === "string"
+    ? type
+    : type.map((v) => JSON.stringify(v)).join(" | ");
 }
 
 /**
@@ -67,7 +77,9 @@ export function shapeError(
   for (const [field, type] of Object.entries(shape)) {
     if (!(field in obj)) return `missing field "${field}"`;
     if (!fieldMatches(obj[field], type)) {
-      return `field "${field}" should be ${type}`;
+      // `typeName`, not `type`: an enum interpolated raw renders as `CUT,MERGE,KEEP`,
+      // which reads like a value rather than a choice among values.
+      return `field "${field}" should be ${typeName(type)}`;
     }
   }
   return null;

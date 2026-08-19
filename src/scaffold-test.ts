@@ -187,7 +187,10 @@ assertTriggerRate(report, { min: 0.8, maxFalsePositive: 0.3 });
 }
 
 /** A JSON value placeholder for an `OutputFieldType`, for the `vigiles:ok` block. */
-function placeholderFor(type: string): unknown {
+function placeholderFor(type: unknown): unknown {
+  // An enum's placeholder must be a MEMBER, or the scaffolded test fails the moment it
+  // is run — a generated test that cannot pass teaches the author to distrust the tool.
+  if (Array.isArray(type) && type.length > 0) return type[0];
   switch (type) {
     case "number":
       return 1;
