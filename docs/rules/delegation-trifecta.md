@@ -108,6 +108,21 @@ in isolation. A linter that checks one unit at a time never sees it; the
 **combination across the tree** is the risk, and it's decidable from the declared
 contracts — for free, no model.
 
+## When two agents share a name
+
+Claude registers `agents/foo.md` and `.claude/agents/foo.md` in DIFFERENT namespaces, so a
+repository can legitimately hold two agents with the same `name:`. A finding carries the agent's
+name, not its path, and the path shown alongside it is looked up from that name.
+
+For an ambiguous name the finding is therefore reported **with no path** rather than with one of
+the two files picked arbitrarily. Until 2026-08-19 the lookup kept whichever entry came last, so a
+finding about the first agent was displayed against the second agent's file — which is worse than
+showing nothing: it sends the reader to audit innocent code while the surface that actually holds
+the trifecta goes unexamined.
+
+The finding itself is unaffected; only the file attribution is withheld. Giving each scope its own
+qualified identity end to end is the complete fix and is not done yet.
+
 ## See also
 
 - [lethal-trifecta](lethal-trifecta.md) — the per-unit check this one extends

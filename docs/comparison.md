@@ -61,6 +61,21 @@ Out of scope — use other tools:
 | Markdown link validity (URLs, paths) | [markdown-link-check](https://github.com/tcort/markdown-link-check)             |
 | Spell / prose / grammar              | [Vale](https://vale.sh/), [alex](https://github.com/get-alex/alex)              |
 
+**What counts as a ref (2026-08-19).** Blocks are PARSED, not pattern-matched. A ref is a call
+whose callee is a bare `enforce` / `file` / `cmd` / `ref` identifier with a string-literal first
+argument. That means a method call on some other object (`ctx.file("OUT")`), a mention inside a
+comment (`// cmd("npm test")`), and a string containing one (`'cmd("x")'`) are all NOT refs — none
+of them is a call expression to the builder. Until this release those three were matched by a
+regex and reported as broken refs; `\b` sits happily after a `.`, and a regex has no notion of a
+comment or a string literal. Parsing makes all three inexpressible rather than individually
+excused.
+
+**Scope.** The pass reads `**/*.md` from the repo root and honours the top-level `exclude` in
+`.vigilesrc.json`, so vendored or benchmark markdown (a third-party `CLAUDE.md` captured verbatim
+as test data) can be kept out of it. Before 2026-08-19 `exclude` was not applied here at all, which
+meant a repository vendoring other people's markdown had no way to reach a clean `lint` — and a
+lint that cannot exit 0 gets its exit code discarded, at which point it gates nothing.
+
 Illustrative code blocks (typo demos, template placeholders, speculative refs in design docs) opt out via `<!-- vigiles:ignore -->` immediately before the fence, or `<!-- vigiles:ignore-file -->` anywhere in a file that's entirely illustrative. Placeholders containing `<` or `>` are auto-skipped. Refs that can't be verified because the underlying tool isn't installed (e.g. `pylint/X` on a machine without pylint) are reported separately from real errors.
 
 ## What vigiles composes with

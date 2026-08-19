@@ -88,6 +88,19 @@ answer the prompt at a terminal. Run headless with none of those and it **refuse
 always runs everything it finds. (Discovery is by name — `*.harness.*` / `*.eval.*`,
 never `*.test.*` / `*.spec.*` — so it won't pick up your vitest/jest files.)
 
+**`test` runs several scripts at once; `eval` runs them one at a time.** The two share a runner
+and want opposite defaults, so the default follows the tier rather than a flag. Harness scripts are
+free and deterministic by construction — the tier drives the agent CLI against a mock model with no
+API key — so running them concurrently cannot cost anything, and on one real repository of 48
+harness files it took the suite from **270s to 77s with byte-identical results**. Evals spend real
+model quota, where concurrency means simultaneous billed calls and rate limits, so they stay
+strictly serial.
+
+Each script's output is buffered and printed whole when that script finishes, rather than streamed
+live, because concurrent children writing to one terminal interleave into an unreadable mess.
+Results are reported in discovery order regardless of which finished first — a run that reorders
+its own output between invocations reads as flaky even when every result is stable.
+
 **Already have vitest or jest? You don't need a second runner for the
 deterministic tier.** The testing API — `runHook`, `runHarnessTest`, the check
 vocabulary, and the matchers (via `vigiles/vitest` / `vigiles/jest`) — are plain
