@@ -366,8 +366,36 @@ jobs:
       - name: Build engine (root dist/)
         run: npm run build
 
+      # 🔴 THIS STEP ATE THE WHOLE JOB TWICE (2026-08-19, runs 32300064395 and
+      # 32303343213), and neither failure was in the diff under review. Two separate
+      # causes, fixed separately:
+      #
+      #  1. `--with-deps` shells out to `apt-get update`, which hung on
+      #     azure.archive.ubuntu.com (`Ign:` on every line, then silence for 12
+      #     minutes until the job bond killed it). `ubuntu-latest` already ships the
+      #     system libraries Chromium needs — `--with-deps` exists for bare
+      #     containers. Dropping it removes the apt call, and with it the only part
+      #     of this step that touches a distro mirror. If a library really is
+      #     missing, the browser fails to LAUNCH in the next step, in seconds, with
+      #     the missing .so named — a loud failure instead of a silent 15-minute hang.
+      #  2. Chromium (~150 MB) was re-downloaded on every run with no cache, so the
+      #     step's floor was a full download even on a good day.
+      #
+      # The step bond is the third leg: a hang now costs 5 minutes, not the job. The
+      # job bond cannot distinguish "this step wedged" from "the suite is slow".
+      - name: Cache the Playwright browser
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          # Keyed on the resolved Playwright version: a bump must miss the cache,
+          # because the browser build is pinned to it.
+          key: pw-${{ runner.os }}-${{ hashFiles('site/package-lock.json', 'package-lock.json') }}
+
       - name: Install Chromium for Playwright (vitest browser mode)
-        run: npx playwright install --with-deps chromium
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 5
+        run: npx playwright install chromium
         working-directory: site
 
       - name: Run site browser tests (parity + interaction + grade-cache)
