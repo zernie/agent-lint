@@ -999,8 +999,28 @@ export function agent<
 // research/railway-subagents.md and research/subagent-compilation.md.
 // ---------------------------------------------------------------------------
 
-/** The field types a result contract can declare (kept tiny + dependency-free). */
-export type OutputFieldType = "string" | "number" | "boolean" | "string[]";
+/**
+ * The field types a result contract can declare (kept tiny + dependency-free).
+ *
+ * The literal-array member is an ENUM: `["CUT", "MERGE", "KEEP"] as const` declares a
+ * field whose value must be one of those strings. It is the ONLY extension to this union,
+ * and it was added because a measured failure had no other cure: across 14 real payloads
+ * a `verdict: "string"` field held 3 mutually incomparable invented categories over 3
+ * runs, and vocabulary compliance was 3/19 — 16%. `string` cannot express "one of these",
+ * so nothing downstream could notice.
+ *
+ * Nothing RELATIONAL follows it — no `object[]`, no tuples, no per-element enums.
+ * Declaring one throws rather than rendering an unsatisfiable schema, because the body of
+ * a result is prose by decision: on those same 14 payloads, 23 scalar values carried
+ * every assertion anyone made while 80,981 characters of prose carried none.
+ */
+export type OutputFieldType =
+  | "string"
+  | "number"
+  | "boolean"
+  | "string[]"
+  // An enum: the permitted values, as a non-empty readonly tuple of literals.
+  | readonly [string, ...string[]];
 
 /** A field SHAPE — a record of field-name → field-type, kept in the TYPE so a
  *  typed pipeline can cross-reference one agent's `ok` against the next agent's

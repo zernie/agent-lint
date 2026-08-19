@@ -1135,7 +1135,12 @@ function renderAgentSections(
 /** Render a result-contract track shape as a compact `{ "f": type, … }` line. */
 function renderShape(shape: Readonly<Record<string, OutputFieldType>>): string {
   const fields = Object.entries(shape)
-    .map(([k, t]) => `"${k}": ${t}`)
+    // An enum renders as the choice itself — `"verdict": "CUT" | "MERGE" | "KEEP"` — so
+    // the fenced rail shows a worker the same permitted values the tool schema shows.
+    .map(
+      ([k, t]) =>
+        `"${k}": ${typeof t === "string" ? t : t.map((v) => JSON.stringify(v)).join(" | ")}`,
+    )
     .join(", ");
   return fields ? `{ ${fields} }` : "{}";
 }

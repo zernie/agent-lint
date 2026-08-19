@@ -31,6 +31,9 @@ export type EmitFieldSchema = {
     readonly items: {
         readonly type: "string";
     };
+} | {
+    readonly type: "string";
+    readonly enum: readonly string[];
 };
 
 // @public

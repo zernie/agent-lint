@@ -382,7 +382,7 @@ export interface OutputContract<Ok extends Shape = Shape, Err extends Shape = Sh
 }
 
 // @public
-export type OutputFieldType = "string" | "number" | "boolean" | "string[]";
+export type OutputFieldType = "string" | "number" | "boolean" | "string[]" | readonly [string, ...string[]];
 
 // @public
 export type OutputPath<Spec extends `${string}.md.spec.ts`> = Spec extends `${infer Base}.spec.ts` ? Base : never;
