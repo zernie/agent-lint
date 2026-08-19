@@ -7,6 +7,7 @@
 
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { globSync } from "glob";
+import yaml from "js-yaml";
 import { resolve, dirname, basename } from "node:path";
 
 import { sha256short, assertNever } from "./hash.js";
@@ -808,6 +809,48 @@ function collectSkillRefs(spec: SkillSpec): InstructionFragment[] {
  * argument-hint, tools). Default is `"claude-code"` so callers that pass no
  * dialect get byte-identical output to before.
  */
+/**
+ * A frontmatter scalar, quoted only when leaving it bare would not survive YAML.
+ *
+ * 🔴 WHY THIS EXISTS. `description: ${spec.description}` interpolated the value
+ * raw, so a description containing a colon-space — `"…измеряет, где замер врёт:
+ * неаналоги в выборке"` — emitted frontmatter that is not valid YAML. Measured
+ * 2026-08-19 on two real skills: right after `vigiles compile`, `skillContract()`
+ * reported `malformed: true` and `declared: []`. The file LOOKS like it declares
+ * `allowed-tools`; a strict parser reads nothing, so the skill silently inherits
+ * every tool the session grants.
+ *
+ * That is the exact defect `frontmatter-valid` exists to report — i.e. the
+ * blessed path produced the thing the product hunts for. Worse, it PUNISHED the
+ * fix: a human who quoted the value by hand got a hash mismatch on the next lint
+ * ("manually edited after compilation"), and recompiling silently reverted them.
+ *
+ * The test is a ROUND TRIP rather than a list of dangerous characters: emit it,
+ * read it back with the same loader the linter uses, and quote only if what comes
+ * back is not the string that went in. Consequences of that choice:
+ *   - a value that was already safe is emitted byte-identically, so no existing
+ *     compiled file churns and no integrity hash moves;
+ *   - the set of "dangerous" inputs never has to be enumerated or maintained —
+ *     YAML itself decides, so `#`, `[`, `&`, `*`, leading/trailing space, `yes`,
+ *     `null` and everything else are covered without being listed.
+ */
+function yamlScalar(value: string): string {
+  try {
+    const parsed = yaml.load(`v: ${value}`);
+    if (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      (parsed as Record<string, unknown>).v === value
+    ) {
+      return value;
+    }
+  } catch {
+    // Did not parse at all — definitively needs quoting.
+  }
+  // A JSON string IS a YAML double-quoted scalar, escaping included.
+  return JSON.stringify(value);
+}
+
 function renderSkillFrontmatter(
   spec: SkillSpec,
   profile: SkillFrontmatterProfile = "claude-code",
@@ -815,8 +858,8 @@ function renderSkillFrontmatter(
   const fm = [
     "---",
     "",
-    `name: ${spec.name}`,
-    `description: ${spec.description}`,
+    `name: ${yamlScalar(spec.name)}`,
+    `description: ${yamlScalar(spec.description)}`,
   ];
   // The CC-only keys below are inert in a minimal (Codex/OpenCode) SKILL.md, so
   // they're omitted entirely under that profile.
@@ -831,7 +874,7 @@ function renderSkillFrontmatter(
       spec.inputs && spec.inputs.length > 0
         ? renderArgumentHint(spec.inputs)
         : spec.argumentHint;
-    if (argHint) fm.push(`argument-hint: ${argHint}`);
+    if (argHint) fm.push(`argument-hint: ${yamlScalar(argHint)}`);
     if (spec.tools && spec.tools.length > 0) {
       // A Claude Code SKILL declares its tool contract under `allowed-tools`
       // (NOT `tools:` — that's the SUBAGENT key), as a real YAML sequence. Flow
@@ -1073,11 +1116,14 @@ function validateAgentTools(
 
 /** Build the subagent YAML frontmatter (name / description / model / tools). */
 function renderAgentFrontmatter(spec: AgentSpec): string {
+  // Same round-trip quoting as the skill renderer — a subagent description is
+  // written just as freely and breaks its frontmatter the same way. See
+  // {@link yamlScalar}.
   const fm = [
     "---",
     "",
-    `name: ${spec.name}`,
-    `description: ${spec.description}`,
+    `name: ${yamlScalar(spec.name)}`,
+    `description: ${yamlScalar(spec.description)}`,
   ];
   if (spec.model !== undefined) fm.push(`model: ${spec.model}`);
   if (spec.color !== undefined) fm.push(`color: ${spec.color}`);

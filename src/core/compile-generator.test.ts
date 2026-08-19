@@ -178,3 +178,49 @@ test("a disallowed-tools entry that is a typo of a real tool is an ERROR, not a 
     `expected a typo report naming both the typo and the real tool, got ${JSON.stringify(errors)}`,
   );
 });
+
+// ── frontmatter scalars must survive YAML, and only be quoted when they must ──
+// Both halves matter and for different reasons. If quoting never fires, `compile`
+// keeps emitting frontmatter that `frontmatter-valid` then reports — the blessed
+// path producing the defect the product hunts for. If quoting fires when it is not
+// needed, every already-compiled file changes bytes and every integrity hash moves,
+// which reads to users as "vigiles rewrote my whole repo".
+test("compile quotes a description YAML would otherwise mis-read", () => {
+  // The real shape that broke two shipped skills: a colon-space inside prose.
+  const withColon =
+    "Узнать, сколько берут за услугу — ловит ошибки, где замер врёт: неаналоги в выборке.";
+  const { markdown } = compileSkill({
+    name: "benchmark-price",
+    description: withColon,
+    tools: ["Read", "WebSearch"],
+    body: "Body.",
+  } as never);
+
+  const fm = readFrontmatter(markdown);
+  assert.equal(
+    fm.malformed,
+    false,
+    "compiled frontmatter must be valid YAML — it is the input to every other check",
+  );
+  assert.equal(
+    frontmatterScalar(fm, "description"),
+    withColon,
+    "and the value must round-trip unchanged, not merely parse",
+  );
+  // The tool contract is what silently vanishes when the block is malformed: the
+  // file still LOOKS declarative while a strict parser reads nothing from it.
+  assert.match(markdown, /allowed-tools: \[Read, WebSearch\]/);
+});
+
+test("compile leaves an already-safe description bare — no hash churn", () => {
+  const plain = "Search products on ozon.kz and return live listings.";
+  const { markdown } = compileSkill({
+    name: "ozon-search-kz",
+    description: plain,
+    body: "Body.",
+  } as never);
+  assert.ok(
+    markdown.includes(`description: ${plain}`),
+    "a safe scalar must stay unquoted, or every compiled file in every repo churns and every integrity hash moves",
+  );
+});
