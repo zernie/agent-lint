@@ -574,3 +574,40 @@ test("eval tier (entry set) stays strictly serial — overlap there is billed tw
     cleanupTmpDir(dir);
   }
 });
+
+// ── a script that could not LOAD did not run ──────────────────────────────────
+// The distinction decides whether coverage is RETRACTED: `fail` retracts, `skip`
+// does not. Measured twice on 2026-08-20 — a container restore left a stale
+// node_modules, every harness died on `Named export 'recordCheck' not found`, and
+// the consumer's ledger fell 48 → 34 and 47 → 33 for surfaces nothing had touched.
+test("a module-resolution failure is a skip, not a fail", () => {
+  const loaderErrors = [
+    "Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/x/y.mjs'",
+    "Error: Cannot find package 'js-yaml' imported from /x/y.mjs",
+    "SyntaxError: Named export 'recordCheck' not found. The requested module 'vigiles' is a CommonJS module",
+    "Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath './nope' is not defined",
+  ];
+  for (const out of loaderErrors)
+    assert.equal(
+      statusFor(1, undefined, out),
+      "skip",
+      `a loader error must not retract coverage: ${out.slice(0, 48)}`,
+    );
+});
+
+test("an ordinary failure is still a fail, and still retracts", () => {
+  // The whole point of the retraction rule: a script that RAN and proved nothing
+  // must not keep yesterday's green record alive.
+  assert.equal(
+    statusFor(1, 3, "AssertionError: expected 1 to equal 2"),
+    "fail",
+  );
+  assert.equal(statusFor(1, 0, ""), "fail");
+  assert.equal(statusFor(1, undefined, undefined), "fail");
+  // …and a passing run that merely MENTIONS a loader string is untouched, because
+  // the check only applies on a non-zero exit.
+  assert.equal(
+    statusFor(0, 2, "ERR_MODULE_NOT_FOUND appears in this output"),
+    "pass",
+  );
+});

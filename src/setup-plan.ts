@@ -196,6 +196,10 @@ export const NUDGE_RULES = [
   "delegation-trifecta",
   "hook-block-ineffective",
   "hook-matcher",
+  // Default OFF for a measured reason, not a rollout one: 0 true positives over
+  // 2 582 markdown files, because a fence in prose is a drawing of config rather
+  // than config. See docs/rules/doc-refs.md.
+  "doc-refs",
 ] as const;
 
 export function mergeProjectConfig(

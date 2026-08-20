@@ -233,6 +233,15 @@ export const RULE_META: Record<RuleName, RuleMeta> = {
     detector: "hookMatcherIssues",
     upstreamPrevention: "compiled hook tool()/tools() matcher is typed",
   },
+  "doc-refs": {
+    id: "doc-refs",
+    bucket: "external-decidable",
+    surface: ["docs"],
+    defaultSeverity: "off",
+    summary:
+      "Builder calls quoted in markdown ```ts fences resolve for real (opt-in: a fence is usually a drawing of config, not config).",
+    detector: "findDocRefs",
+  },
   "prefer-compiled-hooks": {
     id: "prefer-compiled-hooks",
     bucket: "heuristic-behavioral",

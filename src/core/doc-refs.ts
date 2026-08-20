@@ -358,7 +358,15 @@ export function findDocRefs(options: FindDocRefsOptions = {}): DocRefReport {
 }
 
 /** Format a DocRefReport as human-readable text. */
-export function formatDocRefReport(report: DocRefReport): string {
+export function formatDocRefReport(
+  report: DocRefReport,
+  /**
+   * The severity `doc-refs` is configured at. A `✗` next to an exit code of 0
+   * reads as a gate that failed to gate, so the marker follows the severity the
+   * user actually set rather than always claiming the hard tier.
+   */
+  severity: "error" | "warn" = "error",
+): string {
   const lines: string[] = [];
   const meta: string[] = [];
   if (report.filesIgnored > 0)
@@ -378,7 +386,9 @@ export function formatDocRefReport(report: DocRefReport): string {
 
   if (report.errors.length === 0) return lines.join("\n");
 
-  lines.push(`✗ ${String(report.errors.length)} broken ref(s):`);
+  lines.push(
+    `${severity === "error" ? "✗" : "ℹ"} ${String(report.errors.length)} broken ref(s):`,
+  );
   for (const e of report.errors.slice(0, 12)) {
     const trunc =
       e.message.length > 80 ? `${e.message.slice(0, 80)}…` : e.message;

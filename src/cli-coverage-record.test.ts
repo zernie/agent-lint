@@ -245,7 +245,7 @@ test("…and putting the harness back restores the credit, without re-running it
 test("a harness that EVALUATES a compiled hook in-process records it", () => {
   write(
     ".vigiles/hooks/guard.hook.mjs",
-    `import { defineHook, tool, deny, allow } from ${JSON.stringify(HOOK_ENTRY)};\n` +
+    `import { experimental_defineHook as defineHook, tool, deny, allow } from ${JSON.stringify(HOOK_ENTRY)};\n` +
       `export default defineHook({ on: "PreToolUse", match: tool("Bash"),\n` +
       `  decide: (e) => e.command.runs("git push", { force: true }) ? deny("no") : allow() });\n`,
   );
@@ -292,7 +292,7 @@ test("…but a harness that only LOADS one records nothing", () => {
   // execution tier exists to remove. Same fixture, one line shorter.
   write(
     ".vigiles/hooks/guard.hook.mjs",
-    `import { defineHook, tool, deny, allow } from ${JSON.stringify(HOOK_ENTRY)};\n` +
+    `import { experimental_defineHook as defineHook, tool, deny, allow } from ${JSON.stringify(HOOK_ENTRY)};\n` +
       `export default defineHook({ on: "PreToolUse", match: tool("Bash"),\n` +
       `  decide: () => allow() });\n`,
   );

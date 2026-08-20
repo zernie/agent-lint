@@ -90,10 +90,47 @@ export const SKIP_EXIT_CODE = 77;
 export function statusFor(
   code: number,
   checks: number | undefined,
+  output?: string,
 ): ScriptStatus {
   if (code === SKIP_EXIT_CODE) return "skip";
-  if (code !== 0) return "fail";
+  if (code !== 0) return didNotLoad(output) ? "skip" : "fail";
   return checks === 0 ? "vacuous" : "pass";
+}
+
+/**
+ * Did the script fail to LOAD, rather than fail?
+ *
+ * 🔴 The distinction is not cosmetic, because `fail` RETRACTS coverage while
+ * `skip` does not (see the table on `runsFromResults`). The rule for `fail` —
+ * "it ran and proved nothing, so it must not keep yesterday's green record
+ * alive" — is right, and it does not describe a file the runtime never
+ * evaluated. A module that cannot resolve executed no assertion; it is the same
+ * "did not run" as a missing `claude` CLI, arriving through a different door.
+ *
+ * MEASURED, twice in one session on 2026-08-20: a container restore left an old
+ * `node_modules` behind, every harness in the consumer repo died on `Named export
+ * 'recordCheck' not found`, and the ledger dropped from 48 records to 34 and from
+ * 47 to 33. Nothing about those surfaces had changed — the machine had.
+ *
+ * ⚠️ This does NOT make a broken environment quiet. A skip still prints `⊘
+ * SKIPPED`, and `--no-skip` — which this repo's own CI passes — still fails the
+ * run. What changes is only whether a machine problem is allowed to delete a
+ * measurement taken on a machine that worked.
+ *
+ * Deliberately literal, and only the loader's own vocabulary: these strings come
+ * from Node's module resolution, not from user code. A test that legitimately
+ * asserts on one of them exits 0 or asserts, and never reaches here.
+ */
+function didNotLoad(output: string | undefined): boolean {
+  if (output === undefined || output === "") return false;
+  return (
+    output.includes("ERR_MODULE_NOT_FOUND") ||
+    output.includes("Cannot find package") ||
+    output.includes("Cannot find module") ||
+    /SyntaxError: Named export '[^']*' not found/.test(output) ||
+    output.includes("ERR_UNSUPPORTED_DIR_IMPORT") ||
+    output.includes("ERR_PACKAGE_PATH_NOT_EXPORTED")
+  );
 }
 
 /** Filename extensions accepted for harness/eval scripts (JS and TS). */
@@ -296,12 +333,13 @@ export async function runScripts(
       child.stdout.on("data", (c: Buffer) => chunks.push(c));
       child.stderr.on("data", (c: Buffer) => chunks.push(c));
       const finish = (code: number): void => {
-        process.stdout.write(Buffer.concat(chunks));
+        const output = Buffer.concat(chunks).toString("utf8");
+        process.stdout.write(output);
         const report = readCheckReport(countFile);
         resolveRun({
           file,
           code,
-          status: statusFor(code, report?.checks),
+          status: statusFor(code, report?.checks, output),
           checks: report?.checks,
           ...(report ? { surfaces: report.surfaces } : {}),
         });

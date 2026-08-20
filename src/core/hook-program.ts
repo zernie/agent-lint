@@ -771,6 +771,10 @@ export interface HookProgram<
 }
 
 export const tool = (name: string): { tool: string } => ({ tool: name });
+/**
+ * @experimental Compiled hooks are provisional — see docs/experimental.md.
+ * Imported as `experimental_defineHook`; alias it at the import site.
+ */
 export function defineHook<const N extends readonly NeedSpec[] = readonly []>(
   p: HookProgram<N>,
 ): HookProgram<N> {
@@ -1375,6 +1379,10 @@ export interface FileGateHook<
 export const tools = (...names: string[]): { tools: string[] } => ({
   tools: names,
 });
+/**
+ * @experimental Compiled hooks are provisional — see docs/experimental.md.
+ * Imported as `experimental_defineFileGate`; alias it at the import site.
+ */
 export function defineFileGate<
   const N extends readonly NeedSpec[] = readonly [],
 >(p: Omit<FileGateHook<N>, "role">): FileGateHook<N> {
@@ -1453,6 +1461,10 @@ export interface PromptGateHook<
   /** Decide over the prompt. `deny` blocks/erases the prompt; `ask` defers to the user. */
   readonly decide: (e: PromptEvent<N>) => Decision;
 }
+/**
+ * @experimental Compiled hooks are provisional — see docs/experimental.md.
+ * Imported as `experimental_definePromptGate`; alias it at the import site.
+ */
 export function definePromptGate<
   const N extends readonly NeedSpec[] = readonly [],
 >(p: Omit<PromptGateHook<N>, "role">): PromptGateHook<N> {
@@ -1504,6 +1516,10 @@ export interface StopGateHook<
   /** Decide whether the agent may stop. `deny` keeps it going; `allow` lets it stop. */
   readonly decide: (e: StopEvent<N>) => Decision;
 }
+/**
+ * @experimental Compiled hooks are provisional — see docs/experimental.md.
+ * Imported as `experimental_defineStopGate`; alias it at the import site.
+ */
 export function defineStopGate<
   const N extends readonly NeedSpec[] = readonly [],
 >(p: Omit<StopGateHook<N>, "role">): StopGateHook<N> {
@@ -1578,6 +1594,10 @@ export interface InjectHook<
   /** Produces context to add. Its return type (Injection) has no `deny` — by design. */
   readonly produce: (e: SessionEvent<N>) => Injection;
 }
+/**
+ * @experimental Compiled hooks are provisional — see docs/experimental.md.
+ * Imported as `experimental_defineInject`; alias it at the import site.
+ */
 export function defineInject<const N extends readonly NeedSpec[] = readonly []>(
   p: Omit<InjectHook<N>, "role">,
 ): InjectHook<N> {
@@ -1756,6 +1776,10 @@ export interface ReactHook<
   /** Reacts to a tool that already ran. Returns a Reaction — NO `deny` exists here. */
   readonly react: (e: ReactEvent<N>) => Reaction;
 }
+/**
+ * @experimental Compiled hooks are provisional — see docs/experimental.md.
+ * Imported as `experimental_defineReact`; alias it at the import site.
+ */
 export function defineReact<const N extends readonly NeedSpec[] = readonly []>(
   p: Omit<ReactHook<N>, "role">,
 ): ReactHook<N> {

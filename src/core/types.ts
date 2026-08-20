@@ -335,6 +335,25 @@ export interface RulesConfig {
    * docs/rules/hook-matcher.md.
    */
   "hook-matcher"?: RuleSeverity;
+  /**
+   * Validate vigiles-builder calls quoted inside ```ts fences in markdown —
+   * `enforce()` / `file()` / `cmd()` / `ref()` — against the real linter catalog,
+   * filesystem and package scripts.
+   *
+   * DEFAULT OFF, and the default is the finding. Measured on two repositories
+   * 2026-08-19 (2 582 markdown files, 52 refs): **zero true positives, and every
+   * error it has ever raised was a false one** — a design sketch writing
+   * `cmd("npm test")` for a package that doesn't exist yet, or a third-party
+   * `CLAUDE.md` captured verbatim as benchmark data. The reason is structural,
+   * not calibration: a fenced block in prose is a DRAWING of config, and this
+   * rule reads it as config. The consumer repo could only reach a clean `lint`
+   * by excluding a third of itself, after which the pass scanned 604 files and
+   * found 0 refs — inert, and still paying for the walk.
+   *
+   * Turn it on where markdown really is the source (a docs site whose fences are
+   * copy-pasted into live specs). See docs/rules/doc-refs.md.
+   */
+  "doc-refs"?: RuleSeverity;
 }
 
 // ---------------------------------------------------------------------------

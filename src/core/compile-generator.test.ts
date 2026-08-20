@@ -212,6 +212,103 @@ test("compile quotes a description YAML would otherwise mis-read", () => {
   assert.match(markdown, /allowed-tools: \[Read, WebSearch\]/);
 });
 
+// ── the same property, over the scalars YAML actually mis-reads ───────────────
+// One example proves the colon-space case and nothing else. YAML has a dozen ways
+// to read a bare scalar as something other than the string that was written, and a
+// description is arbitrary human prose, so the guarantee has to be stated as a
+// PROPERTY over the space rather than as a sample from it: whatever goes in comes
+// back out identical, and quoting fires only when it must.
+//
+// This is the whole reason a downstream repo does not need its own check. Before
+// this, a consumer proved the reader failed closed by hand-editing a compiled
+// SKILL.md — text surgery that assumed how the corpus happened to be quoted, and
+// that assumption stops holding the moment quoting became conditional (above).
+// The emission side is provable here; the hand-edit side is what `frontmatter-valid`
+// and the integrity hash are for.
+const ADVERSARIAL_SCALARS: readonly (readonly [string, string])[] = [
+  ["colon-space in prose", "Find the venue: rank it by fit, not prestige."],
+  ["leading hash", "# not a comment, an actual description"],
+  ["trailing hash", "Audit a channel # before buying ads"],
+  ["leading dash-space", "- looks like a list item but is prose"],
+  ["leading bracket", "[bracketed] opening that YAML reads as a flow sequence"],
+  ["leading brace", "{braced} opening that YAML reads as a flow mapping"],
+  ["leading percent", "%YAML-looking directive at the start"],
+  ["leading at-sign", "@reserved indicator in YAML 1.2"],
+  ["leading backtick", "`reserved indicator too"],
+  ["leading ampersand", "&anchor-looking first character"],
+  ["leading asterisk", "*alias-looking first character"],
+  ["leading exclamation", "!tag-looking first character"],
+  ["leading pipe", "|block scalar indicator"],
+  ["leading gt", ">folded scalar indicator"],
+  ["leading quote", '"opens with a quote it never closes'],
+  ["bare yes", "yes"],
+  ["bare no", "no"],
+  ["bare on", "on"],
+  ["bare off", "off"],
+  ["bare null", "null"],
+  ["bare true", "true"],
+  ["numeric-looking", "1.0"],
+  ["version-looking", "1.2.3"],
+  ["sexagesimal-looking", "12:30:45"],
+  ["trailing space", "ends with a space "],
+  ["embedded double quote", 'says "hello" in the middle'],
+  ["embedded single quote", "it's got an apostrophe"],
+  ["embedded backslash", "a path-like C:\\Users\\x in prose"],
+  ["non-ascii with colon", "Замер врёт: неаналоги в выборке."],
+];
+
+for (const [label, description] of ADVERSARIAL_SCALARS) {
+  test(`compile round-trips a description: ${label}`, () => {
+    const { markdown } = compileSkill({
+      name: "probe-skill",
+      description,
+      body: "Body.",
+    } as never);
+    const fm = readFrontmatter(markdown);
+    assert.equal(
+      fm.malformed,
+      false,
+      `compiled frontmatter must parse — ${label} produced a block a strict loader rejects`,
+    );
+    // 🔴 The oracle is the RAW parsed value, not `frontmatterScalar`. That helper
+    // trims by contract (a reader should not care about stray whitespace), so it
+    // cannot witness a byte-exact round trip — the `trailing space` row is the one
+    // that proved it, by going red against a compiler that had emitted the value
+    // correctly. A red test is a finding about the test until the product is ruled
+    // out; here the product was fine and the oracle was wrong.
+    assert.equal(
+      fm.data?.["description"],
+      description,
+      `and must round-trip UNCHANGED — ${label} came back as something else, which is worse ` +
+        "than failing to parse: the file looks fine and the value is silently different",
+    );
+  });
+}
+
+// The other direction, as a property too: a scalar YAML reads back correctly must be
+// left bare. Quoting that fires when it need not moves every integrity hash in every
+// consumer repo, which reads as "vigiles rewrote my files".
+const SAFE_SCALARS: readonly string[] = [
+  "Search products on ozon.kz and return live listings.",
+  "Разобрать выписки за месяц и пересчитать NW.",
+  "Rank venues by fit — dashes and em-dashes are fine",
+  "Parentheses (like these) and commas, too",
+];
+
+for (const description of SAFE_SCALARS) {
+  test(`compile leaves a safe description bare: ${description.slice(0, 32)}…`, () => {
+    const { markdown } = compileSkill({
+      name: "probe-skill",
+      description,
+      body: "Body.",
+    } as never);
+    assert.ok(
+      markdown.includes(`description: ${description}`),
+      "a scalar that round-trips bare must stay bare, or every compiled file churns",
+    );
+  });
+}
+
 test("compile leaves an already-safe description bare — no hash churn", () => {
   const plain = "Search products on ozon.kz and return live listings.";
   const { markdown } = compileSkill({

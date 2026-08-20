@@ -7,7 +7,77 @@ on:
     branches: [main]
 
 jobs:
+  # ── WHICH JOBS THIS COMMIT ACTUALLY NEEDS ────────────────────────────────────
+  # Until 2026-08-19 this workflow had no path filter at all, so every PR paid for
+  # all five jobs whatever it touched. Measured on PR #167 (16 files: src/, docs/,
+  # CLAUDE.md — none under site/): the `site` job built the engine, downloaded a
+  # browser and ran the demo suite against code the diff could not reach. Twice, at
+  # ~15 minutes each, because the browser install wedged.
+  #
+  # A workflow-level `paths:` cannot express this — it decides whether to run the
+  # workflow AT ALL and says nothing about individual jobs. Hence this job: one API
+  # call, no checkout, ~10s, and an `if:` on the jobs whose inputs are disjoint from
+  # what changed.
+  #
+  # 🔴 THE RULE INSIDE: any doubt runs everything. An empty list, a failed call, a
+  # push whose `before` is all zeros (a new branch), a manual dispatch — all fall
+  # through to true. A SKIPPED job and a PASSED job look identical in the checks
+  # list, so the cost of a wrong skip is a green tick over work nobody did, while
+  # the cost of a wrong run is a few minutes.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      root: ${{ steps.f.outputs.root }}
+      site: ${{ steps.f.outputs.site }}
+    steps:
+      - id: f
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          files=""
+          case "${{ github.event_name }}" in
+            pull_request)
+              files=$(gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.number }}/files" \
+                        --jq '.[].filename' 2>/dev/null || true) ;;
+            push)
+              before="${{ github.event.before }}"
+              if [ -n "$before" ] && [ "$before" != "0000000000000000000000000000000000000000" ]; then
+                files=$(gh api "repos/${{ github.repository }}/compare/$before...${{ github.sha }}" \
+                          --jq '.files[].filename' 2>/dev/null || true)
+              fi ;;
+          esac
+          if [ -z "$files" ]; then
+            echo "root=true"  >> "$GITHUB_OUTPUT"
+            echo "site=true"  >> "$GITHUB_OUTPUT"
+            echo "no usable file list for ${{ github.event_name }} — running everything"
+            exit 0
+          fi
+          echo "$files" | sed 's/^/  /'
+
+          # `root` — everything except the site. False ONLY when every changed file
+          # is under site/, because nothing outside site/ imports anything inside it.
+          if echo "$files" | grep -qvE '^site/'; then root=true; else root=false; fi
+
+          # `site` — the demo. It imports the built engine through three aliases
+          # (@engine/scan-files, @engine/audit-report, @engine/spec), so any src/
+          # change can reach it and must run it. What CANNOT reach it: prose and
+          # agent config. Verified 2026-08-19 by grepping the three bundles the site
+          # actually loads — the lint rule table (`DEFAULT_RULES`, `frontmatter-valid`)
+          # appears in none of them, so a rules change is invisible to the demo.
+          # Its check pages are generated from site/src/checks/checks.ts, NOT from
+          # docs/, so docs cannot reach it through the page generator either.
+          if echo "$files" | grep -qvE '^(docs/|\.claude/|[^/]*\.md$)'; then site=true; else site=false; fi
+
+          echo "root=$root" >> "$GITHUB_OUTPUT"
+          echo "site=$site" >> "$GITHUB_OUTPUT"
+          [ "$root" = true ] || echo "site-only change — the root jobs are skipped"
+          [ "$site" = true ] || echo "prose/agent-config only — the site job is skipped"
+
   test:
+    needs: changes
+    if: needs.changes.outputs.root == 'true'
     runs-on: ubuntu-latest
     # Bounded 2026-08-19. Every job in this repository was unbounded, so a hung one
     # ran to GitHub's six-hour ceiling — the one failure mode a green checkmark
@@ -314,6 +384,8 @@ jobs:
     # tier runs the real claude CLI against a scripted mock model, so it needs
     # no API key and costs nothing. The eval tier (real model) is run manually
     # via `npm run test:eval`.
+    needs: changes
+    if: needs.changes.outputs.root == 'true'
     runs-on: ubuntu-latest
     # measured 45s.
     timeout-minutes: 10
@@ -348,6 +420,8 @@ jobs:
   # the REAL built bundle and drives it, incl. the 390px mobile-overflow gate that
   # catches layout bleed a component-level test can't (no viewport in @vitest/browser).
   site:
+    needs: changes
+    if: needs.changes.outputs.site == 'true'
     runs-on: ubuntu-latest
     # measured 3m35s.
     timeout-minutes: 15
@@ -366,8 +440,36 @@ jobs:
       - name: Build engine (root dist/)
         run: npm run build
 
+      # 🔴 THIS STEP ATE THE WHOLE JOB TWICE (2026-08-19, runs 32300064395 and
+      # 32303343213), and neither failure was in the diff under review. Two separate
+      # causes, fixed separately:
+      #
+      #  1. `--with-deps` shells out to `apt-get update`, which hung on
+      #     azure.archive.ubuntu.com (`Ign:` on every line, then silence for 12
+      #     minutes until the job bond killed it). `ubuntu-latest` already ships the
+      #     system libraries Chromium needs — `--with-deps` exists for bare
+      #     containers. Dropping it removes the apt call, and with it the only part
+      #     of this step that touches a distro mirror. If a library really is
+      #     missing, the browser fails to LAUNCH in the next step, in seconds, with
+      #     the missing .so named — a loud failure instead of a silent 15-minute hang.
+      #  2. Chromium (~150 MB) was re-downloaded on every run with no cache, so the
+      #     step's floor was a full download even on a good day.
+      #
+      # The step bond is the third leg: a hang now costs 5 minutes, not the job. The
+      # job bond cannot distinguish "this step wedged" from "the suite is slow".
+      - name: Cache the Playwright browser
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          # Keyed on the resolved Playwright version: a bump must miss the cache,
+          # because the browser build is pinned to it.
+          key: pw-${{ runner.os }}-${{ hashFiles('site/package-lock.json', 'package-lock.json') }}
+
       - name: Install Chromium for Playwright (vitest browser mode)
-        run: npx playwright install --with-deps chromium
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 5
+        run: npx playwright install chromium
         working-directory: site
 
       - name: Run site browser tests (parity + interaction + grade-cache)
@@ -389,6 +491,8 @@ jobs:
   # tests run FOR REAL. Tests still self-skip via egressRoutes() if egress can't
   # route, so the job never fails red. See research/egress-sandbox-tooling.md.
   e2e:
+    needs: changes
+    if: needs.changes.outputs.root == 'true'
     runs-on: ubuntu-latest
     # measured 1m16s.
     timeout-minutes: 10

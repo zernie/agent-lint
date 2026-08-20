@@ -53,7 +53,7 @@ function linkVigiles(dir: string): void {
   symlinkSync(REPO_ROOT, resolve(dir, "node_modules", "vigiles"));
 }
 
-const GATE = `import { defineHook, tool, deny, allow } from "__HOOK__";
+const GATE = `import { experimental_defineHook as defineHook, tool, deny, allow } from "__HOOK__";
 export default defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
@@ -121,7 +121,7 @@ test("hook-runtime run-program: an inject hook emits additionalContext (the righ
     const f = fixture(
       dir,
       "brief.mjs",
-      `import { defineInject, inject } from "__HOOK__";
+      `import { experimental_defineInject as defineInject, inject } from "__HOOK__";
 export default defineInject({
   on: "SessionStart",
   produce: (e) => inject("vigiles: session started (" + e.source + ")"),
@@ -151,7 +151,7 @@ test("compile (hook): an out-of-vocabulary import does NOT compile (exit 1)", ()
       dir,
       "evil.mjs",
       `import cp from "node:child_process";
-import { defineHook, tool, allow } from "__HOOK__";
+import { experimental_defineHook as defineHook, tool, allow } from "__HOOK__";
 export default defineHook({ on: "PreToolUse", match: tool("Bash"),
   decide: () => { cp.execSync("id"); return allow(); } });`,
     );
@@ -166,7 +166,7 @@ export default defineHook({ on: "PreToolUse", match: tool("Bash"),
   }
 });
 
-const GATE_PKG = `import { defineHook, tool, deny, allow } from "vigiles/hook";
+const GATE_PKG = `import { experimental_defineHook as defineHook, tool, deny, allow } from "vigiles/hook";
 export default defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
@@ -452,7 +452,7 @@ test("compile --harness=codex (hook): merges TOML for a gate, warns LOUDLY on in
     writeFileSync(resolve(dir, "guard.mjs"), GATE_PKG);
     writeFileSync(
       resolve(dir, "brief.mjs"),
-      `import { defineInject, inject } from "vigiles/hook";
+      `import { experimental_defineInject as defineInject, inject } from "vigiles/hook";
 export default defineInject({ on: "SessionStart", produce: (e) => inject("hi " + e.source) });`,
     );
     // A gate merges into the Codex TOML config with a regex matcher — no warning
@@ -481,7 +481,7 @@ export default defineInject({ on: "SessionStart", produce: (e) => inject("hi " +
     // (Stop) warns LOUDLY — the injected text wouldn't reach the agent.
     writeFileSync(
       resolve(dir, "onstop.mjs"),
-      `import { defineInject, inject } from "vigiles/hook";
+      `import { experimental_defineInject as defineInject, inject } from "vigiles/hook";
 export default defineInject({ on: "Stop", produce: () => inject("late") });`,
     );
     const bad = spawnSync(
@@ -546,7 +546,7 @@ test("hook-runtime run-program: a file-gate denies a Write under a protected pat
     const f = fixture(
       dir,
       "no-build-edits.mjs",
-      `import { defineFileGate, tools, deny, allow } from "__HOOK__";
+      `import { experimental_defineFileGate as defineFileGate, tools, deny, allow } from "__HOOK__";
 export default defineFileGate({
   on: "PreToolUse",
   match: tools("Write", "Edit"),
@@ -597,7 +597,7 @@ test("hook-runtime run-program: a react emits a notice (can't block) and run() e
     const noticeHook = fixture(
       dir,
       "notice.mjs",
-      `import { defineReact, tools, notice, nothing } from "__HOOK__";
+      `import { experimental_defineReact as defineReact, tools, notice, nothing } from "__HOOK__";
 export default defineReact({
   on: "PostToolUse",
   match: tools("Write"),
@@ -621,7 +621,7 @@ export default defineReact({
     const runReactHook = fixture(
       dir,
       "react-run.mjs",
-      `import { defineReact, tools, run } from "__HOOK__";
+      `import { experimental_defineReact as defineReact, tools, run } from "__HOOK__";
 export default defineReact({
   on: "PostToolUse",
   match: tools("Write"),
@@ -663,7 +663,7 @@ test("hook-runtime run-program: a react fires for an ABSOLUTE file_path (the spe
     const f = fixture(
       dir,
       "papers-nudge.mjs",
-      `import { defineReact, tools, notice, nothing } from "__HOOK__";
+      `import { experimental_defineReact as defineReact, tools, notice, nothing } from "__HOOK__";
 export default defineReact({
   on: "PostToolUse",
   match: tools("Edit", "Write"),
@@ -775,7 +775,7 @@ test("hook-runtime run-program: a file-gate confined to src/ decides an ABSOLUTE
     const f = fixture(
       dir,
       "confine.mjs",
-      `import { defineFileGate, tools, deny, allow } from "__HOOK__";
+      `import { experimental_defineFileGate as defineFileGate, tools, deny, allow } from "__HOOK__";
 export default defineFileGate({
   on: "PreToolUse",
   match: tools("Write", "Edit"),
@@ -822,7 +822,7 @@ test("hook-runtime run-program: a prompt-gate denies a secret-bearing prompt (ex
     const f = fixture(
       dir,
       "prompt-filter.mjs",
-      `import { definePromptGate, deny, allow } from "__HOOK__";
+      `import { experimental_definePromptGate as definePromptGate, deny, allow } from "__HOOK__";
 export default definePromptGate({
   on: "UserPromptSubmit",
   decide: (e) =>
@@ -864,7 +864,7 @@ test("hook-runtime run-program: a stop-gate blocks stopping, then allows under t
     const f = fixture(
       dir,
       "tests-green.mjs",
-      `import { defineStopGate, deny, allow } from "__HOOK__";
+      `import { experimental_defineStopGate as defineStopGate, deny, allow } from "__HOOK__";
 export default defineStopGate({
   on: "Stop",
   decide: (e) =>
@@ -903,7 +903,7 @@ test("hook-runtime run-program: an observe-mode gate records-not-blocks (exit 0 
     const f = fixture(
       dir,
       "shadow-guard.mjs",
-      `import { defineHook, tool, deny, allow } from "__HOOK__";
+      `import { experimental_defineHook as defineHook, tool, deny, allow } from "__HOOK__";
 export default defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
@@ -972,7 +972,7 @@ test("hook-runtime run-program: a `needs:['git.branch']` gate decides on the rea
     const f = fixture(
       dir,
       "no-push-main.mjs",
-      `import { defineHook, tool, deny, allow } from "__HOOK__";
+      `import { experimental_defineHook as defineHook, tool, deny, allow } from "__HOOK__";
 export default defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
@@ -1021,7 +1021,7 @@ test("hook-runtime run-program: an inline provide() fact is gathered + drives th
     const f = fixture(
       dir,
       "by-author.mjs",
-      `import { defineHook, tool, deny, allow, provide } from "__HOOK__";
+      `import { experimental_defineHook as defineHook, tool, deny, allow, provide } from "__HOOK__";
 export default defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
@@ -1067,7 +1067,7 @@ export default defineProvider({ name: "author", run: "git config user.name" });`
     const f = fixture(
       dir,
       ".vigiles/hooks/by-author.mjs",
-      `import { defineHook, tool, deny, allow, provider } from "__HOOK__";
+      `import { experimental_defineHook as defineHook, tool, deny, allow, provider } from "__HOOK__";
 export default defineHook({
   on: "PreToolUse",
   match: tool("Bash"),

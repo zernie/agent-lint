@@ -28,6 +28,42 @@ function run(
 }
 
 describe("skillResourceIssues", () => {
+  // ── a file the skill WRITES is not a file the skill SHIPS ──────────────────
+  // Regression for a measured false positive (2026-08-20): a consumer skill's
+  // line "API responses are cached to `scripts/.cite-cache.json` (gitignored)
+  // so re-runs are cheap" was reported as a missing bundled resource, because
+  // `USE_DIRECTIVE`'s `runs` matches INSIDE `re-runs` (JavaScript's `\b` treats
+  // a hyphen as a word boundary). The three cases below are the fixture that
+  // isolated it: only the middle one ever fired.
+  it("does not flag a gitignored cache the skill writes, even with a verb inside a hyphenated word", () => {
+    const body =
+      "Responses are cached to `scripts/.cache.json` (gitignored) so re-runs are cheap.";
+    expect(run(body, existsOnly())).toEqual([]);
+  });
+
+  it("does not flag the same line phrased without the hyphenated word", () => {
+    const body =
+      "Responses are cached to `scripts/.cache.json` (gitignored) so subsequent invocations are cheap.";
+    expect(run(body, existsOnly())).toEqual([]);
+  });
+
+  it("does not flag a markdown link to a file the line says is written at runtime", () => {
+    const body =
+      "The run drops a summary at [scripts/out.json](scripts/out.json), generated at runtime.";
+    expect(run(body, existsOnly())).toEqual([]);
+  });
+
+  // The veto is narrow ON PURPOSE: it keys on the line SAYING the file is
+  // produced, not on the hyphen. So a genuine directive that happens to carry a
+  // hyphenated verb must still be checked — otherwise this fix would trade one
+  // false positive for a false negative, which is the alternative it rejected.
+  it("still flags a missing file when a hyphenated verb is a REAL directive", () => {
+    const body = "Re-run `scripts/verify.sh` before submitting.";
+    const found = run(body, existsOnly());
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ resolved: "scripts/verify.sh" });
+  });
+
   it("does not flag a markdown link to an existing scripts/ file", () => {
     const body = "See [the runner](scripts/run.sh) for setup.";
     expect(run(body, existsOnly("scripts/run.sh"))).toEqual([]);

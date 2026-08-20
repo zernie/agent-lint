@@ -24,7 +24,7 @@
  * `vigiles hook-runtime run-program` entrypoint runs it.
  */
 import {
-  defineHook,
+  experimental_defineHook as defineHook,
   tool,
   deny,
   allow,

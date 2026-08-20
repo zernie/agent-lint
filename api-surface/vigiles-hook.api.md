@@ -121,30 +121,12 @@ export type Decision = {
 // @public
 export function decisionExitCode(d: Decision): number;
 
-// @public (undocumented)
-export function defineFileGate<const N extends readonly NeedSpec[] = readonly []>(p: Omit<FileGateHook<N>, "role">): FileGateHook<N>;
-
-// @public (undocumented)
-export function defineHook<const N extends readonly NeedSpec[] = readonly []>(p: HookProgram<N>): HookProgram<N>;
-
-// @public (undocumented)
-export function defineInject<const N extends readonly NeedSpec[] = readonly []>(p: Omit<InjectHook<N>, "role">): InjectHook<N>;
-
-// @public (undocumented)
-export function definePromptGate<const N extends readonly NeedSpec[] = readonly []>(p: Omit<PromptGateHook<N>, "role">): PromptGateHook<N>;
-
 // @public
 export const defineProvider: <const Name extends string>(p: {
     readonly name: Name;
     readonly run: string;
     readonly dangerous?: boolean;
 }) => RegisteredProvider<Name>;
-
-// @public (undocumented)
-export function defineReact<const N extends readonly NeedSpec[] = readonly []>(p: Omit<ReactHook<N>, "role">): ReactHook<N>;
-
-// @public (undocumented)
-export function defineStopGate<const N extends readonly NeedSpec[] = readonly []>(p: Omit<StopGateHook<N>, "role">): StopGateHook<N>;
 
 // @public (undocumented)
 export const deny: (reason: string) => Decision;
@@ -160,6 +142,24 @@ export type Duration = `${number}${"s" | "m" | "h" | "d"}`;
 
 // @public
 export function durationSeconds(d: string): number | null;
+
+// @public
+export function experimental_defineFileGate<const N extends readonly NeedSpec[] = readonly []>(p: Omit<FileGateHook<N>, "role">): FileGateHook<N>;
+
+// @public
+export function experimental_defineHook<const N extends readonly NeedSpec[] = readonly []>(p: HookProgram<N>): HookProgram<N>;
+
+// @public
+export function experimental_defineInject<const N extends readonly NeedSpec[] = readonly []>(p: Omit<InjectHook<N>, "role">): InjectHook<N>;
+
+// @public
+export function experimental_definePromptGate<const N extends readonly NeedSpec[] = readonly []>(p: Omit<PromptGateHook<N>, "role">): PromptGateHook<N>;
+
+// @public
+export function experimental_defineReact<const N extends readonly NeedSpec[] = readonly []>(p: Omit<ReactHook<N>, "role">): ReactHook<N>;
+
+// @public
+export function experimental_defineStopGate<const N extends readonly NeedSpec[] = readonly []>(p: Omit<StopGateHook<N>, "role">): StopGateHook<N>;
 
 // @public (undocumented)
 export interface FileGateHook<N extends readonly NeedSpec[] = readonly ProviderName[]> {

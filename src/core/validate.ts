@@ -126,6 +126,12 @@ export const DEFAULT_RULES: Required<RulesConfig> = {
   // that matches no tool name, or one too narrow for real server names) — WARN
   // by default (high-precision); raise to error to gate CI.
   "hook-matcher": "warn",
+  // Builder calls quoted inside ```ts fences in markdown — default OFF. Measured
+  // over 2 582 markdown files across two repos: 52 refs, 0 true positives, and
+  // every error raised was a false one (a design sketch's `cmd("npm test")`, a
+  // vendored third-party CLAUDE.md). A fence in prose is a DRAWING of config;
+  // reading it as config is the defect. Opt in where markdown IS the source.
+  "doc-refs": false,
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {

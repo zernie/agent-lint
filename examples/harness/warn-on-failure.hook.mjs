@@ -7,7 +7,12 @@
  * shells out and reads stdout sees nothing and concludes the hook is dead, when
  * it is working perfectly. `assertHookNotices` reads the reaction itself.
  */
-import { defineReact, tools, notice, nothing } from "../../dist/hook.js";
+import {
+  experimental_defineReact as defineReact,
+  tools,
+  notice,
+  nothing,
+} from "../../dist/hook.js";
 
 export default defineReact({
   on: "PostToolUse",

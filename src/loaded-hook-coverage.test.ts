@@ -36,7 +36,7 @@ import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 const HOOK_ENTRY = resolve(__dirname, "..", "dist", "hook.js");
 
-const GATE = `import { defineHook, tool, deny, allow } from ${JSON.stringify(HOOK_ENTRY)};
+const GATE = `import { experimental_defineHook as defineHook, tool, deny, allow } from ${JSON.stringify(HOOK_ENTRY)};
 export default defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
@@ -45,7 +45,7 @@ export default defineHook({
 });
 `;
 
-const REACT = `import { defineReact, tools, notice, nothing } from ${JSON.stringify(HOOK_ENTRY)};
+const REACT = `import { experimental_defineReact as defineReact, tools, notice, nothing } from ${JSON.stringify(HOOK_ENTRY)};
 export default defineReact({
   on: "PostToolUse",
   match: tools("Write"),
@@ -122,8 +122,12 @@ test("QUIET: a hook built IN-PROCESS has no file, so nothing is invented", async
   // There is no path to name, and the tier's first rule is that an unresolvable
   // reference is never guessed into a match. A missed record, never a false one.
   const rel = fixture("guard.mjs", GATE);
-  const { defineHook, tool, deny } = (await import(HOOK_ENTRY)) as {
-    defineHook: (o: unknown) => unknown;
+  const {
+    experimental_defineHook: defineHook,
+    tool,
+    deny,
+  } = (await import(HOOK_ENTRY)) as {
+    experimental_defineHook: (o: unknown) => unknown;
     tool: (n: string) => unknown;
     deny: (r: string) => unknown;
   };

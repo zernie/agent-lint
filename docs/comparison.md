@@ -49,7 +49,7 @@ Codex has no hook or plugin system. The compile-time verification and CI enforce
 
 ## What vigiles Does and Doesn't Validate in Markdown
 
-vigiles validates vigiles-specific things in `.md` files: `<!-- vigiles:enforce ... -->` comments (inline mode), `vigiles:` YAML frontmatter rules (frontmatter mode), and `enforce("...")` / `file("...")` / `cmd("...")` / `ref("...")` calls inside fenced TS/JS code blocks. Same engines used for `.spec.ts` references.
+vigiles validates vigiles-specific things in `.md` files: `<!-- vigiles:enforce ... -->` comments (inline mode) and `vigiles:` YAML frontmatter rules (frontmatter mode) — both on by default. It can also validate `enforce("...")` / `file("...")` / `cmd("...")` / `ref("...")` calls inside fenced TS/JS code blocks, but that one is **opt-in** (`doc-refs`, default off — see below). Same engines used for `.spec.ts` references.
 
 Out of scope — use other tools:
 
@@ -61,6 +61,14 @@ Out of scope — use other tools:
 | Markdown link validity (URLs, paths) | [markdown-link-check](https://github.com/tcort/markdown-link-check)             |
 | Spell / prose / grammar              | [Vale](https://vale.sh/), [alex](https://github.com/get-alex/alex)              |
 
+**Opt-in as of 2026-08-19 (`doc-refs`, default off).** Measured across two real repositories —
+2 582 markdown files, 52 builder refs — this pass produced **0 true positives**, and every error it
+had ever raised was false: design prose sketching an API that doesn't exist yet, and a third-party
+`CLAUDE.md` vendored as benchmark data. The cause is structural, not a threshold: a fenced block in
+prose is a _drawing_ of config, and the pass read it as config. Turn it on with
+`{"rules": {"doc-refs": "error"}}` where markdown genuinely is the source. Full measurement and the
+known gap: [docs/rules/doc-refs.md](rules/doc-refs.md).
+
 **What counts as a ref (2026-08-19).** Blocks are PARSED, not pattern-matched. A ref is a call
 whose callee is a bare `enforce` / `file` / `cmd` / `ref` identifier with a string-literal first
 argument. That means a method call on some other object (`ctx.file("OUT")`), a mention inside a
@@ -70,7 +78,7 @@ regex and reported as broken refs; `\b` sits happily after a `.`, and a regex ha
 comment or a string literal. Parsing makes all three inexpressible rather than individually
 excused.
 
-**Scope.** The pass reads `**/*.md` from the repo root and honours the top-level `exclude` in
+**Scope (when enabled).** The pass reads `**/*.md` from the repo root and honours the top-level `exclude` in
 `.vigilesrc.json`, so vendored or benchmark markdown (a third-party `CLAUDE.md` captured verbatim
 as test data) can be kept out of it. Before 2026-08-19 `exclude` was not applied here at all, which
 meant a repository vendoring other people's markdown had no way to reach a clean `lint` — and a
