@@ -16,6 +16,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import yaml from "js-yaml";
 
 const CI = resolve(__dirname, "..", ".github", "workflows", "ci.yml");
 
@@ -103,6 +104,46 @@ describe("the changes job classifies a diff", () => {
     // The prose arm anchors root-level `*.md` only (`[^/]*\.md$`). A markdown
     // fixture under src/ is test data, and test data changes what tests do.
     expect(decide("site", ["src/fixtures/CLAUDE.md"])).toBe(true);
+  });
+
+  it("every job is gated on `changes`, or exempt BY NAME with a reason", () => {
+    // 🔴 The drift this catches is not today's config, it is tomorrow's job. In the
+    // checks list a SKIPPED job and a PASSED job are the same tick, so a job added
+    // later with no `if:` looks exactly like a correctly-gated one that happened to
+    // run — the whole filter quietly stops meaning anything and nothing goes red.
+    //
+    // Exemptions are named here rather than inferred, so granting one is a visible
+    // edit in the diff.
+    const EXEMPT = new Map([
+      [
+        "changes",
+        "it is the classifier itself — gating it on itself is a cycle",
+      ],
+      [
+        "check",
+        "runs types:site AND cli-lint, so both halves of the repo are its inputs",
+      ],
+    ]);
+    const jobs = (
+      yaml.load(readFileSync(CI, "utf8")) as {
+        jobs: Record<string, { if?: string }>;
+      }
+    ).jobs;
+
+    const ungated = Object.entries(jobs)
+      .filter(([name]) => !EXEMPT.has(name))
+      .filter(([, job]) => !/needs\.changes\.outputs\./.test(job.if ?? ""))
+      .map(([name]) => name);
+    expect(
+      ungated,
+      `job(s) run on every commit with no path gate: ${ungated.join(", ")}. Add ` +
+        "`needs: changes` + `if: needs.changes.outputs.<flag>`, or name the job in " +
+        "EXEMPT with the reason it cannot be path-gated.",
+    ).toEqual([]);
+
+    // Vacuity guard: if every job ends up exempt the assertion above can no longer
+    // fail, and an empty list would read as health.
+    expect(EXEMPT.size).toBeLessThan(Object.keys(jobs).length);
   });
 
   it("an empty diff is not a licence to skip", () => {
