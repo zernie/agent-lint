@@ -25,6 +25,130 @@ const compiled = {
 };
 
 describe("mergeHooksJson", () => {
+  // A settings.json wired the way Claude Code's own docs recommend carries BOTH
+  // a quote and $CLAUDE_PROJECT_DIR. Before 2026-08-21 neither was stripped, so
+  // recompiling appended a second block beside the first — measured at twelve
+  // duplicates across twelve hooks in a real repo.
+  const wiredByHand = (hook: string) => ({
+    matcher: "Bash",
+    hooks: [
+      {
+        type: "command" as const,
+        command: `node "$CLAUDE_PROJECT_DIR/node_modules/vigiles/dist/cli.js" hook-runtime run-program "$CLAUDE_PROJECT_DIR/${hook}"`,
+      },
+    ],
+  });
+
+  it("replaces a hand-wired entry that quotes the path and uses $CLAUDE_PROJECT_DIR", () => {
+    const existing = {
+      hooks: { PreToolUse: [wiredByHand(".claude/hooks/x.hook.ts")] },
+    };
+    const compiled = {
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            {
+              type: "command" as const,
+              command:
+                "npx vigiles hook-runtime run-program .claude/hooks/x.hook.ts",
+            },
+          ],
+        },
+      ],
+    };
+    const out = mergeHooksJson(existing, compiled, ".claude/hooks/x.hook.ts");
+    expect(out.hooks?.PreToolUse).toHaveLength(1);
+  });
+
+  // The over-match that ACTUALLY threatens this change: `$CLAUDE_PROJECT_DIR` is
+  // stripped because it IS the project root by definition. Any OTHER variable
+  // names an unknown location — a sibling checkout, a plugin dir — and treating
+  // it as the root would delete a hook pointing somewhere else entirely.
+  it("does not treat a hook under a DIFFERENT variable as this project's", () => {
+    const existing = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [
+              {
+                type: "command" as const,
+                command:
+                  'npx vigiles hook-runtime run-program "$OTHER_REPO/.claude/hooks/x.hook.ts"',
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const compiled = {
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            {
+              type: "command" as const,
+              command:
+                "npx vigiles hook-runtime run-program .claude/hooks/x.hook.ts",
+            },
+          ],
+        },
+      ],
+    };
+    const out = mergeHooksJson(existing, compiled, ".claude/hooks/x.hook.ts");
+    expect(out.hooks?.PreToolUse).toHaveLength(2);
+  });
+
+  // 🔴 The over-match half, and it needed its own case: a mutation that ORs in a
+  // raw `command.includes(ref)` passed the "different hook" test green, because
+  // `other.hook.ts` does not contain `x.hook.ts` as a substring. Only a PREFIX
+  // COLLISION separates the two rules — which is the very case the module header
+  // says a substring test used to get wrong.
+  it("does not swallow a hand-wired hook whose name merely ENDS WITH this one", () => {
+    const existing = {
+      hooks: { PreToolUse: [wiredByHand(".claude/hooks/my-x.hook.ts")] },
+    };
+    const compiled = {
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            {
+              type: "command" as const,
+              command:
+                "npx vigiles hook-runtime run-program .claude/hooks/x.hook.ts",
+            },
+          ],
+        },
+      ],
+    };
+    const out = mergeHooksJson(existing, compiled, ".claude/hooks/x.hook.ts");
+    expect(out.hooks?.PreToolUse).toHaveLength(2);
+  });
+
+  it("still keeps a hand-wired entry for a DIFFERENT hook", () => {
+    const existing = {
+      hooks: { PreToolUse: [wiredByHand(".claude/hooks/other.hook.ts")] },
+    };
+    const compiled = {
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            {
+              type: "command" as const,
+              command:
+                "npx vigiles hook-runtime run-program .claude/hooks/x.hook.ts",
+            },
+          ],
+        },
+      ],
+    };
+    const out = mergeHooksJson(existing, compiled, ".claude/hooks/x.hook.ts");
+    expect(out.hooks?.PreToolUse).toHaveLength(2);
+  });
+
   it("adds the hook block to an empty settings object", () => {
     const out = mergeHooksJson({}, compiled, ".vigiles/hooks/g.mjs");
     expect(out.hooks?.PreToolUse).toHaveLength(1);
