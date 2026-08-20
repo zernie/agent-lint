@@ -25,6 +25,12 @@
     />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="vigiles" />
+    <!-- Self-referencing canonical. The same build is served from TWO hosts —
+         https://vigiles.sh/ (CNAME) and https://zernie.github.io/vigiles/ — so
+         without this Google picks the canonical itself and may consolidate onto
+         the github.io copy. The generated /checks/<slug>/ pages already carry one
+         (site/scripts/gen-check-pages.ts); the landing was the gap. -->
+    <link rel="canonical" href="https://vigiles.sh/" />
     <meta property="og:url" content="https://vigiles.sh/" />
     <!-- Absolute URL is required: OG crawlers can't resolve a relative path. -->
     <meta property="og:image" content="https://vigiles.sh/og.png" />
