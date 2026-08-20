@@ -256,6 +256,46 @@ const ILLUSTRATIVE_CUE =
 const MD_HEADING = /^\s{0,3}#{1,6}\s/;
 
 /**
+ * Whether the line describes a file the skill PRODUCES rather than one it ships.
+ *
+ * 🔴 WHY THIS IS SEPARATE FROM {@link ILLUSTRATIVE_CUE}. That one vetoes a
+ * HYPOTHETICAL mention — "a `scripts/rotate.py` would be helpful". This one
+ * vetoes a mention that is entirely real and entirely concrete, and still names
+ * a file that cannot be a bundled resource, because the skill's own prose says
+ * the file is written at runtime. Same veto, different reason, and collapsing
+ * them into one list would make the next reader think a gitignored cache is a
+ * kind of example.
+ *
+ * It is the read the module already takes elsewhere: {@link USE_DIRECTIVE}
+ * deliberately EXCLUDES authoring verbs (store/create/add/move/write) because
+ * "a file to CREATE" is not "a file the skill already ships". A cache written
+ * by the skill's own script is that same case; the verb list simply never
+ * covered the writing side.
+ *
+ * MEASURED 2026-08-20 on a real consumer skill (`verify-citations`), which read:
+ *
+ *     API responses are cached to `scripts/.cite-cache.json` (gitignored) so
+ *     re-runs are cheap.
+ *
+ * That produced `bundled resource not found`. Isolated to one word with a
+ * three-line fixture differing only in its tail: the same sentence ending
+ * "so subsequent invocations are cheap" stayed silent, and the same sentence
+ * with no tail stayed silent. The culprit is `re-runs` — JavaScript's `\b`
+ * counts a hyphen as a word boundary, so `USE_DIRECTIVE`'s `runs` matches
+ * INSIDE it, and a plural noun about repetition was read as an instruction to
+ * run the file.
+ *
+ * Fixing the hyphen instead was rejected by that same measurement: "re-run
+ * `scripts/x.sh` before submitting" is a genuine directive, so a rule about
+ * hyphens would trade this false positive for a false negative. The honest
+ * discriminator is not the hyphen, it is that the line says the file is made,
+ * not read. `gitignored` is the strongest form — a file the author states is
+ * outside the repository cannot be shipped inside it.
+ */
+const GENERATED_FILE_CUE =
+  /\bgit-?ignored\b|\.gitignore\b|\bcached? to\b|\bcache file\b|\bwrit(?:ten|es) to\b|\b(?:generated|created) at runtime\b/i;
+
+/**
  * Whether a bundle-path reference on this line reads as a REAL reference (the
  * agent is told to use the file) rather than an illustrative mention. Requires
  * a positive directive — a use verb, or the line being a heading (see
@@ -267,7 +307,8 @@ const MD_HEADING = /^\s{0,3}#{1,6}\s/;
  * real dead ref.
  */
 function inlinePathIsUsed(line: string): boolean {
-  if (ILLUSTRATIVE_CUE.test(line)) return false;
+  if (ILLUSTRATIVE_CUE.test(line) || GENERATED_FILE_CUE.test(line))
+    return false;
   return USE_DIRECTIVE.test(line) || MD_HEADING.test(line);
 }
 
@@ -297,7 +338,8 @@ function candidateFor(ref: MarkdownRef, line: string): Candidate | null {
     // Suppress it ONLY on an illustrative cue; do NOT also require a use
     // directive, or a plain `Resources: [API](references/api.md)` (no verb)
     // goes unchecked (Codex review — that under-detection).
-    if (ILLUSTRATIVE_CUE.test(line)) return null;
+    if (ILLUSTRATIVE_CUE.test(line) || GENERATED_FILE_CUE.test(line))
+      return null;
     const resolved = localResourceTarget(ref.value);
     if (resolved === null) return null;
     return { ref: ref.value.trim(), resolved, kind: "link", line: ref.line };
