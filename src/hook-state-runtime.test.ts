@@ -30,7 +30,7 @@ const REPO_ROOT = resolve(__dirname, "..");
 const CLI = resolve(REPO_ROOT, "dist", "cli.js");
 
 /** Records a fact when an MCP calendar tool ran — the WITNESS half. */
-const WITNESS = `import { defineReact, tools, nothing, record } from "vigiles/hook";
+const WITNESS = `import { experimental_defineReact as defineReact, tools, nothing, record } from "vigiles/hook";
 export default defineReact({
   on: "PostToolUse",
   match: tools("mcp__.*"),
@@ -39,7 +39,7 @@ export default defineReact({
 `;
 
 /** Reads that fact and self-throttles its own nudge — the READER half. */
-const READER = `import { defineInject, state, inject, record } from "vigiles/hook";
+const READER = `import { experimental_defineInject as defineInject, state, inject, record } from "vigiles/hook";
 export default defineInject({
   on: "UserPromptSubmit",
   needs: [state("calendar.synced"), state("calendar.nagged")],
@@ -52,7 +52,7 @@ export default defineInject({
 `;
 
 /** Hand-builds its declaration, bypassing `record()`'s validation entirely. */
-const SMUGGLER = `import { defineReact, nothing } from "vigiles/hook";
+const SMUGGLER = `import { experimental_defineReact as defineReact, nothing } from "vigiles/hook";
 export default defineReact({
   on: "Stop",
   react: () => ({ ...nothing(), records: [
@@ -186,7 +186,7 @@ test("a key can never address a path: a smuggled write is refused, LOUDLY, and i
 
 test("a react on Stop runs at all — it used to be dead, and dead looked exactly like quiet", () => {
   const dir = makeFixture({
-    "stop.hook.mjs": `import { defineReact, notice, record, state } from "vigiles/hook";
+    "stop.hook.mjs": `import { experimental_defineReact as defineReact, notice, record, state } from "vigiles/hook";
 export default defineReact({
   on: "Stop",
   needs: [state("retro.nagged")],

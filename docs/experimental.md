@@ -127,6 +127,49 @@ Three conditions, one of them now met:
 
 A **forked** skill (`context: "fork"`) with an `output:` contract, parsed by `parseAgentResult`. It is stable, it is covered by semver, and it is the right answer whenever the skill can afford to run as a subagent.
 
+## `experimental_define*` — authoring a hook as a typed program
+
+The six entry points of the compiled-hook vocabulary: `experimental_defineHook`,
+`experimental_defineFileGate`, `experimental_definePromptGate`,
+`experimental_defineStopGate`, `experimental_defineInject`,
+`experimental_defineReact`. The full guide is [`compiled-hooks.md`](compiled-hooks.md).
+
+Only the entry points carry the prefix, and that placement is the whole point:
+every other name in `vigiles/hook` — `allow`, `deny`, `tool`, `pathView`,
+`commandView`, `state`, `record`, `notice`, `run` — is reachable ONLY from inside
+a `define*` call. Prefixing the chokepoint makes the marking structural for the
+whole vocabulary; prefixing thirty names could not, because nothing would stop
+the thirty-first from shipping unmarked. Same reasoning as
+`experimental_skill.input()` above, applied to a larger surface.
+
+**Why it is not settled, stated as gaps rather than as a disclaimer:**
+
+- The vocabulary grew a whole new axis in one release. Runtime-owned named state
+  (`record`/`state`) landed 2026-08-12 to close a measured hole — seven advisory
+  hooks in the dogfood repo were still hand-written shell for one uniform reason,
+  every one of them both read and wrote a stamp file, and throttling was
+  inexpressible. An API that gained a dimension that recently has not been
+  pressure-tested by anyone but its author.
+- 🔴 **Testing a hook that uses named state is archaeology today.** The runtime
+  derives the store's path from the hook's own location and validates the key
+  charset, so a test that wants to seed "this fact was recorded four days ago"
+  must reconstruct a private path. The dogfood repo does exactly that, hard-coded,
+  and it broke when the facts were renamed. There is no supported seeding API
+  beside `runHook`. Until there is, a consumer testing a throttle is depending on
+  internals.
+- `vigiles compile` is not idempotent — it appends a duplicate wiring block that
+  has to be removed by hand.
+- Two consumers total, both belonging to the author.
+
+**What would have to be true to drop the prefix:** a supported way to seed and
+read named state in a test; an idempotent `compile`; and at least one consumer
+who did not write the API.
+
+**Stable alternative:** a hand-written shell hook wired in `settings.json`. The
+events and the protocol are the harness's, not ours — nothing about them is
+experimental. What you give up is the typed vocabulary and everything it makes
+unrepresentable.
+
 ## See also
 
 - [`compiled-hooks.md`](compiled-hooks.md) — the typed hook vocabulary, including `state()` / `record()`.

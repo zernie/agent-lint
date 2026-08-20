@@ -46,11 +46,19 @@
  * `docs/compiled-hooks.md`.
  */
 export {
-  // gate vocabulary
-  defineHook,
-  defineFileGate,
-  definePromptGate,
-  defineStopGate,
+  // ── the six ENTRY POINTS carry the experimental marking ─────────────────────
+  // Same shape as `experimental_skill`, and for the same stated reason: every
+  // other name in this file — `allow`, `deny`, `tool`, `pathView`, `state`,
+  // `record` — is reachable ONLY from inside a `define*` call, so prefixing the
+  // entry points makes the marking structural for the whole vocabulary. A
+  // per-name prefix could not guarantee that; a chokepoint can.
+  //
+  // Import them aliased, so the word crosses the package boundary exactly once:
+  //   import { experimental_defineInject as defineInject, state } from "vigiles/hook";
+  defineHook as experimental_defineHook,
+  defineFileGate as experimental_defineFileGate,
+  definePromptGate as experimental_definePromptGate,
+  defineStopGate as experimental_defineStopGate,
   tool,
   tools,
   allow,
@@ -61,10 +69,10 @@ export {
   gateAction,
   hookMode,
   // inject vocabulary
-  defineInject,
+  defineInject as experimental_defineInject,
   inject,
   // react vocabulary
-  defineReact,
+  defineReact as experimental_defineReact,
   run,
   notice,
   nothing,

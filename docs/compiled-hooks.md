@@ -1,5 +1,17 @@
 # Compiled hooks — author a hook that can't be wrong
 
+> ⚠️ **Compiled hooks are experimental.** They compile, they run in production in
+> two repos, and every property below is tested — but the authoring vocabulary is
+> not settled, and it is not covered by semver. The six entry points are named
+> `experimental_defineHook`, `experimental_defineFileGate`,
+> `experimental_definePromptGate`, `experimental_defineStopGate`,
+> `experimental_defineInject` and `experimental_defineReact`; alias them at the
+> import so the word crosses the package boundary once and the body stays
+> readable. [What would have to be true to drop the prefix](experimental.md).
+>
+> **Stable alternative:** a hand-written shell hook wired in `settings.json`. Same
+> events, same protocol, none of the guarantees this page is about.
+
 **A hook is the harness's deterministic gate: the one place that can _stop_ the agent before it does something irreversible.** But a hook today is opaque shell (`bash guard.sh`), and the parts you hand-write are exactly the parts that fail silently. The [README](../README.md) has the pitch; this is the full guide.
 
 vigiles lets you author a hook as a **pure typed function** `(event) => Decision` against a **closed vocabulary** (`vigiles/hook`), then compiles it to the harness protocol. The point isn't ergonomics — it's that **whole classes of hook bugs become unrepresentable**: you can't write the bug because the API has no way to express it.
@@ -48,7 +60,12 @@ Every **gate** (tool / prompt / stop) takes an optional `mode` — see [Observe 
 The entire surface a hook may touch (that's the safety guarantee):
 
 ```ts
-import { defineHook, tool, deny, allow } from "vigiles/hook";
+import {
+  experimental_defineHook as defineHook,
+  tool,
+  deny,
+  allow,
+} from "vigiles/hook";
 
 // Block any force-push to a protected branch — including one hidden in a
 // compound command, which a glob/grep matcher misses.
@@ -128,7 +145,11 @@ Throttling is not a separate feature — it is this one, read as "when did I las
 A prompt gate and a stop gate read like any other gate — they just decide over a different event:
 
 ```ts
-import { definePromptGate, deny, allow } from "vigiles/hook";
+import {
+  experimental_definePromptGate as definePromptGate,
+  deny,
+  allow,
+} from "vigiles/hook";
 
 // Refuse a prompt that looks like it's pasting a secret key.
 export default definePromptGate({
@@ -141,7 +162,11 @@ export default definePromptGate({
 ```
 
 ```ts
-import { defineStopGate, deny, allow } from "vigiles/hook";
+import {
+  experimental_defineStopGate as defineStopGate,
+  deny,
+  allow,
+} from "vigiles/hook";
 
 // Don't let the agent stop while the tests are red.
 export default defineStopGate({
@@ -181,7 +206,12 @@ In observe mode the runtime exits `0` (never blocks) and appends a record to **`
 The fix is the same one Cedar/OPA/Gatekeeper use: **the hook never fetches — it declares what it needs, and the trusted runtime gathers those read-only facts and hands them in** as `e.ctx`.
 
 ```ts
-import { defineHook, tool, deny, allow } from "vigiles/hook";
+import {
+  experimental_defineHook as defineHook,
+  tool,
+  deny,
+  allow,
+} from "vigiles/hook";
 
 export default defineHook({
   on: "PreToolUse",
@@ -201,7 +231,13 @@ The guarantee is intact and **stronger**: the hook still does zero I/O. The runt
 **The lightweight opt-out — `provide` / `dangerously`.** For a one-off, off-catalog fact you don't want to register a whole provider for, declare an **inline** command right in `needs`:
 
 ```ts
-import { defineHook, tool, deny, allow, provide } from "vigiles/hook";
+import {
+  experimental_defineHook as defineHook,
+  tool,
+  deny,
+  allow,
+  provide,
+} from "vigiles/hook";
 
 export default defineHook({
   on: "PreToolUse",

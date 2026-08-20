@@ -7,7 +7,12 @@
  * External users import from the package (`from "vigiles/hook"`); in-repo
  * examples point at the built dist so they run straight from a clone.
  */
-import { defineHook, tool, deny, allow } from "../../dist/hook.js";
+import {
+  experimental_defineHook as defineHook,
+  tool,
+  deny,
+  allow,
+} from "../../dist/hook.js";
 
 export default defineHook({
   on: "PreToolUse",

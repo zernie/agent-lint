@@ -22,7 +22,7 @@ import { writeFileSync } from "node:fs";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 import { runHook } from "./run-hook.js";
 import { assertHookAllows } from "./harness-assert.js";
-import { defineHook, allow, tool } from "./hook.js";
+import { experimental_defineHook as defineHook, allow, tool } from "./hook.js";
 
 /** Capture what an armed report would write, without touching the disk. */
 function fakes(env: NodeJS.ProcessEnv): {

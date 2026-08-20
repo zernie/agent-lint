@@ -25,7 +25,7 @@ const HOOK_DIST = pathToFileURL(
   resolve(__dirname, "..", "dist", "hook.js"),
 ).href;
 
-const GATE = `import { defineHook, tool, deny, allow } from "${HOOK_DIST}";
+const GATE = `import { experimental_defineHook as defineHook, tool, deny, allow } from "${HOOK_DIST}";
 export default defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
