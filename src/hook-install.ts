@@ -101,10 +101,43 @@ export function normalizeHookRef(
 function managesHook(entry: HookEntry, hookPath: string): boolean {
   const ref = normalizeHookRef(hookPath);
   return entry.hooks.some((h) =>
-    h.command
-      .split(/\s+/)
-      .some((token) => token !== "" && normalizeHookRef(token) === ref),
+    h.command.split(/\s+/).some((token) => {
+      const bare = bareToken(token);
+      return bare !== "" && normalizeHookRef(bare) === ref;
+    }),
   );
+}
+
+/**
+ * A command token reduced to the PATH it names, so two spellings of the same
+ * hook file compare equal.
+ *
+ * 🔴 BOTH STRIPS ARE REGRESSIONS, MEASURED IN A CONSUMER REPO 2026-08-21, and
+ * they compound: a settings.json wired the Claude-Code-recommended way carries
+ * BOTH a quote and the project-dir variable, so `managesHook` saw
+ * `"$CLAUDE_PROJECT_DIR/.claude/hooks/x.hook.ts"`, canonicalized it to
+ * something under the cwd that resembles nothing, and reported "not managed by
+ * this hook". Recompiling then APPENDED its own block beside the existing one.
+ * Twelve hooks, twelve duplicates, and the duplicate is the WORSE of the two:
+ * it spells the path relative to the cwd, so it dies with exit 2 the moment the
+ * agent runs from a subdirectory — while the healthy copy beside it keeps
+ * working, which is why this survived a full day unnoticed.
+ *
+ * - QUOTES. A path with a space MUST be quoted, so the quoted form is not an
+ *   exotic spelling — it is the correct one. Comparing it raw could never match.
+ * - `$CLAUDE_PROJECT_DIR`. It is defined as the project root, which is exactly
+ *   what `normalizeHookRef` resolves relative paths against, so stripping the
+ *   prefix makes the two spellings the same path by definition rather than by
+ *   guess. `${CLAUDE_PROJECT_DIR}` is the same variable in brace syntax.
+ *
+ * Nothing else is stripped. A token this function does not recognise is left
+ * alone and simply fails to match, which is the pre-existing behaviour: the
+ * cost of a miss here is a duplicate block, and the cost of an over-match is
+ * deleting a hook the user wrote themselves.
+ */
+function bareToken(token: string): string {
+  const unquoted = token.replace(/^["']/, "").replace(/["']$/, "");
+  return unquoted.replace(/^\$\{?CLAUDE_PROJECT_DIR\}?[/\\]/, "");
 }
 
 /**
