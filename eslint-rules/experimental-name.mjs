@@ -90,15 +90,51 @@ const ALLOW = /vigiles:experimental-name-ok[^\S\n]+\S/;
 /** A tag with or without prose after it — real tags carry prose. */
 const tagRe = (tag) => new RegExp(`^\\s*\\*?\\s*@${tag}\\b`, "m");
 
+/**
+ * Every identifier a binding target introduces, walking destructuring patterns.
+ *
+ * ⚠️ `export const { widget } = source` is a real export of a real name, and the
+ * first version of this filtered to `id.type === "Identifier"` and returned
+ * nothing for it — so a tagged callable shipped under a stable-looking name while
+ * the rule claimed to cover exported `const`. Object patterns, array patterns,
+ * defaults and rest elements all bind names; none of them are Identifiers at the
+ * top.
+ */
+function bindingIds(target, out = []) {
+  switch (target?.type) {
+    case "Identifier":
+      out.push(target);
+      break;
+    case "ObjectPattern":
+      for (const prop of target.properties) {
+        bindingIds(
+          prop.type === "RestElement" ? prop.argument : prop.value,
+          out,
+        );
+      }
+      break;
+    case "ArrayPattern":
+      for (const el of target.elements) if (el) bindingIds(el, out);
+      break;
+    case "AssignmentPattern": // `{ widget = fallback }`
+      bindingIds(target.left, out);
+      break;
+    case "RestElement":
+      bindingIds(target.argument, out);
+      break;
+    default:
+      break;
+  }
+  return out;
+}
+
 /** The declared names of an exported statement, or [] if it declares no value. */
 function declaredNames(node) {
   if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") {
     return node.id ? [node.id] : [];
   }
   if (node.type === "VariableDeclaration") {
-    return node.declarations
-      .map((d) => d.id)
-      .filter((id) => id.type === "Identifier");
+    return node.declarations.flatMap((d) => bindingIds(d.id));
   }
   return [];
 }
@@ -184,6 +220,30 @@ export default {
         if (node.parent?.type === "ExportNamedDeclaration") return;
         if (node.parent?.type === "ExportDefaultDeclaration") return;
         if (!isTagged(node)) return;
+
+        // 🔴 MODULE SCOPE ONLY, and this was a FALSE POSITIVE before — the worse
+        // kind of defect for a rule wired at `error`. Matching by NAME alone, a
+        // tagged local inside some function body would poison the set, and an
+        // unrelated top-level `widget` exported elsewhere in the file got
+        // reported. That fails mandatory lint on valid code, which is how a rule
+        // gets switched off entirely rather than fixed.
+        //
+        // The fix is to stop matching names and require the declaration to sit at
+        // MODULE LEVEL, which is the only place an `export { … }` can be naming.
+        //
+        // ⚠️ Deliberately `node.parent`, not `sourceCode.getScope(node)`. For a
+        // FunctionDeclaration, getScope returns the scope the function CREATES,
+        // not the one its binding lives in — so a top-level `function widget() {}`
+        // reported `function`/its own block and the check rejected it. That broke
+        // the hoisting case and was caught by its test, which is exactly what that
+        // test is for. The parent of a module-level statement is the Program.
+        //
+        // Known and accepted: a `var` or function declared inside a top-level
+        // BLOCK hoists to module scope and is not tracked here. That errs toward
+        // SILENCE, which is the correct direction for a rule wired at `error` —
+        // a miss costs a detection, a false positive costs the build.
+        if (node.parent?.type !== "Program") return;
+
         for (const id of declaredNames(node)) taggedLocals.add(id.name);
       },
 

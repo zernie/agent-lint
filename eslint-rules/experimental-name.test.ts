@@ -117,6 +117,26 @@ tester.run("experimental-name", rule as never, {
       code: "export default function widget() {}",
     },
     {
+      name: "a NESTED tagged local does not condemn an unrelated export of the same name",
+      // 🔴 THE FALSE POSITIVE. Matching by name alone, a tagged local inside a
+      // function body poisoned the set and the unrelated top-level export was
+      // reported — failing mandatory lint on valid code, which is how a rule gets
+      // switched off rather than fixed. Only module-scope bindings may qualify.
+      code:
+        "function outer() {\n" +
+        "  /** @experimental */\n" +
+        "  const widget = () => {};\n" +
+        "  return widget;\n" +
+        "}\n" +
+        "const widget = 1;\n" +
+        "export { widget };",
+    },
+    {
+      name: "a destructured export that already carries the prefix",
+      code:
+        doc("@experimental") + "export const { experimental_widget } = source;",
+    },
+    {
       name: "a same-named local from ANOTHER module — not ours to judge",
       // `export { widget } from "./x.js"` re-exports someone else's `widget`;
       // the tagged local of the same name in this file is a different binding.
@@ -205,6 +225,29 @@ tester.run("experimental-name", rule as never, {
     {
       name: "a tagged default-exported CLASS, same path",
       code: doc("@experimental") + "export default class Widget {}",
+      errors: 1,
+    },
+    {
+      name: "a DESTRUCTURED export binding — object pattern",
+      // `export const { widget } = source` binds a real name; filtering to
+      // top-level Identifiers returned nothing for it and let it through.
+      code: doc("@experimental") + "export const { widget } = source;",
+      errors: [{ message: /`widget`.*not named `experimental_widget`/u }],
+    },
+    {
+      name: "a destructured export with a RENAME — the bound name is what ships",
+      code: doc("@experimental") + "export const { inner: widget } = source;",
+      errors: 1,
+    },
+    {
+      name: "an ARRAY destructured export",
+      code: doc("@experimental") + "export const [widget] = source;",
+      errors: 1,
+    },
+    {
+      name: "a destructured export with a DEFAULT",
+      code:
+        doc("@experimental") + "export const { widget = fallback } = source;",
       errors: 1,
     },
     {
