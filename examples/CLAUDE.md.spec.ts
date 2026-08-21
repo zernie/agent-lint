@@ -4,9 +4,9 @@
  * This is the source of truth. CLAUDE.md is a compiled build artifact.
  * Run `vigiles compile` to generate CLAUDE.md from this spec.
  */
-import { claude, guidance } from "../src/core/spec.js";
+import { instructionFile, guidance } from "../src/core/spec.js";
 
-export default claude({
+export default instructionFile({
   sections: {
     positioning: `vigiles compiles \`.spec.ts\` files to instruction files (CLAUDE.md, AGENTS.md, or any markdown target). The spec is the source of truth. The markdown is a build artifact.
 

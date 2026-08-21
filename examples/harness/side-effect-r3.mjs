@@ -14,7 +14,7 @@
  * (prod DATABASE_URL, cloud keys, ~/.ssh) out of the run. vigiles disposes the
  * container; it does NOT confine the skill. See docs/measuring-skills.md § Safety.
  *
- * The surface is unstable (imported from `vigiles/experimental`); the
+ * The surface is unstable (every name carries `experimental_`); the
  * `measureArms` composition is shown in measure-with-service.mjs.
  * See docs/measuring-skills.md § Experimental and research/r3-disposable-services.md.
  */

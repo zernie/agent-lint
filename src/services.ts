@@ -2,7 +2,7 @@
  * vigiles — R3 disposable-service tier (⚠️ EXPERIMENTAL / UNSTABLE).
  *
  * ─────────────────────────────────────────────────────────────────────────────
- *   EXPERIMENTAL: this surface is a DRAFT. Import it from `vigiles/experimental`,
+ *   EXPERIMENTAL: this surface is a DRAFT. Import it from `vigiles`,
  *   NOT from a stable subpath. It is NOT covered by the stability guarantee and
  *   may change shape or be removed WITHOUT a major-version bump. Do not build a
  *   production workflow on it yet. See docs/measuring-skills.md § Experimental.
@@ -44,7 +44,7 @@
  * side-effect-free).
  *
  * @experimental
- * @module vigiles/experimental (services)
+ * @module vigiles (services)
  */
 
 /**

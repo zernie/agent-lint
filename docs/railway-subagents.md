@@ -44,9 +44,9 @@ typed value on one track.
 `output`. Field types are `"string" | "number" | "boolean" | "string[]"`.
 
 ```ts
-import { agent, result, file, instructions } from "vigiles/spec";
+import { experimental_agent, result, file, prose } from "vigiles/spec";
 
-export default agent({
+export default experimental_agent({
   name: "implementer",
   description: "Implement the planned change and report what it touched.",
   tools: ["Read", "Edit", "Bash"],
@@ -54,7 +54,7 @@ export default agent({
     { files: "string[]", summary: "string" }, // success — rich detail
     { reason: "string", step: "string" }, // error — structured, not a bare bit
   ),
-  body: instructions`
+  body: prose`
     Implement the change described in the task. When done, finish your turn with
     the vigiles:ok block listing the files you changed; if you cannot, emit
     vigiles:err with the reason. See ${file("docs/spec-format.md")}.
@@ -147,13 +147,13 @@ import {
   experimental_needs,
 } from "vigiles/spec";
 
-const planner = agent({
+const planner = experimental_agent({
   name: "planner",
   description: "Plan the change.",
   output: result({ plan: "string", files: "string[]" }, { reason: "string" }),
 });
 
-const implementer = agent({
+const implementer = experimental_agent({
   name: "implementer",
   description: "Implement the plan.",
   output: result(
@@ -162,7 +162,7 @@ const implementer = agent({
   ),
 });
 
-const reviewer = agent({
+const reviewer = experimental_agent({
   name: "reviewer",
   description: "Review the diff.",
   output: result({ approved: "boolean" }, { reason: "string" }),

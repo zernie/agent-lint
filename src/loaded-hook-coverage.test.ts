@@ -36,8 +36,8 @@ import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 const HOOK_ENTRY = resolve(__dirname, "..", "dist", "hook.js");
 
-const GATE = `import { experimental_defineHook as defineHook, tool, deny, allow } from ${JSON.stringify(HOOK_ENTRY)};
-export default defineHook({
+const GATE = `import { experimental_defineHook, tool, deny, allow } from ${JSON.stringify(HOOK_ENTRY)};
+export default experimental_defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
   decide: (e) =>
@@ -45,8 +45,8 @@ export default defineHook({
 });
 `;
 
-const REACT = `import { experimental_defineReact as defineReact, tools, notice, nothing } from ${JSON.stringify(HOOK_ENTRY)};
-export default defineReact({
+const REACT = `import { experimental_defineReact, tools, notice, nothing } from ${JSON.stringify(HOOK_ENTRY)};
+export default experimental_defineReact({
   on: "PostToolUse",
   match: tools("Write"),
   react: (e) => (e.path.under(["src"]) ? notice("typescript touched") : nothing()),
@@ -123,7 +123,7 @@ test("QUIET: a hook built IN-PROCESS has no file, so nothing is invented", async
   // reference is never guessed into a match. A missed record, never a false one.
   const rel = fixture("guard.mjs", GATE);
   const {
-    experimental_defineHook: defineHook,
+    experimental_defineHook: experimental_defineHook,
     tool,
     deny,
   } = (await import(HOOK_ENTRY)) as {
@@ -131,7 +131,7 @@ test("QUIET: a hook built IN-PROCESS has no file, so nothing is invented", async
     tool: (n: string) => unknown;
     deny: (r: string) => unknown;
   };
-  const inline = defineHook({
+  const inline = experimental_defineHook({
     on: "PreToolUse",
     match: tool("Bash"),
     decide: () => deny("x"),

@@ -19,10 +19,10 @@ export {
   claudeAvailable,
 } from "./harness-test.js";
 export * from "./adapters/claude-code/dialect.js";
-// The typed Claude Code authoring surface: `agent` / `experimental_skill` with
+// The typed Claude Code authoring surface: `experimental_agent` / `experimental_skill` with
 // the `purity` floor enforced AT COMPILE TIME against the CC tool catalog (a
 // `tsc` error for e.g. `purity: "pure"` + `"Bash"`). A strict addition to the
-// runtime/compile purity checks; the bare core `agent()`/`experimental_skill()`
+// runtime/compile purity checks; the bare core `experimental_agent()`/`experimental_skill()`
 // (`vigiles/spec`) stay open.
 //
 // NOTE the collision this rename also resolves: `vigiles/testing` exports a
@@ -30,9 +30,21 @@ export * from "./adapters/claude-code/dialect.js";
 // this skill fire?", taking an id string. One word, two concepts, told apart
 // only by which door you imported from. Only the authoring builder is prefixed.
 export {
-  agent,
+  experimental_agent,
   experimental_skill,
   type ClaudeCodeToolVocabulary,
+} from "./adapters/claude-code/typed-spec.js";
+// ─── ОКНО АЛИАСА (один мажор) ──────────────────────────────────────────────────
+// Та же политика, что в `core/spec.ts`: старое имя живёт ровно один мажор. Эта
+// дверь обязана иметь окно ОТДЕЛЬНО — потребитель, импортировавший `agent` из
+// `vigiles/claude-code`, никогда не видел `vigiles/spec`, и окно на той стороне
+// его не спасает.
+export {
+  /**
+   * @deprecated Renamed to `experimental_agent` — the shape is not settled.
+   * Removed next major.
+   */
+  experimental_agent as agent,
 } from "./adapters/claude-code/typed-spec.js";
 // Selection-collision — a Claude-Code-ONLY behavioral measurement (Codex has no
 // skill-selection event to read), so it lives on this surface, not the agnostic

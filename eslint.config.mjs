@@ -5,6 +5,14 @@ import sonarjs from "eslint-plugin-sonarjs";
 import boundaries from "eslint-plugin-boundaries";
 import globals from "globals";
 
+import experimentalName from "./eslint-rules/experimental-name.mjs";
+
+// The repo's own rules. One member so far — see the rule's header for why it is
+// a rule and not the standalone script it replaces (short version: the script
+// hand-rolled a parser over declaration lines, and its one cross-file need, the
+// public/internal exemption, was itself the thing contradicting its rationale).
+const local = { rules: { "experimental-name": experimentalName } };
+
 // Hexagonal boundary (see research/code-adapter-architecture.md). After the
 // reshape the two element types are whole directories: the reference-verification
 // DOMAIN lives in src/core/, the Claude Code harness/transport ADAPTER in
@@ -83,8 +91,10 @@ export default [
     plugins: {
       "@typescript-eslint": tseslint,
       sonarjs,
+      local,
     },
     rules: {
+      "local/experimental-name": "error",
       ...tseslint.configs["strict-type-checked"]?.rules,
       // TypeScript handles these better than ESLint
       "no-undef": "off",

@@ -772,12 +772,12 @@ export interface HookProgram<
 
 export const tool = (name: string): { tool: string } => ({ tool: name });
 /**
- * @experimental Compiled hooks are provisional — see docs/experimental.md.
+ * @experimental Compiled hooks are provisional — see docs/compiled-hooks.md#status--pending.
  * Imported as `experimental_defineHook`; alias it at the import site.
  */
-export function defineHook<const N extends readonly NeedSpec[] = readonly []>(
-  p: HookProgram<N>,
-): HookProgram<N> {
+export function experimental_defineHook<
+  const N extends readonly NeedSpec[] = readonly [],
+>(p: HookProgram<N>): HookProgram<N> {
   return p;
 }
 
@@ -1380,10 +1380,10 @@ export const tools = (...names: string[]): { tools: string[] } => ({
   tools: names,
 });
 /**
- * @experimental Compiled hooks are provisional — see docs/experimental.md.
+ * @experimental Compiled hooks are provisional — see docs/compiled-hooks.md#status--pending.
  * Imported as `experimental_defineFileGate`; alias it at the import site.
  */
-export function defineFileGate<
+export function experimental_defineFileGate<
   const N extends readonly NeedSpec[] = readonly [],
 >(p: Omit<FileGateHook<N>, "role">): FileGateHook<N> {
   return { role: "gate", ...p };
@@ -1462,10 +1462,10 @@ export interface PromptGateHook<
   readonly decide: (e: PromptEvent<N>) => Decision;
 }
 /**
- * @experimental Compiled hooks are provisional — see docs/experimental.md.
+ * @experimental Compiled hooks are provisional — see docs/compiled-hooks.md#status--pending.
  * Imported as `experimental_definePromptGate`; alias it at the import site.
  */
-export function definePromptGate<
+export function experimental_definePromptGate<
   const N extends readonly NeedSpec[] = readonly [],
 >(p: Omit<PromptGateHook<N>, "role">): PromptGateHook<N> {
   return { role: "prompt-gate", ...p };
@@ -1517,10 +1517,10 @@ export interface StopGateHook<
   readonly decide: (e: StopEvent<N>) => Decision;
 }
 /**
- * @experimental Compiled hooks are provisional — see docs/experimental.md.
+ * @experimental Compiled hooks are provisional — see docs/compiled-hooks.md#status--pending.
  * Imported as `experimental_defineStopGate`; alias it at the import site.
  */
-export function defineStopGate<
+export function experimental_defineStopGate<
   const N extends readonly NeedSpec[] = readonly [],
 >(p: Omit<StopGateHook<N>, "role">): StopGateHook<N> {
   return { role: "stop-gate", ...p };
@@ -1595,12 +1595,12 @@ export interface InjectHook<
   readonly produce: (e: SessionEvent<N>) => Injection;
 }
 /**
- * @experimental Compiled hooks are provisional — see docs/experimental.md.
+ * @experimental Compiled hooks are provisional — see docs/compiled-hooks.md#status--pending.
  * Imported as `experimental_defineInject`; alias it at the import site.
  */
-export function defineInject<const N extends readonly NeedSpec[] = readonly []>(
-  p: Omit<InjectHook<N>, "role">,
-): InjectHook<N> {
+export function experimental_defineInject<
+  const N extends readonly NeedSpec[] = readonly [],
+>(p: Omit<InjectHook<N>, "role">): InjectHook<N> {
   return { role: "inject", ...p };
 }
 
@@ -1777,12 +1777,12 @@ export interface ReactHook<
   readonly react: (e: ReactEvent<N>) => Reaction;
 }
 /**
- * @experimental Compiled hooks are provisional — see docs/experimental.md.
+ * @experimental Compiled hooks are provisional — see docs/compiled-hooks.md#status--pending.
  * Imported as `experimental_defineReact`; alias it at the import site.
  */
-export function defineReact<const N extends readonly NeedSpec[] = readonly []>(
-  p: Omit<ReactHook<N>, "role">,
-): ReactHook<N> {
+export function experimental_defineReact<
+  const N extends readonly NeedSpec[] = readonly [],
+>(p: Omit<ReactHook<N>, "role">): ReactHook<N> {
   return { role: "react", ...p };
 }
 

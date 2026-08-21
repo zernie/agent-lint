@@ -22,7 +22,7 @@ import { writeFileSync } from "node:fs";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 import { runHook } from "./run-hook.js";
 import { assertHookAllows } from "./harness-assert.js";
-import { experimental_defineHook as defineHook, allow, tool } from "./hook.js";
+import { experimental_defineHook, allow, tool } from "./hook.js";
 
 /** Capture what an armed report would write, without touching the disk. */
 function fakes(env: NodeJS.ProcessEnv): {
@@ -126,7 +126,7 @@ test("runHook counts as a check", () => {
 test("an in-process compiled-hook assertion counts as a check", () => {
   // The tier with no subprocess at all — without this, a harness that only tests
   // compiled hooks would look like it did nothing.
-  const gate = defineHook({
+  const gate = experimental_defineHook({
     on: "PreToolUse",
     match: tool("Bash"),
     decide: () => allow(),

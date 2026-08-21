@@ -53,10 +53,11 @@ const PARALLEL = [
     cmd: "node scripts/check-doc-imports.mjs . docs README.md",
   },
   { name: "export-prefixes", cmd: "node scripts/check-export-prefixes.mjs ." },
-  {
-    name: "experimental-naming",
-    cmd: "node scripts/check-experimental-naming.mjs",
-  },
+  // The `@experimental` NAMING half of this used to live here too. It is now the
+  // ESLint rule `local/experimental-name`, so it runs inside the `lint` stage
+  // above rather than as its own — see the rule's header for why the move was
+  // possible only after the re-export aliasing went away.
+  { name: "internal-tag", cmd: "node scripts/check-internal-tag.mjs" },
   { name: "typedoc", cmd: "npx typedoc" },
   {
     name: "corpus-guards",

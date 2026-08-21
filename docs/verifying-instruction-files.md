@@ -40,9 +40,9 @@ The spec is the default — and the clear choice once you're standardizing rules
 
 ```typescript
 // CLAUDE.md.spec.ts
-import { claude, enforce, guidance } from "vigiles/spec";
+import { instructionFile, enforce, guidance } from "vigiles/spec";
 
-export default claude({
+export default instructionFile({
   commands: {
     "npm run build": "Compile TypeScript to dist/",
     "npm test": "Build and run all tests",
@@ -91,11 +91,11 @@ Supports ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar, detekt, ktlint
 `file()`, `cmd()`, `symbol()`, and `ref()` catch stale references at compile time:
 
 ```typescript
-import { claude, file, cmd, symbol, ref, instructions } from "vigiles/spec";
+import { instructionFile, file, cmd, symbol, ref, prose } from "vigiles/spec";
 
-export default claude({
+export default instructionFile({
   sections: {
-    architecture: instructions`
+    architecture: prose`
       Core engine in ${file("src/core/compile.ts")}.
       Compile specs with ${symbol("src/core/compile.ts", "compileClaude")}.
       Run ${cmd("npm test")} to verify.

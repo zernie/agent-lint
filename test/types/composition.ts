@@ -1,6 +1,6 @@
 /**
  * Type-level constraint: TYPED COMPOSITION — "your multi-agent pipeline doesn't
- * compile if the handoffs don't line up." The SHIPPED `agent()` / `result()`
+ * compile if the handoffs don't line up." The SHIPPED `experimental_agent()` / `result()`
  * builders now carry each agent's `result()` ok/err SHAPE at the type level (a
  * `TypedAgentSpec`), so a typed `experimental_pipe`/`then` cross-references one step's `ok`
  * against the next step's `experimental_needs` AT `tsc` TIME — a missing field, a wrong field
@@ -11,7 +11,7 @@
  * proven prototype (research/prototypes/typed-spec-power/{typed-composition,fails}.ts).
  */
 import {
-  agent,
+  experimental_agent,
   result,
   experimental_start,
   experimental_andThen,
@@ -24,13 +24,13 @@ import {
 // Three flat workers, each declaring its typed result() shape.
 // ---------------------------------------------------------------------------
 
-const planner = agent({
+const planner = experimental_agent({
   name: "planner",
   description: "Break a request into an ordered plan.",
   output: result({ plan: "string", files: "string[]" }, { reason: "string" }),
 });
 
-const implementer = agent({
+const implementer = experimental_agent({
   name: "implementer",
   description: "Implement the plan and report the diff.",
   output: result(
@@ -39,7 +39,7 @@ const implementer = agent({
   ),
 });
 
-const reviewer = agent({
+const reviewer = experimental_agent({
   name: "reviewer",
   description: "Review the diff.",
   output: result(
@@ -84,7 +84,7 @@ void goodFold;
 // upstream step produces. The handoff is unsatisfiable → `tsc` rejects it.
 // ---------------------------------------------------------------------------
 
-const reviewerNeedsScan = agent({
+const reviewerNeedsScan = experimental_agent({
   name: "reviewer",
   description: "Review with a security scan.",
   output: result({ approved: "boolean" }, { reason: "string" }),
@@ -131,10 +131,13 @@ void experimental_pipe(
 );
 
 // ---------------------------------------------------------------------------
-// BACKWARDS COMPAT — a plain `agent()` with NO output is still a usable spec; a
+// BACKWARDS COMPAT — a plain `experimental_agent()` with NO output is still a usable spec; a
 // pipeline of bare agents (empty needs) composes. (Typed composition is purely
 // additive; the string-path railway/delegate is unchanged and tested at runtime.)
 // ---------------------------------------------------------------------------
 
-const bare = agent({ name: "bare", description: "no result contract" });
+const bare = experimental_agent({
+  name: "bare",
+  description: "no result contract",
+});
 void experimental_start(bare);

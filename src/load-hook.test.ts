@@ -25,8 +25,8 @@ const HOOK_DIST = pathToFileURL(
   resolve(__dirname, "..", "dist", "hook.js"),
 ).href;
 
-const GATE = `import { experimental_defineHook as defineHook, tool, deny, allow } from "${HOOK_DIST}";
-export default defineHook({
+const GATE = `import { experimental_defineHook, tool, deny, allow } from "${HOOK_DIST}";
+export default experimental_defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
   decide: (e) =>
@@ -82,7 +82,7 @@ test("loadHook: a module with no default export fails with an actionable error",
       () => loadHook(file),
       (e: Error) =>
         e instanceof HookCompileError &&
-        /use `export default defineHook/.test(e.message),
+        /use `export default experimental_defineHook/.test(e.message),
     );
   } finally {
     cleanupTmpDir(dir);

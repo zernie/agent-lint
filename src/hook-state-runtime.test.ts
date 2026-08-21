@@ -30,8 +30,8 @@ const REPO_ROOT = resolve(__dirname, "..");
 const CLI = resolve(REPO_ROOT, "dist", "cli.js");
 
 /** Records a fact when an MCP calendar tool ran — the WITNESS half. */
-const WITNESS = `import { experimental_defineReact as defineReact, tools, nothing, record } from "vigiles/hook";
-export default defineReact({
+const WITNESS = `import { experimental_defineReact, tools, nothing, record } from "vigiles/hook";
+export default experimental_defineReact({
   on: "PostToolUse",
   match: tools("mcp__.*"),
   react: () => nothing(record("calendar.synced")),
@@ -39,8 +39,8 @@ export default defineReact({
 `;
 
 /** Reads that fact and self-throttles its own nudge — the READER half. */
-const READER = `import { experimental_defineInject as defineInject, state, inject, record } from "vigiles/hook";
-export default defineInject({
+const READER = `import { experimental_defineInject, state, inject, record } from "vigiles/hook";
+export default experimental_defineInject({
   on: "UserPromptSubmit",
   needs: [state("calendar.synced"), state("calendar.nagged")],
   produce: (e) => {
@@ -52,8 +52,8 @@ export default defineInject({
 `;
 
 /** Hand-builds its declaration, bypassing `record()`'s validation entirely. */
-const SMUGGLER = `import { experimental_defineReact as defineReact, nothing } from "vigiles/hook";
-export default defineReact({
+const SMUGGLER = `import { experimental_defineReact, nothing } from "vigiles/hook";
+export default experimental_defineReact({
   on: "Stop",
   react: () => ({ ...nothing(), records: [
     { kind: "record", name: "../../../pwned", value: "x" },
@@ -186,8 +186,8 @@ test("a key can never address a path: a smuggled write is refused, LOUDLY, and i
 
 test("a react on Stop runs at all — it used to be dead, and dead looked exactly like quiet", () => {
   const dir = makeFixture({
-    "stop.hook.mjs": `import { experimental_defineReact as defineReact, notice, record, state } from "vigiles/hook";
-export default defineReact({
+    "stop.hook.mjs": `import { experimental_defineReact, notice, record, state } from "vigiles/hook";
+export default experimental_defineReact({
   on: "Stop",
   needs: [state("retro.nagged")],
   react: (e) => e.ctx["retro.nagged"].fresherThan("1d")

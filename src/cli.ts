@@ -2096,7 +2096,7 @@ function targetHasHash(absPath: string): boolean {
 /** Classify an adoption target by its path: a `SKILL.md` is a skill, a file under
  * an `agents/` dir is a subagent, everything else is an instruction file. Used to
  * pick the right adopt function so `init --target=skills/x/SKILL.md` (the
- * per-surface path the audit report points at) makes a `skill()`/`agent()` spec. */
+ * per-surface path the audit report points at) makes a `skill()`/`experimental_agent()` spec. */
 function surfaceKind(target: string): "skill" | "agent" | "instruction" {
   if (/^SKILL\.md$/i.test(basename(target))) return "skill";
   if (/(^|[/\\])agents[/\\]/.test(target)) return "agent";
@@ -2541,11 +2541,11 @@ function scaffoldSpec(args: string[]): void {
   // the moment this is committed, because the enforce()/guidance() examples
   // below are commented out. The commented import shows what to add when you
   // write a real rule.
-  const template = `import { claude } from "vigiles/spec";
+  const template = `import { instructionFile } from "vigiles/spec";
 // When you add rules below, import the builders you use, e.g.:
-// import { claude, enforce, guidance } from "vigiles/spec";
+// import { instructionFile, enforce, guidance } from "vigiles/spec";
 
-export default claude({${targetLine}
+export default instructionFile({${targetLine}
   sections: {
     // Prose sections become ## headings in the compiled output.
     // Do not add # or ## headers inside sections.

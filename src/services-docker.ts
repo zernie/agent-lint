@@ -1,6 +1,6 @@
 /**
  * vigiles — a Docker-backed {@link ContainerRuntime} for the R3 disposable-service
- * tier (⚠️ EXPERIMENTAL / UNSTABLE — see src/services.ts and `vigiles/experimental`).
+ * tier (⚠️ EXPERIMENTAL / UNSTABLE — see src/services.ts; served from `vigiles`).
  *
  * This is the v0 backend the R3 build spec (research/r3-disposable-services.md)
  * scopes: `docker run` a throwaway service, wait for it to be ready, run its seed,
@@ -14,7 +14,7 @@
  * end-to-end integration test needs a live daemon (it skips when absent).
  *
  * @experimental
- * @module vigiles/experimental (docker backend)
+ * @module vigiles (docker backend)
  */
 import { spawnSync } from "node:child_process";
 import { connect } from "node:net";

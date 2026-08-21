@@ -115,7 +115,7 @@ The numbers also live on the report — `report.usage` for a single run (`measur
 
 ## Experimental: real side-effect testing
 
-> ⚠️ **Experimental & unstable.** Import from `vigiles/experimental`. This surface is **not** covered by the [stability guarantee](../STABILITY.md) — it may change shape or be removed without a major-version bump. Don't build a production workflow on it yet.
+> ⚠️ **Experimental & unstable.** Import from `vigiles` — R3 starts containers rather than calling a model, so it is not behind the paid `vigiles/eval` door. This surface is **not** covered by the [stability guarantee](../STABILITY.md) — it may change shape or be removed without a major-version bump. Don't build a production workflow on it yet.
 
 The tiers above cover a skill's **output** and its **side-effect safety** — did it call / not call a tool, write / not write a file — with no container. What they don't yet do turnkey is let a skill **actually perform a side effect against a real service and verify the resulting state**: apply a migration to a real Postgres, then check the row landed.
 
@@ -139,10 +139,9 @@ R3 runs your skill **for real**, and a skill is model-driven — the model picks
 `experimental_withServices` starts the services, runs your block, and disposes them even on failure:
 
 ```typescript
-import {
-  experimental_withServices,
-  experimental_dockerRuntime,
-} from "vigiles/experimental";
+// R3 starts containers; it calls no model, so it is on the free door.
+import { experimental_withServices, experimental_dockerRuntime } from "vigiles";
+// The eval driver DOES call a model — hence the other door, and the `paid_`.
 import { paid_runEval } from "vigiles/eval";
 
 await experimental_withServices(
@@ -191,7 +190,7 @@ await experimental_withServices(
 
 Runnable versions: [`side-effect-r3.mjs`](../examples/harness/side-effect-r3.mjs) (the primitive) and [`measure-with-service.mjs`](../examples/harness/measure-with-service.mjs) (the `runEval` composition above).
 
-**What ships today vs later.** Today: the types, the `ContainerRuntime` port, `experimental_startServices` / `experimental_withServices`, and a Docker backend — all under `vigiles/experimental`. Deferred: a first-class `services` option on `measureArms` (+ `ctx.service(name)`), **per-trial** reset (today the container lives for the whole run — make your task self-contained or use `trials: 1`), and the egress wall. Requires Docker (Linux-first), stays an explicit opt-in, and is **never** part of `vigiles audit` — `audit` stays side-effect-free.
+**What ships today vs later.** Today: the types, the `ContainerRuntime` port, `experimental_startServices` / `experimental_withServices`, and a Docker backend — all on the package root, each name carrying the `experimental_` prefix. Deferred: a first-class `services` option on `measureArms` (+ `ctx.service(name)`), **per-trial** reset (today the container lives for the whole run — make your task self-contained or use `trials: 1`), and the egress wall. Requires Docker (Linux-first), stays an explicit opt-in, and is **never** part of `vigiles audit` — `audit` stays side-effect-free.
 
 ## See also
 

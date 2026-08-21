@@ -7,11 +7,14 @@
  *
  * Mirrors the SHIPPED ladder (src/core/effects.ts): pure = read-only only;
  * bounded = read-only ∪ Write/Edit/NotebookEdit ∪ Bash; no purity / dangerous =
- * open. The core (harness-agnostic) `agent()` is unconstrained by default.
+ * open. The core (harness-agnostic) `experimental_agent()` is unconstrained by default.
  */
-import { agent, experimental_skill } from "../../dist/claude-code.js";
 import {
-  agent as coreAgent,
+  experimental_agent,
+  experimental_skill,
+} from "../../dist/claude-code.js";
+import {
+  experimental_agent as coreAgent,
   experimental_skill as coreSkill,
 } from "../../dist/core/spec.js";
 
@@ -20,7 +23,7 @@ import {
 // ---------------------------------------------------------------------------
 
 // pure + read-only tools → OK
-agent({
+experimental_agent({
   name: "reviewer",
   description: "read-only review",
   purity: "pure",
@@ -30,7 +33,7 @@ agent({
 // `LS` is NOT a Claude Code tool — it left the catalog with `BashOutput`,
 // `KillBash` and `MultiEdit` (2026-08-17). A retired name must fail at tsc time,
 // not merely be absent from the list above: absence proves nothing.
-agent({
+experimental_agent({
   name: "bad-retired-tool",
   description: "names a tool that does not exist",
   purity: "pure",
@@ -39,7 +42,7 @@ agent({
 });
 
 // bounded + Bash → OK (bounded ADMITS Bash; its command is gated at runtime)
-agent({
+experimental_agent({
   name: "fixer",
   description: "bounded worker",
   purity: "bounded",
@@ -47,14 +50,14 @@ agent({
 });
 
 // no purity → ANY tools compile (open default, backwards-compatible)
-agent({
+experimental_agent({
   name: "open",
   description: "no purity floor",
   tools: ["Bash", "mcp__server__tool", "whatever"],
 });
 
 // dangerously-unrestricted → ANY tools compile (the loud escape hatch)
-agent({
+experimental_agent({
   name: "yolo",
   description: "escape hatch",
   purity: "dangerously-unrestricted",
@@ -65,7 +68,7 @@ agent({
 // CC-bound `agent` — these MUST NOT compile.
 // ---------------------------------------------------------------------------
 
-agent({
+experimental_agent({
   name: "bad-pure",
   description: "pure cannot take a side-effecting tool",
   purity: "pure",
@@ -73,7 +76,7 @@ agent({
   tools: ["Read", "Bash"],
 });
 
-agent({
+experimental_agent({
   name: "bad-pure-write",
   description: "pure cannot take Write",
   purity: "pure",
@@ -81,7 +84,7 @@ agent({
   tools: ["Read", "Write"],
 });
 
-agent({
+experimental_agent({
   name: "bad-bounded-mcp",
   description: "bounded cannot take an MCP / unknown tool",
   purity: "bounded",

@@ -19,7 +19,7 @@ export default experimental_skill({
   disableModelInvocation: true,
   argumentHint: "<description of recurring PR feedback>",
 
-  body: instructions`
+  body: prose`
 Convert a recurring PR review comment into an automated lint rule.
 
 ## Arguments

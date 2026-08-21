@@ -57,9 +57,9 @@ floor. See [harness-testing.md](harness-testing.md).
 Use `claude()` to define a CLAUDE.md spec. Export it as the default export.
 
 ```ts
-import { claude, enforce, guidance, file, cmd, ref, instructions } from "vigiles/spec";
+import { instructionFile, enforce, guidance, file, cmd, ref, prose } from "vigiles/spec";
 
-export default claude({
+export default instructionFile({
   target: "CLAUDE.md",          // or "AGENTS.md", or ["CLAUDE.md", "AGENTS.md"]
   sections: { ... },
   keyFiles: { ... },
@@ -79,7 +79,7 @@ target: ["CLAUDE.md", "AGENTS.md"],  // emits both from one spec
 
 ### `sections`
 
-`Record<string, string | InstructionFragment[]>` -- Named prose sections. Each key becomes a `## Heading` in the compiled output (first letter uppercased). Values are either plain strings or tagged templates via `instructions` with embedded `file()`, `cmd()`, and `ref()` references.
+`Record<string, string | InstructionFragment[]>` -- Named prose sections. Each key becomes a `## Heading` in the compiled output (first letter uppercased). Values are either plain strings or tagged templates via `prose` with embedded `file()`, `cmd()`, and `ref()` references.
 
 Each section (and each subagent section) is length-guarded at compile time: a single section over a **generous 200-line default** is rejected as a likely content dump (TypeScript types can't bound a string's length, so the cap lives in the compiler — the ESLint `max-len` precedent). Override per spec with `maxSectionLines` (tighter to enforce your own limit, larger for an intentionally long section); `maxTokens` caps the whole compiled file.
 
@@ -88,7 +88,7 @@ Each section (and each subagent section) is length-guarded at compile time: a si
 ```ts
 sections: {
   architecture: `Three rule types: enforce(), guard(), and guidance().`,
-  setup: instructions`See ${file("docs/setup.md")} and run ${cmd("npm install")}.`,
+  setup: prose`See ${file("docs/setup.md")} and run ${cmd("npm install")}.`,
 }
 ```
 
@@ -125,14 +125,14 @@ Use `skill()` to define a SKILL.md spec. Compiles to markdown with YAML frontmat
 <!-- vigiles:ignore -->
 
 ```ts
-import { skill, file, cmd, ref, instructions } from "vigiles/spec";
+import { skill, file, cmd, ref, prose } from "vigiles/spec";
 
 export default skill({
   name: "example-skill",
   description: "Example skill for illustration",
   argumentHint: "<some argument>",
   disableModelInvocation: true,
-  body: instructions`
+  body: prose`
     Check ${file("eslint.config.ts")} for existing rules.
     Run ${cmd("npm test")} to verify.
     See ${ref("skills/other/SKILL.md")} for format.
@@ -167,9 +167,9 @@ this is the field reference.
 <!-- vigiles:ignore -->
 
 ```ts
-import { agent, result } from "vigiles/spec";
+import { experimental_agent, result } from "vigiles/spec";
 
-export default agent({
+export default experimental_agent({
   name: "code-reviewer",
   description: "Review a diff for correctness defects.",
   model: "opus",
@@ -188,7 +188,7 @@ export default agent({
 > `disallowedTools` is a _denylist_. Under a `tools` allowlist a tool not listed is
 > already unavailable, so `disallowedTools` would be **redundant**. Reach for
 > `disallowedTools` only when there's **no** allowlist (the agent inherits all tools)
-> and you want to subtract a few — e.g. `agent({ name, description, disallowedTools: ["Bash"] })`.
+> and you want to subtract a few — e.g. `experimental_agent({ name, description, disallowedTools: ["Bash"] })`.
 
 | Field             | Type                                                | Required | Description                                                                                    |
 | ----------------- | --------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
@@ -234,17 +234,27 @@ the compile/runtime checks, which stay the universal backstop. Import `agent` /
 the Claude Code tool catalog:
 
 ```ts
-import { agent } from "vigiles/claude-code";
+import { experimental_agent } from "vigiles/claude-code";
 
-agent({ name: "r", description: "…", purity: "pure", tools: ["Read", "Bash"] });
+experimental_agent({
+  name: "r",
+  description: "…",
+  purity: "pure",
+  tools: ["Read", "Bash"],
+});
 //                                                              ^^^^^^ tsc error — Bash is side-effecting
-agent({
+experimental_agent({
   name: "f",
   description: "…",
   purity: "bounded",
   tools: ["Read", "Bash", "Write"],
 }); // OK — bounded admits Bash
-agent({ name: "x", description: "…", purity: "bounded", tools: ["mcp__s__t"] });
+experimental_agent({
+  name: "x",
+  description: "…",
+  purity: "bounded",
+  tools: ["mcp__s__t"],
+});
 //                                                              ^^^^^^^^^^^ tsc error — MCP is unknown-effect
 ```
 
@@ -283,7 +293,7 @@ Returns a `DirRef` containing a `VerifiedDir`. The path is verified at compile t
 
 Returns a `GlobRef` containing a `VerifiedGlob`. The pattern is verified at compile time to match **at least one path** (`*` / `**` syntax, dotfiles included). Compiles to a backtick pattern: `` `src/**/*.test.ts` ``. Use it to prove a class of files exists where the instructions claim (e.g. tests, configs).
 
-### `instructions`
+### `prose`
 
 Tagged template literal that interleaves strings and refs. Use it for `sections` values in `claude()` or the `body` of `skill()`. A single prose section over a generous default (200 lines) is rejected as a likely dump — override with `maxSectionLines`, or split / move detail into a `file()`.
 
@@ -294,7 +304,7 @@ Tagged template literal that interleaves strings and refs. Use it for `sections`
 - `input(name, hint)` / `step(do, { gate, retry })` / `project(role)` — a skill's typed inputs, gated pipeline steps, and portable command gates.
 
 ```ts
-instructions`Check ${file("tsconfig.json")} then run ${cmd("npm test")}.`;
+prose`Check ${file("tsconfig.json")} then run ${cmd("npm test")}.`;
 // Returns InstructionFragment[] -- the compiler renders and validates each ref.
 ```
 

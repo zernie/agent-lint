@@ -1,57 +1,43 @@
 #!/usr/bin/env node
 /**
- * check-experimental-naming.mjs — a symbol the source calls EXPERIMENTAL must
- * SAY SO IN ITS NAME.
+ * check-internal-tag.mjs — `@internal` on a symbol we EXPORT is a contradiction.
  *
- * One sentence: if a declaration carries the `@experimental` TSDoc tag and is
- * reachable from a public subpath, its name must start with `experimental_`.
+ * One sentence: if a declaration carries the `@internal` TSDoc tag and appears in
+ * a committed api-extractor report, say so — the tag claims it is not part of the
+ * API while the exports map ships it.
  *
- * WHY THIS EXISTS, measured. The prefix convention already existed —
- * `experimental_emitTool`, `experimental_parseEmitted`, `experimental_withServices`
- * were all named that way on purpose. It was written down nowhere and enforced by
- * nothing, so `skill()` shipped from `vigiles/spec` under a stable name while
- * `docs/skills.md` opened with "**`skill()` is experimental**". Prose said one
- * thing, the API said the other — the exact defect class vigiles exists to catch,
- * in vigiles. A convention that is only a habit gets violated by the next author,
- * and the reader who trusts the NAME (the thing an editor autocompletes) never
- * reads the doc that would have warned them.
+ * WHY IT IS A SCRIPT AND NOT A LINT RULE, unlike its former other half. This
+ * question is **cross-file by nature**: whether a symbol is public is decided by
+ * `src/*.ts` barrels and the `exports` map in `package.json`, not by the file the
+ * declaration lives in. ESLint sees one file at a time, so a rule could only
+ * guess. The api reports are the answer already computed and committed, and
+ * `npm run api:check` already keeps them honest.
  *
- * WHAT IT SUBTRACTS: the ability to mark something experimental in one place and
- * stable in another. Experimentality is declared ONCE, in TSDoc, and the name is
- * checked against it.
+ * 🔴 THIS FILE USED TO DO TWO JOBS (it was `check-experimental-naming.mjs`). The
+ * other one — an `@experimental` declaration must be NAMED `experimental_*` — is
+ * now `local/experimental-name` in `eslint-rules/`. It moved because it turned
+ * out not to need any of the machinery here: it needed the api reports only to
+ * EXEMPT internal symbols, and that exemption contradicted the rule's own
+ * rationale ("the reader who trusts the name never opens the doc" — an internal
+ * reader is a reader). Dropping the exemption left jsdoc + name, both in one
+ * file, and ESLint parses both properly instead of by regex.
  *
- * WHY NOT the alternatives:
- *   - A `vigiles lint` finding shipped to users — rejected: `experimental_` is
- *     THIS project's naming convention, not a universal property of harnesses.
- *     It would also be a new user-facing surface, which the project refuses by
- *     default.
- *   - A new marker comment — rejected: `@experimental` is standard TSDoc, already
- *     used in `src/experimental-emit.ts` and `src/services.ts`, and already
- *     understood by api-extractor. A second marker would be a second truth.
- *   - Prose in CLAUDE.md — rejected BY MEASUREMENT: the convention was already
- *     prose, and `skill()` violated it anyway.
+ * That split is worth stating plainly because the two checks LOOK like one
+ * check — both read TSDoc tags, both are about the stability vocabulary — and
+ * they are not. One is about a NAME, decidable where the name is written. The
+ * other is about an EXPORT GRAPH, decidable only from outside the file. Keeping
+ * them together meant the local half inherited the global half's dependencies.
  *
- * HOW IT DECIDES WHAT IS PUBLIC: `api-surface/*.api.md`, the committed
- * api-extractor reports that `npm run api:check` already keeps honest. A symbol
- * absent from every report is internal and exempt — internals may be experimental
- * without renaming.
+ * WHAT IT SUBTRACTS: the ability to call something "internal" in TSDoc while
+ * shipping it from a public subpath.
  *
- * Usage: node scripts/check-experimental-naming.mjs [root]
+ * Usage: node scripts/check-internal-tag.mjs [root]
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
 const ROOT = resolve(process.argv[2] ?? ".");
 const PREFIX = "experimental_";
-/**
- * Opt out on the declaration itself, with a reason after the marker.
- *
- * The reason must be on the SAME line: `\s+\S` would be satisfied by the newline
- * plus the JSDoc continuation `*`, so a bare marker followed by any further tag
- * would read as "explained". Caught by the bare-marker test, not by review.
- */
-const ALLOW = /vigiles:experimental-name-ok[^\S\n]+\S/;
-
 function walk(dir, out = []) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     if (["node_modules", ".git", "dist"].includes(e.name)) continue;
@@ -157,7 +143,6 @@ function taggedExperimental(file) {
       name: decl[2],
       line,
       tag: experimental ? "@experimental" : "@internal",
-      exempt: ALLOW.test(block),
     });
   }
   return out;
@@ -166,7 +151,7 @@ function taggedExperimental(file) {
 const { names: pub, reports } = publicSymbols();
 if (reports.length === 0) {
   console.error(
-    "check-experimental-naming: no api-surface/*.api.md reports found — " +
+    "check-internal-tag: no api-surface/*.api.md reports found — " +
       "run `npm run api:check` first. Refusing to pass vacuously.",
   );
   process.exit(1);
@@ -181,7 +166,6 @@ for (const file of walk(join(ROOT, "src"))) {
     // promises nothing to anyone. Both tags are fine there, unchecked.
     if (!doors) continue;
     checked++;
-    if (d.exempt) continue;
 
     // `vigiles.api.md` is the root subpath: label it `vigiles`, not `vigiles/vigiles`.
     const where = [...new Set(doors)]
@@ -201,15 +185,6 @@ for (const file of walk(join(ROOT, "src"))) {
       );
       continue;
     }
-
-    if (d.name.startsWith(PREFIX)) continue;
-    findings++;
-    console.log(
-      `${relative(ROOT, file)}:${d.line} \`${d.name}\` is tagged @experimental and is ` +
-        `public (${where}) but is not named \`${PREFIX}${d.name}\`. ` +
-        `Rename it, drop the tag, or mark the declaration ` +
-        `\`vigiles:experimental-name-ok <reason>\`.`,
-    );
   }
 }
 

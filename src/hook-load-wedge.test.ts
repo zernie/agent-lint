@@ -41,8 +41,8 @@ import { scanPlugin } from "./scan.js";
 const REPO_ROOT = resolve(__dirname, "..");
 const CLI = resolve(REPO_ROOT, "dist", "cli.js");
 
-const HOOK = `import { experimental_defineHook as defineHook, tool, deny, allow } from "vigiles/hook";
-export default defineHook({
+const HOOK = `import { experimental_defineHook, tool, deny, allow } from "vigiles/hook";
+export default experimental_defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
   decide: (e) =>

@@ -19,7 +19,7 @@ import {
 } from "../../adapter-conformance.js";
 import { ADAPTERS, getAdapter } from "../../adapter-registry.js";
 import { compileAgent } from "../../core/compile.js";
-import { agent } from "../../core/spec.js";
+import { experimental_agent } from "../../core/spec.js";
 // The generic, layout-driven loader lives at the composition root; the Codex
 // adapter reuses it with codexLayout (no cross-adapter import).
 import { loadPlugin } from "../../plugin-loader.js";
@@ -43,13 +43,23 @@ test("the compiler verifies a subagent tool contract under codexDialect", () => 
   // A Codex built-in passes; a Claude Code tool (Read) is flagged — proving the
   // SAME compiler validates against the injected Codex catalog.
   const ok = compileAgent(
-    agent({ name: "w", description: "x", tools: ["shell"], body: "b" }),
+    experimental_agent({
+      name: "w",
+      description: "x",
+      tools: ["shell"],
+      body: "b",
+    }),
     { specFile: "w.md.spec.ts", dialect: codexDialect },
   );
   assert.equal(ok.errors.filter((e) => e.type === "unknown-tool").length, 0);
 
   const bad = compileAgent(
-    agent({ name: "w", description: "x", tools: ["Read"], body: "b" }),
+    experimental_agent({
+      name: "w",
+      description: "x",
+      tools: ["Read"],
+      body: "b",
+    }),
     { specFile: "w.md.spec.ts", dialect: codexDialect },
   );
   assert.ok(bad.errors.some((e) => e.type === "unknown-tool"));

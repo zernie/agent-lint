@@ -1,13 +1,13 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { experimental_skill, instructions } from "./core/spec.js";
+import { experimental_skill, prose } from "./core/spec.js";
 import {
   claudeOnlyFrontmatterKeys,
   skillFrontmatterDropWarnings,
 } from "./skill-harness.js";
 
-const base = { name: "demo", description: "d", body: instructions`x` };
+const base = { name: "demo", description: "d", body: prose`x` };
 
 test("claudeOnlyFrontmatterKeys picks up disable-model-invocation + argument-hint", () => {
   assert.deepEqual(

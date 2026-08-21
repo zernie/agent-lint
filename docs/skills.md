@@ -55,7 +55,7 @@ export default skill({
   name: "ship-pr",
   description: "Run the checks and open a PR once they pass",
   inputs: [skill.input("branch", "branch to open the PR from")],
-  body: instructions`## Reference\n\n…domain knowledge the model reads…`,
+  body: prose`## Reference\n\n…domain knowledge the model reads…`,
   steps: [
     skill.step("Run the linter and fix issues.", { gate: cmd("npm run lint") }),
     skill.step("Run the tests; fix until green.", {
@@ -107,7 +107,8 @@ A skill's **firing** and its **gates** are testable without a spec, from the pub
 
 ## Status / pending
 
-`skill()` is experimental, and these are the measured reasons:
+`experimental_skill` carries the prefix, and these are the measured reasons — the
+roadmap for a feature lives with the feature, not on a separate stability page:
 
 - **A compiled `SKILL.md` has never been exercised as an installed skill.** Every `SKILL.md` in this repo that a harness actually loads — all of vigiles's own — is hand-written; the only two carrying the `vigiles:sha256:` header live under `examples/`. So the compiled path is untested end-to-end for skills, and adopting one means being the first to try it.
 
@@ -116,3 +117,9 @@ A skill's **firing** and its **gates** are testable without a spec, from the pub
 - **Adoption is all-or-nothing.** `renderSkillSections` composes the whole document in a fixed order, so converting an existing skill rewrites its structure rather than adding a gate to it. There is no "keep my prose, add one verified gate" path.
 - **`inputs` costs more than it looks.** One `input()` adds both the `argument-hint` frontmatter key and a generated `## Arguments` section.
 - The generator authoring mode (`genSkill` / `act` / `checkpoint` / `finish`) is **parked** and undocumented. It compiles, but it is reachable from no package subpath, so it is not part of the public API.
+
+**What would have to be true to drop the prefix:** a real skill corpus converted to it (today: two example specs), and a compiled `SKILL.md` shown to load and run as an installed skill — the first bullet above.
+
+**Why the helpers hang off the builder.** `experimental_skill.input()` and `experimental_skill.step()` are exported through the builder rather than beside it, and that placement is the point: both are used **only** by skill specs, so making them reachable only through the prefixed name makes the marking structural for the whole family. `cmd`, `file`, `project` and `result` are shared with subagents and stay top-level. Honest limit: `const { input } = experimental_skill` strips the marker inside one file — what the shape guarantees is narrower, that an unmarked name never crosses the package boundary.
+
+**Stable alternative:** a hand-written `SKILL.md` with markdown-mode gate markers. Same enforcement, no spec.

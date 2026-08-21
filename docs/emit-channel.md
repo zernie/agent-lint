@@ -1,31 +1,28 @@
-# Experimental surface — what is not settled yet
+# The emit channel — a skill returns a typed result by calling a tool
 
-**The prefix is the promise, wherever the symbol lives.** An `experimental_` name says a thing is provisional at the call site, without anyone opening this page — and that holds whether it comes from the quarantined `vigiles/experimental` subpath or sits beside stable exports in `vigiles/spec`. This page says what would have to be true to drop each one.
+⚠️ **`experimental_emitTool` — the shape is not settled.** The prefix is on every
+call site, so no one has to have read this page to know that. What this page adds
+is _why_: the measurements behind the channel, and the conditions that would
+retire the prefix.
 
-It has not always held. `skill()` once shipped stable-named from `vigiles/spec` while its own guide opened with "`skill()` is experimental" — prose one way, API the other. `npm run experimental:check` now fails CI when a public declaration tagged `@experimental` is not named for it, so the tag and the name cannot drift apart again.
+Import it from the package root:
 
-Nothing here is covered by semver. An experimental export may change shape or disappear in a patch release. If that is not acceptable for your repo, do not import it — everything on this page has a non-experimental alternative, named below in each section.
+```ts
+import { experimental_emitTool, experimental_assertEmittedOk } from "vigiles";
+```
 
-## `experimental_skill` — authoring a `SKILL.md` from a typed spec
+It sits beside `parseAgentResult` / `assertAgentOk`, which are its twins on the
+other delivery shape — a comparison the [choosing a channel](#choosing-a-channel)
+section below makes directly.
 
-The declarative skill builder, and its two helpers `experimental_skill.input()` and `experimental_skill.step()`.
-
-The helpers hang off the builder rather than being exported beside it, and that placement is the point: both are used **only** by skill specs, so making them reachable only through the prefixed name makes the marking structural for the whole family. `cmd`, `file`, `project` and `result` are shared with subagents and stay top-level. Honest limit: `const { input } = experimental_skill` strips the marker inside one file — what the shape guarantees is narrower, that an unmarked name never crosses the package boundary.
-
-**What would have to be true to drop the prefix:** a real skill corpus converted to it (today: two example specs), and a compiled `SKILL.md` shown to load and run as an installed skill — never yet exercised end-to-end. See [`skills.md`](skills.md) §Status for the measured gaps.
-
-**Stable alternative:** hand-written `SKILL.md` with markdown-mode gate markers. Same enforcement, no spec.
-
-## `experimental_emitTool` — a skill emits its result by calling a tool
-
-### The problem it addresses
+## The problem it addresses
 
 A typed result (`output:` + `result()`) is valid **only on a forked skill**. `vigiles compile` hard-errors `output-without-fork` on every other one, and that is deliberate: an inline skill is spliced into the conversation, so it has no call→return boundary and therefore no return value to type.
 
 A **tool call needs no return boundary**. The skill does not _return_ the structure — it _emits_ it, mid-conversation, and the call lands in `Trace.toolCalls`. The objection that grounds the exclusion does not apply to this delivery. It is the same `OutputContract`, reached a different way.
 
 ```ts
-import { experimental_emitTool } from "vigiles/experimental";
+import { experimental_emitTool } from "vigiles";
 
 const CONTRACT = result(
   // `["CUT", "MERGE", "KEEP"]` is an ENUM — the permitted values travel with the tool
@@ -47,7 +44,7 @@ assert.equal(v.verdict.startsWith("BLOCKED"), true);
 assert.ok(v.count > 0); // `count` is a number because the contract said so
 ```
 
-### How a wrong emission is caught
+## How a wrong emission is caught
 
 The reader is **total**: every way an emission can fail to satisfy the contract has its own
 branch with its own reason. There is no "it happened to look fine" path.
@@ -79,7 +76,42 @@ A skill that emits `verdict: "KEEP"` about work it never did is well-formed and 
 no schema can say otherwise. Gating on an emitted verdict was measured and rejected —
 self-report disagreed with a judged check in 45–75.8% of runs.
 
-### What is measured, and what is not
+## Choosing a channel
+
+Both channels deliver **exactly one** result. That is easy to miss, because
+"emit" sounds like a stream: it is not, and the reader treats a second call as a
+defect (`called 2 times; the contract is exactly once`). So the choice between
+them is **not** about how many results you have.
+
+It is about whether the skill has a place to return to.
+
+|                            | `output:` + `result()`                                                                    | `experimental_emitTool`                                     |
+| -------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **How the result travels** | the skill's return value, as a fenced block                                               | a tool call, mid-conversation, landing in `Trace.toolCalls` |
+| **Where it is valid**      | **forked skills only** — `vigiles compile` hard-errors `output-without-fork` on any other | anywhere, including an inline skill                         |
+| **What you have to run**   | nothing                                                                                   | your own MCP server, serving `emit.tool`                    |
+| **What you have to write** | the `output:` field                                                                       | paste `emit.instruction` into the skill body by hand        |
+| **Covered by semver**      | yes                                                                                       | no                                                          |
+
+**Pick `output:` whenever the skill can afford to fork.** It is stable, it costs
+no infrastructure, and the compiler emits it for you.
+
+**Reach for emit when the skill must stay inline.** An inline skill is spliced
+into the conversation rather than called, so it has no call→return boundary and
+no return value to type — which is exactly what `output-without-fork` is saying.
+A tool call needs no such boundary, so the objection that grounds the exclusion
+does not apply to this delivery. It is the same `OutputContract`, reached a
+different way.
+
+**Why there are two rather than one.** The obvious consolidation — let emit
+absorb `output:` — is measured and currently rejected on cost: emit requires the
+caller to stand up an MCP server and hand-paste the instruction, because neither
+`compileSkill` nor `compileAgent` emits it (`src/experimental-emit.ts:26-29`).
+Where the boundary already exists, `output:` is strictly cheaper. Should the
+compile-time path in gap 2 below land, this trade changes and the question is
+worth reopening.
+
+## What is measured, and what is not
 
 **2026-08-13, one skill, sonnet:** 8 runs, 8 emits, all on `ok`, all parsing, none repeated.
 
@@ -107,12 +139,12 @@ by the transcript. So question 3 below is answered.
    compiled subagent) was measured working, a skill was not — so the compile-time path is
    theory until that first end-to-end run.
 
-### What it does NOT buy — stated because it is the obvious thing to assume
+## What it does NOT buy — stated because it is the obvious thing to assume
 
 - **It does not enforce the schema.** The runtime does **not** enforce a tool's declared `required` fields — measured, with the raw call captured in the examples directory. A call with missing required fields reaches the server. Validation therefore lands in **your** receiving code, exactly as it would with a fenced block. What the contract buys is a _typed reader_, not a guaranteed writer.
 - **It does not remove `Bash` from a skill.** `allowed-tools` is **pre-approval, not restriction**. Dropping `Bash` from the list removes a permission prompt, not the capability.
 
-### To drop the `experimental_` prefix
+## To drop the `experimental_` prefix
 
 Three conditions, one of them now met:
 
@@ -123,55 +155,12 @@ Three conditions, one of them now met:
 - **A compile-time path** so the instruction is not hand-pasted. Not started; the design is
   locked and its first gate is the end-to-end run in point 4 above.
 
-### The non-experimental alternative
+## The non-experimental alternative
 
 A **forked** skill (`context: "fork"`) with an `output:` contract, parsed by `parseAgentResult`. It is stable, it is covered by semver, and it is the right answer whenever the skill can afford to run as a subagent.
 
-## `experimental_define*` — authoring a hook as a typed program
-
-The six entry points of the compiled-hook vocabulary: `experimental_defineHook`,
-`experimental_defineFileGate`, `experimental_definePromptGate`,
-`experimental_defineStopGate`, `experimental_defineInject`,
-`experimental_defineReact`. The full guide is [`compiled-hooks.md`](compiled-hooks.md).
-
-Only the entry points carry the prefix, and that placement is the whole point:
-every other name in `vigiles/hook` — `allow`, `deny`, `tool`, `pathView`,
-`commandView`, `state`, `record`, `notice`, `run` — is reachable ONLY from inside
-a `define*` call. Prefixing the chokepoint makes the marking structural for the
-whole vocabulary; prefixing thirty names could not, because nothing would stop
-the thirty-first from shipping unmarked. Same reasoning as
-`experimental_skill.input()` above, applied to a larger surface.
-
-**Why it is not settled, stated as gaps rather than as a disclaimer:**
-
-- The vocabulary grew a whole new axis in one release. Runtime-owned named state
-  (`record`/`state`) landed 2026-08-12 to close a measured hole — seven advisory
-  hooks in the dogfood repo were still hand-written shell for one uniform reason,
-  every one of them both read and wrote a stamp file, and throttling was
-  inexpressible. An API that gained a dimension that recently has not been
-  pressure-tested by anyone but its author.
-- 🔴 **Testing a hook that uses named state is archaeology today.** The runtime
-  derives the store's path from the hook's own location and validates the key
-  charset, so a test that wants to seed "this fact was recorded four days ago"
-  must reconstruct a private path. The dogfood repo does exactly that, hard-coded,
-  and it broke when the facts were renamed. There is no supported seeding API
-  beside `runHook`. Until there is, a consumer testing a throttle is depending on
-  internals.
-- `vigiles compile` is not idempotent — it appends a duplicate wiring block that
-  has to be removed by hand.
-- Two consumers total, both belonging to the author.
-
-**What would have to be true to drop the prefix:** a supported way to seed and
-read named state in a test; an idempotent `compile`; and at least one consumer
-who did not write the API.
-
-**Stable alternative:** a hand-written shell hook wired in `settings.json`. The
-events and the protocol are the harness's, not ours — nothing about them is
-experimental. What you give up is the typed vocabulary and everything it makes
-unrepresentable.
-
 ## See also
 
-- [`compiled-hooks.md`](compiled-hooks.md) — the typed hook vocabulary, including `state()` / `record()`.
+- [`skills.md`](skills.md) — authoring the skill this channel reports from.
 - [`spec-format.md`](spec-format.md) — `result()` and the `output:` contract on a forked skill.
-- [`testing-api.md`](testing-api.md) — `Trace`, `toolCalls`, and the check vocabulary the assertion above composes with.
+- [`testing-api.md`](testing-api.md) — `Trace`, `toolCalls`, and the check vocabulary the assertion composes with.

@@ -12,7 +12,7 @@ import { join, dirname } from "node:path";
 
 import type { HarnessAdapter } from "./core/adapter.js";
 import { compileAgent } from "./core/compile.js";
-import { agent } from "./core/spec.js";
+import { experimental_agent } from "./core/spec.js";
 import { loadPlugin } from "./plugin-loader.js";
 import {
   dialectVocabularyProblems,
@@ -180,7 +180,7 @@ export function checkAdapterConformance(
   // pass the subagent tool-contract check under this dialect.
   const tool = adapter.dialect.builtinAgentTools[0];
   if (tool) {
-    const spec = agent({
+    const spec = experimental_agent({
       name: "conformance",
       description: "conformance probe",
       tools: [tool],

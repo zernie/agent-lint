@@ -7,7 +7,7 @@
 > `experimental_definePromptGate`, `experimental_defineStopGate`,
 > `experimental_defineInject` and `experimental_defineReact`; alias them at the
 > import so the word crosses the package boundary once and the body stays
-> readable. [What would have to be true to drop the prefix](experimental.md).
+> readable. [What would have to be true to drop the prefix](#status--pending).
 >
 > **Stable alternative:** a hand-written shell hook wired in `settings.json`. Same
 > events, same protocol, none of the guarantees this page is about.
@@ -47,11 +47,11 @@ The unifying idea: a hook is a tiny program, and a closed, typed vocabulary shri
 
 **A hook's output depends on when it fires.** vigiles gives each role its own builder and its own return type, so the wrong output for an event won't type-check:
 
-- **`defineHook` / `defineFileGate`** — a **tool gate** (`PreToolUse`). Returns a `Decision`: `allow()`, `deny(reason)`, or `ask(reason)`. `deny` is the only thing that blocks; the compiler maps it to `exit 2`. `defineHook` sees the Bash command (`e.command`); `defineFileGate` sees the file path (`e.path`).
-- **`definePromptGate`** — a **prompt gate** (`UserPromptSubmit`). Sees the prompt **text** (`e.prompt`) and returns a `Decision`. `deny` blocks/erases the prompt — useful as a security filter that refuses a prompt leaking a secret or carrying an injection.
-- **`defineStopGate`** — a **stop gate** (`Stop` / `SubagentStop`). Returns a `Decision`. `deny` keeps the agent **going** (gate-until-tests-pass; the reason is fed back to the model). Honour `e.stopHookActive` (the loop guard): `allow` when it's set, or you can wedge the agent in a stop→continue loop.
-- **`defineInject`** — an **inject** (`SessionStart` / `UserPromptSubmit`). Returns an `Injection` (`inject(text)`) — context added to the model. It has **no `deny`**: a no-decision event can't block.
-- **`defineReact`** — a **react** (`PostToolUse`). Returns a `Reaction` — `run(cmd)`, `notice(msg)`, or `nothing()`. The tool already ran, so it **can't block**. It sees the tool's **response** (`e.response`, e.g. react only on a failure), and `run(cmd)`'s effect is **classified at construction** (read-only / side-effecting), so every reaction is auditable without running it.
+- **`experimental_defineHook` / `experimental_defineFileGate`** — a **tool gate** (`PreToolUse`). Returns a `Decision`: `allow()`, `deny(reason)`, or `ask(reason)`. `deny` is the only thing that blocks; the compiler maps it to `exit 2`. `experimental_defineHook` sees the Bash command (`e.command`); `experimental_defineFileGate` sees the file path (`e.path`).
+- **`experimental_definePromptGate`** — a **prompt gate** (`UserPromptSubmit`). Sees the prompt **text** (`e.prompt`) and returns a `Decision`. `deny` blocks/erases the prompt — useful as a security filter that refuses a prompt leaking a secret or carrying an injection.
+- **`experimental_defineStopGate`** — a **stop gate** (`Stop` / `SubagentStop`). Returns a `Decision`. `deny` keeps the agent **going** (gate-until-tests-pass; the reason is fed back to the model). Honour `e.stopHookActive` (the loop guard): `allow` when it's set, or you can wedge the agent in a stop→continue loop.
+- **`experimental_defineInject`** — an **inject** (`SessionStart` / `UserPromptSubmit`). Returns an `Injection` (`inject(text)`) — context added to the model. It has **no `deny`**: a no-decision event can't block.
+- **`experimental_defineReact`** — a **react** (`PostToolUse`). Returns a `Reaction` — `run(cmd)`, `notice(msg)`, or `nothing()`. The tool already ran, so it **can't block**. It sees the tool's **response** (`e.response`, e.g. react only on a failure), and `run(cmd)`'s effect is **classified at construction** (read-only / side-effecting), so every reaction is auditable without running it.
 
 Every **gate** (tool / prompt / stop) takes an optional `mode` — see [Observe mode](#observe-mode-shadow-rollout).
 
@@ -60,16 +60,11 @@ Every **gate** (tool / prompt / stop) takes an optional `mode` — see [Observe 
 The entire surface a hook may touch (that's the safety guarantee):
 
 ```ts
-import {
-  experimental_defineHook as defineHook,
-  tool,
-  deny,
-  allow,
-} from "vigiles/hook";
+import { experimental_defineHook, tool, deny, allow } from "vigiles/hook";
 
 // Block any force-push to a protected branch — including one hidden in a
 // compound command, which a glob/grep matcher misses.
-export default defineHook({
+export default experimental_defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
   decide: (e) =>
@@ -118,7 +113,7 @@ A hook that should speak _at most once an hour_, or only _after something else a
 So the hook does not write. It **declares** a fact, and the runtime writes it:
 
 ```ts
-export default defineHook({
+export default experimental_defineHook({
   on: "Stop",
   needs: { sync: state("calendar.synced") },
   react: (e) =>
@@ -145,14 +140,10 @@ Throttling is not a separate feature — it is this one, read as "when did I las
 A prompt gate and a stop gate read like any other gate — they just decide over a different event:
 
 ```ts
-import {
-  experimental_definePromptGate as definePromptGate,
-  deny,
-  allow,
-} from "vigiles/hook";
+import { experimental_definePromptGate, deny, allow } from "vigiles/hook";
 
 // Refuse a prompt that looks like it's pasting a secret key.
-export default definePromptGate({
+export default experimental_definePromptGate({
   on: "UserPromptSubmit",
   decide: (e) =>
     /sk-[a-z0-9]{20}/i.test(e.prompt)
@@ -162,14 +153,10 @@ export default definePromptGate({
 ```
 
 ```ts
-import {
-  experimental_defineStopGate as defineStopGate,
-  deny,
-  allow,
-} from "vigiles/hook";
+import { experimental_defineStopGate, deny, allow } from "vigiles/hook";
 
 // Don't let the agent stop while the tests are red.
-export default defineStopGate({
+export default experimental_defineStopGate({
   on: "Stop",
   decide: (e) =>
     e.stopHookActive // a prior block already fired — let it stop now (loop guard)
@@ -186,7 +173,7 @@ export default defineStopGate({
 - **`observe`** — the **shadow / rollout** mode: compute the same decision, **record** what it _would_ have blocked, and **let everything through**. Watch the log, confirm it only flags the bad stuff, then promote to `enforce`.
 
 ```ts
-export default defineHook({
+export default experimental_defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
   mode: "observe", // ← shadow: record, don't block
@@ -206,14 +193,9 @@ In observe mode the runtime exits `0` (never blocks) and appends a record to **`
 The fix is the same one Cedar/OPA/Gatekeeper use: **the hook never fetches — it declares what it needs, and the trusted runtime gathers those read-only facts and hands them in** as `e.ctx`.
 
 ```ts
-import {
-  experimental_defineHook as defineHook,
-  tool,
-  deny,
-  allow,
-} from "vigiles/hook";
+import { experimental_defineHook, tool, deny, allow } from "vigiles/hook";
 
-export default defineHook({
+export default experimental_defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
   needs: ["git.branch"], //                ← declared; gathered by the runtime
@@ -232,14 +214,14 @@ The guarantee is intact and **stronger**: the hook still does zero I/O. The runt
 
 ```ts
 import {
-  experimental_defineHook as defineHook,
+  experimental_defineHook,
   tool,
   deny,
   allow,
   provide,
 } from "vigiles/hook";
 
-export default defineHook({
+export default experimental_defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
   needs: [provide("k8sCtx", "kubectl config current-context")], // read-only, inline
@@ -437,9 +419,56 @@ Compiled hooks are neither free nor magic. The honest downsides:
 - ⚠️ **Compiling proves the protocol, not your policy.** A compiled hook can't have the wrong exit code — but it can still `deny` the wrong thing. Compiling is necessary, not sufficient. Test the _logic_ with [guardrail verification](harness-testing.md).
 - ℹ️ **Codex inject/ask output is unconfirmed.** The gate (`deny` → exit 2) path is cross-harness today. An inject/react hook's _output_ shape is Claude-Code-confirmed only, so `compile --harness=codex` **warns loudly** on those rather than ship a maybe-no-op (see [Compile and wire](#compile-and-wire)).
 
+## Status / pending
+
+The vocabulary's six entry points carry the `experimental_` prefix. This section
+says what that prefix is claiming and what would retire it — the roadmap for the
+feature lives with the feature, not on a separate stability page.
+
+They are `experimental_defineHook`, `experimental_defineFileGate`,
+`experimental_definePromptGate`, `experimental_defineStopGate`,
+`experimental_defineInject` and `experimental_defineReact` — everything this page
+has been about.
+
+Only the entry points carry the prefix, and that placement is the whole point:
+every other name in `vigiles/hook` — `allow`, `deny`, `tool`, `pathView`,
+`commandView`, `state`, `record`, `notice`, `run` — is reachable ONLY from inside
+a `define*` call. Prefixing the chokepoint makes the marking structural for the
+whole vocabulary; prefixing thirty names could not, because nothing would stop
+the thirty-first from shipping unmarked. Same reasoning as
+`experimental_skill.input()` (see [`skills.md`](skills.md#status--pending)), applied to a larger surface.
+
+**Why it is not settled, stated as gaps rather than as a disclaimer:**
+
+- The vocabulary grew a whole new axis in one release. Runtime-owned named state
+  (`record`/`state`) landed 2026-08-12 to close a measured hole — seven advisory
+  hooks in the dogfood repo were still hand-written shell for one uniform reason,
+  every one of them both read and wrote a stamp file, and throttling was
+  inexpressible. An API that gained a dimension that recently has not been
+  pressure-tested by anyone but its author.
+- 🔴 **Testing a hook that uses named state is archaeology today.** The runtime
+  derives the store's path from the hook's own location and validates the key
+  charset, so a test that wants to seed "this fact was recorded four days ago"
+  must reconstruct a private path. The dogfood repo does exactly that, hard-coded,
+  and it broke when the facts were renamed. There is no supported seeding API
+  beside `runHook`. Until there is, a consumer testing a throttle is depending on
+  internals.
+- `vigiles compile` is not idempotent — it appends a duplicate wiring block that
+  has to be removed by hand.
+- Two consumers total, both belonging to the author.
+
+**What would have to be true to drop the prefix:** a supported way to seed and
+read named state in a test; an idempotent `compile`; and at least one consumer
+who did not write the API.
+
+**Stable alternative:** a hand-written shell hook wired in `settings.json`. The
+events and the protocol are the harness's, not ours — nothing about them is
+experimental. What you give up is the typed vocabulary and everything it makes
+unrepresentable.
+
 ## See also
 
 - [Testing your harness](harness-testing.md) — the test tiers; `runHook` unit-tests a hook's decision, and `assertBlocksDisasters` proves a guardrail blocks.
 - [Verifying your instruction files](verifying-instruction-files.md) — the linting layer (references are _true_); compiled hooks are the **gate** instrument beside it.
 - [CLI & GitHub Action](cli.md) — `compile` / `hook-runtime` reference.
-- [API reference (generated)](https://zernie.github.io/vigiles/api/) — every `vigiles/hook` symbol (`defineHook`, `provide`/`dangerously`/`defineProvider`, the `Decision`/`Reaction` types, …).
+- [API reference (generated)](https://zernie.github.io/vigiles/api/) — every `vigiles/hook` symbol (`experimental_defineHook`, `provide`/`dangerously`/`defineProvider`, the `Decision`/`Reaction` types, …).

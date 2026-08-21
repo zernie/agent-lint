@@ -2,7 +2,7 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 
 import { compileAgent } from "./compile.js";
-import { agent } from "./spec.js";
+import { experimental_agent } from "./spec.js";
 import type { HarnessDialect } from "./dialect.js";
 // The concrete Claude Code dialect lives in its adapter (the core defines only
 // the interface). Test files are exempt from the import boundary, so this test
@@ -26,7 +26,7 @@ test("the Claude Code dialect has the expected shape", () => {
 });
 
 test("compileAgent verifies the tool contract against the injected CC dialect", () => {
-  const okAgent = agent({
+  const okAgent = experimental_agent({
     name: "reviewer",
     description: "Reviews code",
     tools: ["Read", "Grep"],
@@ -38,7 +38,7 @@ test("compileAgent verifies the tool contract against the injected CC dialect", 
   });
   assert.equal(ok.errors.filter((e) => e.type === "unknown-tool").length, 0);
 
-  const badAgent = agent({
+  const badAgent = experimental_agent({
     name: "reviewer",
     description: "Reviews code",
     tools: ["Reed"], // typo
@@ -66,7 +66,7 @@ test("an injected dialect swaps the catalog — Codex-prep seam", () => {
     pluginRootToken: "${CODEX_PLUGIN_ROOT}",
     skillFrontmatter: "minimal",
   };
-  const a = agent({
+  const a = experimental_agent({
     name: "worker",
     description: "Does work",
     tools: ["Shell"], // valid in codexish, NOT in Claude Code

@@ -98,10 +98,10 @@ declare module "vigiles/generated" {
     | "check"
     | "docs:check"
     | "exports:check"
-    | "experimental:check"
+    | "internal:check"
     | "docs:api";
 
-  /** 391 project files. */
+  /** 390 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -378,7 +378,6 @@ declare module "vigiles/generated" {
     | "src/examples-syntax.test.ts"
     | "src/experimental-emit.test.ts"
     | "src/experimental-emit.ts"
-    | "src/experimental.ts"
     | "src/fs-walk.test.ts"
     | "src/fs-walk.ts"
     | "src/guardrail-check.test.ts"
@@ -841,7 +840,6 @@ declare module "vigiles/spec" {
       | "src/examples-syntax.test.ts"
       | "src/experimental-emit.test.ts"
       | "src/experimental-emit.ts"
-      | "src/experimental.ts"
       | "src/fs-walk.test.ts"
       | "src/fs-walk.ts"
       | "src/guardrail-check.test.ts"
@@ -981,7 +979,7 @@ declare module "vigiles/spec" {
       | "check"
       | "docs:check"
       | "exports:check"
-      | "experimental:check"
+      | "internal:check"
       | "docs:api";
   }
 }

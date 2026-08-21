@@ -11,9 +11,9 @@ import {
   symbol,
   dir,
   glob,
-  instructions,
+  prose,
   experimental_effect,
-  claude,
+  instructionFile,
   experimental_skill,
 } from "./spec.js";
 import type {
@@ -126,7 +126,7 @@ describe("reference helpers", () => {
 
 describe("instructions tagged template", () => {
   it("interleaves strings and refs", () => {
-    const result = instructions`Check ${file("foo.ts")} and run ${cmd("npm test")}.`;
+    const result = prose`Check ${file("foo.ts")} and run ${cmd("npm test")}.`;
     assert.equal(result.length, 5);
     assert.equal(typeof result[0], "string");
     assert.equal((result[1] as { _ref: string })._ref, "file");
@@ -156,7 +156,7 @@ describe("experimental_effect() tagged template", () => {
   });
 
   it("can be nested inside instructions", () => {
-    const frags = instructions`Before. ${experimental_effect`Inside ${file("package.json")}.`} After.`;
+    const frags = prose`Before. ${experimental_effect`Inside ${file("package.json")}.`} After.`;
     // [string, EffectRegion, string]
     assert.equal(frags.length, 3);
     const region = frags[1] as { _ref: string; body: unknown[] };
@@ -165,9 +165,9 @@ describe("experimental_effect() tagged template", () => {
   });
 });
 
-describe("claude()", () => {
+describe("instructionFile()", () => {
   it("creates a claude spec with correct type tag", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: {
         "no-console": enforce("eslint/no-console", "Use logger."),
       },
@@ -195,7 +195,7 @@ describe("experimental_skill()", () => {
 
 describe("compileClaude()", () => {
   it("compiles a minimal spec to markdown", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: {
         "no-console": enforce("eslint/no-console", "Use structured logger."),
         "research-first": guidance("Google unfamiliar APIs first."),
@@ -215,7 +215,7 @@ describe("compileClaude()", () => {
   });
 
   it("includes commands section", () => {
-    const spec = claude({
+    const spec = instructionFile({
       commands: { "npm test": "Run tests" },
       rules: {},
     });
@@ -225,7 +225,7 @@ describe("compileClaude()", () => {
   });
 
   it("includes key files section", () => {
-    const spec = claude({
+    const spec = instructionFile({
       keyFiles: { "src/core/spec.ts": "Spec system" },
       rules: {},
     });
@@ -235,7 +235,7 @@ describe("compileClaude()", () => {
   });
 
   it("reports errors for missing key files", () => {
-    const spec = claude({
+    const spec = instructionFile({
       keyFiles: { "src/nonexistent-file-xyz.ts": "Does not exist" },
       rules: {},
     });
@@ -245,7 +245,7 @@ describe("compileClaude()", () => {
   });
 
   it("reports errors for missing npm scripts", () => {
-    const spec = claude({
+    const spec = instructionFile({
       commands: { "npm run nonexistent-script-xyz": "Does not exist" },
       rules: {},
     });
@@ -255,9 +255,9 @@ describe("compileClaude()", () => {
   });
 
   it("symbol() renders `file#symbol` and verifies the named file defines it", () => {
-    const ok = claude({
+    const ok = instructionFile({
       sections: {
-        u: instructions`Use ${symbol("src/core/symbols.ts", "definedSymbols")}.`,
+        u: prose`Use ${symbol("src/core/symbols.ts", "definedSymbols")}.`,
       },
       rules: {},
     });
@@ -268,9 +268,9 @@ describe("compileClaude()", () => {
       /`vigiles:symbol src\/core\/symbols\.ts#definedSymbols`/,
     );
 
-    const bad = claude({
+    const bad = instructionFile({
       sections: {
-        u: instructions`Use ${symbol("src/core/symbols.ts", "noSuchSymbol")}.`,
+        u: prose`Use ${symbol("src/core/symbols.ts", "noSuchSymbol")}.`,
       },
       rules: {},
     });
@@ -279,7 +279,7 @@ describe("compileClaude()", () => {
   });
 
   it("includes sections in output", () => {
-    const spec = claude({
+    const spec = instructionFile({
       sections: {
         architecture: "TypeScript strict-mode codebase.",
       },
@@ -295,14 +295,14 @@ describe("compileClaude()", () => {
     for (let i = 0; i < 5; i++) {
       rules[`rule-${String(i)}`] = guidance("test");
     }
-    const spec = claude({ rules });
+    const spec = instructionFile({ rules });
     const { errors } = compileClaude(spec, { maxRules: 3 });
     assert.equal(errors.length, 1);
     assert.ok(errors[0].message.includes("exceeds maxRules"));
   });
 
   it("returns linterResults for enforce rules", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: {
         "no-console": enforce("eslint/no-console", "Use logger."),
       },
@@ -380,7 +380,7 @@ describe("compileSkill()", () => {
     const spec = experimental_skill({
       name: "test-skill",
       description: "A test skill",
-      body: instructions`Check ${file("package.json")} and run ${cmd("npm test")}.`,
+      body: prose`Check ${file("package.json")} and run ${cmd("npm test")}.`,
     });
     const { markdown } = compileSkill(spec, { basePath: process.cwd() });
     assert.ok(markdown.includes("`package.json`"));
@@ -391,7 +391,7 @@ describe("compileSkill()", () => {
     const spec = experimental_skill({
       name: "test-skill",
       description: "A test skill",
-      body: instructions`Check ${file("nonexistent-xyz.ts")}.`,
+      body: prose`Check ${file("nonexistent-xyz.ts")}.`,
     });
     const { errors } = compileSkill(spec, { basePath: process.cwd() });
     assert.equal(errors.length, 1);
@@ -402,7 +402,7 @@ describe("compileSkill()", () => {
     const spec = experimental_skill({
       name: "test-skill",
       description: "A test skill",
-      body: instructions`The engine lives in ${dir("src/core")}.`,
+      body: prose`The engine lives in ${dir("src/core")}.`,
     });
     const { markdown, errors } = compileSkill(spec, {
       basePath: process.cwd(),
@@ -415,7 +415,7 @@ describe("compileSkill()", () => {
     const spec = experimental_skill({
       name: "test-skill",
       description: "A test skill",
-      body: instructions`See ${dir("src/nonexistent-dir-xyz")}.`,
+      body: prose`See ${dir("src/nonexistent-dir-xyz")}.`,
     });
     const { errors } = compileSkill(spec, { basePath: process.cwd() });
     assert.equal(errors.length, 1);
@@ -426,7 +426,7 @@ describe("compileSkill()", () => {
     const spec = experimental_skill({
       name: "test-skill",
       description: "A test skill",
-      body: instructions`See ${dir("package.json")}.`,
+      body: prose`See ${dir("package.json")}.`,
     });
     const { errors } = compileSkill(spec, { basePath: process.cwd() });
     assert.equal(errors.length, 1);
@@ -438,7 +438,7 @@ describe("compileSkill()", () => {
     const spec = experimental_skill({
       name: "test-skill",
       description: "A test skill",
-      body: instructions`Specs: ${glob("src/core/*.test.ts")}.`,
+      body: prose`Specs: ${glob("src/core/*.test.ts")}.`,
     });
     const { markdown, errors } = compileSkill(spec, {
       basePath: process.cwd(),
@@ -451,7 +451,7 @@ describe("compileSkill()", () => {
     const spec = experimental_skill({
       name: "test-skill",
       description: "A test skill",
-      body: instructions`Specs: ${glob("src/**/*.nonexistent-ext")}.`,
+      body: prose`Specs: ${glob("src/**/*.nonexistent-ext")}.`,
     });
     const { errors } = compileSkill(spec, { basePath: process.cwd() });
     assert.equal(errors.length, 1);
@@ -593,7 +593,7 @@ describe("estimateTokens()", () => {
 
 describe("maxTokens budget", () => {
   it("errors when compiled output exceeds maxTokens", () => {
-    const spec = claude({
+    const spec = instructionFile({
       sections: { prose: "x".repeat(1000) },
       rules: {},
     });
@@ -603,7 +603,7 @@ describe("maxTokens budget", () => {
   });
 
   it("passes when under budget", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: { test: guidance("Short.") },
     });
     const { errors } = compileClaude(spec, { maxTokens: 10000 });
@@ -617,7 +617,7 @@ describe("maxTokens budget", () => {
 
 describe("section guardrails", () => {
   it("errors when section contains a top-level header", () => {
-    const spec = claude({
+    const spec = instructionFile({
       sections: { about: "Some intro\n# Overview\nMore text" },
       rules: {},
     });
@@ -626,7 +626,7 @@ describe("section guardrails", () => {
   });
 
   it("errors when section contains a second-level header", () => {
-    const spec = claude({
+    const spec = instructionFile({
       sections: { about: "Some intro\n## Subsection\nMore text" },
       rules: {},
     });
@@ -635,7 +635,7 @@ describe("section guardrails", () => {
   });
 
   it("allows ### and deeper headers in sections", () => {
-    const spec = claude({
+    const spec = instructionFile({
       sections: { about: "Some intro\n### Detail\nMore text" },
       rules: {},
     });
@@ -644,7 +644,7 @@ describe("section guardrails", () => {
   });
 
   it("does not flag # inside code fences", () => {
-    const spec = claude({
+    const spec = instructionFile({
       sections: { about: "Example:\n```\n# this is a comment\n```" },
       rules: {},
     });
@@ -653,7 +653,7 @@ describe("section guardrails", () => {
   });
 
   it("does not flag # inside tilde code fences", () => {
-    const spec = claude({
+    const spec = instructionFile({
       sections: { about: "Example:\n~~~\n## heading in fence\n~~~" },
       rules: {},
     });
@@ -662,7 +662,7 @@ describe("section guardrails", () => {
   });
 
   it("flags # after code fence closes", () => {
-    const spec = claude({
+    const spec = instructionFile({
       sections: {
         about: "Example:\n```\n# safe\n```\n# not safe",
       },
@@ -677,7 +677,7 @@ describe("section guardrails", () => {
       { length: 50 },
       (_, i) => `Line ${String(i + 1)}`,
     ).join("\n");
-    const spec = claude({
+    const spec = instructionFile({
       sections: { wall: longContent },
       rules: {},
     });
@@ -692,7 +692,7 @@ describe("section guardrails", () => {
       { length: 20 },
       (_, i) => `Line ${String(i + 1)}`,
     ).join("\n");
-    const spec = claude({
+    const spec = instructionFile({
       sections: { ok: content },
       rules: {},
     });
@@ -706,7 +706,7 @@ describe("section guardrails", () => {
       { length: 100 },
       (_, i) => `Line ${String(i + 1)}`,
     ).join("\n");
-    const spec = claude({ sections: { ok: content }, rules: {} });
+    const spec = instructionFile({ sections: { ok: content }, rules: {} });
     const { errors } = compileClaude(spec);
     assert.ok(!errors.some((e) => e.type === "section-too-long"));
   });
@@ -718,7 +718,7 @@ describe("section guardrails", () => {
       { length: 250 },
       (_, i) => `Line ${String(i + 1)}`,
     ).join("\n");
-    const spec = claude({ sections: { wall: dump }, rules: {} });
+    const spec = instructionFile({ sections: { wall: dump }, rules: {} });
     const { errors } = compileClaude(spec);
     const tooLong = errors.find((e) => e.type === "section-too-long");
     assert.ok(tooLong, "the default cap should fire on a 250-line section");
@@ -733,7 +733,7 @@ describe("section guardrails", () => {
 
 describe("reserved section keys", () => {
   it("errors when section key is 'commands'", () => {
-    const spec = claude({
+    const spec = instructionFile({
       sections: { commands: "Should use the commands field instead." },
       rules: {},
     });
@@ -742,7 +742,7 @@ describe("reserved section keys", () => {
   });
 
   it("errors when section key is 'rules'", () => {
-    const spec = claude({
+    const spec = instructionFile({
       sections: { rules: "Should use the rules field instead." },
       rules: {},
     });
@@ -751,7 +751,7 @@ describe("reserved section keys", () => {
   });
 
   it("errors when section key is 'keyFiles'", () => {
-    const spec = claude({
+    const spec = instructionFile({
       sections: { keyFiles: "Should use the keyFiles field instead." },
       rules: {},
     });
@@ -760,7 +760,7 @@ describe("reserved section keys", () => {
   });
 
   it("allows non-reserved section keys", () => {
-    const spec = claude({
+    const spec = instructionFile({
       sections: { architecture: "This is fine." },
       rules: {},
     });
@@ -779,7 +779,7 @@ describe("per-spec maxSectionLines", () => {
       { length: 30 },
       (_, i) => `Line ${String(i + 1)}`,
     ).join("\n");
-    const spec = claude({
+    const spec = instructionFile({
       sections: { wall: longContent },
       maxSectionLines: 20,
       rules: {},
@@ -793,7 +793,7 @@ describe("per-spec maxSectionLines", () => {
       { length: 30 },
       (_, i) => `Line ${String(i + 1)}`,
     ).join("\n");
-    const spec = claude({
+    const spec = instructionFile({
       sections: { wall: longContent },
       maxSectionLines: 50, // spec says 50, which would pass
       rules: {},
@@ -810,7 +810,7 @@ describe("per-spec maxSectionLines", () => {
       { length: 30 },
       (_, i) => `Line ${String(i + 1)}`,
     ).join("\n");
-    const spec = claude({
+    const spec = instructionFile({
       sections: { wall: longContent },
       rules: {},
     });
@@ -825,9 +825,9 @@ describe("per-spec maxSectionLines", () => {
 
 describe("sections with refs", () => {
   it("compiles sections with file() refs and validates them", () => {
-    const spec = claude({
+    const spec = instructionFile({
       sections: {
-        architecture: instructions`Core engine in ${file("src/core/spec.ts")}.`,
+        architecture: prose`Core engine in ${file("src/core/spec.ts")}.`,
       },
       rules: {},
     });
@@ -839,9 +839,9 @@ describe("sections with refs", () => {
   });
 
   it("reports stale file refs in sections", () => {
-    const spec = claude({
+    const spec = instructionFile({
       sections: {
-        architecture: instructions`See ${file("src/nonexistent-xyz.ts")}.`,
+        architecture: prose`See ${file("src/nonexistent-xyz.ts")}.`,
       },
       rules: {},
     });
@@ -1078,7 +1078,7 @@ describe("checkLinterRule()", () => {
 
 describe("enforce() linter integration in compileClaude", () => {
   it("verifies eslint rules during compilation", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: {
         "no-console": enforce("eslint/no-console", "Use logger."),
       },
@@ -1092,7 +1092,7 @@ describe("enforce() linter integration in compileClaude", () => {
   });
 
   it("errors on nonexistent linter rule during compilation", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: {
         fake: enforce("eslint/completely-fake-xyz", "Doesn't exist."),
       },
@@ -1103,7 +1103,7 @@ describe("enforce() linter integration in compileClaude", () => {
   });
 
   it("respects catalogOnly option", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: {
         "no-console": enforce("eslint/no-console", "Use logger."),
       },
@@ -1123,7 +1123,7 @@ describe("enforce() linter integration in compileClaude", () => {
 
 describe("linter verification disable options", () => {
   it("per-rule: verify: false skips linter check", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: {
         "fake-rule": enforce("eslint/totally-fake-xyz", "Doesn't exist.", {
           verify: false,
@@ -1139,7 +1139,7 @@ describe("linter verification disable options", () => {
   });
 
   it("per-rule: verify: true (default) checks linter", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: {
         "fake-rule": enforce("eslint/totally-fake-xyz", "Doesn't exist."),
       },
@@ -1149,7 +1149,7 @@ describe("linter verification disable options", () => {
   });
 
   it("global: verifyLinters: false skips ALL linter checks", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: {
         "fake-a": enforce("eslint/fake-a-xyz", "Nope."),
         "fake-b": enforce("ruff/FAKE999", "Nope."),
@@ -1166,7 +1166,7 @@ describe("linter verification disable options", () => {
   });
 
   it("per-linter: false skips that linter only", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: {
         "eslint-fake": enforce("eslint/fake-xyz", "Nope."),
         "ruff-fake": enforce("ruff/FAKE999", "Nope."),
@@ -1185,7 +1185,7 @@ describe("linter verification disable options", () => {
   });
 
   it("per-linter: catalog-only skips config check", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: {
         "no-console": enforce("eslint/no-console", "Use logger."),
       },
@@ -1200,7 +1200,7 @@ describe("linter verification disable options", () => {
   });
 
   it("per-rule verify: false takes priority over global verifyLinters: true", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: {
         "skip-this": enforce("eslint/fake-xyz", "Skip.", { verify: false }),
         "check-this": enforce("eslint/no-console", "Check."),
@@ -1215,7 +1215,7 @@ describe("linter verification disable options", () => {
   });
 
   it("global verifyLinters: false overrides per-linter modes", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: {
         "no-console": enforce("eslint/no-console", "Use logger."),
       },
@@ -1236,7 +1236,7 @@ describe("linter verification disable options", () => {
 
 describe("adoptDiff()", () => {
   it("detects unchanged compiled file", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: { test: guidance("Hello.") },
     });
     const tmpDir = join(process.cwd(), ".vigiles-test-adopt-tmp");
@@ -1258,7 +1258,7 @@ describe("adoptDiff()", () => {
   });
 
   it("detects manually edited file", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: { test: guidance("Hello.") },
     });
     const tmpDir = join(process.cwd(), ".vigiles-test-adopt-edit-tmp");
@@ -1284,7 +1284,7 @@ describe("adoptDiff()", () => {
   });
 
   it("handles file without hash", () => {
-    const spec = claude({ rules: {} });
+    const spec = instructionFile({ rules: {} });
     const tmpDir = join(process.cwd(), ".vigiles-test-adopt-nohash-tmp");
     mkdirSync(tmpDir, { recursive: true });
     try {
@@ -1328,8 +1328,8 @@ describe("type exports", () => {
     assert.ok(true, "phantom types are importable");
   });
 
-  it("claude() stores maxSectionLines on the spec", () => {
-    const spec = claude({
+  it("instructionFile() stores maxSectionLines on the spec", () => {
+    const spec = instructionFile({
       sections: { about: "Hello" },
       maxSectionLines: 25,
       rules: {},
@@ -1337,8 +1337,8 @@ describe("type exports", () => {
     assert.equal(spec.maxSectionLines, 25);
   });
 
-  it("claude() without sections has no maxSectionLines", () => {
-    const spec = claude({ rules: {} });
+  it("instructionFile() without sections has no maxSectionLines", () => {
+    const spec = instructionFile({ rules: {} });
     assert.equal(spec.maxSectionLines, undefined);
   });
 
@@ -1357,7 +1357,7 @@ describe("type exports", () => {
 
 describe("spec file naming convention", () => {
   it("accepts valid CLAUDE.md.spec.ts name", () => {
-    const spec = claude({ rules: {} });
+    const spec = instructionFile({ rules: {} });
     const { errors } = compileClaude(spec, {
       specFile: "CLAUDE.md.spec.ts",
     });
@@ -1365,7 +1365,7 @@ describe("spec file naming convention", () => {
   });
 
   it("accepts valid nested path spec name", () => {
-    const spec = claude({ rules: {} });
+    const spec = instructionFile({ rules: {} });
     const { errors } = compileClaude(spec, {
       specFile: "src/CLAUDE.md.spec.ts",
     });
@@ -1373,7 +1373,7 @@ describe("spec file naming convention", () => {
   });
 
   it("errors when spec file does not end with .spec.ts", () => {
-    const spec = claude({ rules: {} });
+    const spec = instructionFile({ rules: {} });
     const { errors } = compileClaude(spec, {
       specFile: "CLAUDE.md.ts",
     });
@@ -1381,7 +1381,7 @@ describe("spec file naming convention", () => {
   });
 
   it("errors when spec file does not match target", () => {
-    const spec = claude({ rules: {} });
+    const spec = instructionFile({ rules: {} });
     const { errors } = compileClaude(spec, {
       specFile: "AGENTS.md.spec.ts",
     });
@@ -1421,27 +1421,27 @@ describe("spec file naming convention", () => {
 
 describe("output target", () => {
   it("defaults to CLAUDE.md heading", () => {
-    const spec = claude({ rules: {} });
+    const spec = instructionFile({ rules: {} });
     const { markdown } = compileClaude(spec);
     assert.ok(markdown.includes("# CLAUDE.md"));
   });
 
   it("uses custom target for heading", () => {
-    const spec = claude({ target: "AGENTS.md", rules: {} });
+    const spec = instructionFile({ target: "AGENTS.md", rules: {} });
     const { markdown } = compileClaude(spec);
     assert.ok(markdown.includes("# AGENTS.md"));
     assert.ok(!markdown.includes("# CLAUDE.md"));
   });
 
   it("defaults specFile based on target", () => {
-    const spec = claude({ target: "AGENTS.md", rules: {} });
+    const spec = instructionFile({ target: "AGENTS.md", rules: {} });
     // Without explicit specFile, it should derive from target
     const { markdown } = compileClaude(spec);
     assert.ok(markdown.includes("compiled from AGENTS.md.spec.ts"));
   });
 
   it("accepts AGENTS.md.spec.ts naming for AGENTS.md target", () => {
-    const spec = claude({ target: "AGENTS.md", rules: {} });
+    const spec = instructionFile({ target: "AGENTS.md", rules: {} });
     const { errors } = compileClaude(spec, {
       specFile: "AGENTS.md.spec.ts",
     });
@@ -1449,13 +1449,13 @@ describe("output target", () => {
   });
 
   it("accepts custom target name", () => {
-    const spec = claude({ target: "CODEX.md", rules: {} });
+    const spec = instructionFile({ target: "CODEX.md", rules: {} });
     const { markdown } = compileClaude(spec);
     assert.ok(markdown.includes("# CODEX.md"));
   });
 
   it("returns all targets from array", () => {
-    const spec = claude({
+    const spec = instructionFile({
       target: ["CLAUDE.md", "AGENTS.md"],
       rules: {},
     });
@@ -1466,13 +1466,13 @@ describe("output target", () => {
   });
 
   it("returns single target in targets array", () => {
-    const spec = claude({ target: "AGENTS.md", rules: {} });
+    const spec = instructionFile({ target: "AGENTS.md", rules: {} });
     const { targets } = compileClaude(spec);
     assert.deepEqual(targets, ["AGENTS.md"]);
   });
 
   it("defaults targets to CLAUDE.md", () => {
-    const spec = claude({ rules: {} });
+    const spec = instructionFile({ rules: {} });
     const { targets } = compileClaude(spec);
     assert.deepEqual(targets, ["CLAUDE.md"]);
   });
@@ -1484,7 +1484,7 @@ describe("output target", () => {
 
 describe("edge cases", () => {
   it("compileClaude with empty spec produces valid markdown", () => {
-    const spec = claude({ rules: {} });
+    const spec = instructionFile({ rules: {} });
     const { markdown, errors, tokens } = compileClaude(spec);
     assert.ok(markdown.includes("# CLAUDE.md"));
     assert.equal(errors.length, 0);
@@ -1492,7 +1492,7 @@ describe("edge cases", () => {
   });
 
   it("compileClaude with only sections (no rules)", () => {
-    const spec = claude({
+    const spec = instructionFile({
       sections: { about: "This is a project." },
       rules: {},
     });
@@ -1506,13 +1506,13 @@ describe("edge cases", () => {
     for (let i = 0; i < 3; i++) {
       rules[`rule-${String(i)}`] = guidance("test");
     }
-    const spec = claude({ rules });
+    const spec = instructionFile({ rules });
     const { errors } = compileClaude(spec, { maxRules: 3 });
     assert.ok(!errors.some((e) => e.type === "invalid-rule"));
   });
 
   it("maxTokens at exact boundary passes", () => {
-    const spec = claude({ rules: { a: guidance("x") } });
+    const spec = instructionFile({ rules: { a: guidance("x") } });
     const { tokens, errors } = compileClaude(spec, { maxTokens: 99999 });
     // Should pass — output is small
     assert.ok(!errors.some((e) => e.type === "budget-exceeded"));
@@ -1531,7 +1531,7 @@ describe("edge cases", () => {
   });
 
   it("rule ID with underscores compiles to title case", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: { no_console_log: guidance("Don't.") },
     });
     const { markdown } = compileClaude(spec);
@@ -1539,7 +1539,7 @@ describe("edge cases", () => {
   });
 
   it("rule ID with hyphens compiles to title case", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: { "barrel-imports-only": guidance("Use barrels.") },
     });
     const { markdown } = compileClaude(spec);
@@ -1564,7 +1564,7 @@ describe("edge cases", () => {
   });
 
   it("multiple enforce rules all get linter-checked", () => {
-    const spec = claude({
+    const spec = instructionFile({
       rules: {
         "rule-a": enforce("eslint/no-console", "A"),
         "rule-b": enforce("eslint/no-debugger", "B"),
@@ -1580,9 +1580,9 @@ describe("edge cases", () => {
   });
 
   it("sections with file() ref to nonexistent file reports error", () => {
-    const spec = claude({
+    const spec = instructionFile({
       sections: {
-        arch: instructions`See ${file("totally-fake-file-xyz.ts")}.`,
+        arch: prose`See ${file("totally-fake-file-xyz.ts")}.`,
       },
       rules: {},
     });
@@ -1591,7 +1591,7 @@ describe("edge cases", () => {
   });
 
   it("cmd() validation catches missing npm scripts in commands", () => {
-    const spec = claude({
+    const spec = instructionFile({
       commands: {
         "npm run nonexistent-xyz": "Does not exist",
       },
@@ -1602,7 +1602,7 @@ describe("edge cases", () => {
   });
 
   it("cmd() validation passes for real npm scripts", () => {
-    const spec = claude({
+    const spec = instructionFile({
       commands: { "npm test": "Run tests", "npm run build": "Build" },
       rules: {},
     });
@@ -1617,7 +1617,7 @@ describe("edge cases", () => {
 
 describe("compile → hash → verify → adopt roundtrip", () => {
   it("full lifecycle works end-to-end", () => {
-    const spec = claude({
+    const spec = instructionFile({
       commands: { "npm test": "Run tests" },
       keyFiles: { "src/core/spec.ts": "Spec system" },
       sections: { about: "A test project." },

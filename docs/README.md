@@ -68,5 +68,5 @@ The docs are grouped by what you're trying to do:
 - [`what-vigiles-catches.md`](what-vigiles-catches.md) — the taxonomy of problems vigiles handles: the prevented / caught / measured model, biggest-problem-first.
 - [`comparison.md`](comparison.md) — before/after tables, the determinism breakdown, the flow diagram, and what vigiles composes with rather than replaces.
 - [`sandboxing.md`](sandboxing.md) — what the sandbox isolates vs records (honestly): IO / `rm -rf`, the three network modes, tiers and limits.
-- [`experimental.md`](experimental.md) — everything behind the `experimental_` prefix: what is measured, what is not, what would have to be true to drop the prefix, and the stable alternative for each. Not covered by semver.
+- [`emit-channel.md`](emit-channel.md) — `experimental_emitTool`: a skill returns a typed result by calling a tool instead of ending its turn, which is how an INLINE skill can carry an output contract at all. Includes the measurements, and when to prefer the stable `output:` instead.
 - [`faq.md`](faq.md) — the front-door FAQ across all four layers.

@@ -105,7 +105,7 @@ footgun the compiled-hooks design makes **unrepresentable**:
 
 - You never write the exit code or the field (the compiler emits them from a
   closed vocabulary).
-- The role (`defineHook` / `definePromptGate` / `defineStopGate`) constrains
+- The role (`experimental_defineHook` / `experimental_definePromptGate` / `experimental_defineStopGate`) constrains
   which events can carry a block decision — a category mistake is a `tsc` error.
 
 Rewriting the hook as a **compiled hook** (`vigiles/hook`) is the durable
