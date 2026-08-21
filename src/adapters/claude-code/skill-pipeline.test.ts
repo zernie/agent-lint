@@ -226,3 +226,40 @@ test("setting BOTH `postcondition:` and `result:` throws at the builder", () => 
     /BOTH `postcondition:` and the deprecated `result:`/,
   );
 });
+
+test("a STRUCTURAL SkillSpec with the deprecated `result:` still gets its gate", () => {
+  // 🔴 THE SECOND DOOR, found by a reviewer and not by me. `compileSkill` is
+  // public and takes a `SkillSpec` structurally, so this is legal TypeScript and
+  // never touches `experimental_skill()`. Before the fold moved to a shared
+  // helper called at BOTH entrances, such a spec silently lost the `## Result`
+  // section AND its reference verification — the exact failure the builder's own
+  // comment predicted, arriving through the entrance that comment did not count.
+  const structural = {
+    _specType: "skill",
+    name: "hand-rolled",
+    description: "built as an object literal, not through the builder",
+    body: "do the thing",
+    result: cmd("npm test"),
+  } as unknown as Parameters<typeof compileSkill>[0];
+
+  const { markdown, errors } = compileSkill(structural, opts);
+  assert.equal(errors.length, 0, JSON.stringify(errors));
+  assert.match(markdown, /## Result/);
+  assert.match(markdown, /<!-- vigiles:result "npm test" -->/);
+});
+
+test("the both-set guard holds at the compiler door too, not only the builder", () => {
+  const structural = {
+    _specType: "skill",
+    name: "ambiguous",
+    description: "d",
+    body: "b",
+    postcondition: cmd("npm test"),
+    result: cmd("npm run lint"),
+  } as unknown as Parameters<typeof compileSkill>[0];
+
+  assert.throws(
+    () => compileSkill(structural, opts),
+    /BOTH `postcondition:` and the deprecated `result:`/,
+  );
+});

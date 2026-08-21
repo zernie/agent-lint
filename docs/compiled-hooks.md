@@ -5,9 +5,14 @@
 > not settled, and it is not covered by semver. The six entry points are named
 > `experimental_defineHook`, `experimental_defineFileGate`,
 > `experimental_definePromptGate`, `experimental_defineStopGate`,
-> `experimental_defineInject` and `experimental_defineReact`; alias them at the
-> import so the word crosses the package boundary once and the body stays
-> readable. [What would have to be true to drop the prefix](#status--pending).
+> `experimental_defineInject` and `experimental_defineReact`. **Write them out at
+> every call site** — do not alias the prefix away at the import. This notice used
+> to advise exactly that, and the advice defeated the mechanism it was attached
+> to: measured 2026-08-21, with the alias in place the marker survived at **0 of
+> 5** call sites in the only user-facing example, because a reader 200 lines down
+> sees `defineHook(...)` and cannot tell it is provisional. A prefix stripped on
+> import is a subpath with extra steps.
+> [What would have to be true to drop the prefix](#status--pending).
 >
 > **Stable alternative:** a hand-written shell hook wired in `settings.json`. Same
 > events, same protocol, none of the guarantees this page is about.

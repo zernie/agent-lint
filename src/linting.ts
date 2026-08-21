@@ -58,11 +58,11 @@ export {
   // politeness here. Kept on THIS door too: a consumer importing `claude` from
   // `vigiles/linting` never saw `vigiles/spec`, so the window over there does
   // not cover them.
-  /** @deprecated Renamed to `instructionFile`. Removed next major. */
+  /** @deprecated Renamed to `instructionFile`. Removed one major AFTER the one that introduces it. */
   claude,
-  /** @deprecated Renamed to `prose`. Removed next major. */
+  /** @deprecated Renamed to `prose`. Removed one major AFTER the one that introduces it. */
   instructions,
-  /** @deprecated Renamed to `experimental_agent`. Removed next major. */
+  /** @deprecated Renamed to `experimental_agent`. Removed one major AFTER the one that introduces it. */
   agent,
 } from "./core/spec.js";
 

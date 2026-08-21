@@ -44,21 +44,18 @@ Fix failures until the suite is green.
 **For a linear skill**, a `SKILL.md.spec.ts` gives typed inputs, a knowledge body, and gated steps that compile to a verified `SKILL.md`:
 
 ```ts
-import {
-  experimental_skill as skill,
-  cmd,
-  project,
-  instructions,
-} from "vigiles/spec";
+import { experimental_skill, cmd, project, prose } from "vigiles/spec";
 
-export default skill({
+export default experimental_skill({
   name: "ship-pr",
   description: "Run the checks and open a PR once they pass",
-  inputs: [skill.input("branch", "branch to open the PR from")],
+  inputs: [experimental_skill.input("branch", "branch to open the PR from")],
   body: prose`## Reference\n\n…domain knowledge the model reads…`,
   steps: [
-    skill.step("Run the linter and fix issues.", { gate: cmd("npm run lint") }),
-    skill.step("Run the tests; fix until green.", {
+    experimental_skill.step("Run the linter and fix issues.", {
+      gate: cmd("npm run lint"),
+    }),
+    experimental_skill.step("Run the tests; fix until green.", {
       gate: project("test"),
       retry: 3,
     }),

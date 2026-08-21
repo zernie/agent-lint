@@ -13,6 +13,8 @@
 // Template literal types for type-safe linter references
 // ---------------------------------------------------------------------------
 
+import { foldLegacyPostcondition } from "./skill-normalize.js";
+
 /** Linters and policy catalogs vigiles can cross-reference. */
 /**
  * The built-in linter / policy catalogs vigiles cross-references — the SINGLE
@@ -813,28 +815,11 @@ function skillSpec<
   const P extends AuthoredPurity | undefined = undefined,
   V extends ToolVocabulary = OpenToolVocabulary,
 >(spec: SkillSpecInput<P, V>): SkillSpec {
-  // The deprecated `result:` is folded into `postcondition:` HERE, at the one
-  // constructor, rather than at each reader. Two readers exist today
-  // (`specRefs`, `renderSkillSections`); folding at the readers means the next
-  // one added silently reads only the new field and drops every spec still on
-  // the old one. Normalising at the door makes that omission unwritable.
-  // This IS the one place the deprecated field is allowed to be read: the alias
-  // window works by someone reading the old name exactly once, right here, so a
-  // lint that forbade it everywhere would forbid the window itself.
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- see above
-  const { result: legacyPostcondition, ...rest } = spec;
-  if (legacyPostcondition && rest.postcondition) {
-    throw new Error(
-      "skill spec sets BOTH `postcondition:` and the deprecated `result:` — " +
-        "they are the same field under two names, so which gate runs is a " +
-        "coin flip. Keep `postcondition:` and delete `result:`.",
-    );
-  }
-  return {
-    _specType: "skill",
-    ...rest,
-    ...(legacyPostcondition ? { postcondition: legacyPostcondition } : {}),
-  } as SkillSpec;
+  // The deprecated `result:` is folded into `postcondition:` by the shared
+  // helper — see `skill-normalize.ts` for why it is shared rather than inlined
+  // here (short version: this builder is not the only public entrance, and the
+  // other one silently dropped the gate until a reviewer noticed).
+  return foldLegacyPostcondition({ _specType: "skill", ...spec } as SkillSpec);
 }
 
 /**
@@ -1615,24 +1600,32 @@ export function defineConfig(config: VigilesV2Config): VigilesV2Config {
 // PreToolUse отбивает ЛЮБУЮ Bash-команду — включая ту, которой это чинится.
 // Репа встала колом на час. Одно окно в один мажор делает этот отказ
 // невыразимым: любая пара (лок, исходники) в пределах мажора совместима.
+//
+// 🔴 «ОДИН МАЖОР» СЧИТАЕТСЯ ОТ ТОГО, КОТОРЫЙ АЛИАСЫ ВВОДИТ, а не до него.
+// Мажор, выпускающий этот PR, — ПЕРВЫЙ, где старые и новые имена сосуществуют;
+// именно он и есть обещанное окно. Убирать алиасы можно в СЛЕДУЮЩЕМ за ним.
+// Формулировка «Removed next major» была двусмысленной ровно здесь (её так и
+// прочитал ревьюер: как «удалить в том же релизе, который их вводит»), и по
+// такому расписанию окна не существовало бы вовсе — то есть отказ выше
+// воспроизвёлся бы дословно, при живом абзаце, который его запрещает.
 
 /**
  * @deprecated Renamed to {@link instructionFile}. The builder compiles to
  * `CLAUDE.md` **and** `AGENTS.md` (see `InstructionTarget`), so a name taken from
- * one of the two harnesses was never right. Removed next major.
+ * one of the two harnesses was never right. Removed one major AFTER the one that introduces it.
  */
 export const claude = instructionFile;
 
 /**
  * @deprecated Renamed to {@link prose}. It builds a prose FRAGMENT with typed
  * refs; the plural read as "the instruction file", which is what
- * {@link instructionFile} builds. Removed next major.
+ * {@link instructionFile} builds. Removed one major AFTER the one that introduces it.
  */
 export const instructions = prose;
 
 /**
  * @deprecated Renamed to {@link experimental_agent} — the shape is not settled.
- * Removed next major.
+ * Removed one major AFTER the one that introduces it.
  *
  * @experimental
  * vigiles:experimental-name-ok this IS the old spelling — prefixing a deprecated

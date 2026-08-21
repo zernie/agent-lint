@@ -42,7 +42,7 @@ export {
 export {
   /**
    * @deprecated Renamed to `experimental_agent` — the shape is not settled.
-   * Removed next major.
+   * Removed one major AFTER the one that introduces it.
    */
   experimental_agent as agent,
 } from "./adapters/claude-code/typed-spec.js";

@@ -72,8 +72,35 @@ tester.run("experimental-name", rule as never, {
       name: "not exported — the rule is about what we ship",
       code: doc("@experimental") + "function widget() {}",
     },
+    {
+      name: "a re-export that KEEPS the prefix",
+      code: 'export { experimental_widget } from "./x.js";',
+    },
+    {
+      name: "a deliberate compatibility alias, marked @deprecated on the specifier",
+      // This is the alias window: exporting the old spelling for one major is the
+      // whole mechanism, and `@deprecated` is both the opt-out and the docs.
+      code: 'export {\n  /** @deprecated Renamed to `experimental_widget`. */\n  experimental_widget as widget,\n} from "./x.js";',
+    },
+    {
+      name: "an alias that does not touch a prefixed name",
+      code: 'export { plain as other } from "./x.js";',
+    },
   ],
   invalid: [
+    {
+      name: "a re-export that STRIPS the prefix — the hole this rule exists to close",
+      // 🔴 The rule shipped returning early on every specifier form, so this was
+      // silent: a barrel could hand consumers a stable-looking name for an
+      // unstable API, which is the exact aliasing the rule was written after.
+      code: 'export { experimental_widget as widget } from "./x.js";',
+      errors: [{ message: /stripping the `experimental_` prefix/u }],
+    },
+    {
+      name: "an unmarked alias is not excused by a @deprecated on a DIFFERENT specifier",
+      code: 'export {\n  /** @deprecated */\n  experimental_a as a,\n  experimental_b as b,\n} from "./x.js";',
+      errors: 1,
+    },
     {
       name: "tagged, exported, unprefixed",
       code: doc("@experimental") + "export function widget() {}",

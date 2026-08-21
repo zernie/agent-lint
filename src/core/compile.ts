@@ -14,6 +14,7 @@ import { sha256short, assertNever } from "./hash.js";
 import { findIntegrityHeader, placeIntegrityHeader } from "./integrity.js";
 import { fencedLineFlags } from "./markdown.js";
 import { fileDefinesSymbol, langForFile } from "./symbols.js";
+import { foldLegacyPostcondition } from "./skill-normalize.js";
 
 import type {
   ClaudeSpec,
@@ -974,6 +975,14 @@ export function compileSkill(
     dialect?: HarnessDialect;
   } = {},
 ): CompileSkillResult {
+  // 🔴 NORMALISE FIRST, before anything reads the spec. `compileSkill` accepts a
+  // `SkillSpec` STRUCTURALLY, so a caller can hand us `{ _specType: "skill", …,
+  // result: cmd(…) }` without ever touching `experimental_skill()`. Both readers
+  // below (`collectSkillRefs`, `renderSkillSections`) look only at
+  // `postcondition`, so without this line such a spec loses its `## Result`
+  // section AND its reference verification, silently. Doing it here rather than
+  // in the readers means a reader added later cannot reintroduce the gap.
+  spec = foldLegacyPostcondition(spec);
   const basePath = options.basePath ?? process.cwd();
   const specFile = options.specFile ?? "SKILL.md.spec.ts";
   const profile: SkillFrontmatterProfile =

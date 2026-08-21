@@ -106,13 +106,61 @@ export default {
         "The tag warns a reader who opens the doc; the name warns the one who does not — " +
         "and that is most of them. Rename it, or opt out on the declaration with " +
         "`vigiles:experimental-name-ok <reason>`.",
+      aliasedAway:
+        "this re-export renames `{{local}}` to `{{exported}}`, stripping the " +
+        "`experimental_` prefix. Consumers would then call an unstable API through " +
+        "a stable-looking name — the exact defect the prefix exists to prevent, and " +
+        "the one that made a marker survive at 0 of 5 call sites when it was done at " +
+        "an import. Export the prefixed spelling, or, if this IS a deliberate " +
+        "compatibility alias, say so with `@deprecated` on the specifier (or " +
+        "`vigiles:experimental-name-ok <reason>`).",
     },
   },
   create(context) {
     const source = context.sourceCode;
     return {
       ExportNamedDeclaration(node) {
-        if (!node.declaration) return; // `export { x }` — the declaration is elsewhere
+        if (!node.declaration) {
+          // `export { x }` / `export { experimental_x as x } from "…"`.
+          //
+          // 🔴 THIS BRANCH USED TO BE A BARE `return`, and that was a hole in the
+          // middle of the rule's own thesis. The prefix is supposed to reach every
+          // CALL SITE; a barrel that re-exports `experimental_widget as widget`
+          // hands consumers a stable-looking name for an unstable API, which is
+          // precisely the aliasing this rule was written after — measured at 0 of 5
+          // call sites surviving when the same trick was done at an import. Skipping
+          // every specifier form meant the rule policed declarations and ignored the
+          // one construct that can undo them. Found by a reviewer, in the same PR
+          // that introduced the rule.
+          //
+          // A deliberate compatibility alias is legitimate and common — the whole
+          // point of a deprecation window is to export the old spelling for one
+          // major. Those carry `@deprecated` on the specifier, which is both the
+          // opt-out and the documentation, so no second marker is needed.
+          for (const spec of node.specifiers ?? []) {
+            if (spec.type !== "ExportSpecifier") continue;
+            const local = spec.local.name ?? spec.local.value;
+            const exported = spec.exported.name ?? spec.exported.value;
+            if (typeof local !== "string" || typeof exported !== "string")
+              continue;
+            if (!local.startsWith(PREFIX)) continue;
+            if (exported.startsWith(PREFIX)) continue;
+            const near = source
+              .getCommentsBefore(spec)
+              .map((c) => c.value)
+              .join("\n");
+            if (tagRe("deprecated").test(near)) continue;
+            if (ALLOW.test(near)) continue;
+            const line = source.lines[spec.loc.start.line - 1] ?? "";
+            if (ALLOW.test(line)) continue;
+            context.report({
+              node: spec,
+              messageId: "aliasedAway",
+              data: { local, exported },
+            });
+          }
+          return;
+        }
         const names = declaredNames(node.declaration);
         if (names.length === 0) return;
 
