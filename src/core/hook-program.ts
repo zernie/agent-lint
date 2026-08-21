@@ -773,7 +773,10 @@ export interface HookProgram<
 export const tool = (name: string): { tool: string } => ({ tool: name });
 /**
  * @experimental Compiled hooks are provisional — see docs/compiled-hooks.md#status--pending.
- * Imported as `experimental_defineHook`; alias it at the import site.
+ * Imported and CALLED as `experimental_defineHook` — do not alias the prefix away at
+ * the import. Measured 2026-08-21: with the alias in place the marker survived
+ * at 0 of 5 call sites in the only user-facing example, because a reader 200
+ * lines down sees `defineHook` without it and cannot tell it is provisional.
  */
 export function experimental_defineHook<
   const N extends readonly NeedSpec[] = readonly [],
@@ -1381,7 +1384,10 @@ export const tools = (...names: string[]): { tools: string[] } => ({
 });
 /**
  * @experimental Compiled hooks are provisional — see docs/compiled-hooks.md#status--pending.
- * Imported as `experimental_defineFileGate`; alias it at the import site.
+ * Imported and CALLED as `experimental_defineFileGate` — do not alias the prefix away at
+ * the import. Measured 2026-08-21: with the alias in place the marker survived
+ * at 0 of 5 call sites in the only user-facing example, because a reader 200
+ * lines down sees `defineFileGate` without it and cannot tell it is provisional.
  */
 export function experimental_defineFileGate<
   const N extends readonly NeedSpec[] = readonly [],
@@ -1463,7 +1469,10 @@ export interface PromptGateHook<
 }
 /**
  * @experimental Compiled hooks are provisional — see docs/compiled-hooks.md#status--pending.
- * Imported as `experimental_definePromptGate`; alias it at the import site.
+ * Imported and CALLED as `experimental_definePromptGate` — do not alias the prefix away at
+ * the import. Measured 2026-08-21: with the alias in place the marker survived
+ * at 0 of 5 call sites in the only user-facing example, because a reader 200
+ * lines down sees `definePromptGate` without it and cannot tell it is provisional.
  */
 export function experimental_definePromptGate<
   const N extends readonly NeedSpec[] = readonly [],
@@ -1518,7 +1527,10 @@ export interface StopGateHook<
 }
 /**
  * @experimental Compiled hooks are provisional — see docs/compiled-hooks.md#status--pending.
- * Imported as `experimental_defineStopGate`; alias it at the import site.
+ * Imported and CALLED as `experimental_defineStopGate` — do not alias the prefix away at
+ * the import. Measured 2026-08-21: with the alias in place the marker survived
+ * at 0 of 5 call sites in the only user-facing example, because a reader 200
+ * lines down sees `defineStopGate` without it and cannot tell it is provisional.
  */
 export function experimental_defineStopGate<
   const N extends readonly NeedSpec[] = readonly [],
@@ -1596,7 +1608,10 @@ export interface InjectHook<
 }
 /**
  * @experimental Compiled hooks are provisional — see docs/compiled-hooks.md#status--pending.
- * Imported as `experimental_defineInject`; alias it at the import site.
+ * Imported and CALLED as `experimental_defineInject` — do not alias the prefix away at
+ * the import. Measured 2026-08-21: with the alias in place the marker survived
+ * at 0 of 5 call sites in the only user-facing example, because a reader 200
+ * lines down sees `defineInject` without it and cannot tell it is provisional.
  */
 export function experimental_defineInject<
   const N extends readonly NeedSpec[] = readonly [],
@@ -1778,7 +1793,10 @@ export interface ReactHook<
 }
 /**
  * @experimental Compiled hooks are provisional — see docs/compiled-hooks.md#status--pending.
- * Imported as `experimental_defineReact`; alias it at the import site.
+ * Imported and CALLED as `experimental_defineReact` — do not alias the prefix away at
+ * the import. Measured 2026-08-21: with the alias in place the marker survived
+ * at 0 of 5 call sites in the only user-facing example, because a reader 200
+ * lines down sees `defineReact` without it and cannot tell it is provisional.
  */
 export function experimental_defineReact<
   const N extends readonly NeedSpec[] = readonly [],

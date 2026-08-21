@@ -101,6 +101,22 @@ tester.run("experimental-name", rule as never, {
       code: "/**\n * vigiles:experimental-name-ok probe, deliberately unprefixed\n * @experimental\n */\nconst widget = () => {};\nexport { widget };",
     },
     {
+      name: "a default export that already carries the prefix",
+      code:
+        doc("@experimental") +
+        "export default function experimental_widget() {}",
+    },
+    {
+      name: "an ANONYMOUS default — no name to carry the marker",
+      // Not an oversight: a name-based convention has nothing to say about a
+      // call site that names nothing. Stated so the silence is readable.
+      code: doc("@experimental") + "export default function () {};",
+    },
+    {
+      name: "an UNtagged default export",
+      code: "export default function widget() {}",
+    },
+    {
       name: "a same-named local from ANOTHER module — not ours to judge",
       // `export { widget } from "./x.js"` re-exports someone else's `widget`;
       // the tagged local of the same name in this file is a different binding.
@@ -176,6 +192,19 @@ tester.run("experimental-name", rule as never, {
       // when the specifier is visited.
       code:
         "export { widget };\n" + doc("@experimental") + "function widget() {}",
+      errors: 1,
+    },
+    {
+      name: "a TAGGED default export without the prefix — the third export path",
+      // 🔴 ExportNamedDeclaration never fires for `export default`, so this
+      // shipped unchecked while the rule's header and STABILITY.md both claimed
+      // every exported declaration was covered.
+      code: doc("@experimental") + "export default function widget() {}",
+      errors: [{ message: /`widget`.*not named `experimental_widget`/u }],
+    },
+    {
+      name: "a tagged default-exported CLASS, same path",
+      code: doc("@experimental") + "export default class Widget {}",
       errors: 1,
     },
     {

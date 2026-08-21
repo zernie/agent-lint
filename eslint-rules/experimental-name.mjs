@@ -53,6 +53,20 @@
  * of `src/`, with no exemption at all: **22 tagged exported value declarations,
  * 0 without the prefix.** The rule turns on silent.
  *
+ * THE THREE EXPORT PATHS, all covered — because a rule that policed one of them
+ * while claiming to police exports would be worse than one honest about a narrow
+ * scope: the overstatement is what stops anyone looking. Each was a separate hole
+ * and each was found by a reviewer, not by me:
+ *   1. `export const x` / `export function x`  — the declaration form;
+ *   2. `export { x }` / `export { experimental_x as x }` — specifiers, including a
+ *      tagged local declared separately (judged at `Program:exit`, since the export
+ *      may legally precede the declaration);
+ *   3. `export default function x() {}` — visited by a different node type entirely.
+ *
+ * ⚠️ The one case it cannot cover: an ANONYMOUS default (`export default () => {}`)
+ * has no name to carry a marker. That is a limit of a name-based convention, not a
+ * gap in this rule, and it is stated rather than left as unexplained silence.
+ *
  * SCOPE: value declarations only (`function` / `const` / `let` / `var` / `class`).
  * Types and interfaces are out, deliberately and by measurement: the convention
  * only ever applied to callables, and the surface before the gate paired
@@ -183,6 +197,41 @@ export default {
             data: { local: p.local },
           });
         }
+      },
+
+      /**
+       * `export default function widget() {}` — the THIRD export path, and the
+       * third hole found in this rule by the same reviewer. `ExportNamedDeclaration`
+       * never fires for it, so a tagged callable shipped unprefixed while both this
+       * rule's own header and STABILITY.md claimed every exported declaration was
+       * checked. A rule that overstates its coverage is worse than one that states
+       * a narrow scope honestly, because the overstatement is what stops anyone
+       * looking.
+       *
+       * An ANONYMOUS default (`export default function () {}`, `export default
+       * () => {}`) has no name to prefix, so there is nothing to report — the
+       * marker cannot live at a call site that names nothing. That is a real gap
+       * in what a name-based convention can promise, and it is a property of the
+       * convention rather than of this rule.
+       */
+      ExportDefaultDeclaration(node) {
+        const d = node.declaration;
+        const id =
+          (d?.type === "FunctionDeclaration" ||
+            d?.type === "ClassDeclaration") &&
+          d.id
+            ? d.id
+            : null;
+        if (!id) return;
+        if (id.name.startsWith(PREFIX)) return;
+        if (!isTagged(node)) return;
+        const line = source.lines[id.loc.start.line - 1] ?? "";
+        if (ALLOW.test(line)) return;
+        context.report({
+          node: id,
+          messageId: "unprefixed",
+          data: { name: id.name },
+        });
       },
 
       ExportNamedDeclaration(node) {
