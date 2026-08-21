@@ -60,7 +60,7 @@ export default experimental_skill({
       retry: 3,
     }),
   ],
-  result: project("test"),
+  postcondition: project("test"),
 });
 ```
 
@@ -70,7 +70,7 @@ What each field does:
 
 - **`inputs`** compile to the `argument-hint` frontmatter and an `## Arguments` section (`$1`, `$2`, …).
 - **`body`** (knowledge) and **`steps`** (procedure) compose — the body renders as a reference section before the gated steps.
-- Each step's **`gate`** + optional **`retry`** renders a `vigiles:gate` marker. **`result`** renders the terminal `vigiles:result` marker.
+- Each step's **`gate`** + optional **`retry`** renders a `vigiles:gate` marker. **`postcondition`** renders the terminal `vigiles:result` marker. (The field was called `result:` until it collided with `result()`, the subagent output contract; the compiled MARKER keeps its name, because every already-compiled `SKILL.md` on disk carries it.)
 - Every gate reference is **verified at compile time** (see below).
 
 ## Gates and what is verified

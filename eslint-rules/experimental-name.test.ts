@@ -86,6 +86,28 @@ tester.run("experimental-name", rule as never, {
       name: "an alias that does not touch a prefixed name",
       code: 'export { plain as other } from "./x.js";',
     },
+    {
+      name: "an UNtagged local exported separately",
+      code: "const widget = () => {};\nexport { widget };",
+    },
+    {
+      name: "a tagged local that already carries the prefix, exported separately",
+      code:
+        doc("@experimental") +
+        "const experimental_widget = () => {};\nexport { experimental_widget };",
+    },
+    {
+      name: "a tagged local exported separately, opted out with a reason",
+      code: "/**\n * vigiles:experimental-name-ok probe, deliberately unprefixed\n * @experimental\n */\nconst widget = () => {};\nexport { widget };",
+    },
+    {
+      name: "a same-named local from ANOTHER module — not ours to judge",
+      // `export { widget } from "./x.js"` re-exports someone else's `widget`;
+      // the tagged local of the same name in this file is a different binding.
+      code:
+        doc("@experimental") +
+        'const widget = 1;\nexport { widget } from "./x.js";',
+    },
   ],
   invalid: [
     {
@@ -136,6 +158,24 @@ tester.run("experimental-name", rule as never, {
       // a time. `\s+\S` alone would be satisfied by the newline plus the JSDoc
       // continuation `*`, so the reason must be on the marker's own line.
       code: "/**\n * vigiles:experimental-name-ok\n * @experimental\n */\nexport function widget() {}",
+      errors: 1,
+    },
+    {
+      name: "a TAGGED local declared without the prefix and exported separately",
+      // 🔴 The second hole in the specifier path. The declaration branch never
+      // sees it (no `export` modifier) and the aliasing branch skipped it (the
+      // local has no prefix to strip), so a tagged callable reached consumers
+      // under a stable-looking name with nothing complaining.
+      code:
+        doc("@experimental") + "const widget = () => {};\nexport { widget };",
+      errors: [{ message: /is tagged @experimental and is exported here/u }],
+    },
+    {
+      name: "…and the export may legally PRECEDE the declaration it names",
+      // Which is why the judgement is deferred to Program:exit rather than made
+      // when the specifier is visited.
+      code:
+        "export { widget };\n" + doc("@experimental") + "function widget() {}",
       errors: 1,
     },
     {

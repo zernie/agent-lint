@@ -114,11 +114,77 @@ export default {
         "an import. Export the prefixed spelling, or, if this IS a deliberate " +
         "compatibility alias, say so with `@deprecated` on the specifier (or " +
         "`vigiles:experimental-name-ok <reason>`).",
+      // A separate message on purpose: nothing is being RENAMED here, so the
+      // aliasing wording would read as nonsense ("renames `widget` to `widget`").
+      // The defect is the same — an unstable callable reaching consumers under a
+      // stable-looking name — but the author's fix is different: rename the
+      // declaration, rather than stop aliasing at the export.
+      exportedTaggedLocal:
+        "`{{local}}` is tagged @experimental and is exported here, so it must be " +
+        "named `experimental_{{local}}`. Declaring it without the prefix and " +
+        "exporting it separately reaches consumers exactly as an aliased " +
+        "re-export would — the declaration simply never had the marker to strip. " +
+        "Rename the declaration, or opt out with " +
+        "`vigiles:experimental-name-ok <reason>`.",
     },
   },
   create(context) {
     const source = context.sourceCode;
+
+    /**
+     * Locals declared WITHOUT `export` but tagged `@experimental`, e.g.
+     *
+     *   /** @experimental *\/
+     *   const widget = () => {};
+     *   export { widget };
+     *
+     * 🔴 A SECOND HOLE IN THE SPECIFIER PATH, found by the same reviewer one
+     * round after the first. Closing the aliasing case was not enough: that
+     * check only fires when the LOCAL already carries the prefix, so a tagged
+     * declaration that never had it — legal TypeScript, and the ordinary shape
+     * when declarations and exports are separated — reached consumers under a
+     * stable-looking name with nothing complaining. The declaration branch never
+     * sees it either, because the declaration has no `export` modifier.
+     *
+     * Collected during traversal and judged at `Program:exit`, because
+     * `export { widget }` may legally precede the declaration it names.
+     */
+    const taggedLocals = new Set();
+    /** Specifier checks deferred until `taggedLocals` is complete. */
+    const pending = [];
+
+    const isTagged = (node) => {
+      const doc = source
+        .getCommentsBefore(node)
+        .map((c) => c.value)
+        .join("\n");
+      if (!tagRe("experimental").test(doc)) return false;
+      if (tagRe("module").test(doc)) return false;
+      if (ALLOW.test(doc)) return false;
+      return true;
+    };
+
     return {
+      "VariableDeclaration, FunctionDeclaration, ClassDeclaration"(node) {
+        // Only bare declarations; the exported form is handled below.
+        if (node.parent?.type === "ExportNamedDeclaration") return;
+        if (node.parent?.type === "ExportDefaultDeclaration") return;
+        if (!isTagged(node)) return;
+        for (const id of declaredNames(node)) taggedLocals.add(id.name);
+      },
+
+      "Program:exit"() {
+        for (const p of pending) {
+          if (p.local.startsWith(PREFIX)) continue; // already reported inline
+          if (!taggedLocals.has(p.local)) continue;
+          context.report({
+            node: p.node,
+            messageId: "exportedTaggedLocal",
+            data: { local: p.local },
+          });
+        }
+      },
+
       ExportNamedDeclaration(node) {
         if (!node.declaration) {
           // `export { x }` / `export { experimental_x as x } from "…"`.
@@ -143,8 +209,22 @@ export default {
             const exported = spec.exported.name ?? spec.exported.value;
             if (typeof local !== "string" || typeof exported !== "string")
               continue;
-            if (!local.startsWith(PREFIX)) continue;
             if (exported.startsWith(PREFIX)) continue;
+            if (!local.startsWith(PREFIX)) {
+              // Might be a tagged local declared separately — decidable only once
+              // the whole file has been walked. `export { x } from "./y.js"` has a
+              // source, so its local is another module's name and never ours.
+              if (!node.source) {
+                const near = source
+                  .getCommentsBefore(spec)
+                  .map((c) => c.value)
+                  .join("\n");
+                if (!tagRe("deprecated").test(near) && !ALLOW.test(near)) {
+                  pending.push({ node: spec, local, exported });
+                }
+              }
+              continue;
+            }
             const near = source
               .getCommentsBefore(spec)
               .map((c) => c.value)

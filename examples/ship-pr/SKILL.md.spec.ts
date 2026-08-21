@@ -39,5 +39,5 @@ export default experimental_skill({
   ],
 
   // The skill is not "done" until the test suite passes.
-  result: cmd("npm test"),
+  postcondition: cmd("npm test"),
 });
