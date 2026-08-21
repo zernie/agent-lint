@@ -60,7 +60,7 @@ function publicSymbols() {
     return { names, reports };
   }
   const DECL =
-    /^export\s+(?:declare\s+)?(?:abstract\s+)?(?:function|const|let|var|class|interface|type|enum)\s+([A-Za-z0-9_$]+)/;
+    /^export\s+(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:function|const|let|var|class|interface|type|enum)\s+([A-Za-z0-9_$]+)/;
   for (const f of reports) {
     for (const line of readFileSync(join(dir, f), "utf8").split("\n")) {
       const m = DECL.exec(line.trim());
@@ -89,8 +89,20 @@ function publicSymbols() {
  *    types in would have opened with 6 cosmetic renames against 1 real finding,
  *    and a gate that arrives 86% noise is muted within the day.
  */
+/**
+ * ⚠️ `export default` IS matched, and was not until 2026-08-21. Both this matcher
+ * and the api-report one above omitted the modifier, so an `@internal` symbol
+ * exported as default was invisible to BOTH halves at once — the source side saw
+ * no declaration and the report side saw no public name, and the two absences
+ * cancelled into a clean `findings: 0`. A default export is an ordinary public
+ * API shape, so the check simply did not hold for it.
+ *
+ * An ANONYMOUS default (`export default function () {}`) is still out of reach:
+ * it has no name for the api report to list, so there is nothing to correlate.
+ * Stated rather than left as silence.
+ */
 const VALUE_DECL =
-  /^\s*export\s+(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(function|const|let|var|class)\s+([A-Za-z0-9_$]+)/;
+  /^\s*export\s+(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(function|const|let|var|class)\s+([A-Za-z0-9_$]+)/;
 
 /**
  * A TSDoc tag, with or without prose after it.
@@ -142,7 +154,20 @@ function taggedExperimental(file) {
     out.push({
       name: decl[2],
       line,
-      tag: experimental ? "@experimental" : "@internal",
+      // 🔴 `@internal` WINS when both tags are present, and the opposite order
+      // was a live bug for as long as this file had one job. It reads as a
+      // harmless tie-break, and it is not: since the split, the reporting loop
+      // acts only on `@internal`, so recording `@experimental` for a
+      // both-tagged symbol swallowed it silently — and the run still printed
+      // `checked: 1`, claiming it had looked. A counter that counts a symbol it
+      // then ignores is worse than one that misses it, because the number reads
+      // as coverage.
+      //
+      // Precedence is also right on the merits: `@experimental` says "this may
+      // change", `@internal` says "this is not API at all". The second is the
+      // stronger claim about an exported symbol, and the stronger claim is the
+      // contradiction worth reporting.
+      tag: internal ? "@internal" : "@experimental",
     });
   }
   return out;

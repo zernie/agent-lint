@@ -94,6 +94,47 @@ describe("check-internal-tag", () => {
     expect(out).not.toContain("experimental_experimental_");
   });
 
+  it("FIRES when BOTH tags are present — @internal is the stronger claim", () => {
+    // 🔴 A REGRESSION INTRODUCED BY THE SPLIT, found by a reviewer. The tag field
+    // was recorded as `experimental ? "@experimental" : "@internal"`, and after
+    // the naming half moved to ESLint the reporting loop acts only on
+    // `@internal` — so a both-tagged export was recorded as `@experimental` and
+    // then silently ignored. Worse than a miss: the run still printed
+    // `checked: 1`, so the counter read as coverage.
+    const { code, out } = run(
+      fixture(
+        "/**\n * @experimental\n * @internal\n */\nexport function widget(): void {}\n",
+      ),
+    );
+    expect(code).not.toBe(0);
+    expect(out).toContain("tagged @internal but IS exported");
+  });
+
+  it("FIRES on an @internal DEFAULT export — an ordinary public API shape", () => {
+    // Both matchers omitted the `default` modifier, so the source side saw no
+    // declaration and the api-report side saw no public name. The two absences
+    // cancelled into a clean `findings: 0`.
+    const { code, out } = run(
+      fixture(
+        "/**\n * @internal\n */\nexport default function widget(): void {}\n",
+        "export default function widget(): void;",
+      ),
+    );
+    expect(code).not.toBe(0);
+    expect(out).toContain("tagged @internal but IS exported");
+  });
+
+  it("is SILENT on an @internal default export that is NOT public", () => {
+    const { code, out } = run(
+      fixture(
+        "/**\n * @internal\n */\nexport default function helper(): void {}\n",
+        "export function somethingElse(): void;",
+      ),
+    );
+    expect(code).toBe(0);
+    expect(out).toContain("checked: 0");
+  });
+
   // ── the failure mode that would make it green and dead ──
 
   it("REFUSES to pass when there are no api reports to read", () => {
