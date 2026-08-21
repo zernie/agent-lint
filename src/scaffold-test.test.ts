@@ -147,7 +147,9 @@ describe("scaffoldTest — agent with a typed contract (the typed-spec payoff)",
 
   it("generates an assertAgentOk outcome test from the result() contract", () => {
     const { content } = scaffoldTest(withContract);
-    expect(content).toContain('import { result } from "vigiles/spec"');
+    expect(content).toContain(
+      'import { experimental_agent } from "vigiles/spec"',
+    );
     expect(content).toContain("assertAgentOk(okOutput, contract)");
     // the contract is reconstructed with the REAL parsed fields
     expect(content).toContain('{ summary: "string" }');

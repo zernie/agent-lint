@@ -14,7 +14,8 @@
  * planner.ok supplies the implementer's `steps`, and implementer.ok supplies the
  * reviewer's `summary`. A mismatch would be a `tsc` error naming the field.
  */
-import { railway, delegate, needs } from "../../src/core/spec.js";
+import { experimental_agent } from "../../src/core/spec.js";
+const { railway, delegate, needs } = experimental_agent;
 
 export default railway({
   name: "ship-pr",

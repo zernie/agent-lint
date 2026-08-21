@@ -8,6 +8,14 @@
 >
 > Where this fits the testing tiers: [`harness-testing.md`](harness-testing.md).
 
+> **One import, one root.** Everything on this page hangs off `experimental_agent`:
+> `.result()`, `.railway()`, `.delegate()`, `.pipe()`, `.pipeStep()`, `.needs()`,
+> `.start()`, `.andThen()`. They are members rather than top-level exports because
+> each is meaningless without a subagent, and because `result`/`needs`/`start`/`pipe`
+> are far too generic to own a package-level name. Destructure them if you prefer the
+> short spelling — `const { result, railway, delegate } = experimental_agent;` — the
+> examples below do exactly that. See [STABILITY.md](../STABILITY.md#the-corollary-one-experimental-root-per-feature).
+
 ## Contents
 
 - [Why railway, for subagents](#why-railway-for-subagents)
@@ -44,7 +52,8 @@ typed value on one track.
 `output`. Field types are `"string" | "number" | "boolean" | "string[]"`.
 
 ```ts
-import { experimental_agent, result, file, prose } from "vigiles/spec";
+import { experimental_agent, file, prose } from "vigiles/spec";
+const { result } = experimental_agent;
 
 export default experimental_agent({
   name: "implementer",
@@ -95,7 +104,8 @@ track — no loop combinator, so it always terminates and every `delegate()` tar
 is resolved against the real agent specs at compile time.
 
 ```ts
-import { railway, delegate } from "vigiles/spec";
+import { experimental_agent } from "vigiles/spec";
+const { railway, delegate } = experimental_agent;
 
 export default railway({
   name: "ship-pr",
@@ -141,13 +151,13 @@ paired to its agent via `experimental_pipeStep(agent, experimental_needs(...))`:
 <!-- vigiles:check -->
 
 ```ts
-import {
-  experimental_agent,
+import { experimental_agent } from "vigiles/spec";
+const {
   result,
-  experimental_pipe,
-  experimental_pipeStep,
-  experimental_needs,
-} from "vigiles/spec";
+  pipe: experimental_pipe,
+  pipeStep: experimental_pipeStep,
+  needs: experimental_needs,
+} = experimental_agent;
 
 const planner = experimental_agent({
   name: "planner",
@@ -242,7 +252,8 @@ Declare the handoff with the optional 3rd argument of `delegate()` — the same
 success-track step's agent `result().ok` SUPPLIES it:
 
 ```ts
-import { railway, delegate, experimental_needs } from "vigiles/spec";
+import { experimental_agent } from "vigiles/spec";
+const { railway, delegate, needs: experimental_needs } = experimental_agent;
 
 // agents/planner.md.spec.ts emits result({ steps: "string[]" }, …)
 // agents/implementer.md.spec.ts emits result({ files: "string[]" }, …)
@@ -279,7 +290,8 @@ This is the payoff: a `result()` contract replaces
 no key.
 
 ```ts
-import { result } from "vigiles/spec";
+import { experimental_agent } from "vigiles/spec";
+const { result } = experimental_agent;
 import { assertAgentOk, assertAgentErr, assertAgentResult } from "vigiles";
 
 const implementer = result(
@@ -322,7 +334,8 @@ contract renders. The gate is enforced at compile — an `output` without
 `context: "fork"` is an error, because an inline skill has no return to type:
 
 ```ts
-import { experimental_skill, result } from "vigiles/spec";
+import { experimental_agent, experimental_skill } from "vigiles/spec";
+const { result } = experimental_agent;
 
 export default experimental_skill({
   name: "review",

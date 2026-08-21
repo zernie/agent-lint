@@ -177,7 +177,8 @@ the success track, `vigiles:err` on the error track — and `assertAgentOk` /
 `assertAgentErr` / `assertAgentResult` parse and validate it against the contract.
 
 ```ts
-import { result } from "vigiles/spec";
+import { experimental_agent } from "vigiles/spec";
+const { result } = experimental_agent;
 import { assertAgentOk, assertAgentResult } from "vigiles";
 
 // The worker's contract: success = the files it changed + a summary.

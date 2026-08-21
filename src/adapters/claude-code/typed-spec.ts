@@ -62,11 +62,30 @@ export interface ClaudeCodeToolVocabulary extends ToolVocabulary {
  * runtime (it IS the core builder); the only difference is the typed `tools`
  * constraint. `P` is inferred from the literal `purity` field.
  */
-export function experimental_agent<
-  const P extends AuthoredPurity | undefined = undefined,
->(spec: AgentSpecInput<P, ClaudeCodeToolVocabulary>): AgentSpec {
+function agentSpec<const P extends AuthoredPurity | undefined = undefined>(
+  spec: AgentSpecInput<P, ClaudeCodeToolVocabulary>,
+): AgentSpec {
   return coreAgent<P, ClaudeCodeToolVocabulary>(spec);
 }
+
+/**
+ * The Claude Code subagent root. Carries the SAME vocabulary members as the core
+ * builder, and it must: they stopped being standalone exports when the vocabulary
+ * moved onto the root, so an author who picked this door would otherwise have no
+ * way to reach them — the same asymmetry `experimental_skill.input()` closed.
+ *
+ * @experimental
+ */
+export const experimental_agent = Object.assign(agentSpec, {
+  result: coreAgent.result,
+  delegate: coreAgent.delegate,
+  railway: coreAgent.railway,
+  needs: coreAgent.needs,
+  pipeStep: coreAgent.pipeStep,
+  start: coreAgent.start,
+  andThen: coreAgent.andThen,
+  pipe: coreAgent.pipe,
+});
 
 /**
  * Define a Claude Code skill with the purity floor enforced AT COMPILE TIME

@@ -996,7 +996,7 @@ export type OkOf<T> = T extends TypedOutcome<infer Ok, Shape> ? Ok : Shape;
  * loaded a compiled `agents/code-reviewer.md`, dispatched to it and read it,
  * 100% of trials — stronger end-to-end evidence than `experimental_skill` has.
  */
-export function experimental_agent<
+function agentSpec<
   const P extends AuthoredPurity | undefined = undefined,
   V extends ToolVocabulary = OpenToolVocabulary,
   Ok extends Shape = Shape,
@@ -1087,8 +1087,9 @@ export interface OutputContract<
  * cross-reference one agent's `ok` against the next agent's needs at `tsc` time.
  * The return is still an `OutputContract`, so every existing consumer (the
  * `output:` field, `renderOutputContract`, `parseAgentResult`) is unchanged.
+ 
  */
-export function result<const Ok extends Shape, const Err extends Shape>(
+function result<const Ok extends Shape, const Err extends Shape>(
   ok: Ok,
   err: Err,
 ): OutputContract<Ok, Err> {
@@ -1126,8 +1127,9 @@ export interface RailwayStep {
  * handoff that doesn't line up is a `tsc` error naming the offending field.
  * Omitting it (the historical 1-/2-arg call) keeps the exact string-path
  * behavior — fully backwards-compatible.
+ 
  */
-export function delegate(
+function delegate(
   agent: string,
   task?: string,
   needsContract?: Shape,
@@ -1165,8 +1167,9 @@ export interface Railway {
  *     onError: delegate("reporter"),
  *     recover: { step: delegate("fixer"), max: 2 },
  *   })
+ 
  */
-export function railway(spec: Omit<Railway, "_specType">): Railway {
+function railway(spec: Omit<Railway, "_specType">): Railway {
   return { _specType: "railway", ...spec };
 }
 
@@ -1211,10 +1214,9 @@ export type NeedsContract<N extends Shape> = N;
  *
  * @experimental Experimental typed-composition surface — NOT part of the frozen
  * public API (pre-1.0); may change without a major bump.
+ 
  */
-export function experimental_needs<const N extends Shape>(
-  shape: N,
-): NeedsContract<N> {
+function experimental_needs<const N extends Shape>(shape: N): NeedsContract<N> {
   return shape;
 }
 
@@ -1245,8 +1247,9 @@ export interface PipeStep<
  *
  * @experimental Experimental typed-composition surface — NOT part of the frozen
  * public API (pre-1.0); may change without a major bump.
+ 
  */
-export function experimental_pipeStep<
+function experimental_pipeStep<
   Needs extends Shape,
   Ok extends Shape,
   Err extends Shape,
@@ -1322,8 +1325,9 @@ export interface Pipeline<Ok extends Shape, Err extends Shape> {
  *
  * @experimental Experimental typed-composition surface — NOT part of the frozen
  * public API (pre-1.0); may change without a major bump.
+ 
  */
-export function experimental_start<Ok extends Shape, Err extends Shape>(
+function experimental_start<Ok extends Shape, Err extends Shape>(
   first: PipeStep<Record<string, never>, Ok, Err> | TypedAgentSpec<Ok, Err>,
 ): Pipeline<Ok, Err> {
   const step =
@@ -1356,8 +1360,9 @@ export function experimental_start<Ok extends Shape, Err extends Shape>(
  *
  * @experimental Experimental typed-composition surface — NOT part of the frozen
  * public API (pre-1.0); may change without a major bump.
+ 
  */
-export function experimental_andThen<
+function experimental_andThen<
   PriorOk extends Shape,
   PriorErr extends Shape,
   Needs extends Shape,
@@ -1406,11 +1411,12 @@ export function experimental_andThen<
  */
 /* eslint-disable no-redeclare -- TypeScript function overloads (the base
    no-redeclare rule, unlike @typescript-eslint/no-redeclare, flags the overload
-   signatures; each `pipe` line is one arity of the SAME function). */
-export function experimental_pipe<A extends Shape, AE extends Shape>(
+   signatures; each `pipe` line is one arity of the SAME function). 
+ */
+function experimental_pipe<A extends Shape, AE extends Shape>(
   a: TypedAgentSpec<A, AE>,
 ): Pipeline<A, AE>;
-export function experimental_pipe<
+function experimental_pipe<
   A extends Shape,
   AE extends Shape,
   BN extends Shape,
@@ -1422,7 +1428,7 @@ export function experimental_pipe<
     ? PipeStep<BN, B, BE>
     : { readonly __HANDOFF_ERROR: Supplies<A, BN> },
 ): Pipeline<B, AE | BE>;
-export function experimental_pipe<
+function experimental_pipe<
   A extends Shape,
   AE extends Shape,
   BN extends Shape,
@@ -1440,7 +1446,7 @@ export function experimental_pipe<
     ? PipeStep<CN, C, CE>
     : { readonly __HANDOFF_ERROR: Supplies<B, CN> },
 ): Pipeline<C, AE | BE | CE>;
-export function experimental_pipe<
+function experimental_pipe<
   A extends Shape,
   AE extends Shape,
   BN extends Shape,
@@ -1464,7 +1470,7 @@ export function experimental_pipe<
     ? PipeStep<DN, D, DE>
     : { readonly __HANDOFF_ERROR: Supplies<C, DN> },
 ): Pipeline<D, AE | BE | CE | DE>;
-export function experimental_pipe(
+function experimental_pipe(
   first: TypedAgentSpec<Shape, Shape>,
   ...rest: readonly PipeStep<Shape, Shape, Shape>[]
 ): Pipeline<Shape, Shape> {
@@ -1622,6 +1628,39 @@ export const claude = instructionFile;
  * {@link instructionFile} builds. Removed one major AFTER the one that introduces it.
  */
 export const instructions = prose;
+
+/**
+ * Define a subagent — and the ROOT of the subagent vocabulary.
+ *
+ * Everything that only makes sense for subagents hangs off this one symbol:
+ * `experimental_agent.result()` (the outcome contract), `.railway()` / `.delegate()`
+ * (the flat orchestrator), and `.pipe()` / `.start()` / `.andThen()` / `.pipeStep()` /
+ * `.needs()` (the typed pipeline). Same chokepoint as `experimental_skill.input()`.
+ *
+ * WHY a root and not a prefix on each name: `railway()` and `delegate()` are
+ * meaningless without a subagent, yet they shipped under STABLE names while the
+ * builder they depend on is experimental — a stable name resting on an unstable
+ * one. Prefixing each would carry the warning but multiply the vocabulary; a
+ * namespace OBJECT was rejected for the reason the `vigiles/experimental` subpath
+ * was retired in #169 — it marks the import line, out of view by the time anyone
+ * reads the call. A member reached through the marked root cannot be destructured
+ * free of its warning without renaming it, so the warning rides every call site.
+ *
+ * The rule this establishes: ONE experimental root per feature, everything else a
+ * member of it, TYPES excluded (a type annotation is not a call site).
+ *
+ * @experimental
+ */
+export const experimental_agent = Object.assign(agentSpec, {
+  result,
+  delegate,
+  railway,
+  needs: experimental_needs,
+  pipeStep: experimental_pipeStep,
+  start: experimental_start,
+  andThen: experimental_andThen,
+  pipe: experimental_pipe,
+});
 
 /**
  * @deprecated Renamed to {@link experimental_agent} — the shape is not settled.

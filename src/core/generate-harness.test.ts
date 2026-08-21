@@ -329,7 +329,7 @@ const TSCONFIG = JSON.stringify(
   2,
 );
 
-const PLANNER = `import { experimental_agent, result } from "vigiles/spec";
+const PLANNER = `import { experimental_agent } from "vigiles/spec";\nconst { result } = experimental_agent;
 export default experimental_agent({
   name: "planner",
   description: "Break the request into an ordered plan. Dispatch first.",
@@ -337,7 +337,7 @@ export default experimental_agent({
   output: result({ steps: "string[]" }, { reason: "string" }),
 });
 `;
-const IMPLEMENTER = `import { experimental_agent, result } from "vigiles/spec";
+const IMPLEMENTER = `import { experimental_agent } from "vigiles/spec";\nconst { result } = experimental_agent;
 export default experimental_agent({
   name: "implementer",
   description: "Implement the plan and prove the build passes.",
@@ -367,7 +367,7 @@ function writeRailwayFixture(dir: string, target: string): void {
   writeFileSync(join(dir, "reporter.spec.ts"), REPORTER);
   writeFileSync(
     join(dir, "ship.spec.ts"),
-    `import { railway, delegate } from "vigiles/spec";
+    `import { experimental_agent } from "vigiles/spec";\nconst { railway, delegate } = experimental_agent;
 export default railway({
   name: "ship",
   steps: [delegate("planner"), delegate("${target}")],
@@ -476,7 +476,7 @@ test("a DANGLING delegate is rejected by tsc, naming the missing target", async 
 // railway's second step (`implementer`) declares the `needs` shape under test.
 // ---------------------------------------------------------------------------
 
-const HANDOFF_PLANNER = `import { experimental_agent, result } from "vigiles/spec";
+const HANDOFF_PLANNER = `import { experimental_agent } from "vigiles/spec";\nconst { result } = experimental_agent;
 export default experimental_agent({
   name: "planner",
   description: "Produce the ordered plan with its step list.",
@@ -484,7 +484,7 @@ export default experimental_agent({
   output: result({ steps: "string[]" }, { reason: "string" }),
 });
 `;
-const HANDOFF_IMPLEMENTER = `import { experimental_agent, result } from "vigiles/spec";
+const HANDOFF_IMPLEMENTER = `import { experimental_agent } from "vigiles/spec";\nconst { result } = experimental_agent;
 export default experimental_agent({
   name: "implementer",
   description: "Implement the supplied plan.",
@@ -502,7 +502,7 @@ function writeHandoffFixture(
   writeFileSync(join(dir, "implementer.spec.ts"), HANDOFF_IMPLEMENTER);
   writeFileSync(
     join(dir, "ship.spec.ts"),
-    `import { railway, delegate, experimental_needs } from "vigiles/spec";
+    `import { experimental_agent } from "vigiles/spec";\nconst { railway, delegate, needs: experimental_needs } = experimental_agent;
 export default railway({
   name: "ship",
   steps: [delegate("planner"), delegate("implementer", undefined, experimental_needs(${needsLiteral}))],

@@ -7,7 +7,8 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { experimental_agent, result, railway, delegate } from "./spec.js";
+import { experimental_agent } from "./spec.js";
+const { result, railway, delegate } = experimental_agent;
 import { compileAgent, compileRailway, validateRailway } from "./compile.js";
 import { claudeCodeDialect } from "../adapters/claude-code/dialect.js";
 

@@ -10,15 +10,19 @@
  * executed. `// @ts-expect-error` marks the must-NOT-compile cases. Mirrors the
  * proven prototype (research/prototypes/typed-spec-power/{typed-composition,fails}.ts).
  */
-import {
-  experimental_agent,
+import { experimental_agent } from "../../dist/core/spec.js";
+
+// The subagent vocabulary hangs off the root (the `experimental_skill.input()`
+// chokepoint, applied to subagents): destructuring here keeps the body below
+// unchanged, and the ONLY way to reach these names is through the marked root.
+const {
   result,
-  experimental_start,
-  experimental_andThen,
-  experimental_pipe,
-  experimental_pipeStep,
-  experimental_needs,
-} from "../../dist/core/spec.js";
+  start: experimental_start,
+  andThen: experimental_andThen,
+  pipe: experimental_pipe,
+  pipeStep: experimental_pipeStep,
+  needs: experimental_needs,
+} = experimental_agent;
 
 // ---------------------------------------------------------------------------
 // Three flat workers, each declaring its typed result() shape.

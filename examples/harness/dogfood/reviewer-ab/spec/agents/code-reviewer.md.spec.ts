@@ -11,7 +11,8 @@
  * The A/B eval (../../reviewer-ab.eval.mjs) measures whether that typed contract
  * helps (a parseable outcome) at NO quality cost (still finds the bug).
  */
-import { experimental_agent, result } from "../../../../../../src/core/spec.js";
+import { experimental_agent } from "../../../../../../src/core/spec.js";
+const { result } = experimental_agent;
 
 export default experimental_agent({
   name: "code-reviewer",

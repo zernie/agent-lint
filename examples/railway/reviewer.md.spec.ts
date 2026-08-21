@@ -5,7 +5,8 @@
  * either approves (ok) or returns blocking findings (err) that route to the
  * recovery / error track.
  */
-import { experimental_agent, result, prose, cmd } from "../../src/core/spec.js";
+import { experimental_agent, prose, cmd } from "../../src/core/spec.js";
+const { result } = experimental_agent;
 
 export default experimental_agent({
   name: "reviewer",

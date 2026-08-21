@@ -5,7 +5,16 @@
 ```ts
 
 // @public @deprecated (undocumented)
-export const agent: typeof experimental_agent;
+export const agent: typeof agentSpec & {
+    result: typeof result;
+    delegate: typeof delegate;
+    railway: typeof railway;
+    needs: typeof experimental_needs;
+    pipeStep: typeof experimental_pipeStep;
+    start: typeof experimental_start;
+    andThen: typeof experimental_andThen;
+    pipe: typeof experimental_pipe;
+};
 
 // @public
 export interface AgentSpec {
@@ -74,9 +83,6 @@ export interface CmdRef {
 export function defineConfig(config: VigilesV2Config): VigilesV2Config;
 
 // @public
-export function delegate(agent: string, task?: string, needsContract?: Shape): RailwayStep;
-
-// @public
 export function dir(path: string): DirRef;
 
 // @public
@@ -115,54 +121,25 @@ export interface EnforceRule {
 }
 
 // @public
-export function experimental_agent<const P extends AuthoredPurity | undefined = undefined, V extends ToolVocabulary = OpenToolVocabulary, Ok extends Shape = Shape, Err extends Shape = Shape>(spec: AgentSpecInput<P, V, Ok, Err>): TypedAgentSpec<Ok, Err>;
-
-// @public
-export function experimental_andThen<PriorOk extends Shape, PriorErr extends Shape, Needs extends Shape, Ok extends Shape, Err extends Shape>(prior: Pipeline<PriorOk, PriorErr>, next: Supplies<PriorOk, Needs> extends true ? PipeStep<Needs, Ok, Err> : {
-    readonly __HANDOFF_ERROR: Supplies<PriorOk, Needs>;
-}): Pipeline<Ok, PriorErr | Err>;
+export const experimental_agent: typeof agentSpec & {
+    result: typeof result;
+    delegate: typeof delegate;
+    railway: typeof railway;
+    needs: typeof experimental_needs;
+    pipeStep: typeof experimental_pipeStep;
+    start: typeof experimental_start;
+    andThen: typeof experimental_andThen;
+    pipe: typeof experimental_pipe;
+};
 
 // @public
 export function experimental_effect(strings: TemplateStringsArray, ...values: InstructionFragment[]): EffectRegion;
-
-// @public
-export function experimental_needs<const N extends Shape>(shape: N): NeedsContract<N>;
-
-// @public
-export function experimental_pipe<A extends Shape, AE extends Shape>(a: TypedAgentSpec<A, AE>): Pipeline<A, AE>;
-
-// @public (undocumented)
-export function experimental_pipe<A extends Shape, AE extends Shape, BN extends Shape, B extends Shape, BE extends Shape>(a: TypedAgentSpec<A, AE>, b: Supplies<A, BN> extends true ? PipeStep<BN, B, BE> : {
-    readonly __HANDOFF_ERROR: Supplies<A, BN>;
-}): Pipeline<B, AE | BE>;
-
-// @public (undocumented)
-export function experimental_pipe<A extends Shape, AE extends Shape, BN extends Shape, B extends Shape, BE extends Shape, CN extends Shape, C extends Shape, CE extends Shape>(a: TypedAgentSpec<A, AE>, b: Supplies<A, BN> extends true ? PipeStep<BN, B, BE> : {
-    readonly __HANDOFF_ERROR: Supplies<A, BN>;
-}, c: Supplies<B, CN> extends true ? PipeStep<CN, C, CE> : {
-    readonly __HANDOFF_ERROR: Supplies<B, CN>;
-}): Pipeline<C, AE | BE | CE>;
-
-// @public (undocumented)
-export function experimental_pipe<A extends Shape, AE extends Shape, BN extends Shape, B extends Shape, BE extends Shape, CN extends Shape, C extends Shape, CE extends Shape, DN extends Shape, D extends Shape, DE extends Shape>(a: TypedAgentSpec<A, AE>, b: Supplies<A, BN> extends true ? PipeStep<BN, B, BE> : {
-    readonly __HANDOFF_ERROR: Supplies<A, BN>;
-}, c: Supplies<B, CN> extends true ? PipeStep<CN, C, CE> : {
-    readonly __HANDOFF_ERROR: Supplies<B, CN>;
-}, d: Supplies<C, DN> extends true ? PipeStep<DN, D, DE> : {
-    readonly __HANDOFF_ERROR: Supplies<C, DN>;
-}): Pipeline<D, AE | BE | CE | DE>;
-
-// @public
-export function experimental_pipeStep<Needs extends Shape, Ok extends Shape, Err extends Shape>(a: TypedAgentSpec<Ok, Err>, needsContract?: Needs): PipeStep<Needs, Ok, Err>;
 
 // @public (undocumented)
 export const experimental_skill: typeof skillSpec & {
     input: typeof input;
     step: typeof step;
 };
-
-// @public
-export function experimental_start<Ok extends Shape, Err extends Shape>(first: PipeStep<Record<string, never>, Ok, Err> | TypedAgentSpec<Ok, Err>): Pipeline<Ok, Err>;
 
 // @public
 export function file(path: NoInfer<StrictFile>): FileRef;
@@ -339,9 +316,6 @@ export interface Railway {
 }
 
 // @public
-export function railway(spec: Omit<Railway, "_specType">): Railway;
-
-// @public
 export interface RailwayStep {
     readonly agent: string;
     readonly needs?: Shape;
@@ -370,9 +344,6 @@ export function ref(path: string): SkillRef;
 export type RefsValidated<T extends ClaudeSpec | SkillSpec = ClaudeSpec> = T & {
     readonly [__stage]: "refs-validated";
 };
-
-// @public
-export function result<const Ok extends Shape, const Err extends Shape>(ok: Ok, err: Err): OutputContract<Ok, Err>;
 
 // @public
 export interface RoleGate {

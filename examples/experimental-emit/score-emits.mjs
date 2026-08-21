@@ -15,7 +15,8 @@
  */
 import { readFileSync } from "node:fs";
 
-import { result } from "../../dist/core/spec.js";
+import { experimental_agent } from "../../dist/core/spec.js";
+const { result } = experimental_agent;
 import { experimental_parseEmitted } from "../../dist/experimental-emit.js";
 
 // Defaults to the PUBLISHED run so `node score-emits.mjs` reproduces the numbers

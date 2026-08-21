@@ -5,7 +5,8 @@
  * failing step's error payload and tries to address it. The railway caps how
  * many times it runs (recover.max) — the finite, sub-Turing guarantee.
  */
-import { experimental_agent, result, prose, cmd } from "../../src/core/spec.js";
+import { experimental_agent, prose, cmd } from "../../src/core/spec.js";
+const { result } = experimental_agent;
 
 export default experimental_agent({
   name: "fixer",

@@ -8,7 +8,8 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { result } from "./core/spec.js";
+import { experimental_agent } from "./core/spec.js";
+const { result } = experimental_agent;
 import type { ToolCall } from "./core/harness-driver.js";
 import {
   experimental_emitTool,

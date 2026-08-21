@@ -34,7 +34,8 @@ import {
 import { basename, resolve } from "node:path";
 import MarkdownIt from "markdown-it";
 
-import { result } from "../../dist/core/spec.js";
+import { experimental_agent } from "../../dist/core/spec.js";
+const { result } = experimental_agent;
 import {
   experimental_emitTool,
   experimental_parseEmitted,

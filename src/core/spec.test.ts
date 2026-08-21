@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import {
   enforce,
   guidance,
-  result,
   file,
   cmd,
   ref,
@@ -15,7 +14,9 @@ import {
   experimental_effect,
   instructionFile,
   experimental_skill,
+  experimental_agent,
 } from "./spec.js";
+const { result } = experimental_agent;
 import type {
   SpecPath,
   OutputPath,

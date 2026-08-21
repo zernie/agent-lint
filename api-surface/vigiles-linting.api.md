@@ -5,7 +5,16 @@
 ```ts
 
 // @public @deprecated (undocumented)
-export const agent: typeof experimental_agent;
+export const agent: typeof agentSpec & {
+    result: typeof result;
+    delegate: typeof delegate;
+    railway: typeof railway;
+    needs: typeof experimental_needs;
+    pipeStep: typeof experimental_pipeStep;
+    start: typeof experimental_start;
+    andThen: typeof experimental_andThen;
+    pipe: typeof experimental_pipe;
+};
 
 // @public
 export interface AgentSpec {
@@ -164,9 +173,6 @@ export interface CompileSkillResult {
 }
 
 // @public
-export function delegate(agent: string, task?: string, needsContract?: Shape): RailwayStep;
-
-// @public
 export function dir(path: string): DirRef;
 
 // @public
@@ -205,7 +211,16 @@ export interface EnforceRule {
 }
 
 // @public
-export function experimental_agent<const P extends AuthoredPurity | undefined = undefined, V extends ToolVocabulary = OpenToolVocabulary, Ok extends Shape = Shape, Err extends Shape = Shape>(spec: AgentSpecInput<P, V, Ok, Err>): TypedAgentSpec<Ok, Err>;
+export const experimental_agent: typeof agentSpec & {
+    result: typeof result;
+    delegate: typeof delegate;
+    railway: typeof railway;
+    needs: typeof experimental_needs;
+    pipeStep: typeof experimental_pipeStep;
+    start: typeof experimental_start;
+    andThen: typeof experimental_andThen;
+    pipe: typeof experimental_pipe;
+};
 
 // @public
 export function experimental_effect(strings: TemplateStringsArray, ...values: InstructionFragment[]): EffectRegion;
@@ -344,9 +359,6 @@ export interface Railway {
     // (undocumented)
     readonly steps: readonly RailwayStep[];
 }
-
-// @public
-export function railway(spec: Omit<Railway, "_specType">): Railway;
 
 // @public
 export interface RailwayStep {
