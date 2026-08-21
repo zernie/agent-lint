@@ -21,7 +21,7 @@
 import {
   experimental_startServices,
   experimental_dockerRuntime,
-} from "../../dist/experimental.js";
+} from "../../dist/test.js";
 
 if (!experimental_dockerRuntime.available()) {
   console.log("⊘ SKIPPED — no Docker daemon reachable (this tier needs one)");

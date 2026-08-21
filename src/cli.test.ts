@@ -966,7 +966,7 @@ export default experimental_skill({
   description: "A demo skill",
   disableModelInvocation: true,
   argumentHint: "<x>",
-  body: instructions\`Do the thing.\`,
+  body: prose\`Do the thing.\`,
 });
 `,
       );
@@ -1058,7 +1058,7 @@ export default experimental_skill({
   name: "demo",
   description: "A demo skill",
   disableModelInvocation: true,
-  body: instructions\`Do the thing.\`,
+  body: prose\`Do the thing.\`,
 });
 `,
       );
