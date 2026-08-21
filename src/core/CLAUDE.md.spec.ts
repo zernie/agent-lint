@@ -8,9 +8,9 @@
  * whenever you work in `src/core/`. Source of truth; `src/core/CLAUDE.md` is a
  * compiled build artifact (`vigiles compile`).
  */
-import { claude, guidance } from "./spec.js";
+import { instructionFile, guidance } from "./spec.js";
 
-export default claude({
+export default instructionFile({
   sections: {
     scope: `Working in \`src/core/\`? This is the harness-AGNOSTIC domain (spec, compile, linters, the lint/audit detectors). The root \`CLAUDE.md\` holds the full positioning + rule set — read it first. Two invariants live closest to this code: the core must not import an adapter (\`core ⊄ adapter\`, eslint-enforced) and must not hard-code a Claude Code literal (read it from the injected layout/dialect). This file adds the rule for ADDING or CHANGING a detector.`,
   },

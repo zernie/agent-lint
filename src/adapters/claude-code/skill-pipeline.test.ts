@@ -178,3 +178,88 @@ test("a script-runner gate verifies the referenced script file exists", () => {
     "expected a stale-command error for the missing script",
   );
 });
+
+// ---------------------------------------------------------------------------
+// The `result:` → `postcondition:` rename window
+// ---------------------------------------------------------------------------
+// Both halves, because an alias can fail in either direction: it can stop
+// working (old specs break on upgrade — the failure that bricked the consuming
+// repo for an hour when the previous rename shipped with no window at all), or
+// it can work TOO well and quietly outlive the deprecation. The third test is
+// the one that has no counterpart above: setting both names is the only state
+// where the compiler would have to guess.
+
+test("the deprecated `result:` still compiles — the alias window is open", () => {
+  const spec = experimental_skill({
+    name: "legacy",
+    description: "A spec written before the rename",
+    body: "do the thing",
+    result: cmd("npm test"),
+  });
+  const { markdown, errors } = compileSkill(spec, opts);
+  assert.equal(errors.length, 0, JSON.stringify(errors));
+  assert.match(markdown, /<!-- vigiles:result "npm test" -->/);
+});
+
+test("`postcondition:` compiles to the SAME marker as `result:` did", () => {
+  const of = (spec: Parameters<typeof compileSkill>[0]) =>
+    compileSkill(spec, opts).markdown;
+  const base = { name: "same", description: "d", body: "b" } as const;
+  assert.equal(
+    of(experimental_skill({ ...base, postcondition: cmd("npm test") })),
+    of(experimental_skill({ ...base, result: cmd("npm test") })),
+    "the rename is source-level only — the compiled wire format must not move, " +
+      "because every already-compiled SKILL.md on disk carries `vigiles:result`",
+  );
+});
+
+test("setting BOTH `postcondition:` and `result:` throws at the builder", () => {
+  assert.throws(
+    () =>
+      experimental_skill({
+        name: "ambiguous",
+        description: "d",
+        body: "b",
+        postcondition: cmd("npm test"),
+        result: cmd("npm run lint"),
+      }),
+    /BOTH `postcondition:` and the deprecated `result:`/,
+  );
+});
+
+test("a STRUCTURAL SkillSpec with the deprecated `result:` still gets its gate", () => {
+  // 🔴 THE SECOND DOOR, found by a reviewer and not by me. `compileSkill` is
+  // public and takes a `SkillSpec` structurally, so this is legal TypeScript and
+  // never touches `experimental_skill()`. Before the fold moved to a shared
+  // helper called at BOTH entrances, such a spec silently lost the `## Result`
+  // section AND its reference verification — the exact failure the builder's own
+  // comment predicted, arriving through the entrance that comment did not count.
+  const structural = {
+    _specType: "skill",
+    name: "hand-rolled",
+    description: "built as an object literal, not through the builder",
+    body: "do the thing",
+    result: cmd("npm test"),
+  } as unknown as Parameters<typeof compileSkill>[0];
+
+  const { markdown, errors } = compileSkill(structural, opts);
+  assert.equal(errors.length, 0, JSON.stringify(errors));
+  assert.match(markdown, /## Result/);
+  assert.match(markdown, /<!-- vigiles:result "npm test" -->/);
+});
+
+test("the both-set guard holds at the compiler door too, not only the builder", () => {
+  const structural = {
+    _specType: "skill",
+    name: "ambiguous",
+    description: "d",
+    body: "b",
+    postcondition: cmd("npm test"),
+    result: cmd("npm run lint"),
+  } as unknown as Parameters<typeof compileSkill>[0];
+
+  assert.throws(
+    () => compileSkill(structural, opts),
+    /BOTH `postcondition:` and the deprecated `result:`/,
+  );
+});

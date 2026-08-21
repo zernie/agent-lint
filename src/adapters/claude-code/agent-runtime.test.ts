@@ -9,8 +9,8 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 
 import {
-  agent,
-  instructions,
+  experimental_agent,
+  prose,
   experimental_effect,
   file,
 } from "../../core/spec.js";
@@ -46,7 +46,7 @@ import { join, resolve } from "node:path";
 
 test("parseAgentTools reads the tools list from compiled frontmatter", () => {
   const { markdown } = compileAgent(
-    agent({
+    experimental_agent({
       name: "reviewer",
       description: "Review a diff.",
       tools: ["Read", "Grep", "Bash"],
@@ -59,7 +59,7 @@ test("parseAgentTools reads the tools list from compiled frontmatter", () => {
 
 test("parseAgentTools returns null when no tools: line (inherit-all)", () => {
   const { markdown } = compileAgent(
-    agent({ name: "a", description: "d", body: "b" }),
+    experimental_agent({ name: "a", description: "d", body: "b" }),
     { specFile: "a.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.equal(parseAgentTools(markdown), null);
@@ -233,11 +233,11 @@ test("NESTING CONTRACT-ESCAPE regression (AgentWindowStack.tla counterexample): 
   try {
     mkdirSync(join(dir, "agents"), { recursive: true });
     const { markdown } = compileAgent(
-      agent({
+      experimental_agent({
         name: "writer",
         description: "writes files",
         tools: ["Read", "Write", "Edit"],
-        body: instructions`Write the file.`,
+        body: prose`Write the file.`,
       }),
       { dialect: claudeCodeDialect },
     );
@@ -272,7 +272,7 @@ test("evaluatePreToolUse blocks an out-of-contract tool for the active agent", (
   const dir = makeTmpDir("agent-eval");
   try {
     const { markdown } = compileAgent(
-      agent({
+      experimental_agent({
         name: "reviewer",
         description: "Review a diff.",
         tools: ["Read", "Grep"], // no Write/Edit/Bash
@@ -319,7 +319,7 @@ test("evaluatePreToolUse allows everything for an inherit-all agent", () => {
   const dir = makeTmpDir("agent-eval-inherit");
   try {
     const { markdown } = compileAgent(
-      agent({ name: "open", description: "d", body: "b" }), // no tools: line
+      experimental_agent({ name: "open", description: "d", body: "b" }), // no tools: line
       {
         basePath: dir,
         specFile: "agents/open.md.spec.ts",
@@ -340,7 +340,7 @@ test("evaluatePreToolUse allows everything for an inherit-all agent", () => {
 
 test("parseAgentPurity reads the vigiles:purity marker compile emits", () => {
   const { markdown } = compileAgent(
-    agent({
+    experimental_agent({
       name: "editor",
       description: "Edits within a boundary.",
       purity: "bounded",
@@ -354,7 +354,12 @@ test("parseAgentPurity reads the vigiles:purity marker compile emits", () => {
 
 test("parseAgentPurity returns null when no marker is present", () => {
   const { markdown } = compileAgent(
-    agent({ name: "a", description: "d", tools: ["Read"], body: "b" }),
+    experimental_agent({
+      name: "a",
+      description: "d",
+      tools: ["Read"],
+      body: "b",
+    }),
     { specFile: "a.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.equal(parseAgentPurity(markdown), null);
@@ -364,7 +369,7 @@ test("evaluatePreToolUse applies the purity gate: a bounded agent's Bash is comm
   const dir = makeTmpDir("agent-purity");
   try {
     const { markdown } = compileAgent(
-      agent({
+      experimental_agent({
         name: "editor",
         description: "Edits + observes via Bash.",
         purity: "bounded",
@@ -400,7 +405,7 @@ test("evaluatePreToolUse: the tool-contract rail still fires before the purity g
     // A pure agent: Read/Grep only. Write is out of contract → the RAIL denies
     // it (the purity gate never needs to), proving the two layers compose.
     const { markdown } = compileAgent(
-      agent({
+      experimental_agent({
         name: "reviewer",
         description: "Reviews.",
         purity: "pure",
@@ -435,7 +440,7 @@ test("the rail the hook enforces is exactly the declared contract (round-trip)",
   // will read → it equals the declared tools, and the hook allows exactly those.
   const declared = ["Read", "Grep", "Glob", "Bash"];
   const { markdown } = compileAgent(
-    agent({
+    experimental_agent({
       name: "ui-visual-validator",
       description: "Validate UI visually.",
       tools: declared,
@@ -474,7 +479,7 @@ const CLI = resolve(__dirname, "..", "..", "..", "dist", "cli.js");
 function projectWithActiveAgent(tools: string[]): string {
   const dir = makeTmpDir("agent-hook-cli");
   const { markdown } = compileAgent(
-    agent({
+    experimental_agent({
       name: "reader",
       description: "read-only worker",
       tools,
@@ -533,7 +538,7 @@ test("agent-hook CLI allows (exit 0) an in-contract tool", () => {
 test("agent-hook CLI command-gates Bash for a bounded agent (read-only allowed, mutating blocked)", () => {
   const dir = makeTmpDir("agent-hook-purity");
   const { markdown } = compileAgent(
-    agent({
+    experimental_agent({
       name: "editor",
       description: "Edits + observes.",
       purity: "bounded",
@@ -647,7 +652,7 @@ test("the spec form ADDS the rail the real subagent omits, and it parses + enfor
   assert.ok(nameLine && descLine); // sanity: we're reading the real frontmatter
 
   const { markdown, errors } = compileAgent(
-    agent({
+    experimental_agent({
       name: nameLine[1].trim(),
       description: descLine[1].trim(),
       model: "sonnet",
@@ -677,11 +682,11 @@ test("evaluatePreToolUse: effect boundary outside blocks side-effecting tools", 
   const dir = makeTmpDir("agent-effect-boundary");
   try {
     const { markdown } = compileAgent(
-      agent({
+      experimental_agent({
         name: "release",
         description: "Cut a release.",
         tools: ["Read", "Write", "Bash"],
-        body: instructions`
+        body: prose`
           ## Prepare
           Read ${file("package.json")}.
 
@@ -718,11 +723,11 @@ test("evaluatePreToolUse: effect boundary inside allows side-effecting tools", (
   const dir = makeTmpDir("agent-effect-inside");
   try {
     const { markdown } = compileAgent(
-      agent({
+      experimental_agent({
         name: "release",
         description: "Cut a release.",
         tools: ["Read", "Write"],
-        body: instructions`
+        body: prose`
           ## Apply
           ${experimental_effect`Write ${file("package.json")}.`}
         `,
@@ -749,11 +754,11 @@ test("evaluatePreToolUse: effect boundary inside allows side-effecting tools", (
 test("agent-hook CLI: effect-enter allows Write; effect-exit blocks Write again", () => {
   const dir = makeTmpDir("agent-hook-effect");
   const { markdown } = compileAgent(
-    agent({
+    experimental_agent({
       name: "release",
       description: "Cut a release.",
       tools: ["Read", "Write"],
-      body: instructions`
+      body: prose`
         ## Apply
         ${experimental_effect`Write the changelog.`}
       `,

@@ -74,9 +74,9 @@ describe("CLI: vigiles init", () => {
     // uses); enforce/guidance appear solely in a COMMENTED import. A strict
     // `no-unused-vars` + `--max-warnings=0` CI would fail otherwise.
     const liveImport = content.split("\n").find((l) => l.startsWith("import "));
-    assert.equal(liveImport, 'import { claude } from "vigiles/spec";');
+    assert.equal(liveImport, 'import { instructionFile } from "vigiles/spec";');
     assert.ok(
-      content.includes("// import { claude, enforce, guidance }"),
+      content.includes("// import { instructionFile, enforce, guidance }"),
       "shows the fuller import as a comment for when rules are added",
     );
   });
@@ -136,7 +136,7 @@ describe("CLI: vigiles compile", () => {
     const specSrc = resolve(process.cwd(), "dist", "core", "spec.js");
     writeFileSync(
       join(tmpDir, "CLAUDE.md.spec.ts"),
-      `import { claude, guidance } from "${specSrc}";\nexport default claude({ rules: { r: guidance("test") } });\n`,
+      `import { instructionFile, guidance } from "${specSrc}";\nexport default instructionFile({ rules: { r: guidance("test") } });\n`,
     );
     const { stdout, exitCode } = run("compile CLAUDE.md.spec.ts", tmpDir);
     assert.equal(exitCode, 0, stdout);
@@ -153,8 +153,8 @@ describe("CLI: vigiles compile", () => {
     const specSrc = resolve(process.cwd(), "dist", "core", "spec.js");
     writeFileSync(
       join(tmpDir, "worker.md.spec.ts"),
-      `import { agent, result } from "${specSrc}";\n` +
-        `export default agent({ name: "worker", description: "d", tools: ["Read"], body: "b", output: result({ summary: "string" }, { reason: "string" }) });\n`,
+      `import { experimental_agent, result } from "${specSrc}";\n` +
+        `export default experimental_agent({ name: "worker", description: "d", tools: ["Read"], body: "b", output: result({ summary: "string" }, { reason: "string" }) });\n`,
     );
     writeFileSync(
       join(tmpDir, "flow.md.spec.ts"),
@@ -204,7 +204,7 @@ describe("CLI: vigiles compile", () => {
     const specSrc = resolve(process.cwd(), "dist", "core", "spec.js");
     writeFileSync(
       join(subDir, "CLAUDE.md.spec.ts"),
-      `import { claude, guidance } from "${specSrc}";\nexport default claude({ rules: { r: guidance("test") } });\n`,
+      `import { instructionFile, guidance } from "${specSrc}";\nexport default instructionFile({ rules: { r: guidance("test") } });\n`,
     );
     const { stdout, exitCode } = run(
       "compile examples/CLAUDE.md.spec.ts",
@@ -234,14 +234,14 @@ describe("CLI: vigiles compile", () => {
     // Root spec
     writeFileSync(
       join(tmpDir, "CLAUDE.md.spec.ts"),
-      `import { claude, guidance } from "${specSrc}";\nexport default claude({ rules: { "root-rule": guidance("from root") } });\n`,
+      `import { instructionFile, guidance } from "${specSrc}";\nexport default instructionFile({ rules: { "root-rule": guidance("from root") } });\n`,
     );
     // Subdirectory spec
     const subDir = join(tmpDir, "examples");
     mkdirSync(subDir);
     writeFileSync(
       join(subDir, "CLAUDE.md.spec.ts"),
-      `import { claude, guidance } from "${specSrc}";\nexport default claude({ rules: { "sub-rule": guidance("from subdir") } });\n`,
+      `import { instructionFile, guidance } from "${specSrc}";\nexport default instructionFile({ rules: { "sub-rule": guidance("from subdir") } });\n`,
     );
 
     const { stdout, exitCode } = run("compile", tmpDir);
@@ -331,8 +331,8 @@ describe("CLI: vigiles lint", () => {
       const specSrc = resolve(process.cwd(), "dist", "core", "spec.js");
       writeFileSync(
         join(dupDir, "CLAUDE.md.spec.ts"),
-        `import { claude, guidance } from "${specSrc}";
-export default claude({
+        `import { instructionFile, guidance } from "${specSrc}";
+export default instructionFile({
   rules: {
     "use-logger": guidance("Always use the structured logger instead of console.log for production output."),
     "logger-over-console": guidance("Use the structured logger instead of console.log in production code."),
@@ -368,8 +368,8 @@ export default claude({
       const specSrc = resolve(process.cwd(), "dist", "core", "spec.js");
       writeFileSync(
         join(specDir, "CLAUDE.md.spec.ts"),
-        `import { claude, guidance } from "${specSrc}";
-export default claude({
+        `import { instructionFile, guidance } from "${specSrc}";
+export default instructionFile({
   sections: {
     // A literal enforce marker embedded in prose — would be picked
     // up as an inline rule if lint did not skip spec-managed files.
@@ -866,8 +866,8 @@ describe("CLI: multi-target compile", () => {
     // Create a spec with multiple targets
     writeFileSync(
       join(tmpDir, "CLAUDE.md.spec.ts"),
-      `import { claude, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
-export default claude({
+      `import { instructionFile, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
+export default instructionFile({
   target: ["CLAUDE.md", "AGENTS.md"],
   rules: {
     "test-rule": guidance("Test guidance."),
@@ -912,8 +912,8 @@ describe("CLI: multi-harness compile", () => {
     tmpDir = mkdtempSync(join(tmpdir(), "vigiles-cli-harness-"));
     writeFileSync(
       join(tmpDir, "CLAUDE.md.spec.ts"),
-      `import { claude, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
-export default claude({
+      `import { instructionFile, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
+export default instructionFile({
   target: "CLAUDE.md",
   rules: { "test-rule": guidance("Test guidance.") },
 });
@@ -960,13 +960,13 @@ export default claude({
     try {
       writeFileSync(
         join(dir, "SKILL.md.spec.ts"),
-        `import { experimental_skill, instructions } from "${resolve(process.cwd(), "src/core/spec.js")}";
+        `import { experimental_skill, prose } from "${resolve(process.cwd(), "src/core/spec.js")}";
 export default experimental_skill({
   name: "demo",
   description: "A demo skill",
   disableModelInvocation: true,
   argumentHint: "<x>",
-  body: instructions\`Do the thing.\`,
+  body: prose\`Do the thing.\`,
 });
 `,
       );
@@ -994,14 +994,14 @@ export default experimental_skill({
   it("mirror never clobbers a target that owns its own spec", () => {
     const dir = mkdtempSync(join(tmpdir(), "vigiles-harness-twospecs-"));
     try {
-      const specImport = `import { claude, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";`;
+      const specImport = `import { instructionFile, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";`;
       writeFileSync(
         join(dir, "CLAUDE.md.spec.ts"),
-        `${specImport}\nexport default claude({ target: "CLAUDE.md", rules: { "r": guidance("c") } });\n`,
+        `${specImport}\nexport default instructionFile({ target: "CLAUDE.md", rules: { "r": guidance("c") } });\n`,
       );
       writeFileSync(
         join(dir, "AGENTS.md.spec.ts"),
-        `${specImport}\nexport default claude({ target: "AGENTS.md", rules: { "r": guidance("a") } });\n`,
+        `${specImport}\nexport default instructionFile({ target: "AGENTS.md", rules: { "r": guidance("a") } });\n`,
       );
       writeFileSync(
         join(dir, ".vigilesrc.json"),
@@ -1028,8 +1028,8 @@ export default experimental_skill({
     try {
       writeFileSync(
         join(dir, "CLAUDE.md.spec.ts"),
-        `import { claude, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
-export default claude({ target: "CLAUDE.md", rules: { "r": guidance("c") } });
+        `import { instructionFile, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
+export default instructionFile({ target: "CLAUDE.md", rules: { "r": guidance("c") } });
 `,
       );
       writeFileSync(
@@ -1053,12 +1053,12 @@ export default claude({ target: "CLAUDE.md", rules: { "r": guidance("c") } });
     try {
       writeFileSync(
         join(dir, "SKILL.md.spec.ts"),
-        `import { experimental_skill, instructions } from "${resolve(process.cwd(), "src/core/spec.js")}";
+        `import { experimental_skill, prose } from "${resolve(process.cwd(), "src/core/spec.js")}";
 export default experimental_skill({
   name: "demo",
   description: "A demo skill",
   disableModelInvocation: true,
-  body: instructions\`Do the thing.\`,
+  body: prose\`Do the thing.\`,
 });
 `,
       );
@@ -1083,8 +1083,8 @@ export default experimental_skill({
       // heading. Before the fix this used the hard-coded claude-code dialect.
       writeFileSync(
         join(dir, "AGENTS.md.spec.ts"),
-        `import { claude, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
-export default claude({ rules: { r: guidance("a") } });
+        `import { instructionFile, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
+export default instructionFile({ rules: { r: guidance("a") } });
 `,
       );
       const { exitCode } = run("compile AGENTS.md.spec.ts", dir);
@@ -1101,8 +1101,8 @@ export default claude({ rules: { r: guidance("a") } });
     try {
       writeFileSync(
         join(dir, "CLAUDE.md.spec.ts"),
-        `import { claude, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
-export default claude({ target: "CLAUDE.md", rules: { r: guidance("c") } });
+        `import { instructionFile, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
+export default instructionFile({ target: "CLAUDE.md", rules: { r: guidance("c") } });
 `,
       );
       writeFileSync(
@@ -1126,8 +1126,8 @@ export default claude({ target: "CLAUDE.md", rules: { r: guidance("c") } });
     try {
       writeFileSync(
         join(dir, "CLAUDE.md.spec.ts"),
-        `import { claude, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
-export default claude({ target: "CLAUDE.md", rules: { r: guidance("c") } });
+        `import { instructionFile, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
+export default instructionFile({ target: "CLAUDE.md", rules: { r: guidance("c") } });
 `,
       );
       const { stdout, stderr, exitCode } = run(
@@ -1606,7 +1606,7 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
-  it("adopts an existing subagent into an agent() spec (unmapped key noted)", () => {
+  it("adopts an existing subagent into an experimental_agent() spec (unmapped key noted)", () => {
     const dir = freshProject();
     try {
       mkdirSync(join(dir, "agents"), { recursive: true });
@@ -1620,7 +1620,10 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
         join(dir, "agents", "reviewer.md.spec.ts"),
         "utf-8",
       );
-      assert.ok(spec.includes("agent({"), "agent() spec written");
+      assert.ok(
+        spec.includes("experimental_agent({"),
+        "experimental_agent() spec written",
+      );
       assert.ok(spec.includes('name: "reviewer"'));
       assert.ok(spec.includes("Read the diff."), "## section captured");
       assert.ok(
@@ -2440,8 +2443,8 @@ describe("E2E: fixture project adoption", () => {
     const specSrc = resolve(process.cwd(), "dist", "core", "spec.js");
     writeFileSync(
       specPath,
-      `import { claude, guidance } from "${specSrc}";
-export default claude({
+      `import { instructionFile, guidance } from "${specSrc}";
+export default instructionFile({
   commands: { "npm test": "Run tests" },
   rules: { "be-nice": guidance("Be nice.") },
 });

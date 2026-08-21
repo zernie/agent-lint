@@ -98,10 +98,10 @@ declare module "vigiles/generated" {
     | "check"
     | "docs:check"
     | "exports:check"
-    | "experimental:check"
+    | "internal:check"
     | "docs:api";
 
-  /** 391 project files. */
+  /** 392 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -319,6 +319,7 @@ declare module "vigiles/generated" {
     | "src/core/skill-description-budget.ts"
     | "src/core/skill-missing-fence.test.ts"
     | "src/core/skill-missing-fence.ts"
+    | "src/core/skill-normalize.ts"
     | "src/core/skill-resources.test.ts"
     | "src/core/skill-resources.ts"
     | "src/core/source-refs.test.ts"
@@ -375,10 +376,10 @@ declare module "vigiles/generated" {
     | "src/eval-surface.ts"
     | "src/eval.test.ts"
     | "src/eval.ts"
+    | "src/example-imports.test.ts"
     | "src/examples-syntax.test.ts"
     | "src/experimental-emit.test.ts"
     | "src/experimental-emit.ts"
-    | "src/experimental.ts"
     | "src/fs-walk.test.ts"
     | "src/fs-walk.ts"
     | "src/guardrail-check.test.ts"
@@ -782,6 +783,7 @@ declare module "vigiles/spec" {
       | "src/core/skill-description-budget.ts"
       | "src/core/skill-missing-fence.test.ts"
       | "src/core/skill-missing-fence.ts"
+      | "src/core/skill-normalize.ts"
       | "src/core/skill-resources.test.ts"
       | "src/core/skill-resources.ts"
       | "src/core/source-refs.test.ts"
@@ -838,10 +840,10 @@ declare module "vigiles/spec" {
       | "src/eval-surface.ts"
       | "src/eval.test.ts"
       | "src/eval.ts"
+      | "src/example-imports.test.ts"
       | "src/examples-syntax.test.ts"
       | "src/experimental-emit.test.ts"
       | "src/experimental-emit.ts"
-      | "src/experimental.ts"
       | "src/fs-walk.test.ts"
       | "src/fs-walk.ts"
       | "src/guardrail-check.test.ts"
@@ -981,7 +983,7 @@ declare module "vigiles/spec" {
       | "check"
       | "docs:check"
       | "exports:check"
-      | "experimental:check"
+      | "internal:check"
       | "docs:api";
   }
 }

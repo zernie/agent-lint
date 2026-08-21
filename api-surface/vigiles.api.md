@@ -325,6 +325,14 @@ export interface Comparison {
 }
 
 // @public
+export interface ContainerRuntime {
+    available(): boolean | Promise<boolean>;
+    readonly name: string;
+    start(name: string, spec: ServiceSpec): Promise<ServiceHandle>;
+    stop(handle: ServiceHandle): Promise<void>;
+}
+
+// @public
 export interface ContainmentInput {
     // (undocumented)
     readonly perPrompt: readonly {
@@ -405,10 +413,67 @@ export interface DocCommand {
 }
 
 // @public
+export type DockerExec = (args: readonly string[]) => {
+    readonly stdout: string;
+    readonly stderr: string;
+    readonly code: number;
+};
+
+// @public
 export function egressHosts(r: HasEgress): string[];
 
 // @public (undocumented)
 export function egressRoutes(): boolean;
+
+// @public
+export type EmitFieldSchema = {
+    readonly type: "string";
+} | {
+    readonly type: "number";
+} | {
+    readonly type: "boolean";
+} | {
+    readonly type: "array";
+    readonly items: {
+        readonly type: "string";
+    };
+} | {
+    readonly type: "string";
+    readonly enum: readonly string[];
+};
+
+// @public
+export interface EmitObjectSchema {
+    // (undocumented)
+    readonly additionalProperties: false;
+    // (undocumented)
+    readonly properties: Readonly<Record<string, EmitPropertySchema>>;
+    // (undocumented)
+    readonly required: readonly string[];
+    // (undocumented)
+    readonly type: "object";
+}
+
+// @public
+export type EmitPropertySchema = EmitFieldSchema | EmitTrackSchema | EmitObjectSchema;
+
+// @public
+export interface EmitToolDefinition {
+    // (undocumented)
+    readonly description: string;
+    // (undocumented)
+    readonly inputSchema: EmitObjectSchema;
+    // (undocumented)
+    readonly name: string;
+}
+
+// @public
+export interface EmitTrackSchema {
+    // (undocumented)
+    readonly enum: readonly ["ok", "err"];
+    // (undocumented)
+    readonly type: "string";
+}
 
 // @public
 export interface EvalArm {
@@ -521,6 +586,44 @@ export interface EvalUsage {
     readonly inputTokens: number;
     // (undocumented)
     readonly outputTokens: number;
+}
+
+// @public
+export function experimental_assertEmittedOk(toolCalls: readonly ToolCall[], contract: OutputContract, options?: {
+    readonly name?: string;
+}): Record<string, unknown>;
+
+// @public
+export const experimental_dockerRuntime: ContainerRuntime;
+
+// @public
+export function experimental_emitTool(contract: OutputContract, options?: {
+    readonly name?: string;
+}): ExperimentalEmitTool;
+
+// @public
+export function experimental_makeDockerRuntime(deps?: {
+    exec?: DockerExec;
+    netProbe?: NetProbe;
+    sleep?: (ms: number) => Promise<void>;
+    readyTimeoutMs?: number;
+}): ContainerRuntime;
+
+// @public
+export function experimental_parseEmitted(toolCalls: readonly ToolCall[], contract: OutputContract, options?: {
+    readonly name?: string;
+}): ParsedAgentResult;
+
+// @public
+export function experimental_startServices(services: Readonly<Record<string, ServiceSpec>>, runtime: ContainerRuntime): Promise<ServiceSession>;
+
+// @public
+export function experimental_withServices<T>(services: Readonly<Record<string, ServiceSpec>>, runtime: ContainerRuntime, fn: (session: ServiceSession) => Promise<T>): Promise<T>;
+
+// @public
+export interface ExperimentalEmitTool {
+    readonly instruction: string;
+    readonly tool: EmitToolDefinition;
 }
 
 // @public
@@ -765,6 +868,9 @@ export function mustInclude(fragment: string, why: string): Check<readonly DocCo
 export function mustNotInclude(fragment: string, why: string): Check<readonly DocCommand[]>;
 
 // @public
+export type NetProbe = (port: number) => Promise<boolean>;
+
+// @public
 export function notTool(name: string, args?: ArgMatcher): Check<Trace>;
 
 // @public
@@ -957,6 +1063,47 @@ export interface SelectionTrialResult {
     readonly errored: boolean;
     // (undocumented)
     readonly fired: readonly string[];
+}
+
+// @public
+export interface ServiceHandle {
+    exec(command: string): {
+        readonly stdout: string;
+        readonly stderr: string;
+        readonly code: number;
+    };
+    readonly host: string;
+    readonly port?: number;
+    readonly url?: string;
+}
+
+// @public
+export type ServiceReady = {
+    readonly tcp: number;
+} | {
+    readonly log: RegExp;
+} | {
+    readonly exec: string;
+};
+
+// @public
+export type ServiceReset = "per-trial" | "per-arm";
+
+// @public
+export interface ServiceSession {
+    readonly endpoints: readonly string[];
+    readonly handles: Readonly<Record<string, ServiceHandle>>;
+    teardown(): Promise<void>;
+}
+
+// @public
+export interface ServiceSpec {
+    readonly env?: Readonly<Record<string, string>>;
+    readonly image: string;
+    readonly port?: number;
+    readonly ready?: ServiceReady;
+    readonly reset?: ServiceReset;
+    readonly seed?: string;
 }
 
 // @public

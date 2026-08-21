@@ -2,7 +2,7 @@
  * Faithful markdown → typed-spec adoption — the deterministic half of `init`
  * auto-adopt (research/install-enforcement-dx.md).
  *
- * Turns an existing instruction file (CLAUDE.md / AGENTS.md) into a `claude()`
+ * Turns an existing instruction file (CLAUDE.md / AGENTS.md) into a `instructionFile()`
  * spec source that compiles back to ~the same file, so adopting a rich,
  * hand-tuned instruction file is SAFE: every heading becomes a prose section
  * (verbatim), no rule is invented, nothing is dropped. The contract to the user
@@ -28,7 +28,7 @@ import {
 } from "./frontmatter-read.js";
 import {
   experimental_skill,
-  agent,
+  experimental_agent,
   type SkillSpec,
   type AgentSpec,
 } from "./spec.js";
@@ -52,7 +52,7 @@ export interface AdoptResult {
 }
 
 /**
- * The intermediate adoption result: the `claude()` spec FIELDS (before
+ * The intermediate adoption result: the `instructionFile()` spec FIELDS (before
  * rendering to source). Exposed so the renderer and the round-trip tests share
  * one parse — the test can feed `sections` straight into `compileClaude` and
  * assert the file is reproduced, without evaluating generated TS source.
@@ -177,16 +177,16 @@ function renderSpecSource(spec: AdoptedSpec): string {
   return `// Adopted from ${spec.target} by \`vigiles init\` — faithful by default.
 // Each heading became a prose section; no rules were inferred. Run the
 // \`/strengthen\` skill to upgrade prose to verified enforce()/guard() rules.
-import { claude } from "vigiles/spec";
+import { instructionFile } from "vigiles/spec";
 
-export default claude({${targetLine}${maxLine}${sectionsBlock}
+export default instructionFile({${targetLine}${maxLine}${sectionsBlock}
   rules: {},
 });
 `;
 }
 
 /**
- * Parse an instruction file's markdown into the faithful `claude()` spec FIELDS.
+ * Parse an instruction file's markdown into the faithful `instructionFile()` spec FIELDS.
  * The shared core of {@link adoptMarkdown} and the round-trip tests.
  *
  * @param markdown the file's current content (an existing integrity header, if
@@ -253,7 +253,7 @@ export function adoptToSpec(markdown: string, target: string): AdoptedSpec {
 }
 
 /**
- * Convert an instruction file's markdown into a faithful `claude()` spec source
+ * Convert an instruction file's markdown into a faithful `instructionFile()` spec source
  * (the deliverable `init` writes).
  */
 export function adoptMarkdown(markdown: string, target: string): AdoptResult {
@@ -267,7 +267,7 @@ export function adoptMarkdown(markdown: string, target: string): AdoptResult {
 
 // ---------------------------------------------------------------------------
 // Skill / subagent adoption — turn an existing SKILL.md / agents/<name>.md into
-// an `experimental_skill()` / `agent()` spec source. BEST-EFFORT (not a guaranteed byte
+// an `experimental_skill()` / `experimental_agent()` spec source. BEST-EFFORT (not a guaranteed byte
 // round-trip like the instruction-file path): the verbatim BODY and the
 // standard frontmatter fields round-trip, but a non-standard frontmatter key the
 // typed spec can't model (e.g. a custom `level:`/`skills:`) is PRESERVED in a
@@ -460,7 +460,7 @@ export function adoptSkill(
 }
 
 /**
- * Adopt an existing subagent (`agents/<name>.md`) into an `agent()` spec. Unlike
+ * Adopt an existing subagent (`agents/<name>.md`) into an `experimental_agent()` spec. Unlike
  * a skill, an agent's `sections` reject `##` headers, so the body is split: the
  * lead preamble becomes `body` and each `##`/`#` heading becomes a named section
  * (reusing the instruction-file splitter). The tool contract is carried as-is —
@@ -504,7 +504,7 @@ interface AgentFields {
   sectionEntries: { key: string; content: string }[];
 }
 
-/** Render the `agent({…})` source lines from the extracted fields. */
+/** Render the `experimental_agent({…})` source lines from the extracted fields. */
 function buildAgentLines(f: AgentFields): string[] {
   const lines = [
     `  name: ${JSON.stringify(f.name)},`,
@@ -551,7 +551,7 @@ export function adoptAgent(
   const sections: Record<string, string> = {};
   for (const { key, content } of f.sectionEntries) sections[key] = content;
 
-  const spec = agent({
+  const spec = experimental_agent({
     name: f.name,
     description: f.description,
     ...(f.model ? { model: f.model } : {}),
@@ -567,7 +567,7 @@ export function adoptAgent(
   const source =
     SURFACE_HEADER(`${fileBase}.md`) +
     unmappedNote("agent", unmappedKeys) +
-    `import { agent } from "vigiles/spec";\n\n` +
-    `export default agent({\n${buildAgentLines(f).join("\n")}\n});\n`;
+    `import { experimental_agent } from "vigiles/spec";\n\n` +
+    `export default experimental_agent({\n${buildAgentLines(f).join("\n")}\n});\n`;
   return { source, kind: "agent", spec, unmappedKeys };
 }

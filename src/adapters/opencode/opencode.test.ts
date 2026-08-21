@@ -21,7 +21,7 @@ import {
 } from "../../adapter-conformance.js";
 import { ADAPTERS, getAdapter } from "../../adapter-registry.js";
 import { compileAgent } from "../../core/compile.js";
-import { agent } from "../../core/spec.js";
+import { experimental_agent } from "../../core/spec.js";
 // The generic, layout-driven loader lives at the composition root; the OpenCode
 // prototype reuses it with opencodeLayout (no cross-adapter import).
 import { loadPlugin } from "../../plugin-loader.js";
@@ -49,13 +49,23 @@ test("the compiler verifies a subagent tool contract under opencodeDialect", () 
   // An OpenCode built-in passes; a Claude-Code-only tool (NotebookEdit) is
   // flagged — proving the SAME compiler validates against the injected catalog.
   const ok = compileAgent(
-    agent({ name: "w", description: "x", tools: ["bash"], body: "b" }),
+    experimental_agent({
+      name: "w",
+      description: "x",
+      tools: ["bash"],
+      body: "b",
+    }),
     { specFile: "w.md.spec.ts", dialect: opencodeDialect },
   );
   assert.equal(ok.errors.filter((e) => e.type === "unknown-tool").length, 0);
 
   const bad = compileAgent(
-    agent({ name: "w", description: "x", tools: ["NotebookEdit"], body: "b" }),
+    experimental_agent({
+      name: "w",
+      description: "x",
+      tools: ["NotebookEdit"],
+      body: "b",
+    }),
     { specFile: "w.md.spec.ts", dialect: opencodeDialect },
   );
   assert.ok(bad.errors.some((e) => e.type === "unknown-tool"));

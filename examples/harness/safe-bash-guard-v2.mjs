@@ -24,7 +24,7 @@
  * `vigiles hook-runtime run-program` entrypoint runs it.
  */
 import {
-  experimental_defineHook as defineHook,
+  experimental_defineHook,
   tool,
   deny,
   allow,
@@ -78,7 +78,7 @@ function gitRuns(leaf, sub) {
   return leaf.head === "git" && leaf.args.includes(sub);
 }
 
-export default defineHook({
+export default experimental_defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
   decide: (e) => {

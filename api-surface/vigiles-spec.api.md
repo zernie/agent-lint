@@ -4,8 +4,8 @@
 
 ```ts
 
-// @public
-export function agent<const P extends AuthoredPurity | undefined = undefined, V extends ToolVocabulary = OpenToolVocabulary, Ok extends Shape = Shape, Err extends Shape = Shape>(spec: AgentSpecInput<P, V, Ok, Err>): TypedAgentSpec<Ok, Err>;
+// @public @deprecated (undocumented)
+export const agent: typeof experimental_agent;
 
 // @public
 export interface AgentSpec {
@@ -43,8 +43,8 @@ export const BUILTIN_LINTERS: readonly ["eslint", "stylelint", "ruff", "clippy",
 // @public (undocumented)
 export type BuiltinLinter = (typeof BUILTIN_LINTERS)[number];
 
-// @public
-export function claude(spec: ClaudeSpecInput): ClaudeSpec;
+// @public @deprecated (undocumented)
+export const claude: typeof instructionFile;
 
 // @public (undocumented)
 export interface ClaudeSpec {
@@ -58,9 +58,6 @@ export interface ClaudeSpec {
     readonly _specType: "claude";
     readonly target?: InstructionTarget | InstructionTarget[];
 }
-
-// @public (undocumented)
-export type ClaudeTool = "Read" | "Write" | "Edit" | "Bash" | "Grep" | "Glob" | "Agent" | "TodoWrite" | "WebSearch" | "WebFetch" | "NotebookEdit";
 
 // @public
 export function cmd(command: NoInfer<StrictCmd>): CmdRef;
@@ -116,6 +113,9 @@ export interface EnforceRule {
     // (undocumented)
     readonly why: string;
 }
+
+// @public
+export function experimental_agent<const P extends AuthoredPurity | undefined = undefined, V extends ToolVocabulary = OpenToolVocabulary, Ok extends Shape = Shape, Err extends Shape = Shape>(spec: AgentSpecInput<P, V, Ok, Err>): TypedAgentSpec<Ok, Err>;
 
 // @public
 export function experimental_andThen<PriorOk extends Shape, PriorErr extends Shape, Needs extends Shape, Ok extends Shape, Err extends Shape>(prior: Pipeline<PriorOk, PriorErr>, next: Supplies<PriorOk, Needs> extends true ? PipeStep<Needs, Ok, Err> : {
@@ -223,14 +223,14 @@ export type Handoff<Producer extends Shape, Consumer extends Shape> = Supplies<P
     readonly __handoff_error: Supplies<Producer, Consumer>;
 };
 
-// @public (undocumented)
-export type HookEvent = "PreToolUse" | "PostToolUse" | "PreSession" | "PostSession" | "Notification";
+// @public
+export function instructionFile(spec: ClaudeSpecInput): ClaudeSpec;
 
 // @public (undocumented)
 export type InstructionFragment = string | Ref | EffectRegion;
 
-// @public
-export function instructions(strings: TemplateStringsArray, ...values: InstructionFragment[]): InstructionFragment[];
+// @public @deprecated (undocumented)
+export const instructions: typeof prose;
 
 // @public
 export type InstructionTarget = "CLAUDE.md" | "AGENTS.md" | (string & {});
@@ -319,6 +319,9 @@ export function project(role: ProjectRole): RoleGate;
 
 // @public
 export type ProjectRole = "test" | "build" | "lint";
+
+// @public
+export function prose(strings: TemplateStringsArray, ...values: InstructionFragment[]): InstructionFragment[];
 
 // @public
 export interface Railway {
@@ -412,7 +415,9 @@ export interface SkillSpec {
     readonly maxInlineCodeLines?: number;
     readonly name: string;
     readonly output?: OutputContract;
+    readonly postcondition?: Gate;
     readonly purity?: AuthoredPurity;
+    // @deprecated (undocumented)
     readonly result?: Gate;
     // (undocumented)
     readonly _specType: "skill";

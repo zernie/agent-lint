@@ -23,8 +23,8 @@ export default defineEval({
     pluginDir,
     // A repo whose CLAUDE.md spec has a guidance() rule that a linter could enforce.
     fixture: {
-      "CLAUDE.md.spec.ts": `import { claude, guidance } from "vigiles/spec";
-  export default claude({ rules: {
+      "CLAUDE.md.spec.ts": `import { instructionFile, guidance } from "vigiles/spec";
+  export default instructionFile({ rules: {
     "no-console": guidance("Don't leave console.log calls in committed code."),
   } });`,
     },

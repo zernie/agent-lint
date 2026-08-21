@@ -18,7 +18,7 @@
 import {
   experimental_withServices,
   experimental_dockerRuntime,
-} from "../../dist/experimental.js";
+} from "../../dist/test.js";
 import { runEval } from "../../dist/eval.js";
 
 if (!experimental_dockerRuntime.available()) {

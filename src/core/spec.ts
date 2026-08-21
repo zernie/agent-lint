@@ -13,6 +13,8 @@
 // Template literal types for type-safe linter references
 // ---------------------------------------------------------------------------
 
+import { foldLegacyPostcondition } from "./skill-normalize.js";
+
 /** Linters and policy catalogs vigiles can cross-reference. */
 /**
  * The built-in linter / policy catalogs vigiles cross-references — the SINGLE
@@ -125,7 +127,7 @@ export type StrictCmd = [keyof KnownNpmScripts] extends [never]
 // a HARNESS fact, so the CC vocabulary is wired in at the `vigiles/claude-code`
 // composition layer (derived from `claudeCodeDialect`), never hard-coded here.
 // The DEFAULT vocabulary is fully open (`string` at every level), so core
-// `agent()`/`skill()` with no vocabulary param accept any tools, exactly as
+// `experimental_agent()`/`skill()` with no vocabulary param accept any tools, exactly as
 // before — backwards compatibility is preserved.
 // ---------------------------------------------------------------------------
 
@@ -142,7 +144,7 @@ export type StrictCmd = [keyof KnownNpmScripts] extends [never]
  *   MCP / unknown / wildcard.
  *
  * The default (`string` at both) imposes no constraint — any tool is accepted at
- * every level, the historical behaviour of an untyped `agent()`/`skill()`.
+ * every level, the historical behaviour of an untyped `experimental_agent()`/`skill()`.
  */
 export interface ToolVocabulary {
   /** Union of tool names allowed under `purity: "pure"`. */
@@ -176,33 +178,25 @@ export type AllowedAt<
     : string;
 
 // ---------------------------------------------------------------------------
-// Claude Code tool types (for hook validation)
+// REMOVED 2026-08-21: `ClaudeTool` and `HookEvent`.
 //
-// The typed mirror of the Claude Code dialect (src/core/dialect.ts:
-// claudeCodeDialect). These literal unions are the authoring-time surface; the
-// compiler verifies tool contracts against the injected HarnessDialect's
-// runtime catalog, so a second harness swaps the dialect, not these types.
+// They described themselves as "the typed mirror of the Claude Code dialect",
+// and both had drifted off it — while staying exported, so a consumer could
+// import either and be misled with full type-checker blessing:
+//
+//   ClaudeTool  listed 11 tools, missing Task/Skill/SlashCommand, and carried
+//               `Agent` — a name the live CLI uses and the docs do not.
+//   HookEvent   listed 5 events, TWO OF WHICH DO NOT EXIST (`PreSession`,
+//               `PostSession`). The vendor documents 31; the real list is
+//               `claudeCodeHookEventNames` in the adapter's `vocabulary.ts`,
+//               which itself held only 9 until 2026-08-17.
+//
+// Measured before deletion: zero references anywhere in src/, test/, examples/
+// or docs/. Nothing consumed them, which is exactly why they were free to rot —
+// a duplicate with no readers gets no correction pressure. The dialect is the
+// single catalog (`claudeCodeDialect`), and a second harness swaps the dialect
+// rather than editing a mirror of it.
 // ---------------------------------------------------------------------------
-
-export type ClaudeTool =
-  | "Read"
-  | "Write"
-  | "Edit"
-  | "Bash"
-  | "Grep"
-  | "Glob"
-  | "Agent"
-  | "TodoWrite"
-  | "WebSearch"
-  | "WebFetch"
-  | "NotebookEdit";
-
-export type HookEvent =
-  | "PreToolUse"
-  | "PostToolUse"
-  | "PreSession"
-  | "PostSession"
-  | "Notification";
 
 // ---------------------------------------------------------------------------
 // Rule types
@@ -425,13 +419,13 @@ export type InstructionFragment = string | Ref | EffectRegion;
 /**
  * Tagged template literal for skill instructions with typed references.
  *
- *   instructions`
+ *   prose`
  *     Check ${file("eslint.config.ts")} for rules.
  *     Run ${cmd("npm test")} to verify.
  *     See ${ref("skills/other/SKILL.md")} for format.
  *   `
  */
-export function instructions(
+export function prose(
   strings: TemplateStringsArray,
   ...values: InstructionFragment[]
 ): InstructionFragment[] {
@@ -447,7 +441,7 @@ export function instructions(
  * Tagged template literal marking a side-effect boundary — usable as an
  * interpolated fragment inside a body / `instructions\`\``:
  *
- *   instructions`
+ *   prose`
  *     ## Apply
  *     ${effect`
  *       Side effects are allowed ONLY here:
@@ -529,7 +523,7 @@ export interface ClaudeSpec {
 }
 
 /**
- * Input type for claude() — maxSectionLines is only valid when sections are provided.
+ * Input type for instructionFile() — maxSectionLines is only valid when sections are provided.
  * TypeScript errors if you set maxSectionLines without defining sections.
  */
 type ClaudeSpecBase = {
@@ -553,9 +547,9 @@ type ClaudeSpecInput = ClaudeSpecBase & ClaudeSpecSections;
  * Define a CLAUDE.md specification.
  *
  *   // CLAUDE.md.spec.ts
- *   export default claude({ commands: {...}, rules: {...} });
+ *   export default instructionFile({ commands: {...}, rules: {...} });
  */
-export function claude(spec: ClaudeSpecInput): ClaudeSpec {
+export function instructionFile(spec: ClaudeSpecInput): ClaudeSpec {
   return { _specType: "claude", ...spec } as ClaudeSpec;
 }
 
@@ -727,6 +721,25 @@ export interface SkillSpec {
   /**
    * Terminal postcondition — the skill is "done" only when this gate passes.
    * Compiles to a `## Result` section + a `vigiles:result` marker.
+   *
+   * 🔴 NAMED `postcondition`, NOT `result`, because `result` already means
+   * something else one screen down: {@link result} builds a subagent's typed
+   * ok/err CONTRACT (and reaches a skill through `output:`). Two concepts under
+   * one word, told apart only by whether you wrote `result:` or `output:
+   * result(...)` — the doc comment on {@link result} had to spend a line saying
+   * "distinct from a skill's `result:` postcondition gate", which is the tell.
+   * A name that needs a disambiguating sentence is the wrong name.
+   *
+   * The compiled MARKER stays `vigiles:result` deliberately: it is the wire
+   * format between the compiler and {@link parseSkillGates}, and every already
+   * compiled SKILL.md on disk carries it. Renaming the authoring field is a
+   * source-level change; renaming the marker would invalidate stamps.
+   */
+  readonly postcondition?: Gate;
+  /**
+   * @deprecated Renamed to {@link SkillSpec.postcondition}. Removed next
+   * major. Measured 2026-08-21: 0 of 46 specs in the consuming knowledge base
+   * set this field, so the window costs nothing and closes the collision above.
    */
   readonly result?: Gate;
   /**
@@ -772,7 +785,7 @@ export type SkillSpecInput<
  *   export default experimental_skill({ name: "my-skill", description: "…" });
  *
  * Generic over a tool `Vocabulary` (default `OpenToolVocabulary` — no
- * constraint), exactly like `agent()`: a vocabulary-bound `experimental_skill`
+ * constraint), exactly like `experimental_agent()`: a vocabulary-bound `experimental_skill`
  * (e.g. `vigiles/claude-code`) makes `purity: "pure"` + a side-effecting tool a
  * `tsc` error; the bare core one accepts any tools, as before.
  *
@@ -802,7 +815,11 @@ function skillSpec<
   const P extends AuthoredPurity | undefined = undefined,
   V extends ToolVocabulary = OpenToolVocabulary,
 >(spec: SkillSpecInput<P, V>): SkillSpec {
-  return { _specType: "skill", ...spec } as SkillSpec;
+  // The deprecated `result:` is folded into `postcondition:` by the shared
+  // helper — see `skill-normalize.ts` for why it is shared rather than inlined
+  // here (short version: this builder is not the only public entrance, and the
+  // other one silently dropped the gate until a reviewer noticed).
+  return foldLegacyPostcondition({ _specType: "skill", ...spec } as SkillSpec);
 }
 
 /**
@@ -886,7 +903,7 @@ export interface AgentSpec {
 }
 
 /**
- * The input to `agent()` — `AgentSpec` minus the internal `_specType`, with the
+ * The input to `experimental_agent()` — `AgentSpec` minus the internal `_specType`, with the
  * `tools` list constrained by the declared `purity` and the tool vocabulary `V`.
  * `P` is inferred from the literal `purity` field (`const` inference), and
  * `tools` is then typed `AllowedAt<P, V>[]`:
@@ -894,7 +911,7 @@ export interface AgentSpec {
  * - `purity: "bounded"`→ `tools` may list `V["bounded"]` tools (admits `Bash`).
  * - no `purity` / `"dangerously-unrestricted"` → `tools` is `string[]` (open).
  *
- * With the open default vocabulary (core `agent()`) every level widens to
+ * With the open default vocabulary (core `experimental_agent()`) every level widens to
  * `string`, so any tools compile — backwards-compatible.
  */
 export type AgentSpecInput<
@@ -913,7 +930,7 @@ export type AgentSpecInput<
 // ---------------------------------------------------------------------------
 // Typed composition carrier (additive — the typed half of railway composition)
 //
-// `agent()` returns `AgentSpec` (every existing consumer reads that). To ALSO
+// `experimental_agent()` returns `AgentSpec` (every existing consumer reads that). To ALSO
 // remember the agent's result SHAPE at the type level — so a typed `pipe` can
 // cross-reference one step's `ok` against the next step's needs — the return is
 // the SAME `AgentSpec` intersected with a PHANTOM carrier of the ok/err shapes.
@@ -951,12 +968,12 @@ export type OkOf<T> = T extends TypedOutcome<infer Ok, Shape> ? Ok : Shape;
  * Define a subagent specification (compiles to `agents/<name>.md`).
  *
  *   // agents/reviewer.md.spec.ts
- *   export default agent({
+ *   export default experimental_agent({
  *     name: "reviewer",
  *     description: "Review a diff for correctness. Dispatch PROACTIVELY after edits.",
  *     model: "sonnet",
  *     tools: ["Read", "Grep", "Bash"],
- *     body: instructions`Review the diff. Run ${cmd("npm test")} first.`,
+ *     body: prose`Review the diff. Run ${cmd("npm test")} first.`,
  *     rules: {
  *       "no-floating": enforce("@typescript-eslint/no-floating-promises", "Await promises."),
  *     },
@@ -965,15 +982,21 @@ export type OkOf<T> = T extends TypedOutcome<infer Ok, Shape> ? Ok : Shape;
  * Generic over a tool `Vocabulary` (default `OpenToolVocabulary` — no
  * constraint). A harness adapter re-exports a vocabulary-bound `agent` (e.g.
  * `vigiles/claude-code`) so `purity: "pure"` + a side-effecting tool is a `tsc`
- * error at edit time; the bare core `agent()` accepts any tools, as before.
+ * error at edit time; the bare core `experimental_agent()` accepts any tools, as before.
  *
  * Also generic over the result's `Ok`/`Err` shapes, inferred from `output:
  * result(...)`. The returned value is a `TypedAgentSpec<Ok, Err>` — an
  * `AgentSpec` that carries those shapes at the type level, so a typed `pipe`
  * can cross-reference the handoff. With no `output` the shapes default to the
  * erased `Shape`, and the value is still a plain `AgentSpec` — backwards-compatible.
+ *
+ * @experimental The SHAPE is not settled — the author is unsure of the design,
+ * which is exactly what this marker promises: the form may change. It is NOT a
+ * claim that the surface is unproven. Measured 2026-06-20: real Claude Code
+ * loaded a compiled `agents/code-reviewer.md`, dispatched to it and read it,
+ * 100% of trials — stronger end-to-end evidence than `experimental_skill` has.
  */
-export function agent<
+export function experimental_agent<
   const P extends AuthoredPurity | undefined = undefined,
   V extends ToolVocabulary = OpenToolVocabulary,
   Ok extends Shape = Shape,
@@ -1215,7 +1238,7 @@ export interface PipeStep<
 
 /**
  * Pair a typed agent with the input it `needs` from the previous step. The first
- * argument is an `agent()` VALUE (which carries its `result()` shape); the
+ * argument is an `experimental_agent()` VALUE (which carries its `result()` shape); the
  * second is the `needs(...)` input contract.
  *
  *   pipeStep(implementer, needs({ plan: "string", files: "string[]" }))
@@ -1564,3 +1587,50 @@ export interface VigilesV2Config {
 export function defineConfig(config: VigilesV2Config): VigilesV2Config {
   return config;
 }
+
+// ─── ОКНО АЛИАСА (один мажор) ──────────────────────────────────────────────────
+// Старые имена остаются рабочими ровно один мажорный релиз, помеченные
+// `@deprecated`, и убираются в следующем.
+//
+// 🔴 ПОЧЕМУ ЭТО НЕ ВЕЖЛИВОСТЬ, А НЕОБХОДИМОСТЬ, замерено 2026-08-21: предыдущее
+// переименование ушло БЕЗ окна — 18.1.1 экспортировал только старые имена,
+// 19.0.0 только новые, пересечения ноль. У потребителя (репа знаний, 12
+// скомпилированных хуков) откат контейнера вернул старый `node_modules` под
+// новые исходники, `PreToolUse` перестал загружаться, а не загрузившийся
+// PreToolUse отбивает ЛЮБУЮ Bash-команду — включая ту, которой это чинится.
+// Репа встала колом на час. Одно окно в один мажор делает этот отказ
+// невыразимым: любая пара (лок, исходники) в пределах мажора совместима.
+//
+// 🔴 «ОДИН МАЖОР» СЧИТАЕТСЯ ОТ ТОГО, КОТОРЫЙ АЛИАСЫ ВВОДИТ, а не до него.
+// Мажор, выпускающий этот PR, — ПЕРВЫЙ, где старые и новые имена сосуществуют;
+// именно он и есть обещанное окно. Убирать алиасы можно в СЛЕДУЮЩЕМ за ним.
+// Формулировка «Removed next major» была двусмысленной ровно здесь (её так и
+// прочитал ревьюер: как «удалить в том же релизе, который их вводит»), и по
+// такому расписанию окна не существовало бы вовсе — то есть отказ выше
+// воспроизвёлся бы дословно, при живом абзаце, который его запрещает.
+
+/**
+ * @deprecated Renamed to {@link instructionFile}. The builder compiles to
+ * `CLAUDE.md` **and** `AGENTS.md` (see `InstructionTarget`), so a name taken from
+ * one of the two harnesses was never right. Removed one major AFTER the one that introduces it.
+ */
+export const claude = instructionFile;
+
+/**
+ * @deprecated Renamed to {@link prose}. It builds a prose FRAGMENT with typed
+ * refs; the plural read as "the instruction file", which is what
+ * {@link instructionFile} builds. Removed one major AFTER the one that introduces it.
+ */
+export const instructions = prose;
+
+/**
+ * @deprecated Renamed to {@link experimental_agent} — the shape is not settled.
+ * Removed one major AFTER the one that introduces it.
+ *
+ * @experimental
+ * vigiles:experimental-name-ok this IS the old spelling — prefixing a deprecated
+ * alias would defeat the alias, which exists precisely so code written against
+ * the unprefixed name keeps compiling for one major. It carries the tag because
+ * it is the same function, and the tag is what the deprecation notice points at.
+ */
+export const agent = experimental_agent;

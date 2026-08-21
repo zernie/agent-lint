@@ -153,7 +153,7 @@ same command handles. Codex hooks (`.codex/config.toml [hooks]`) aren't auto-wir
 Use a **single spec with multiple targets** — one source of truth, two outputs:
 
 ```typescript
-export default claude({
+export default instructionFile({
   target: ["CLAUDE.md", "AGENTS.md"],
   rules: { ... },
 });

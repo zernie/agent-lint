@@ -172,7 +172,7 @@ export const RULE_META: Record<RuleName, RuleMeta> = {
     summary: "A subagent's tools: are all real (no never-available / typo).",
     detector: "verifyToolContract / scoredIssues",
     upstreamPrevention:
-      "typed agent() vocabulary + compileAgent — an unknown tool is a tsc/compile error",
+      "typed experimental_agent() vocabulary + compileAgent — an unknown tool is a tsc/compile error",
   },
   "disallowed-tools-contract": {
     id: "disallowed-tools-contract",
@@ -181,7 +181,8 @@ export const RULE_META: Record<RuleName, RuleMeta> = {
     defaultSeverity: "warn",
     summary: "A disallowedTools: entry isn't a typo that blocks nothing.",
     detector: "disallowedToolIssues",
-    upstreamPrevention: "typed agent() vocabulary (a typo is a tsc error)",
+    upstreamPrevention:
+      "typed experimental_agent() vocabulary (a typo is a tsc error)",
   },
   "subagent-frontmatter": {
     id: "subagent-frontmatter",

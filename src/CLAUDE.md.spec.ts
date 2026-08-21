@@ -7,9 +7,9 @@
  * directory memory whenever you work in `src/`. Source of truth; `src/CLAUDE.md`
  * is a compiled build artifact (`vigiles compile`).
  */
-import { claude, guidance } from "./core/spec.js";
+import { instructionFile, guidance } from "./core/spec.js";
 
-export default claude({
+export default instructionFile({
   sections: {
     scope: `Working in \`src/\`? The root \`CLAUDE.md\` holds the full positioning, architecture, and rule set — read it first. This file adds the discipline specific to the CLI surface (\`src/cli.ts\`, \`src/cli-commands.ts\`): keep the command set small and cohesive.`,
   },

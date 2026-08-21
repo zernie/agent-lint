@@ -24,9 +24,9 @@ import {
   type StateEntry,
 } from "./hook-state.js";
 import {
-  defineReact,
-  defineInject,
-  defineHook,
+  experimental_defineReact,
+  experimental_defineInject,
+  experimental_defineHook,
   tool,
   tools,
   notice,
@@ -273,7 +273,7 @@ test("a state() need is never reported as an unknown provider, and reaches no su
 // ---------------------------------------------------------------------------
 
 test("a react that only WITNESSES returns nothing() and still declares its record", () => {
-  const hook = defineReact({
+  const hook = experimental_defineReact({
     on: "PostToolUse",
     match: tools("mcp__.*"),
     react: () => nothing(record("calendar.synced")),
@@ -310,7 +310,7 @@ test("records ride notice()/run()/inject() as trailing arguments, and are option
 });
 
 test("an inject reads state and records its own nudge in ONE return", () => {
-  const hook = defineInject({
+  const hook = experimental_defineInject({
     on: "UserPromptSubmit",
     needs: [state("calendar.synced"), state("calendar.nagged")] as const,
     produce: (e) => {
@@ -366,7 +366,7 @@ test("an inject reads state and records its own nudge in ONE return", () => {
 });
 
 test("a GATE cannot record: a Decision carries no writes, in either direction", () => {
-  const gate = defineHook({
+  const gate = experimental_defineHook({
     on: "PreToolUse",
     match: tool("Bash"),
     needs: [state("deploy.done")] as const,
@@ -417,7 +417,7 @@ test("matchesTool follows the SAME regex semantics as the matcher the compiler e
 });
 
 test("a tool pattern that is not a valid regex does NOT compile", () => {
-  const bad = defineReact({
+  const bad = experimental_defineReact({
     on: "PostToolUse",
     match: tools("a(b"),
     react: () => nothing(),
@@ -428,7 +428,7 @@ test("a tool pattern that is not a valid regex does NOT compile", () => {
     HookCompileError,
   );
   // Clean half: a valid family pattern compiles.
-  const good = defineReact({
+  const good = experimental_defineReact({
     on: "PostToolUse",
     match: tools("mcp__.*"),
     react: () => nothing(),
@@ -439,7 +439,7 @@ test("a tool pattern that is not a valid regex does NOT compile", () => {
 });
 
 test("a react on a TOOL-LESS event fires; one that declared tools still filters", () => {
-  const stopHook = defineReact({
+  const stopHook = experimental_defineReact({
     on: "Stop",
     react: () => notice("substantive session"),
   });
@@ -461,7 +461,7 @@ test("a react on a TOOL-LESS event fires; one that declared tools still filters"
   assert.equal(block.hooks.Stop[0].matcher, undefined);
 
   // Defect half: omitting `match` must not turn every react into a catch-all.
-  const toolHook = defineReact({
+  const toolHook = experimental_defineReact({
     on: "PostToolUse",
     match: tools("Edit"),
     react: () => notice("edited"),

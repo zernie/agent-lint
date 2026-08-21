@@ -30,7 +30,12 @@ export default defineConfig({
           // `scripts/` is in scope on purpose: `check-doc-imports.mjs` is a CI gate, and a gate
           // with no test is the shape this repo has shipped dead three times. Its test lives
           // beside it (colocation), so the glob has to reach outside `src/`.
-          include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
+          include: [
+            "src/**/*.test.ts",
+            "scripts/**/*.test.ts",
+            // The repo's own ESLint rules, tested beside the rule they check.
+            "eslint-rules/**/*.test.ts",
+          ],
           exclude: [
             ...configDefaults.exclude,
             "src/**/*.integration.test.ts",

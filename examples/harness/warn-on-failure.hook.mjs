@@ -8,13 +8,13 @@
  * it is working perfectly. `assertHookNotices` reads the reaction itself.
  */
 import {
-  experimental_defineReact as defineReact,
+  experimental_defineReact,
   tools,
   notice,
   nothing,
 } from "../../dist/hook.js";
 
-export default defineReact({
+export default experimental_defineReact({
   on: "PostToolUse",
   match: tools("Bash"),
   react: (e) =>

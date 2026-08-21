@@ -11,15 +11,15 @@
  *
  * The roles, each with its own output type so a category mistake is a `tsc`
  * error, not a silent no-op:
- *   - `defineHook` / `defineFileGate` — a **gate** returns a `Decision`
+ *   - `experimental_defineHook` / `experimental_defineFileGate` — a **gate** returns a `Decision`
  *     (`allow`/`deny`/`ask`); `deny` is the only thing that blocks.
- *   - `definePromptGate` — a **prompt gate** (UserPromptSubmit) sees the prompt
+ *   - `experimental_definePromptGate` — a **prompt gate** (UserPromptSubmit) sees the prompt
  *     TEXT and may `deny` to block it (a security filter).
- *   - `defineStopGate` — a **stop gate** (Stop/SubagentStop) may `deny` to keep
+ *   - `experimental_defineStopGate` — a **stop gate** (Stop/SubagentStop) may `deny` to keep
  *     the agent going (gate-until-tests-pass).
- *   - `defineInject` — an **inject** returns an `Injection` (context text); it
+ *   - `experimental_defineInject` — an **inject** returns an `Injection` (context text); it
  *     has no `deny`, so "block on a SessionStart hook" won't compile.
- *   - `defineReact` — a **react** (PostToolUse) returns a `Reaction`; it sees the
+ *   - `experimental_defineReact` — a **react** (PostToolUse) returns a `Reaction`; it sees the
  *     tool RESPONSE, its `run(cmd)` is effect-classified at construction, and it
  *     can't block (the tool already ran).
  *
@@ -53,12 +53,23 @@ export {
   // entry points makes the marking structural for the whole vocabulary. A
   // per-name prefix could not guarantee that; a chokepoint can.
   //
-  // Import them aliased, so the word crosses the package boundary exactly once:
-  //   import { experimental_defineInject as defineInject, state } from "vigiles/hook";
-  defineHook as experimental_defineHook,
-  defineFileGate as experimental_defineFileGate,
-  definePromptGate as experimental_definePromptGate,
-  defineStopGate as experimental_defineStopGate,
+  // 🔴 DO NOT alias the prefix away at the import. This block used to advise
+  // exactly that — "so the word crosses the package boundary exactly once" — and
+  // the advice defeated the mechanism it was attached to. Measured 2026-08-21:
+  // with the alias in place the marker survived at 0 of 5 call sites in the only
+  // user-facing example, because a reader 200 lines down sees `defineHook(...)`
+  // and cannot tell it is provisional. A prefix that is stripped on import is a
+  // subpath with extra steps; if the guarantee is only boundary-deep, the honest
+  // shape is a quarantined subpath, not a name nobody sees. We chose the name,
+  // and then deleted the subpath (`vigiles/experimental`, gone 2026-08-21) so
+  // there is only the one mechanism left to keep honest.
+  // so the name has to be there. The declarations carry it too — there is one
+  // spelling of each symbol now, and `local/experimental-name` no longer needs
+  // to reason about re-export aliasing to know what crosses the boundary.
+  experimental_defineHook,
+  experimental_defineFileGate,
+  experimental_definePromptGate,
+  experimental_defineStopGate,
   tool,
   tools,
   allow,
@@ -69,10 +80,10 @@ export {
   gateAction,
   hookMode,
   // inject vocabulary
-  defineInject as experimental_defineInject,
+  experimental_defineInject,
   inject,
   // react vocabulary
-  defineReact as experimental_defineReact,
+  experimental_defineReact,
   run,
   notice,
   nothing,

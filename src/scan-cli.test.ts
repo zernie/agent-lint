@@ -544,16 +544,16 @@ describe("generate-harness CLI", () => {
   const REPO = resolve(__dirname, "..");
   let dir = "";
 
-  const PLANNER = `import { agent, result } from "vigiles/spec";
-export default agent({
+  const PLANNER = `import { experimental_agent, result } from "vigiles/spec";
+export default experimental_agent({
   name: "planner",
   description: "Break the request into an ordered plan. Dispatch first.",
   tools: ["Read", "Grep", "Glob"],
   output: result({ steps: "string[]" }, { reason: "string" }),
 });
 `;
-  const IMPLEMENTER = `import { agent } from "vigiles/spec";
-export default agent({
+  const IMPLEMENTER = `import { experimental_agent } from "vigiles/spec";
+export default experimental_agent({
   name: "implementer",
   description: "Implement the plan and prove the build passes.",
   tools: ["Read", "Edit", "Write", "Bash"],
@@ -620,11 +620,11 @@ export default railway({ name: "ship", steps: [delegate("planner"), delegate("im
 describe("compile refreshes harness.gen.ts", () => {
   const REPO = resolve(__dirname, "..");
   const SPECS: Record<string, string> = {
-    "planner.md.spec.ts": `import { agent, result } from "vigiles/spec";
-export default agent({ name: "planner", description: "Break the request into an ordered plan. Dispatch first.", tools: ["Read", "Grep", "Glob"], output: result({ steps: "string[]" }, { reason: "string" }) });
+    "planner.md.spec.ts": `import { experimental_agent, result } from "vigiles/spec";
+export default experimental_agent({ name: "planner", description: "Break the request into an ordered plan. Dispatch first.", tools: ["Read", "Grep", "Glob"], output: result({ steps: "string[]" }, { reason: "string" }) });
 `,
-    "implementer.md.spec.ts": `import { agent } from "vigiles/spec";
-export default agent({ name: "implementer", description: "Implement the plan and prove the build passes.", tools: ["Read", "Edit", "Write", "Bash"] });
+    "implementer.md.spec.ts": `import { experimental_agent } from "vigiles/spec";
+export default experimental_agent({ name: "implementer", description: "Implement the plan and prove the build passes.", tools: ["Read", "Edit", "Write", "Bash"] });
 `,
     "ship.md.spec.ts": `import { railway, delegate } from "vigiles/spec";
 export default railway({ name: "ship", steps: [delegate("planner"), delegate("implementer")] });

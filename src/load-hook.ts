@@ -63,7 +63,7 @@ export async function loadHook(file: string): Promise<AnyHook> {
   if (!program || typeof program !== "object") {
     throw new HookCompileError(
       `${file} has no default-exported hook program ` +
-        `(use \`export default defineHook({…})\`).`,
+        `(use \`export default experimental_defineHook({…})\`).`,
     );
   }
   // Remember WHERE it came from, so the assertion that later EVALUATES it can

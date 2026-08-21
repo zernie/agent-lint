@@ -53,8 +53,8 @@ function linkVigiles(dir: string): void {
   symlinkSync(REPO_ROOT, resolve(dir, "node_modules", "vigiles"));
 }
 
-const GATE = `import { experimental_defineHook as defineHook, tool, deny, allow } from "__HOOK__";
-export default defineHook({
+const GATE = `import { experimental_defineHook, tool, deny, allow } from "__HOOK__";
+export default experimental_defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
   decide: (e) =>
@@ -121,8 +121,8 @@ test("hook-runtime run-program: an inject hook emits additionalContext (the righ
     const f = fixture(
       dir,
       "brief.mjs",
-      `import { experimental_defineInject as defineInject, inject } from "__HOOK__";
-export default defineInject({
+      `import { experimental_defineInject, inject } from "__HOOK__";
+export default experimental_defineInject({
   on: "SessionStart",
   produce: (e) => inject("vigiles: session started (" + e.source + ")"),
 });`,
@@ -151,8 +151,8 @@ test("compile (hook): an out-of-vocabulary import does NOT compile (exit 1)", ()
       dir,
       "evil.mjs",
       `import cp from "node:child_process";
-import { experimental_defineHook as defineHook, tool, allow } from "__HOOK__";
-export default defineHook({ on: "PreToolUse", match: tool("Bash"),
+import { experimental_defineHook, tool, allow } from "__HOOK__";
+export default experimental_defineHook({ on: "PreToolUse", match: tool("Bash"),
   decide: () => { cp.execSync("id"); return allow(); } });`,
     );
     const r = spawnSync("node", [CLI, "compile", f], {
@@ -166,8 +166,8 @@ export default defineHook({ on: "PreToolUse", match: tool("Bash"),
   }
 });
 
-const GATE_PKG = `import { experimental_defineHook as defineHook, tool, deny, allow } from "vigiles/hook";
-export default defineHook({
+const GATE_PKG = `import { experimental_defineHook, tool, deny, allow } from "vigiles/hook";
+export default experimental_defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
   decide: (e) =>
@@ -452,8 +452,8 @@ test("compile --harness=codex (hook): merges TOML for a gate, warns LOUDLY on in
     writeFileSync(resolve(dir, "guard.mjs"), GATE_PKG);
     writeFileSync(
       resolve(dir, "brief.mjs"),
-      `import { experimental_defineInject as defineInject, inject } from "vigiles/hook";
-export default defineInject({ on: "SessionStart", produce: (e) => inject("hi " + e.source) });`,
+      `import { experimental_defineInject, inject } from "vigiles/hook";
+export default experimental_defineInject({ on: "SessionStart", produce: (e) => inject("hi " + e.source) });`,
     );
     // A gate merges into the Codex TOML config with a regex matcher — no warning
     // (deny→exit 2 is cross-harness).
@@ -481,8 +481,8 @@ export default defineInject({ on: "SessionStart", produce: (e) => inject("hi " +
     // (Stop) warns LOUDLY — the injected text wouldn't reach the agent.
     writeFileSync(
       resolve(dir, "onstop.mjs"),
-      `import { experimental_defineInject as defineInject, inject } from "vigiles/hook";
-export default defineInject({ on: "Stop", produce: () => inject("late") });`,
+      `import { experimental_defineInject, inject } from "vigiles/hook";
+export default experimental_defineInject({ on: "Stop", produce: () => inject("late") });`,
     );
     const bad = spawnSync(
       "node",
@@ -535,7 +535,7 @@ test("compile (hook): a repo targeting BOTH harnesses installs the SAME hook int
 // just the synthetic unit fixtures in hook-install.test.ts. The seed is the
 // REAL superpowers hooks.json (a SessionStart hook), vendored under
 // test/dogfood/ (MIT, SHA-pinned).
-// E2E dogfood — the FILE-GATE role (defineFileGate + PathView.under): block a
+// E2E dogfood — the FILE-GATE role (experimental_defineFileGate + PathView.under): block a
 // Write/Edit under a protected path, allow elsewhere. Mirrors the bash-gate
 // E2E; closes the file-gate dogfood gap (was unit-only in hook-program.test.ts).
 // Harness scope (test-both-harnesses): the deny→exit 2 path is byte-identical on
@@ -546,8 +546,8 @@ test("hook-runtime run-program: a file-gate denies a Write under a protected pat
     const f = fixture(
       dir,
       "no-build-edits.mjs",
-      `import { experimental_defineFileGate as defineFileGate, tools, deny, allow } from "__HOOK__";
-export default defineFileGate({
+      `import { experimental_defineFileGate, tools, deny, allow } from "__HOOK__";
+export default experimental_defineFileGate({
   on: "PreToolUse",
   match: tools("Write", "Edit"),
   decide: (e) =>
@@ -585,7 +585,7 @@ export default defineFileGate({
   }
 });
 
-// E2E dogfood — the REACT role (defineReact): a PostToolUse reaction CANNOT
+// E2E dogfood — the REACT role (experimental_defineReact): a PostToolUse reaction CANNOT
 // block (always exit 0) but DOES its side — a `notice` reaches stderr, a `run`
 // executes its (effect-classified) command. Closes the react dogfood gap (was
 // unit-only, no E2E at all). Harness scope (test-both-harnesses): run()→spawn and
@@ -597,8 +597,8 @@ test("hook-runtime run-program: a react emits a notice (can't block) and run() e
     const noticeHook = fixture(
       dir,
       "notice.mjs",
-      `import { experimental_defineReact as defineReact, tools, notice, nothing } from "__HOOK__";
-export default defineReact({
+      `import { experimental_defineReact, tools, notice, nothing } from "__HOOK__";
+export default experimental_defineReact({
   on: "PostToolUse",
   match: tools("Write"),
   react: (e) =>
@@ -621,8 +621,8 @@ export default defineReact({
     const runReactHook = fixture(
       dir,
       "react-run.mjs",
-      `import { experimental_defineReact as defineReact, tools, run } from "__HOOK__";
-export default defineReact({
+      `import { experimental_defineReact, tools, run } from "__HOOK__";
+export default experimental_defineReact({
   on: "PostToolUse",
   match: tools("Write"),
   react: () => run("touch reacted.marker"),
@@ -663,8 +663,8 @@ test("hook-runtime run-program: a react fires for an ABSOLUTE file_path (the spe
     const f = fixture(
       dir,
       "papers-nudge.mjs",
-      `import { experimental_defineReact as defineReact, tools, notice, nothing } from "__HOOK__";
-export default defineReact({
+      `import { experimental_defineReact, tools, notice, nothing } from "__HOOK__";
+export default experimental_defineReact({
   on: "PostToolUse",
   match: tools("Edit", "Write"),
   react: (e) =>
@@ -775,8 +775,8 @@ test("hook-runtime run-program: a file-gate confined to src/ decides an ABSOLUTE
     const f = fixture(
       dir,
       "confine.mjs",
-      `import { experimental_defineFileGate as defineFileGate, tools, deny, allow } from "__HOOK__";
-export default defineFileGate({
+      `import { experimental_defineFileGate, tools, deny, allow } from "__HOOK__";
+export default experimental_defineFileGate({
   on: "PreToolUse",
   match: tools("Write", "Edit"),
   decide: (e) => (e.path.under(["src"]) ? allow() : deny("confined to src/")),
@@ -811,7 +811,7 @@ export default defineFileGate({
   }
 });
 
-// E2E dogfood — the PROMPT-GATE role (definePromptGate): a UserPromptSubmit gate
+// E2E dogfood — the PROMPT-GATE role (experimental_definePromptGate): a UserPromptSubmit gate
 // reads the prompt TEXT and denies (exit 2) a prompt that leaks a secret, allows
 // a clean one. Harness scope (test-both-harnesses): the deny→exit 2 runtime is
 // the shared gate path (byte-identical on Codex), so one run covers both; the
@@ -822,8 +822,8 @@ test("hook-runtime run-program: a prompt-gate denies a secret-bearing prompt (ex
     const f = fixture(
       dir,
       "prompt-filter.mjs",
-      `import { experimental_definePromptGate as definePromptGate, deny, allow } from "__HOOK__";
-export default definePromptGate({
+      `import { experimental_definePromptGate, deny, allow } from "__HOOK__";
+export default experimental_definePromptGate({
   on: "UserPromptSubmit",
   decide: (e) =>
     /sk-[a-z0-9]{20}/i.test(e.prompt)
@@ -855,7 +855,7 @@ export default definePromptGate({
   }
 });
 
-// E2E dogfood — the STOP-GATE role (defineStopGate): a Stop gate denies (exit 2)
+// E2E dogfood — the STOP-GATE role (experimental_defineStopGate): a Stop gate denies (exit 2)
 // to keep the agent going, and respects the stop_hook_active loop guard. Same
 // shared exit-2 runtime (one run covers both harnesses).
 test("hook-runtime run-program: a stop-gate blocks stopping, then allows under the loop guard", () => {
@@ -864,8 +864,8 @@ test("hook-runtime run-program: a stop-gate blocks stopping, then allows under t
     const f = fixture(
       dir,
       "tests-green.mjs",
-      `import { experimental_defineStopGate as defineStopGate, deny, allow } from "__HOOK__";
-export default defineStopGate({
+      `import { experimental_defineStopGate, deny, allow } from "__HOOK__";
+export default experimental_defineStopGate({
   on: "Stop",
   decide: (e) =>
     e.stopHookActive ? allow() : deny("keep going until the tests pass"),
@@ -903,8 +903,8 @@ test("hook-runtime run-program: an observe-mode gate records-not-blocks (exit 0 
     const f = fixture(
       dir,
       "shadow-guard.mjs",
-      `import { experimental_defineHook as defineHook, tool, deny, allow } from "__HOOK__";
-export default defineHook({
+      `import { experimental_defineHook, tool, deny, allow } from "__HOOK__";
+export default experimental_defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
   mode: "observe",
@@ -972,8 +972,8 @@ test("hook-runtime run-program: a `needs:['git.branch']` gate decides on the rea
     const f = fixture(
       dir,
       "no-push-main.mjs",
-      `import { experimental_defineHook as defineHook, tool, deny, allow } from "__HOOK__";
-export default defineHook({
+      `import { experimental_defineHook, tool, deny, allow } from "__HOOK__";
+export default experimental_defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
   needs: ["git.branch"],
@@ -1021,8 +1021,8 @@ test("hook-runtime run-program: an inline provide() fact is gathered + drives th
     const f = fixture(
       dir,
       "by-author.mjs",
-      `import { experimental_defineHook as defineHook, tool, deny, allow, provide } from "__HOOK__";
-export default defineHook({
+      `import { experimental_defineHook, tool, deny, allow, provide } from "__HOOK__";
+export default experimental_defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
   needs: [provide("author", "git config user.name")],
@@ -1067,8 +1067,8 @@ export default defineProvider({ name: "author", run: "git config user.name" });`
     const f = fixture(
       dir,
       ".vigiles/hooks/by-author.mjs",
-      `import { experimental_defineHook as defineHook, tool, deny, allow, provider } from "__HOOK__";
-export default defineHook({
+      `import { experimental_defineHook, tool, deny, allow, provider } from "__HOOK__";
+export default experimental_defineHook({
   on: "PreToolUse",
   match: tool("Bash"),
   needs: [provider("author")],

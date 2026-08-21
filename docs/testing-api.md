@@ -507,7 +507,7 @@ integration`), the way `@playwright/test` does.
 **Every runtime export on `vigiles/eval` is also named `paid_`.** The import path
 warns once, at the top of the file; the name warns at every call site, which is
 where the money is spent. Same device the package already uses for
-`experimental_` on `vigiles/experimental`. ⚠️ The prefix overstates slightly —
+`experimental_` on every call site. ⚠️ The prefix overstates slightly —
 `paid_judged(rubric, { judge: myFn })` runs your function and bills nothing, and
 the `measure*` family takes an injectable `evalDriver`; only the DEFAULT path
 calls a model. `metered_` would be exact but reads a beat slower, and a warning

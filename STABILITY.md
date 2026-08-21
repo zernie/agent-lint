@@ -18,10 +18,11 @@ their exit codes. Most of the churn is in the library API underneath it.
 - **The authoring + testing library entry points:**
   - `vigiles/linting` — the compiler + reference verification
     (`compileClaude`, `compileSkill`, …).
-  - `vigiles/spec` — the core builders (`enforce`, `guidance`, `claude`,
-    `agent`, `file`, `cmd`, `ref`, `dir`, `glob`, `result`,
+  - `vigiles/spec` — the core builders (`enforce`, `guidance`, `instructionFile`,
+    `file`, `cmd`, `ref`, `dir`, `glob`, `prose`, `result`,
     `delegate`, `railway`). Skill authoring is **not** on this list — see
-    `experimental_skill` below.
+    `experimental_skill` below, and neither is subagent authoring — see
+    `experimental_agent`.
   - `vigiles` (the package root) — the free harness-test + check vocabulary,
     plus `defineEval`, which declares what a `*.eval.mjs` file measures.
     **`*.eval.*` FILE SHAPE IS A CONTRACT** and it changed in a major release —
@@ -60,13 +61,17 @@ change or be removed **without** a major bump.
 
 That is the whole convention. Two supporting clauses:
 
-- **`@experimental` in the TSDoc is how it's declared**, and `npm run
-experimental:check` fails CI if a tagged, exported symbol lacks the prefix — so
-  the tag and the name cannot drift apart.
+- **`@experimental` in the TSDoc is how it's declared**, and the ESLint rule
+  `local/experimental-name` fails CI if a tagged, exported declaration lacks the
+  prefix — so the tag and the name cannot drift apart. It checks every exported
+  declaration, internal ones included: an internal reader is still a reader who
+  trusts the name.
 - **`@internal` no longer means "unstable".** It answers a different question —
   _is this part of the API at all_ — and it is only correct on something we do
   **not** export. An `@internal` symbol that appears in `api-surface/*.api.md` is
-  a contradiction the same check reports: the exports map ships it, so it is
+  a contradiction, reported by a separate check (`npm run internal:check`)
+  because that one needs the export graph rather than one file: the exports map
+  ships it, so it is
   public whatever the tag says.
 
 Why the name and not just a tag: a tag is invisible where it matters. You see a
@@ -89,6 +94,13 @@ not get a major bump. That is what "no stability promise" means.
   by skill specs, yet is exported with no tag and no prefix, so nothing warns
   you. The check enforces "tagged ⇒ named", not "everything that should be
   tagged is". Treat both as carrying `experimental_skill`'s promise.
+- **`experimental_agent()`** in `vigiles/spec` — subagent authoring. Moved off
+  the stable list on 2026-08-21, and the reason matters because the evidence
+  points the other way: a compiled `agents/code-reviewer.md` was loaded by real
+  Claude Code, dispatched to and read, **100% of trials** (2026-06-20) — stronger
+  end-to-end proof than `experimental_skill` has. What is unsettled is the
+  **shape**, which is what this marker promises. `agent` stays as a `@deprecated`
+  alias for one major.
 - **Typed-composition combinators** in `vigiles/spec` — `experimental_pipe` /
   `experimental_pipeStep` / `experimental_needs` / `experimental_start` /
   `experimental_andThen`, and their helper types (`Supplies`, `Handoff`,
@@ -98,11 +110,20 @@ not get a major bump. That is what "no stability promise" means.
 - The whole-harness codegen (`generate harness`) and capability lattice.
 - Internal-only research/spike modules (`guards`, `hook-spec`, `evolve`) — not
   exported from any entry point.
-- **`vigiles/experimental`** — a quarantined subpath for draft surfaces, signalled
-  by the `experimental_` name prefix on runtime exports. Currently the R3
-  disposable-service tier (real side-effect testing: `experimental_startServices`,
-  `ServiceSpec`, `ContainerRuntime`, …). Import it only if you accept it may change
-  or vanish without a major bump.
+- **Every export named `experimental_`**, wherever it lives. The prefix is the
+  whole signal — there is no quarantined subpath any more. `vigiles/experimental`
+  was deleted 2026-08-21: it marked the IMPORT LINE, which is out of view by the
+  time anyone reads the call, and it split each draft feature across two doors
+  (7 of the 20 experimental names were behind it; the other 13 already sat beside
+  stable ones in `vigiles/spec` and `vigiles/hook`, so the subpath was not even a
+  reliable place to look). The prefix marks every call site instead, and
+  the ESLint rule `local/experimental-name` fails CI when a declaration tagged
+  `@experimental` is not named for it. Today that covers the R3 disposable-service tier
+  (`experimental_startServices`, … — on `vigiles`: it starts containers and calls
+  no model, so it is not behind the paid `vigiles/eval` door, though it does have
+  real side effects), the emit channel (`experimental_emitTool`, … — on `vigiles`), the
+  compiled-hook entry points (`vigiles/hook`), and the spec builders
+  `experimental_skill` / `experimental_agent` (`vigiles/spec`).
 
 ## How the surface is enforced
 

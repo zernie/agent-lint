@@ -2,23 +2,23 @@
  * Typed Claude Code authoring surface — the compile-time half of the purity
  * contract, bound to the Claude Code tool vocabulary.
  *
- * The core `agent()` / `skill()` builders (`vigiles/spec`) are generic over a
+ * The core `experimental_agent()` / `skill()` builders (`vigiles/spec`) are generic over a
  * tool `ToolVocabulary` that DEFAULTS to fully-open (`string` at every purity
  * level), so they accept any tools — backwards-compatible, harness-agnostic.
  * This module re-binds them to the CONCRETE Claude Code vocabulary derived from
  * `claudeCodeDialect`, so authoring a spec with an invalid `purity`×`tools`
  * combination is a `tsc` error at EDIT TIME, before any vigiles command runs:
  *
- *   import { agent } from "vigiles/claude-code";
+ *   import { experimental_agent } from "vigiles/claude-code";
  *
- *   agent({ purity: "pure", tools: ["Read", "Bash"] });
+ *   experimental_agent({ purity: "pure", tools: ["Read", "Bash"] });
  *   //                                       ^^^^^^ tsc error — Bash side-effecting
  *
- *   agent({ purity: "bounded", tools: ["Read", "Bash", "Write"] }); // OK
- *   agent({ purity: "bounded", tools: ["mcp__x__y"] });
+ *   experimental_agent({ purity: "bounded", tools: ["Read", "Bash", "Write"] }); // OK
+ *   experimental_agent({ purity: "bounded", tools: ["mcp__x__y"] });
  *   //                                  ^^^^^^^^^^^ tsc error — MCP not decidable
  *
- *   agent({ tools: ["anything", "mcp__x__y"] }); // no purity → open, OK
+ *   experimental_agent({ tools: ["anything", "mcp__x__y"] }); // no purity → open, OK
  *
  * This is a STRICT ADDITION to the runtime/compile checks: `purityViolations`
  * (`vigiles compile`) and `decidePurityGate` (the PreToolUse gate) are unchanged
@@ -31,7 +31,7 @@
  * harness-agnostic.
  */
 import {
-  agent as coreAgent,
+  experimental_agent as coreAgent,
   experimental_skill as coreSkill,
   type AgentSpec,
   type AgentSpecInput,
@@ -58,13 +58,13 @@ export interface ClaudeCodeToolVocabulary extends ToolVocabulary {
 
 /**
  * Define a Claude Code subagent with the purity floor enforced AT COMPILE TIME
- * against the Claude Code tool catalog. Identical to the core `agent()` at
+ * against the Claude Code tool catalog. Identical to the core `experimental_agent()` at
  * runtime (it IS the core builder); the only difference is the typed `tools`
  * constraint. `P` is inferred from the literal `purity` field.
  */
-export function agent<const P extends AuthoredPurity | undefined = undefined>(
-  spec: AgentSpecInput<P, ClaudeCodeToolVocabulary>,
-): AgentSpec {
+export function experimental_agent<
+  const P extends AuthoredPurity | undefined = undefined,
+>(spec: AgentSpecInput<P, ClaudeCodeToolVocabulary>): AgentSpec {
   return coreAgent<P, ClaudeCodeToolVocabulary>(spec);
 }
 

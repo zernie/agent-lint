@@ -172,7 +172,7 @@ export function assertHookAllowed(r: HookRunResult): void {
  * in-process rather than loaded from disk has no file to name, so nothing is
  * recorded and nothing is invented:
  *
- *     const h = defineHook({…}); assertHookDenies(h, e);  → surfacesRecorded() === []
+ *     const h = experimental_defineHook({…}); assertHookDenies(h, e);  → surfacesRecorded() === []
  *
  * …and a direct `runHookProgram(hook, event)` call (the pure evaluator, public
  * via `vigiles/hook`) records nothing either, for the reason above. Both cost a

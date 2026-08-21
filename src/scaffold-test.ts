@@ -259,7 +259,7 @@ function fallbackSection(input: ScaffoldInput): string {
   return `import { runHarnessTest, assertToolUsed } from "vigiles";
 
 // ${input.name} has no result() contract, so its outcome can't be asserted
-// deterministically — add one (result() on its agent() spec) for a no-judge
+// deterministically — add one (result() on its experimental_agent() spec) for a no-judge
 // outcome test. For now, assert it reaches for the right tool.
 const r = await runHarnessTest({
   plugin: ".", // TODO: the plugin dir holding this subagent

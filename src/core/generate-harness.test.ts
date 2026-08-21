@@ -329,31 +329,31 @@ const TSCONFIG = JSON.stringify(
   2,
 );
 
-const PLANNER = `import { agent, result } from "vigiles/spec";
-export default agent({
+const PLANNER = `import { experimental_agent, result } from "vigiles/spec";
+export default experimental_agent({
   name: "planner",
   description: "Break the request into an ordered plan. Dispatch first.",
   tools: ["Read", "Grep", "Glob"],
   output: result({ steps: "string[]" }, { reason: "string" }),
 });
 `;
-const IMPLEMENTER = `import { agent, result } from "vigiles/spec";
-export default agent({
+const IMPLEMENTER = `import { experimental_agent, result } from "vigiles/spec";
+export default experimental_agent({
   name: "implementer",
   description: "Implement the plan and prove the build passes.",
   tools: ["Read", "Edit", "Write", "Bash"],
   output: result({ files: "string[]" }, { failedAt: "string" }),
 });
 `;
-const FIXER = `import { agent } from "vigiles/spec";
-export default agent({
+const FIXER = `import { experimental_agent } from "vigiles/spec";
+export default experimental_agent({
   name: "fixer",
   description: "Address the failing step's findings, then re-verify.",
   tools: ["Read", "Edit", "Bash"],
 });
 `;
-const REPORTER = `import { agent } from "vigiles/spec";
-export default agent({
+const REPORTER = `import { experimental_agent } from "vigiles/spec";
+export default experimental_agent({
   name: "reporter",
   description: "Report an exhausted failure for a human.",
   tools: ["Read"],
@@ -476,16 +476,16 @@ test("a DANGLING delegate is rejected by tsc, naming the missing target", async 
 // railway's second step (`implementer`) declares the `needs` shape under test.
 // ---------------------------------------------------------------------------
 
-const HANDOFF_PLANNER = `import { agent, result } from "vigiles/spec";
-export default agent({
+const HANDOFF_PLANNER = `import { experimental_agent, result } from "vigiles/spec";
+export default experimental_agent({
   name: "planner",
   description: "Produce the ordered plan with its step list.",
   tools: ["Read"],
   output: result({ steps: "string[]" }, { reason: "string" }),
 });
 `;
-const HANDOFF_IMPLEMENTER = `import { agent, result } from "vigiles/spec";
-export default agent({
+const HANDOFF_IMPLEMENTER = `import { experimental_agent, result } from "vigiles/spec";
+export default experimental_agent({
   name: "implementer",
   description: "Implement the supplied plan.",
   tools: ["Read", "Edit"],

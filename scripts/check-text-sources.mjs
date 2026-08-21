@@ -24,7 +24,7 @@
  * of removing it. The byte is the thing that is wrong.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const EXT = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs|json|md|yml|yaml|sh|css|html)$/;
 
@@ -46,6 +46,11 @@ if (tracked.length === 0) {
 
 const bad = [];
 for (const p of tracked) {
+  // `git ls-files` reads the INDEX, so a file deleted in the worktree but not yet
+  // staged is still listed. Without this, the gate dies with an ENOENT stack
+  // trace mid-refactor and reads as "the checker is broken" rather than "you have
+  // an unstaged deletion" — observed 2026-08-21, deleting an api-surface report.
+  if (!existsSync(p)) continue;
   const buf = readFileSync(p);
   const at = buf.indexOf(0);
   if (at !== -1) {

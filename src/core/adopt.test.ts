@@ -203,7 +203,7 @@ describe("adoptMarkdown — generated source", () => {
 
   it("imports claude, emits empty rules, and never infers a rule", () => {
     const { source } = adoptMarkdown(`# CLAUDE.md\n\n## A\n\nx\n`, "CLAUDE.md");
-    expect(source).toContain('import { claude } from "vigiles/spec"');
+    expect(source).toContain('import { instructionFile } from "vigiles/spec"');
     expect(source).toContain("rules: {},");
     // No rule is INFERRED — only `claude` is imported (no enforce/guidance import).
     expect(source).not.toContain("import { claude, ");

@@ -5,15 +5,15 @@
  * runs with the failing step's error payload and records the failure clearly so
  * a human can pick it up.
  */
-import { agent, result, instructions } from "../../src/core/spec.js";
+import { experimental_agent, result, prose } from "../../src/core/spec.js";
 
-export default agent({
+export default experimental_agent({
   name: "reporter",
   description:
     "Summarize a railway failure for a human. Dispatched on the error track when recovery is exhausted.",
   model: "haiku",
   tools: ["Read"],
-  body: instructions`You receive the error payload of the step that failed and the
+  body: prose`You receive the error payload of the step that failed and the
 recovery attempts that were exhausted. Write a concise, factual report: what was
 attempted, where it failed, and what a human should look at next.`,
   output: result(

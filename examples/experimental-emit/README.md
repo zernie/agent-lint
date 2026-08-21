@@ -1,6 +1,6 @@
 # `experimental-emit` — can an UNFORKED skill emit a structured result?
 
-The runnable half of the `vigiles/experimental` emit channel
+The runnable half of the `experimental_emitTool` emit channel
 (`src/experimental-emit.ts`). Read that module's header first: it lists, by
 number, what is unproven and what would have to be true to drop the
 `experimental_` prefix.

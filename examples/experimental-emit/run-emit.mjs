@@ -1,5 +1,5 @@
 /**
- * 💵 PAID. The prototype measurement behind `vigiles/experimental`'s emit channel:
+ * 💵 PAID. The prototype measurement behind the `experimental_emitTool` channel:
  * can an UNFORKED skill emit a structured, observable result by calling a tool?
  *
  *   node examples/experimental-emit/run-emit.mjs <skill-dir> [trials] [maxCostUsd]

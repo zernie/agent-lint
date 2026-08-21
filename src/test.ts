@@ -86,6 +86,27 @@ export type {
 // --- assertions and the eval-RESULT analysis helpers (free; see cost #1 above) ---
 export * from "./harness-assert.js";
 
+// --- the EMIT delivery for a typed result (⚠️ EXPERIMENTAL) ---
+// Moved here 2026-08-21 from the `vigiles/experimental` subpath, which is gone
+// (the `experimental_` prefix already marks every call site; the subpath only
+// marked the import line). It belongs BESIDE the assertions above rather than in
+// a drawer of its own: `experimental_parseEmitted` / `experimental_assertEmittedOk`
+// are the emit-channel twins of `parseAgentResult` / `assertAgentOk`, and a reader
+// comparing the two delivery shapes should not have to change doors to see both.
+// Read src/experimental-emit.ts's header before using it — it lists, by number,
+// what is unproven and what would have to be true to drop the prefix.
+export {
+  experimental_emitTool,
+  experimental_parseEmitted,
+  experimental_assertEmittedOk,
+  type EmitFieldSchema,
+  type EmitObjectSchema,
+  type EmitPropertySchema,
+  type EmitTrackSchema,
+  type EmitToolDefinition,
+  type ExperimentalEmitTool,
+} from "./experimental-emit.js";
+
 // The compiled-hook LOADER. The in-process assertions above take the hook
 // OBJECT, but a `.harness.mjs` test only has its PATH — without this the
 // intended in-process test path is unreachable from the file format
@@ -266,3 +287,42 @@ export type {
   AgentRunArgs,
   AgentRunner,
 } from "./eval.js";
+
+// --- R3: the disposable-service tier (⚠️ EXPERIMENTAL, and it has REAL EFFECTS) ---
+// Moved off the `vigiles/experimental` subpath 2026-08-21, when that subpath was
+// deleted: it marked the IMPORT LINE, which is out of view by the time anyone
+// reads the call, while `experimental_` marks every call site.
+//
+// 🔴 IT LANDED ON `vigiles/eval` FIRST, AND THE EXPORT-PREFIX GATE REJECTED IT —
+// correctly, and the reasoning is worth keeping. `./eval` has a naming contract:
+// every runtime export there is `paid_*`, meaning THIS CALL CAN BILL YOU. R3 felt
+// like it belonged because the docs frame it as measuring skills for real. But
+// `experimental_startServices` takes a `ContainerRuntime` and starts containers;
+// it calls no model. Naming it `paid_experimental_startServices` to satisfy the
+// gate would have made `paid_` mean "expensive in some sense", which is exactly
+// the erosion that turns a prefix back into decoration. The model spend is in
+// `paid_measureArms`, which is already over there. So R3 is free-of-model-cost
+// and belongs on this door — where "free" keeps its narrow meaning.
+//
+// ⚠️ FREE OF MODEL COST IS NOT FREE OF CONSEQUENCE, and this is the one place the
+// root barrel carries something with real side effects. The disposable container
+// is the ONLY isolation vigiles provides — it does NOT confine the skill's
+// filesystem or network. Run it somewhere disposable with no production access
+// and keep real credentials out of the run. See the SAFETY note in src/services.ts.
+export {
+  experimental_startServices,
+  experimental_withServices,
+  type ServiceSpec,
+  type ServiceReady,
+  type ServiceReset,
+  type ServiceHandle,
+  type ServiceSession,
+  type ContainerRuntime,
+} from "./services.js";
+
+export {
+  experimental_dockerRuntime,
+  experimental_makeDockerRuntime,
+  type DockerExec,
+  type NetProbe,
+} from "./services-docker.js";

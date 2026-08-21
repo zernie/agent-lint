@@ -18,6 +18,7 @@
  */
 import { Extractor, ExtractorConfig } from "@microsoft/api-extractor";
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -35,10 +36,40 @@ const ENTRIES = [
   { name: "vigiles-claude-code", dts: "dist/claude-code.d.ts" },
   { name: "vigiles-codex", dts: "dist/codex.d.ts" },
   { name: "vigiles-adapter", dts: "dist/adapter.d.ts" },
-  { name: "vigiles-experimental", dts: "dist/experimental.d.ts" },
   { name: "vigiles-vitest", dts: "dist/vitest.d.mts" },
   { name: "vigiles-jest", dts: "dist/jest.d.ts" },
 ];
+
+// 🔴 THIS LIST IS HAND-MAINTAINED, so it can drift from `package.json` exports —
+// and a drift in one direction is INVISIBLE without this assertion. Measured
+// 2026-08-21: the `./experimental` subpath was deleted and its entry left here,
+// and the gate reported "API surface verified for 11 entries — no drift",
+// because `tsc` does not clean `dist/` and the previous build's
+// `dist/experimental.d.ts` was still on disk. A green gate reading a file no
+// build produces any more is the exact failure shape this repo keeps finding in
+// other people's harnesses.
+{
+  const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+  const subpaths = Object.keys(pkg.exports).sort();
+  const covered = ENTRIES.map((e) =>
+    e.name === "vigiles" ? "." : "./" + e.name.replace(/^vigiles-/, ""),
+  ).sort();
+  const missing = subpaths.filter((s) => !covered.includes(s));
+  const extra = covered.filter((c) => !subpaths.includes(c));
+  if (missing.length || extra.length) {
+    console.error(
+      "api-extractor: ENTRIES is out of step with package.json exports.\n" +
+        (missing.length
+          ? `  exported but UNREPORTED: ${missing.join(", ")}\n`
+          : "") +
+        (extra.length
+          ? `  reported but NOT exported: ${extra.join(", ")}\n`
+          : "") +
+        "  Fix ENTRIES in this file, and delete any orphaned api-surface/*.api.md.",
+    );
+    process.exit(1);
+  }
+}
 
 const localBuild = process.argv.includes("--local");
 

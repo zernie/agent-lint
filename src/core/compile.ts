@@ -14,6 +14,7 @@ import { sha256short, assertNever } from "./hash.js";
 import { findIntegrityHeader, placeIntegrityHeader } from "./integrity.js";
 import { fencedLineFlags } from "./markdown.js";
 import { fileDefinesSymbol, langForFile } from "./symbols.js";
+import { foldLegacyPostcondition } from "./skill-normalize.js";
 
 import type {
   ClaudeSpec,
@@ -426,7 +427,7 @@ interface SectionResult {
 // chars; TS #52243 unresolved), so a helper's content is guarded at COMPILE time
 // instead — the ESLint-max-len / Prettier-printWidth precedent. Deliberately
 // generous (don't-cry-wolf): real prose sections are short, so this only trips on
-// an egregious dump (a whole essay pasted into one section / instructions``).
+// an egregious dump (a whole essay pasted into one section / prose``).
 // Override per spec with `maxSectionLines`; `maxTokens` is the global backstop.
 const DEFAULT_MAX_SECTION_LINES = 200;
 
@@ -798,7 +799,8 @@ function collectSkillRefs(spec: SkillSpec): InstructionFragment[] {
     // Role gates resolve per host project at run time — nothing to verify here.
     if (s.gate && s.gate._ref !== "role") refs.push(s.gate);
   }
-  if (spec.result && spec.result._ref !== "role") refs.push(spec.result);
+  if (spec.postcondition && spec.postcondition._ref !== "role")
+    refs.push(spec.postcondition);
   return refs;
 }
 
@@ -910,7 +912,7 @@ function renderSkillSections(spec: SkillSpec): string {
   if (spec.steps && spec.steps.length > 0) {
     sections.push(renderSteps(spec.steps));
   }
-  if (spec.result) sections.push(renderResult(spec.result));
+  if (spec.postcondition) sections.push(renderResult(spec.postcondition));
   // A forked skill (context: fork) runs as a subagent, so it may carry the SAME
   // typed Result outcome — reuse the subagent renderer (one-renderer-no-drift).
   if (spec.output) sections.push(renderOutputContract(spec.output));
@@ -973,6 +975,14 @@ export function compileSkill(
     dialect?: HarnessDialect;
   } = {},
 ): CompileSkillResult {
+  // 🔴 NORMALISE FIRST, before anything reads the spec. `compileSkill` accepts a
+  // `SkillSpec` STRUCTURALLY, so a caller can hand us `{ _specType: "skill", …,
+  // result: cmd(…) }` without ever touching `experimental_skill()`. Both readers
+  // below (`collectSkillRefs`, `renderSkillSections`) look only at
+  // `postcondition`, so without this line such a spec loses its `## Result`
+  // section AND its reference verification, silently. Doing it here rather than
+  // in the readers means a reader added later cannot reintroduce the gap.
+  spec = foldLegacyPostcondition(spec);
   const basePath = options.basePath ?? process.cwd();
   const specFile = options.specFile ?? "SKILL.md.spec.ts";
   const profile: SkillFrontmatterProfile =
@@ -1087,13 +1097,13 @@ export function compileSkill(
 // harness's format-axis vocabulary — it lives in the HarnessDialect port
 // (src/core/dialect.ts), injected here, never hard-coded for one harness.
 //
-// SCOPE: compileAgent renders vigiles's agent() — a VERIFIED TOOL CONTRACT — to
+// SCOPE: compileAgent renders vigiles's experimental_agent() — a VERIFIED TOOL CONTRACT — to
 // a Claude-Code-shaped subagent markdown file. Compiling that to Codex is a
 // deliberate NON-GOAL, not a missing renderer: a Codex "subagent" is an
 // [agents.<name>] TOML concurrency table (max_threads / max_depth), which is a
 // runtime-orchestration knob, NOT a tool contract. The two models don't map, so
 // vigiles does not emit a TOML [agents] block. The Codex dialect still verifies
-// an agent()'s tool contract (its built-in catalog) — only the OUTPUT renderer
+// an experimental_agent()'s tool contract (its built-in catalog) — only the OUTPUT renderer
 // is CC-only here. See research/codex-prototype-findings.md (gaps).
 
 /** Verify a subagent's allowed-tools contract — the rails are real tools. The

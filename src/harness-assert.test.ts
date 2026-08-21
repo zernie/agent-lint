@@ -53,11 +53,16 @@ import {
   vigilesMatchers,
 } from "./harness-assert.js";
 import { result } from "./core/spec.js";
-import { defineHook, tool, deny, allow } from "./core/hook-program.js";
 import {
-  defineInject,
+  experimental_defineHook,
+  tool,
+  deny,
+  allow,
+} from "./core/hook-program.js";
+import {
+  experimental_defineInject,
   inject,
-  defineReact,
+  experimental_defineReact,
   run,
   notice,
   nothing,
@@ -739,7 +744,7 @@ test("assertNoRegression gates on a significant drop vs baseline", () => {
 });
 
 test("assertHookDenies / assertHookAllows test a compiled hook in-process (no subprocess)", () => {
-  const guard = defineHook({
+  const guard = experimental_defineHook({
     on: "PreToolUse",
     match: tool("Bash"),
     decide: (e) =>
@@ -770,7 +775,7 @@ test("assertHookDenies / assertHookAllows test a compiled hook in-process (no su
 
   // A non-gate hook isn't a decision at all — the message names the role, so a
   // gate assert against an inject/react hook fails loudly (not silently passes).
-  const briefing = defineInject({
+  const briefing = experimental_defineInject({
     on: "SessionStart",
     produce: () => inject("hi"),
   });
@@ -778,7 +783,7 @@ test("assertHookDenies / assertHookAllows test a compiled hook in-process (no su
     assertHookDenies(briefing, { source: "startup" });
   }, /got an injection/);
 
-  const formatOnWrite = defineReact({
+  const formatOnWrite = experimental_defineReact({
     on: "PostToolUse",
     match: tools("Write"),
     react: () => run("prettier --write x"),
@@ -797,7 +802,7 @@ test("assertHookDenies / assertHookAllows test a compiled hook in-process (no su
 // react hooks as DEAD on 2026-08-03. These read the reaction in-process, so
 // stdout-vs-stderr never enters into it.
 test("assertHookNotices / assertHookSilent test a react hook in-process", () => {
-  const warnOnFailure = defineReact({
+  const warnOnFailure = experimental_defineReact({
     on: "PostToolUse",
     match: tools("Bash"),
     react: (e) =>
@@ -839,7 +844,7 @@ test("assertHookNotices / assertHookSilent test a react hook in-process", () => 
   }, /expected the hook to stay silent, got notice \(a reaction\)/);
 
   // A `run(…)` reaction is not silence — the hook still reacted.
-  const formatOnWrite = defineReact({
+  const formatOnWrite = experimental_defineReact({
     on: "PostToolUse",
     match: tools("Write"),
     react: () => run("prettier --write x"),
@@ -852,7 +857,7 @@ test("assertHookNotices / assertHookSilent test a react hook in-process", () => 
   }, /expected the hook to stay silent, got run \(a reaction\)/);
 
   // Aimed at the wrong ROLE, both name what they got instead of passing.
-  const guard = defineHook({
+  const guard = experimental_defineHook({
     on: "PreToolUse",
     match: tool("Bash"),
     decide: () => allow(),

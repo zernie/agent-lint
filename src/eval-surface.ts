@@ -13,9 +13,14 @@
  * The import path warns ONCE, at the top of the file. The name warns EVERY time,
  * at the call site. Reading `await judged(trace, "did it refuse?")` on line 140,
  * the import line is long out of view — `await paid_judged(...)` still says what
- * it costs. This is not a new idiom in this package: `vigiles/experimental`
- * already pairs a quarantined subpath with an `experimental_` name prefix for
- * exactly this reason. The same device, applied to a second axis.
+ * it costs. This is not a new idiom in this package: the `experimental_` prefix
+ * says the same kind of thing on a second axis, at the same place.
+ *
+ * That comparison used to read "`vigiles/experimental` already pairs a
+ * quarantined subpath WITH a name prefix". The subpath was deleted 2026-08-21
+ * and the prefix kept, on the argument this paragraph makes: of the two, only
+ * the name is present where the reader is. Which is also why THIS surface has
+ * no `vigiles/paid` subpath and never needed one.
  *
  * ⚠️ **The prefix slightly OVERSTATES the cost, and that is a deliberate trade
  * rather than an oversight.** `paid_judged` takes an injectable judge:

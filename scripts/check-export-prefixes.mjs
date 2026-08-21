@@ -3,10 +3,25 @@
  * check-export-prefixes.mjs — a subpath that carries a WARNING in its name must
  * carry it on every symbol behind it too.
  *
- * Two quarantine subpaths in this package pair a path with a name prefix:
+ * ONE quarantine subpath in this package pairs a path with a name prefix:
  *
- *   ./experimental  →  every runtime export starts with `experimental_`
  *   ./eval          →  every runtime export starts with `paid_`
+ *
+ * There were two. `./experimental` was deleted 2026-08-21 on the argument this
+ * header already made — that of the pair, only the NAME is present where the
+ * reader is — so the `experimental_` prefix now stands alone, enforced per
+ * declaration by the ESLint rule `local/experimental-name` rather than per
+ * subpath by this script. Nothing was relaxed: the prefix is checked in MORE
+ * places than before, since it no longer depends on which door a symbol left by.
+ *
+ * 🔴 That deletion is also how this check earned its own bug report. Moving R3
+ * onto `./eval` looked reasonable and this gate rejected it: `paid_` means "this
+ * call can bill you", and `experimental_startServices` takes a
+ * `ContainerRuntime` and starts containers — it calls no model. The tempting fix
+ * was `paid_experimental_startServices`, which would have quietly redefined
+ * `paid_` as "expensive in some sense" and turned the prefix back into
+ * decoration. R3 went to the package root instead. A quarantine prefix is only
+ * worth having while it is narrow enough to be false somewhere.
  *
  * The reason the prefix exists at all is that the import path warns ONCE, at the
  * top of a file, and the name warns EVERY time, at the call site. Reading
@@ -15,9 +30,9 @@
  *
  * A convention held only by prose decays the moment someone adds one export in a
  * hurry — and it HAD decayed: `makeDockerRuntime` sat unprefixed among six
- * `experimental_` siblings on `./experimental` until this check was written. One
- * missing prefix is worse than none at all, because the six that are prefixed
- * teach the reader that an unprefixed name means "safe".
+ * `experimental_` siblings on the old `./experimental` until this check was
+ * written. One missing prefix is worse than none at all, because the six that
+ * are prefixed teach the reader that an unprefixed name means "safe".
  *
  * TYPES ARE EXEMPT, BY DESIGN, NOT BY OVERSIGHT. The prefix warns about calling
  * something. A type is never called and can never bill or misbehave, so
@@ -40,11 +55,6 @@ import { createRequire } from "node:module";
 /** The contract: one built type-entry, one required prefix on every VALUE export. */
 export const SURFACES = [
   { subpath: "./eval", dts: "dist/eval-surface.d.ts", prefix: "paid_" },
-  {
-    subpath: "./experimental",
-    dts: "dist/experimental.d.ts",
-    prefix: "experimental_",
-  },
 ];
 
 /**

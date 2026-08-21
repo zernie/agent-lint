@@ -211,15 +211,23 @@ describe("check-export-prefixes: it is SILENT on the legitimate surface", () => 
 });
 
 describe("check-export-prefixes: this repository's real surfaces", () => {
-  // 🔴 FOUND BY MUTATION, NOT BY REVIEW. Deleting the `./experimental` entry from
-  // SURFACES left the whole suite GREEN: the axis-specific test passes its own
-  // surface list, the "real barrels" test below is satisfied by a SHORTER list,
-  // and the CLI test still exits 1 on its `./eval` defect. So an entire axis
-  // could stop being policed with nothing turning red — the same shape as a dead
-  // check. This assertion is what makes the SURFACES list itself load-bearing.
+  // 🔴 FOUND BY MUTATION, NOT BY REVIEW. Deleting an entry from SURFACES left the
+  // whole suite GREEN: the axis-specific test passes its own surface list, the
+  // "real barrels" test below is satisfied by a SHORTER list, and the CLI test
+  // still exits 1 on its `./eval` defect. So an entire axis could stop being
+  // policed with nothing turning red — the same shape as a dead check. This
+  // assertion is what makes the SURFACES list itself load-bearing.
+  //
+  // It did its job on 2026-08-21: `./experimental` was deleted as a subpath and
+  // this test is what said so, out loud, instead of the removal passing silently.
+  // The list is down to one entry ON PURPOSE — the `experimental_` prefix is now
+  // enforced per DECLARATION by `local/experimental-name`, which covers more
+  // ground than a per-subpath sweep ever did, since it no longer depends on which
+  // door a symbol leaves by. Shrinking this list again needs the same treatment:
+  // say where the axis went, or it did not go anywhere.
   it("SURFACES covers exactly the quarantined subpaths — deleting one is a failure", () => {
     expect(new Set(SURFACES.map((s) => s.subpath))).toEqual(
-      new Set(["./eval", "./experimental"]),
+      new Set(["./eval"]),
     );
     const pkg = JSON.parse(
       readFileSync(join(REPO, "package.json"), "utf8"),

@@ -5,9 +5,6 @@
 ```ts
 
 // @public
-export function agent<const P extends AuthoredPurity | undefined = undefined>(spec: AgentSpecInput<P, ClaudeCodeToolVocabulary>): AgentSpec;
-
-// @public
 export function assertNoCollision(report: SelectionReport, opts?: {
     maxOffDiagonal?: number;
     maxPluginCollision?: number;
@@ -65,6 +62,11 @@ export interface ClaudeCodeToolVocabulary extends ToolVocabulary {
     // (undocumented)
     readonly readOnly: ClaudeCodeReadOnlyTool;
 }
+
+// @public
+function experimental_agent<const P extends AuthoredPurity | undefined = undefined>(spec: AgentSpecInput<P, ClaudeCodeToolVocabulary>): AgentSpec;
+export { experimental_agent as agent }
+export { experimental_agent }
 
 // @public (undocumented)
 export const experimental_skill: typeof skillSpec & {
