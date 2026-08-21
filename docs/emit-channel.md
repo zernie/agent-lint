@@ -21,8 +21,13 @@ A typed result (`output:` + `result()`) is valid **only on a forked skill**. `vi
 
 A **tool call needs no return boundary**. The skill does not _return_ the structure — it _emits_ it, mid-conversation, and the call lands in `Trace.toolCalls`. The objection that grounds the exclusion does not apply to this delivery. It is the same `OutputContract`, reached a different way.
 
+<!-- vigiles:check -->
+
 ```ts
 import { experimental_emitTool } from "vigiles";
+// `result()` builds the contract and lives on the authoring surface, not the
+// testing one — two doors on purpose, and the reason this line is easy to forget.
+import { result } from "vigiles/spec";
 
 const CONTRACT = result(
   // `["CUT", "MERGE", "KEEP"]` is an ENUM — the permitted values travel with the tool

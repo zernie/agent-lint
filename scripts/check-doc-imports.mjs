@@ -10,6 +10,29 @@
  *           an illustrative fragment cannot make it fire.
  *   GATE 2 (opt-in, block marked `<!-- vigiles:check -->`): full tsc diagnostics.
  *
+ * 🔴 RECONSIDERED AND REFUTED BY MEASUREMENT, 2026-08-21 — recorded so it is not
+ * proposed again. A review round found two doc blocks calling this package's own
+ * exports without importing them (`experimental_agent` in railway-subagents.md,
+ * `result` in emit-channel.md) — both the residue of a rename that updated the
+ * import line and not the body. Gate 1 is blind to them by design, since they are
+ * free variables.
+ *
+ * The tempting narrowing: report TS2304, but ONLY for names this package actually
+ * exports. It sounds precise — a fragment referencing a local `planner` stays
+ * silent, a fragment calling `result()` with no import does not. It was
+ * implemented and run against the corpus before being kept, and the number
+ * settled it: **66 findings across 93 blocks.** Docs legitimately name our
+ * exports as free variables all over — `skillResolved`, `assertTriggerRate`,
+ * `codexAdapter` — in fragments that deliberately omit the import they already
+ * showed three blocks earlier. A gate opening at 66 is muted the same day, which
+ * is the founding decision above, re-derived the hard way.
+ *
+ * What was done instead: the two blocks in question are COMPLETE programs, so
+ * they now carry `<!-- vigiles:check -->` and get real tsc diagnostics forever.
+ * That is Gate 2 used as intended — per-block opt-in where completeness is a
+ * property of the block, rather than a corpus-wide rule that cannot be true of a
+ * corpus mostly made of fragments.
+ *
  * No network. No new CLI verb. Resolution is TypeScript's own package
  * self-reference: `import ... from "vigiles/eval"` resolves through this
  * package.json's `exports` map to the local ./dist.

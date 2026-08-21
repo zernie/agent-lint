@@ -138,9 +138,11 @@ markdown or YAML railway can do this; it is a cross-reference only types can car
 Each consumer declares the fields it reads from its predecessor with `experimental_needs(...)`,
 paired to its agent via `experimental_pipeStep(agent, experimental_needs(...))`:
 
+<!-- vigiles:check -->
+
 ```ts
 import {
-  agent,
+  experimental_agent,
   result,
   experimental_pipe,
   experimental_pipeStep,
