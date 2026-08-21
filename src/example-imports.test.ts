@@ -46,7 +46,13 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 
-const REPO = resolve(import.meta.dirname, "..");
+// `__dirname`, NOT `import.meta.dirname` — this package builds to CommonJS, and
+// `tsc` rejects `import.meta` in a file destined for CJS output (TS1470). The
+// sibling tests in scripts/ use `import.meta.dirname` legitimately, because
+// scripts/ is outside the tsc build; copying that idiom into src/ breaks the
+// build while `vitest` stays green, since vitest strips types and never
+// typechecks. That is exactly how this line shipped red the first time.
+const REPO = resolve(__dirname, "..");
 const EXAMPLES = join(REPO, "examples");
 
 function walk(dir: string, out: string[] = []): string[] {
