@@ -5,7 +5,8 @@
  * runs with the failing step's error payload and records the failure clearly so
  * a human can pick it up.
  */
-import { experimental_agent, result, prose } from "../../src/core/spec.js";
+import { experimental_agent, prose } from "../../src/core/spec.js";
+const { result } = experimental_agent;
 
 export default experimental_agent({
   name: "reporter",

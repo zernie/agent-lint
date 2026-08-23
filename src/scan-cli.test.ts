@@ -544,7 +544,7 @@ describe("generate-harness CLI", () => {
   const REPO = resolve(__dirname, "..");
   let dir = "";
 
-  const PLANNER = `import { experimental_agent, result } from "vigiles/spec";
+  const PLANNER = `import { experimental_agent } from "vigiles/spec";\nconst { result } = experimental_agent;
 export default experimental_agent({
   name: "planner",
   description: "Break the request into an ordered plan. Dispatch first.",
@@ -572,7 +572,7 @@ export default experimental_agent({
     writeFileSync(join(dir, "implementer.spec.ts"), IMPLEMENTER);
     writeFileSync(
       join(dir, "ship.spec.ts"),
-      `import { railway, delegate } from "vigiles/spec";
+      `import { experimental_agent } from "vigiles/spec";\nconst { railway, delegate } = experimental_agent;
 export default railway({ name: "ship", steps: [delegate("planner"), delegate("implementer")] });
 `,
     );
@@ -620,13 +620,13 @@ export default railway({ name: "ship", steps: [delegate("planner"), delegate("im
 describe("compile refreshes harness.gen.ts", () => {
   const REPO = resolve(__dirname, "..");
   const SPECS: Record<string, string> = {
-    "planner.md.spec.ts": `import { experimental_agent, result } from "vigiles/spec";
+    "planner.md.spec.ts": `import { experimental_agent } from "vigiles/spec";\nconst { result } = experimental_agent;
 export default experimental_agent({ name: "planner", description: "Break the request into an ordered plan. Dispatch first.", tools: ["Read", "Grep", "Glob"], output: result({ steps: "string[]" }, { reason: "string" }) });
 `,
     "implementer.md.spec.ts": `import { experimental_agent } from "vigiles/spec";
 export default experimental_agent({ name: "implementer", description: "Implement the plan and prove the build passes.", tools: ["Read", "Edit", "Write", "Bash"] });
 `,
-    "ship.md.spec.ts": `import { railway, delegate } from "vigiles/spec";
+    "ship.md.spec.ts": `import { experimental_agent } from "vigiles/spec";\nconst { railway, delegate } = experimental_agent;
 export default railway({ name: "ship", steps: [delegate("planner"), delegate("implementer")] });
 `,
   };

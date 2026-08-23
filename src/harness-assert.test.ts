@@ -52,7 +52,8 @@ import {
   assertToolCalls,
   vigilesMatchers,
 } from "./harness-assert.js";
-import { result } from "./core/spec.js";
+import { experimental_agent } from "./core/spec.js";
+const { result } = experimental_agent;
 import {
   experimental_defineHook,
   tool,

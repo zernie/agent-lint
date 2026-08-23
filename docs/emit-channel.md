@@ -27,7 +27,8 @@ A **tool call needs no return boundary**. The skill does not _return_ the struct
 import { experimental_emitTool } from "vigiles";
 // `result()` builds the contract and lives on the authoring surface, not the
 // testing one — two doors on purpose, and the reason this line is easy to forget.
-import { result } from "vigiles/spec";
+import { experimental_agent } from "vigiles/spec";
+const { result } = experimental_agent;
 
 const CONTRACT = result(
   // `["CUT", "MERGE", "KEEP"]` is an ENUM — the permitted values travel with the tool

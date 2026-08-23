@@ -667,7 +667,8 @@ Declare a handoff with the optional 3rd argument of `delegate()` — the same
 `experimental_needs(...)` builder a typed `experimental_pipeStep` uses:
 
 ```ts
-import { railway, delegate, experimental_needs } from "vigiles/spec";
+import { experimental_agent } from "vigiles/spec";
+const { railway, delegate, needs: experimental_needs } = experimental_agent;
 railway({
   name: "ship-pr",
   steps: [

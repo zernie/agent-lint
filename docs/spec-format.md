@@ -167,7 +167,8 @@ this is the field reference.
 <!-- vigiles:ignore -->
 
 ```ts
-import { experimental_agent, result } from "vigiles/spec";
+import { experimental_agent } from "vigiles/spec";
+const { result } = experimental_agent;
 
 export default experimental_agent({
   name: "code-reviewer",

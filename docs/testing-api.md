@@ -175,7 +175,8 @@ contract ends its turn with a `vigiles:ok` / `vigiles:err` block; these helpers
 parse it and validate it against the declared shape:
 
 ```ts
-import { result } from "vigiles/spec";
+import { experimental_agent } from "vigiles/spec";
+const { result } = experimental_agent;
 import { assertAgentOk, assertAgentErr, assertAgentResult } from "vigiles";
 
 const contract = result(

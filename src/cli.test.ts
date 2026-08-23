@@ -153,12 +153,14 @@ describe("CLI: vigiles compile", () => {
     const specSrc = resolve(process.cwd(), "dist", "core", "spec.js");
     writeFileSync(
       join(tmpDir, "worker.md.spec.ts"),
-      `import { experimental_agent, result } from "${specSrc}";\n` +
+      `import { experimental_agent } from "${specSrc}";\n` +
+        `const { result } = experimental_agent;\n` +
         `export default experimental_agent({ name: "worker", description: "d", tools: ["Read"], body: "b", output: result({ summary: "string" }, { reason: "string" }) });\n`,
     );
     writeFileSync(
       join(tmpDir, "flow.md.spec.ts"),
-      `import { railway, delegate } from "${specSrc}";\n` +
+      `import { experimental_agent } from "${specSrc}";\n` +
+        `const { railway, delegate } = experimental_agent;\n` +
         `export default railway({ name: "flow", steps: [delegate("worker")] });\n`,
     );
     const { stdout, exitCode } = run(
@@ -184,7 +186,8 @@ describe("CLI: vigiles compile", () => {
     const specSrc = resolve(process.cwd(), "dist", "core", "spec.js");
     writeFileSync(
       join(tmpDir, "flow.md.spec.ts"),
-      `import { railway, delegate } from "${specSrc}";\n` +
+      `import { experimental_agent } from "${specSrc}";\n` +
+        `const { railway, delegate } = experimental_agent;\n` +
         `export default railway({ name: "flow", steps: [delegate("ghost")] });\n`,
     );
     const { stdout, exitCode } = run("compile flow.md.spec.ts", tmpDir);

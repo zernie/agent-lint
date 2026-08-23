@@ -64,7 +64,35 @@ export interface ClaudeCodeToolVocabulary extends ToolVocabulary {
 }
 
 // @public
-function experimental_agent<const P extends AuthoredPurity | undefined = undefined>(spec: AgentSpecInput<P, ClaudeCodeToolVocabulary>): AgentSpec;
+const experimental_agent: typeof agentSpec & {
+    result: <const Ok extends Shape, const Err extends Shape>(ok: Ok, err: Err) => OutputContract<Ok, Err>;
+    delegate: (agent: string, task?: string, needsContract?: Shape) => RailwayStep;
+    railway: (spec: Omit<Railway, "_specType">) => Railway;
+    needs: <const N extends Shape>(shape: N) => NeedsContract<N>;
+    pipeStep: <Needs extends Shape, Ok extends Shape, Err extends Shape>(a: TypedAgentSpec<Ok, Err>, needsContract?: Needs) => PipeStep<Needs, Ok, Err>;
+    start: <Ok extends Shape, Err extends Shape>(first: PipeStep<Record<string, never>, Ok, Err> | TypedAgentSpec<Ok, Err>) => Pipeline<Ok, Err>;
+    andThen: <PriorOk extends Shape, PriorErr extends Shape, Needs extends Shape, Ok extends Shape, Err extends Shape>(prior: Pipeline<PriorOk, PriorErr>, next: Supplies<PriorOk, Needs> extends true ? PipeStep<Needs, Ok, Err> : {
+        readonly __HANDOFF_ERROR: Supplies<PriorOk, Needs>;
+    }) => Pipeline<Ok, PriorErr | Err>;
+    pipe: {
+        <A extends Shape, AE extends Shape>(a: TypedAgentSpec<A, AE>): Pipeline<A, AE>;
+        <A extends Shape, AE extends Shape, BN extends Shape, B extends Shape, BE extends Shape>(a: TypedAgentSpec<A, AE>, b: Supplies<A, BN> extends true ? PipeStep<BN, B, BE> : {
+            readonly __HANDOFF_ERROR: Supplies<A, BN>;
+        }): Pipeline<B, AE | BE>;
+        <A extends Shape, AE extends Shape, BN extends Shape, B extends Shape, BE extends Shape, CN extends Shape, C extends Shape, CE extends Shape>(a: TypedAgentSpec<A, AE>, b: Supplies<A, BN> extends true ? PipeStep<BN, B, BE> : {
+            readonly __HANDOFF_ERROR: Supplies<A, BN>;
+        }, c: Supplies<B, CN> extends true ? PipeStep<CN, C, CE> : {
+            readonly __HANDOFF_ERROR: Supplies<B, CN>;
+        }): Pipeline<C, AE | BE | CE>;
+        <A extends Shape, AE extends Shape, BN extends Shape, B extends Shape, BE extends Shape, CN extends Shape, C extends Shape, CE extends Shape, DN extends Shape, D extends Shape, DE extends Shape>(a: TypedAgentSpec<A, AE>, b: Supplies<A, BN> extends true ? PipeStep<BN, B, BE> : {
+            readonly __HANDOFF_ERROR: Supplies<A, BN>;
+        }, c: Supplies<B, CN> extends true ? PipeStep<CN, C, CE> : {
+            readonly __HANDOFF_ERROR: Supplies<B, CN>;
+        }, d: Supplies<C, DN> extends true ? PipeStep<DN, D, DE> : {
+            readonly __HANDOFF_ERROR: Supplies<C, DN>;
+        }): Pipeline<D, AE | BE | CE | DE>;
+    };
+};
 export { experimental_agent as agent }
 export { experimental_agent }
 

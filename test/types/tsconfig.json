@@ -6,7 +6,14 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": false
   },
-  "include": ["smoke.vitest.ts", "smoke.jest.ts", "purity.ts", "composition.ts"]
+  "include": [
+    "smoke.vitest.ts",
+    "smoke.jest.ts",
+    "purity.ts",
+    "composition.ts",
+    "../../examples/**/*.spec.ts"
+  ]
 }

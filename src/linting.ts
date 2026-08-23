@@ -51,9 +51,8 @@ export {
   project,
   // the other two spec kinds + how a railway wires them
   experimental_skill,
+  // the subagent ROOT — `railway`/`delegate`/`result`/`pipe`… are its members
   experimental_agent,
-  railway,
-  delegate,
   // ─── ОКНО АЛИАСА (один мажор) — see core/spec.ts for why a window is not
   // politeness here. Kept on THIS door too: a consumer importing `claude` from
   // `vigiles/linting` never saw `vigiles/spec`, so the window over there does

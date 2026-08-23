@@ -228,7 +228,7 @@ function outcomeSection(
     ? `// TODO: assert the VALUES you expect (the shape is already validated above), e.g.:\n//   assert.ok(value.${firstField}, "expected a ${firstField}");`
     : "";
   return `import assert from "node:assert/strict";
-import { result } from "vigiles/spec";
+import { experimental_agent } from "vigiles/spec";\nconst { result } = experimental_agent;
 import { assertAgentOk } from "vigiles";
 
 // Reconstructed from ${input.name}'s ## Output contract (its compiled .md) — the

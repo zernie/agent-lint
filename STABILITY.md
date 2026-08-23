@@ -84,6 +84,44 @@ convention was a habit rather than a check.
 Cost of the promise: renaming one of these is **not** a breaking change and does
 not get a major bump. That is what "no stability promise" means.
 
+### The corollary: one experimental ROOT per feature
+
+The prefix answers "is this name stable?". It does not answer "is the name my
+_stable_ symbol depends on stable?" — and that gap shipped: `railway()`,
+`delegate()` and `result()` carried stable names while being meaningless without
+`experimental_agent()`. A stable name resting on an unstable one promises more
+than the feature can keep, and `local/experimental-name` cannot see it (it checks
+tag-vs-name on one declaration, not the dependency between two).
+
+So the vocabulary of an experimental feature hangs off ONE marked root:
+
+```ts
+experimental_agent({ … })                 // the builder
+experimental_agent.result(ok, err)        // its outcome contract
+experimental_agent.railway({ steps: […] })// the flat orchestrator
+experimental_agent.pipe(a, b)             // the typed pipeline
+```
+
+The same chokepoint as `experimental_skill.input()`. Three things it buys, and
+the first is the one the prefix alone could not:
+
+1. **No stable name can rest on an unstable one** — there are no top-level names
+   left to rest.
+2. **Collision-prone words stop being global.** `result`, `needs`, `start`,
+   `pipe` say nothing as package-level exports; on the root they are unambiguous.
+3. **The warning survives destructuring.** `const { result } = experimental_agent`
+   still names the root at the binding site — unlike a namespace OBJECT or an
+   import subpath, which mark the import line and are out of view by the time
+   anyone reads the call. That is why `vigiles/experimental` was retired rather
+   than reused here.
+
+TYPES stay top-level: a type annotation is not a call site, which is the same
+reason the prefix rule excludes them.
+
+Mechanically it is `Object.assign(fn, { … })`, not a TypeScript `namespace` —
+`@typescript-eslint/no-namespace` is an error in this repo, and a namespace
+merges only with `function` declarations (`experimental_skill` is a `const`).
+
 ### What's on the list
 
 - **`experimental_skill()`** in `vigiles/spec` / `vigiles/claude-code` — skill

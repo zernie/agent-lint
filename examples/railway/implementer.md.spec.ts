@@ -5,7 +5,8 @@
  * payload, makes the edits, and returns the files it changed — or a structured
  * failure (where it stopped + whether a retry could help).
  */
-import { experimental_agent, result, prose, cmd } from "../../src/core/spec.js";
+import { experimental_agent, prose, cmd } from "../../src/core/spec.js";
+const { result } = experimental_agent;
 
 export default experimental_agent({
   name: "implementer",

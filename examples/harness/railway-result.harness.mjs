@@ -25,7 +25,8 @@
  *   npx vigiles test examples/harness/railway-result.harness.mjs
  */
 import assert from "node:assert/strict";
-import { result } from "../../dist/core/spec.js";
+import { experimental_agent } from "../../dist/core/spec.js";
+const { result } = experimental_agent;
 import {
   assertAgentOk,
   assertAgentErr,
