@@ -39,11 +39,13 @@
  * inline `provide(name, cmd)` (read-only) or `dangerously(name, cmd)` (the loud
  * escape) right in `needs`. See `research/hook-context-providers.md`.
  *
- * ⚠️ Honest scope: compile/verify fix the hook's AUTHORING + LOGIC. They do NOT
- * change DELIVERY — Claude Code's own subagent-bypass (#34692) means a
- * PreToolUse hook (compiled or hand-written) does not fire for a subagent's
- * tool calls. A gate is a strong default, never an unbypassable wall. See
- * `docs/compiled-hooks.md`.
+ * ⚠️ Honest scope: compile/verify fix the hook's AUTHORING + LOGIC, not the
+ * harness's DELIVERY. The delivery floor MOVED — #34692 (a subagent's tool calls
+ * never reaching PreToolUse) is FIXED as of Claude Code 2.1.241, measured against
+ * a stock registry install and pinned by src/subagent-delivery.test.ts, which goes
+ * red if it regresses. What has NOT changed: a model can still route around a tool
+ * entirely (#45427 / #32376 — a Bash heredoc instead of `Write`), so a gate is a
+ * strong default and is NEVER an unbypassable wall. See `docs/compiled-hooks.md`.
  */
 export {
   // ── the six ENTRY POINTS carry the experimental marking ─────────────────────

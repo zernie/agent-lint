@@ -329,8 +329,11 @@ cmd)`, or a **registered** provider. `compile` also discovers
 The merged block points at the `hook-runtime run-program` entrypoint (below).
 
 Honest scope: this fixes the hook's authoring + logic, not the harness's
-delivery — a subagent's tool calls still bypass any PreToolUse hook
-([#34692](https://github.com/anthropics/claude-code/issues/34692)).
+delivery. The delivery floor moved —
+[#34692](https://github.com/anthropics/claude-code/issues/34692) (a subagent's
+tool calls bypassing `PreToolUse`) is fixed as of Claude Code 2.1.241. A gate is
+still a strong default rather than an unbypassable wall, because a model can
+route around a tool entirely.
 
 ### `hook-runtime <kind>` — runtime entrypoints (not typed by hand)
 
