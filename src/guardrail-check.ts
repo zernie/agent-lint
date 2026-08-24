@@ -14,7 +14,9 @@
  * the hook via {@link runHook} and check the normalized decision is BLOCK. No model,
  * no API key, runs in CI, works on a hand-written hook with NO vigiles spec — it
  * verifies the hook's decision LOGIC, so it sidesteps CC's runtime delivery bugs
- * (subagent-bypass #34692 etc.) which it deliberately does NOT claim to fix.
+ * (the model routing around a tool entirely, #45427 / #32376) which it deliberately
+ * does NOT claim to fix. (#34692, the old subagent-delivery gap, is fixed as of CC
+ * 2.1.241 — see src/subagent-delivery.test.ts.)
  *
  * Pure-ish (wraps the existing runHook tier). The catalog is harness-neutral data;
  * the scaffold-test generator emits a test that calls these, and the same engine

@@ -24,9 +24,11 @@
  *    OpenCode via the HookProtocol port later — OpenCode hooks ARE in-process TS).
  *
  * Pure core, harness-neutral. HONEST SCOPE (kept in every doc): compile/verify fix
- * the hook's AUTHORING + LOGIC, not DELIVERY — CC's subagent-bypass (#34692) means
- * a PreToolUse hook does not fire for a subagent's tool calls, so a gate is a strong
- * default, never an unbypassable wall. Limits (buy-in, node-startup latency) +
+ * the hook's AUTHORING + LOGIC, not the harness's DELIVERY. #34692 (a subagent's
+ * calls never reaching PreToolUse) is FIXED as of CC 2.1.241 — measured on a stock
+ * install, pinned by src/subagent-delivery.test.ts. A gate is STILL a strong default
+ * rather than an unbypassable wall, because a model can route around a tool
+ * entirely (#45427 / #32376). Limits (buy-in, node-startup latency) +
  * full record in research/hook-pain-points.md.
  */
 import {

@@ -47,8 +47,12 @@ A breaking change to any of the above is signalled with a Conventional-Commit
   internal modules under `dist/core/…` reached by deep import) may change in a
   minor release. Import from the published subpaths, not deep paths.
 - **`vigiles/hook`** (compiled hooks) is exported and usable but **not yet
-  frozen** — it carries a known delivery caveat
-  ([#34692](https://github.com/anthropics/claude-code/issues/34692)).
+  frozen**. Its long-standing delivery caveat
+  ([#34692](https://github.com/anthropics/claude-code/issues/34692) — a subagent's
+  tool calls never reaching `PreToolUse`) is **fixed** as of Claude Code 2.1.241,
+  measured on a stock install and pinned by a test that goes red if it regresses.
+  A gate is still a strong default rather than an unbypassable wall, because a
+  model can route around a tool entirely.
 
 ## Experimental — no stability promise
 
