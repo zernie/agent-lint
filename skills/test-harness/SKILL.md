@@ -49,83 +49,18 @@ not established, which is why the floor stays.
 If the unit and deterministic tiers can both answer it, **prefer unit**: it's
 faster and reaches events the deterministic mock can't drive.
 
-## Step 0.4 — Observing a run (what it CALLED, WROTE, and TOUCHED)
+## Step 0.4 — Observing a run, and what it costs
 
-The table above is keyed on the harness _surface_ under test. Half the real
-questions are keyed on the **observation** instead — "what did this skill
-actually do?" — and they have answers already. Reach for these before building
-anything; every one of them ships today.
+Two questions have their own references — open the one you need, don't guess:
 
-| The question you're actually asking                                     | Use                                                                                    |
-| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Which tools did it call, and with what arguments?                       | `trace.toolCalls` · `tool` / `toolWith` checks · `parseToolCalls` (`vigiles`)          |
-| Did it call a tool it must not?                                         | `notTool(name)`                                                                        |
-| Did it call **only** tools from a known set?                            | `onlyTools([...])` — the white-list, symmetric to `assertWroteOnly`                    |
-| Did it stay inside the `allowed-tools` its own frontmatter declares?    | `skillContract(dir).surface` — builds that check FROM the declaration                  |
-| What files did the run write?                                           | `filesWritten` · `wrote(path)` / `didNotWrite(path)` · `r.file(path)`                  |
-| Did it write **only** where it was supposed to?                         | `assertWroteOnly([...])` / `assertNoWrite()` — needs `{ sandbox: "auto" }`             |
-| Run a tool call but **don't let it execute** — capture the args instead | the `interceptTools` option on `measure` / `runEval` (a `ToolIntercept[]`)             |
-| Did a subagent do it, and which one?                                    | `subagent(name, [...])` · `SubagentTrace`                                              |
-| Was it an MCP tool?                                                     | `mcp(server, toolName)`                                                                |
-| Assert the whole effect boundary deterministically                      | `assertChecks` + the checks above (see `examples/harness/effect-boundary.harness.mjs`) |
+- **"What did the run actually DO?"** — which tools it called, whether it stayed
+  inside its declared `allowed-tools`, what it wrote, how to record a call without
+  executing it → [`references/observing-a-run.md`](references/observing-a-run.md)
+- **"Is this free, sub-priced, or does it need a container?"** — the three buckets,
+  and what to tell the user after a paid run →
+  [`references/cost-and-expectations.md`](references/cost-and-expectations.md)
 
-`interceptTools` is the one worth knowing about, because it is not obvious it
-exists: it denies a tool its **real execution** via an auto-wired `PreToolUse`
-hook while still recording the call and its arguments into the trace. That is
-how you test a skill that would otherwise mutate a real external service — a
-calendar, an upload — without mocking anything yourself.
-
-**Verify a skill against its own declaration** with `skillContract` — it reads
-the `allowed-tools:` the skill already claims and hands back ready checks, so
-the claim is verified instead of restated:
-
-```ts
-import { skillContract, assertChecks } from "vigiles";
-
-const c = skillContract(".claude/skills/my-skill");
-assertChecks(trace, [c.activation, ...c.surface]);
-```
-
-Two of its states are **findings**, not clean bills, and their `surface` check
-fails rather than passing on nothing: `undeclared` (no `allowed-tools:` line, so
-the skill inherits _every_ tool) and `malformed` (frontmatter that isn't valid
-YAML, so a strict loader reads no contract at all — one unquoted `: ` does it).
-
-⚠️ **What is still NOT checked.** `onlyTools` compares tool _names_, so a narrow
-allowlist entry like `Bash(node scripts/x.mjs:*)` is satisfied by any `Bash` call
-at all. Scope inside a tool is unverified — say so rather than implying the
-assertion is total.
-
-## Step 0.5 — Set honest expectations (what's testable, and at what cost)
-
-Be explicit with the user about which bucket each surface falls into — never let
-"we'll test it" hide whether that's free, sub-priced, or needs a container. Every
-surface sorts into one of three buckets:
-
-- **A — Free & deterministic** (no model, runs in CI on every commit): a hook's
-  block/allow decision (`runHook`), a tool-contract / "did NOT call the forbidden
-  tool" check, structural facts (`vigiles audit`), and **record-replay** of any tool
-  a skill shells out to (record the real result once, replay it via a PATH stub).
-- **B — Model-gated, on your subscription** (real model, **no metered API**): does a
-  skill's description **fire** (`measureTriggerRate`, recall + precision) **and**
-  does its guidance actually **produce good output** (score it directly:
-  `measure({ checks: [judged(rubric)] })` + `assertRates` — the absolute oracle;
-  use a `runEval` A/B on-vs-off only when you need the _relative_ lift). This is
-  the half a **prose / guidance skill** lives in —
-  its worth is behavioral, so only a model can judge it. That is **not** "uncovered"
-  and **not** free: it's fully testable on the sub. State it that way.
-- **C — Needs a real service** (a real browser / DB / redis / a11y runtime): vigiles
-  **composes with a container** here; it does not fake real semantics. Name the
-  service and hand off — don't pretend a cheap tier substitutes for it.
-
-So a prose-skill library is roughly **~100% testable (some free, most on your sub),
-~0% needs-a-container** — not "poorly covered." An accessibility/browser plugin is
-the worst case, with a large bucket C. When you report coverage, give **two
-numbers**: "% testable at all (free + sub)" vs "% that needs a container", and say
-which surfaces are free vs sub-priced. The model-gated half is the **point** of the
-eval pillar (affordable on the sub), not a gap — and testing a prose skill's
-_behavior_ requires a real model for **everyone** (promptfoo, the SDKs, all of it);
-vigiles just does it on your subscription instead of metered API.
+Never say "we'll test it" without settling the second one first.
 
 ## Step 1 — Ensure vigiles is installed
 
@@ -154,142 +89,12 @@ Pick one concrete thing to pin down — a specific `PreToolUse` hook, a specific
 
 ## Step 3 — Write the test for the chosen tier
 
-**Unit (`runHook`)** — hand a hook a synthesized event, assert the decision:
+Per-tier skeletons, and the one mistake that silently swallows failures (a
+hand-rolled runner eats stderr) →
+[`references/writing-tests.md`](references/writing-tests.md)
 
-```ts
-import { runHook, assertHookBlocked } from "vigiles";
-
-const r = runHook(hookCommand, {
-  hook_event_name: "PreToolUse",
-  tool_name: "Bash",
-  tool_input: { command: "git commit --no-verify" },
-});
-assertHookBlocked(r); // exit 2 / decision:"block" / permissionDecision:"deny"
-```
-
-Testing a hook you didn't write (a vendored third-party script)? Mark it
-`{ trusted: false }` and it runs confined under bubblewrap by default (read-only
-host, cleared env, no network egress). Add `{ recordEgress: true }` to also
-**record** what it tries to reach — `r.egress` plus `assertNoEgress(r)` /
-`assertEgressOnly(r, [...])` — the supply-chain check for "what does this skill
-phone home to / install from?". When the hook's setup needs a _real_ install,
-`{ egress: { allow: ["registry.npmjs.org"] } }` lets it reach only that
-allowlist (a packet-layer `nft` wall, so a raw socket off-list is dropped too) →
-`r.egress` (allowed hosts) + `r.egressDropped`. Be precise about the boundaries:
-see
-[`docs/sandboxing.md`](../../docs/sandboxing.md) (it blocks destruction and
-egress, but does NOT isolate reads of host files, and only under bwrap).
-
-**Deterministic (`runHarnessTest`)** — load the real plugin, drive a scripted
-mock model, assert the hook fired (or the context landed):
-
-```ts
-import {
-  runHarnessTest,
-  assertHookFired,
-  assertRequestContains,
-} from "vigiles";
-// `scriptModel` is the Claude-Code TRANSPORT, deliberately not re-exported from
-// the harness-agnostic root surface — import it from the harness package:
-import { scriptModel } from "vigiles/claude-code";
-
-const r = await runHarnessTest({
-  pluginDir: "./", // or { settings: { hooks: {...} } }
-  transcript: true,
-  model: scriptModel([{ text: "ok" }]),
-});
-assertHookFired(r, "SessionStart");
-assertRequestContains(r, "expected injected text"); // did it actually land?
-```
-
-**Eval — absolute (`paid_measure` + `paid_judged`)** — testing _one_ skill, the usual case:
-score its output directly against a rubric. No on/off baseline — this is the
-"is it any good?" oracle (what promptfoo/DeepEval lead with), and the right
-default when there's nothing to compare against:
-
-An eval file **describes** its eval — it must never run one at the top level,
-because importing such a file spends real money. Write `<name>.eval.mjs`:
-
-```ts
-import { defineEval, skill, assertRates } from "vigiles";
-import { paid_judged } from "vigiles/eval"; // a Check whose default judge bills
-
-export default defineEval({
-  measure: {
-    pluginDir: "./",
-    task: "…a task the skill should handle…",
-    checks: [
-      skill("my-plugin:my-skill"), // it fired
-      paid_judged("the answer correctly does X and avoids Y"), // …and the output is good
-    ],
-    trials: 6,
-  },
-  assert: (report) => assertRates(report, { min: 0.8 }), // each check ≥ 80% of trials
-});
-```
-
-Run it with `npx vigiles eval <file>` — never `node <file>`, which refuses.
-
-**Eval — relative (`paid_runEval` + `assertSignificant`)** — when the question is
-_lift over no-skill_ (regression, or proving a change isn't noise): A/B the
-change on vs off and gate on significance, not eyeballing:
-
-```ts
-import { defineEval, assertSignificant } from "vigiles";
-
-export default defineEval({
-  runEval: {
-    arms: { off: {}, on: { pluginDir: "./" } },
-    task: "…a task the harness change should affect…",
-    measure: (ctx) => ({ ok: /* a bare predicate over the trace */ true }),
-    trials: 6,
-    cache: "readwrite",
-  },
-  assert: (report) =>
-    assertSignificant(report, { baseline: "off", arm: "on", metric: "ok" }),
-});
-```
-
-### Never hand-roll the runner — it silently eats stderr
-
-Do **not** reach for `execFileSync` / `spawnSync` to drive the thing under test.
-The failure is quiet and repeats: `execFileSync` returns **stdout only** on
-success, while advisory output — including vigiles's own compiled-hook
-`notice()` — is written to **stderr**. A hand-rolled runner therefore reports a
-perfectly healthy react hook as **dead**, and an assertion about a warning can
-never pass. (Observed three times in one repo, twice after the first fix.)
-
-Every vigiles result already carries **both streams**, so the bug is
-unrepresentable:
-
-| Runner           | Result              | Carries                                             |
-| ---------------- | ------------------- | --------------------------------------------------- |
-| `runScript`      | `ScriptRunResult`   | `exitCode`, `stdout`, `stderr`, `filesWritten?`     |
-| `runHook`        | `HookRunResult`     | all of the above, **plus** `blocked` / `decision`   |
-| `runHarnessTest` | `HarnessTestResult` | `exitCode`, `stdout`, `stderr`, `cwd` + the `Trace` |
-
-**Testing a plain helper script** (a bash/node/python program that isn't a hook)?
-Use **`runScript`** — it runs any command and reports what it did:
-
-```ts
-import { runScript } from "vigiles";
-
-const r = runScript("bash scripts/check-links.sh", { cwd: repoDir });
-assert.equal(r.exitCode, 0);
-assert.match(r.stderr, /0 broken links/); // advisory output lives HERE
-```
-
-`runHook` is exactly `runScript` plus the hook protocol (event → stdin, exit code
-→ allow/deny). Pick by the question you're asking: a **hook** has a _decision_, a
-**script** has _effects_. That's why `ScriptRunResult` has no `decision` field —
-a field that is always meaningless is worse than no field.
-
-⚠️ **Asserting what a script wrote requires confinement.** `filesWritten` is
-recorded by diffing the work dir, which only a confined run does — so it is
-`undefined` after a plain run. That is deliberately _not_ the same as `[]`
-("recorded, wrote nothing"): `assertNoWrite` / `assertWroteOnly` **throw** on an
-unrecorded result rather than pass having inspected nothing. Pass
-`{ sandbox: "auto" }` (Linux + bubblewrap) to actually record writes.
+Read it before writing the file — the skeleton differs per tier, and the runner
+warning has cost real debugging time.
 
 ## Step 4 — Run it
 
@@ -308,23 +113,6 @@ via `skip(reason)` from `vigiles`. A skip passes by default, but in a CI
 job that asserts the capability is present, run **`vigiles test --no-skip`** so a
 skipped tier fails — a green-with-skips is untested surface. Keep unit +
 deterministic tests in CI (free); run evals locally or on a schedule with auth.
-
-### After a real-model run: TELL THE USER WHAT IT SPENT
-
-Whenever you run a real-model eval (`runEval` / `measureArms` / `measureTriggerRate`
-/ `measure`), **surface the spend to the user in your reply** — don't let a paid run
-be silent. `runEval` prints a cost block to stderr and every report carries `usage`
-(`report.arms[*].usage`: `totalCostUsd` + token counts). Relay, in plain words:
-
-- **tokens spent** and the **API-equivalent `$`** (`total_cost_usd` — what it _would_
-  cost at metered API rates);
-- **how it was billed** — "on your Claude subscription (**$0 metered**)" if you're
-  logged in, or a **⚠ warning** if `ANTHROPIC_API_KEY` is set (that run was billed
-  **per token** — tell them to unset it and `claude login` to run free).
-
-We do **not** show "% of your subscription" — Anthropic doesn't expose a plan's
-quota, so any percentage would be invented. Tokens + API-equivalent `$` + the
-billed-to line is the honest, complete picture. Keep the user's cost visible, always.
 
 ## CI — don't hand-write the steps
 
