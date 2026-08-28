@@ -81,16 +81,33 @@ describe("computeVerdict", () => {
   });
 
   it("an A that carries a graded finding names it (never 'clean')", () => {
-    // One broken intra-plugin reference: 100 − 8 = 92 (A), but NOT a recommendation.
-    // The verdict must not claim clean while the report shows the finding.
+    // An agent naming an unknown model alias: 100 − 5 = 95 (A), graded but NOT a
+    // recommendation. The verdict must not claim clean while the report shows it.
+    //
+    // Deliberately NOT a dangling ref any more, which is what this test used
+    // before 2026-08-28: a broken reference is a CONFIDENT BREAKAGE and now caps
+    // the score at 89, so "an A carrying a dangling ref" is a state that can no
+    // longer exist. An invalid model alias is a SILENT FALLBACK — the agent still
+    // registers, it just ignores the value — so it dents without capping, which is
+    // exactly the line the cap is drawn on (score-core.ts::confidentBreakages).
+    // (A description overlap was tried first and rejected: it IS a recommendation,
+    // which would have changed what this test asserts.)
     const report = makeReport({
-      danglingRefs: ["skills/x/SKILL.md → ./missing.md (MISSING)"],
+      frontmatterValueIssues: [
+        {
+          path: "agents/x.md",
+          field: "model",
+          value: "sonnet-4",
+          suggestion: "sonnet",
+          message: 'model "sonnet-4" is not a known alias — silent fallback',
+        },
+      ],
     });
-    expect(auditScore(report).overall).toBe(92);
+    expect(auditScore(report).overall).toBe(95);
     const v = verdictFor(report);
     expect(v.grade).toBe("A");
     expect(v.sentence).not.toMatch(/clean/);
-    expect(v.sentence).toMatch(/broken intra-plugin reference is flagged/);
+    expect(v.sentence).toMatch(/flagged/);
   });
 
   it("names the fix COUNT + target grade when fixing recs raises the grade (one fix)", () => {

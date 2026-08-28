@@ -39,6 +39,8 @@
  */
 import {
   gradeFor,
+  applyBreakageCap,
+  CONFIDENT_BREAKAGE_CAP,
   computeIntegrityScore,
   reportDeductions,
   isEmptyMachine,
@@ -291,9 +293,25 @@ function structure(r: ScanReport): CategoryScore {
           `${String(noContract)} agent(s) inherit all tools (no contract) (advisory)`,
         ]
       : [];
+  // A confident breakage caps this ring too, so the breakdown can't render a
+  // healthy `●` over a dead surface — the defect this fixes was measured as
+  // "Structure 92 ●" while an agent named a never-available tool. Only the
+  // rows that mean a surface is DEAD count; the typo'd `disallowedTools` and
+  // invalid model/color rows are footguns, not breakage, so they stay out.
+  const breakage =
+    deadTools +
+    deadMcpTools +
+    r.hookEventIssues.length +
+    r.mcpIssues.length +
+    r.mcpHookIssues.length +
+    r.frontmatterIssues.length +
+    r.pluginLayoutIssues.length +
+    r.skillFenceIssues.length +
+    r.hookBlockFindings.length +
+    r.hookMatcherFindings.length;
   return {
     key: "Structure",
-    score,
+    score: breakage > 0 ? Math.min(score, CONFIDENT_BREAKAGE_CAP) : score,
     weight: 1,
     findings: [...findings, ...advisory],
   };
@@ -568,7 +586,10 @@ export function auditScore(
   // of the rings — averaging would let a real problem in one category be diluted
   // by clean siblings. The rings above stay a diagnostic breakdown; Tested and
   // Evaluated (both advisory) are never summed in (neither drags the grade).
-  const { score: overall } = computeIntegrityScore(reportDeductions(report));
+  const { score: summed } = computeIntegrityScore(reportDeductions(report));
+  // A confident breakage caps the headline too, so it can never read `A` while a
+  // surface is definitively dead (score-core.ts::applyBreakageCap).
+  const overall = applyBreakageCap(summed, report);
   return { overall, grade: gradeFor(overall), categories, empty: false };
 }
 
