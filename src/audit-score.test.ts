@@ -809,3 +809,63 @@ describe("confident-breakage cap", () => {
     expect(structure?.score).toBe(100); // untouched: overlap is a Triggering signal
   });
 });
+
+/**
+ * INEFFECTIVE-FENCE COLLAPSE — a `disallowed-tools:` that closes no leg keeps its
+ * own line while there are few of them (the documented intent: it is a genuine
+ * mistake and naming the skill is actionable). Past a threshold it becomes one
+ * fact about the harness, not N facts about N skills.
+ *
+ * MEASURED 2026-08-28: the shape's premise — that this state is "Rare" — does not
+ * hold. A fixture where every skill carried a naive `disallowed-tools: WebFetch`
+ * printed the same ~450-character paragraph ten times (~4,500 chars into the
+ * terminal report).
+ */
+describe("ineffective-fence collapse", () => {
+  const fence = (name: string) => ({
+    path: `skills/${name}/SKILL.md`,
+    kind: "skill" as const,
+    name,
+    finding: {
+      severity: "advisory" as const,
+      fence: "ineffective" as const,
+      message: "`disallowed-tools: WebFetch` closes no lethal-trifecta leg — …",
+    },
+  });
+
+  it("names them individually while there are few", () => {
+    const s = auditScore(
+      makeReport({
+        trifectaFindings: [
+          fence("alpha"),
+          fence("beta"),
+        ] as unknown as ScanReport["trifectaFindings"],
+      }),
+    );
+    const found = cat(s, "Safety")?.findings ?? [];
+    expect(found.some((f) => f.startsWith("alpha:"))).toBe(true);
+    expect(found.some((f) => f.startsWith("beta:"))).toBe(true);
+  });
+
+  it("collapses into ONE line past the threshold, keeping every name", () => {
+    const names = ["a", "b", "c", "d", "e", "f"];
+    const s = auditScore(
+      makeReport({
+        trifectaFindings: names.map(
+          fence,
+        ) as unknown as ScanReport["trifectaFindings"],
+      }),
+    );
+    const found = cat(s, "Safety")?.findings ?? [];
+    // One aggregate line, not six per-skill ones.
+    expect(
+      found.filter((f) => /closes no lethal-trifecta leg/.test(f)),
+    ).toHaveLength(1);
+    // Nothing is lost — every skill is still named in it.
+    const line =
+      found.find((f) => /closes no lethal-trifecta leg/.test(f)) ?? "";
+    for (const n of names) expect(line).toContain(n);
+    // And the repetition is gone: the old shape was ~450 chars × 6.
+    expect(line.length).toBeLessThan(900);
+  });
+});

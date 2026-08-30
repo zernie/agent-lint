@@ -12,6 +12,30 @@
 
 For the deep mechanics of host confinement, see [`sandboxing.md`](sandboxing.md). This doc is the front door that ties the whole model together — including the part `sandboxing.md` doesn't cover: preventing a **real model's tool side effects** during an eval.
 
+## Does vigiles send my code anywhere?
+
+The first question in a private monorepo, and it deserves a direct answer rather
+than an inference from the confinement sections below. Those answer "how do I
+safely run code I am TESTING"; this answers "what does the tool itself transmit".
+
+| What you run                                | What leaves your machine                                                                                                                                                                                    |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vigiles lint`                              | **Nothing.** Reads files, resolves rule names against the linter configs and binaries already installed locally.                                                                                            |
+| `vigiles audit` (default)                   | **Nothing.** A deterministic read — see [Audit is side-effect free](#the-one-rule-safe-by-default-never-silently-unconfined).                                                                               |
+| `vigiles audit` + measure consent           | Starts **your own** MCP servers, and spends **your own** model quota. Both are opt-in, asked once at a TTY, and never taken headlessly.                                                                     |
+| `vigiles test` (unit / deterministic tiers) | **Nothing.** No model, no key — the mock is co-launched locally.                                                                                                                                            |
+| `vigiles eval`                              | Drives **your own** `claude` CLI, so your content reaches Anthropic exactly as it does when you use Claude Code yourself — under your session, your terms, your subscription. No third party is introduced. |
+
+There is **no telemetry, no analytics, no usage reporting, and no license or
+version check** — verified by construction, not by policy: vigiles ships no HTTP
+client. Its runtime dependencies are parsers and matchers only (ast-grep, toml,
+yaml, markdown-it, mvdan-sh, glob, minimatch, cosmiconfig, ci-info, typescript),
+and there is no `fetch` in the shipped source.
+
+The practical consequence: the free tier is usable inside an air-gapped or
+egress-restricted network, and nothing you scan is ever sent to _us_, because
+there is no _us_ to send it to — there is no service, only a CLI on your machine.
+
 ## Two distinct risks → two distinct mechanisms
 
 | Risk                  | What can go wrong                                                                               | The mechanism                                                                      |
