@@ -4,7 +4,10 @@
  * selector, so the wrong one fires (a precision collision). This catches a
  * `--trigger`-class problem with NO model, reusing the NCD engine in proofs.ts
  * (the same one `findSimilarRules` uses) — the bridge between the deterministic
- * and behavioral columns, and a check no other plugin linter has.
+ * and behavioral columns. The CHECK is not unique — cisco-ai-defense/skill-scanner
+ * ships `--check-overlap` under a security framing (skill impersonation). What is
+ * ours: the cutoff calibrated against a real corpus, and the precision-collision
+ * framing (verified 2026-08-28).
  *
  * Calibrated HIGH-PRECISION against the mid-2026 sweep: across 4678 within-plugin
  * skill-description pairs, the MOST-similar legitimately-distinct pair

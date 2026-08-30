@@ -175,6 +175,8 @@ Every path, script, symbol, and rule verified against reality — plus tool cont
 A hook that blocks nothing, a skill that hijacks unrelated prompts, context that never reaches the model — each passes a naive "did it run?" check. That gap is **false confidence**: a guard that looks like it works and silently doesn't. vigiles tests the real thing — hooks block, skills fire, subagents finish what they promised, a stray `git push` is caught before it happens. It drives a scripted stand-in for the model, not a live call, so it needs no key and runs on every commit.
 **[How testing works →](docs/harness-testing.md)**
 
+**Nothing you scan leaves your machine.** `lint`, `audit` and the deterministic test tiers make no network call at all — no telemetry, no analytics, no HTTP client in the package. Evals drive your own `claude` CLI on your own subscription, so no third party is introduced. **[What is and isn't transmitted →](docs/safety.md#does-vigiles-send-my-code-anywhere)**
+
 ### 📊 Eval — the only way to put a real number on cost
 
 _"Caveman Mode cuts 65% of your tokens." Says who?_ vigiles A/Bs the claim on real coding tasks and hands you three numbers: the **token bill**, whether it hit its **target**, and whether your code still **works**.

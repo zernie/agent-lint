@@ -77,6 +77,95 @@ export function gradeFor(score: number): PluginScore["grade"] {
   return "F";
 }
 
+/**
+ * The health score a report may NOT exceed while it carries a CONFIDENT BREAKAGE
+ * — one point below the healthy band, so a definitively-broken harness can never
+ * render as `●` / grade `A`.
+ *
+ * WHY a cap and not a heavier weight: the score is a SUM of deductions, so one
+ * real breakage among many clean surfaces is diluted by its siblings. MEASURED
+ * 2026-08-28 on a fixture (10 distinct-description skills + one agent naming a
+ * never-available tool): Structure scored **92 with a `●` green dot** while
+ * carrying a dead tool contract, and the grade was driven instead by the
+ * lethal-trifecta pattern that {@link W_TRIFECTA} deliberately calls a ding and
+ * not a fail. A weight big enough to fix that would cry wolf on a large clean
+ * plugin; a cap fixes the reading without touching the arithmetic.
+ *
+ * The same defect, with higher stakes, is documented in an external 517-skill
+ * catalog run of a different scanner: its weighted aggregate returned MEDIUM for
+ * a skill carrying THREE HIGH findings, so gating on the aggregate would have
+ * admitted exactly the skill the gate existed to stop. That team's conclusion —
+ * judge by the worst finding, not the aggregate — is what this encodes.
+ */
+export const CONFIDENT_BREAKAGE_CAP = 89;
+
+/**
+ * The findings that CAP the score — each one means a surface is definitively
+ * dead, not merely risky: it will silently not run, not resolve, or not register.
+ *
+ * ENUMERATED on purpose, never derived from "severity". Two properties decide
+ * membership, and both must hold: the finding is DECIDABLE from the artifact plus
+ * the world (the `structural-closed` / `external-decidable` buckets of the
+ * lint-rule-calibration rule), and its consequence is BREAKAGE rather than
+ * exposure. So the heuristic rings stay out by construction — a lethal-trifecta
+ * unit and a description overlap are real signals but are a capability PATTERN
+ * and a calibrated PROXY, and capping on either is how a gate earns the reputation
+ * that gets it switched off.
+ *
+ * Adding a row here is a deliberate act: it makes a finding grade-capping for
+ * every consumer, so it belongs only to a check whose false-positive rate is
+ * already known to be ~0.
+ */
+export function confidentBreakages(
+  r: ScanReport,
+): { readonly n: number; readonly label: string }[] {
+  const rows = [
+    {
+      n: r.hooks.filter((h) => h.status === "missing").length,
+      label: "hook script missing",
+    },
+    { n: r.hookEventIssues.length, label: "hook on an unknown event" },
+    { n: r.danglingRefs.length, label: "broken intra-plugin reference" },
+    {
+      n: r.agents.reduce((n, a) => n + a.toolIssues.length, 0),
+      label: "unavailable agent tool",
+    },
+    {
+      n: r.agents.reduce((n, a) => n + a.mcpToolIssues.length, 0),
+      label: "agent MCP tool whose server isn't declared",
+    },
+    { n: r.mcpIssues.length, label: "MCP server that can't start" },
+    {
+      n: r.mcpHookIssues.length,
+      label: "mcp_tool hook incomplete / undeclared server",
+    },
+    {
+      n: r.skillResourceIssues.length,
+      label: "skill bundled-resource ref that doesn't resolve",
+    },
+    {
+      n: r.skillFenceIssues.length,
+      label: "invisible skill (no opening `---` fence)",
+    },
+    {
+      n: r.frontmatterIssues.length,
+      label: "surface missing required frontmatter",
+    },
+  ];
+  return rows.filter((row) => row.n > 0);
+}
+
+/**
+ * Cap a health score at {@link CONFIDENT_BREAKAGE_CAP} when the report carries any
+ * {@link confidentBreakages} finding. Applied to the OVERALL and to the ring that
+ * owns the finding, so the headline and the breakdown cannot disagree.
+ */
+export function applyBreakageCap(score: number, r: ScanReport): number {
+  return confidentBreakages(r).length > 0
+    ? Math.min(score, CONFIDENT_BREAKAGE_CAP)
+    : score;
+}
+
 /** One deduction: a count, its per-item weight, and the label if non-zero. */
 export interface Deduction {
   readonly n: number;
@@ -336,7 +425,10 @@ export function scoreReport(r: ScanReport): {
   }
 
   const deductions = reportDeductions(r);
-  const { score } = computeIntegrityScore(deductions);
+  const { score: summed } = computeIntegrityScore(deductions);
+  // A confident breakage caps the score — a summed model dilutes one real
+  // breakage among clean siblings. See applyBreakageCap for the measurement.
+  const score = applyBreakageCap(summed, r);
 
   const issues: string[] = [];
   for (const d of deductions) {

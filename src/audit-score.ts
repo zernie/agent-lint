@@ -39,6 +39,8 @@
  */
 import {
   gradeFor,
+  applyBreakageCap,
+  CONFIDENT_BREAKAGE_CAP,
   computeIntegrityScore,
   reportDeductions,
   isEmptyMachine,
@@ -291,9 +293,25 @@ function structure(r: ScanReport): CategoryScore {
           `${String(noContract)} agent(s) inherit all tools (no contract) (advisory)`,
         ]
       : [];
+  // A confident breakage caps this ring too, so the breakdown can't render a
+  // healthy `●` over a dead surface — the defect this fixes was measured as
+  // "Structure 92 ●" while an agent named a never-available tool. Only the
+  // rows that mean a surface is DEAD count; the typo'd `disallowedTools` and
+  // invalid model/color rows are footguns, not breakage, so they stay out.
+  const breakage =
+    deadTools +
+    deadMcpTools +
+    r.hookEventIssues.length +
+    r.mcpIssues.length +
+    r.mcpHookIssues.length +
+    r.frontmatterIssues.length +
+    r.pluginLayoutIssues.length +
+    r.skillFenceIssues.length +
+    r.hookBlockFindings.length +
+    r.hookMatcherFindings.length;
   return {
     key: "Structure",
-    score,
+    score: breakage > 0 ? Math.min(score, CONFIDENT_BREAKAGE_CAP) : score,
     weight: 1,
     findings: [...findings, ...advisory],
   };
@@ -346,13 +364,41 @@ function safety(r: ScanReport): CategoryScore {
   const unfenced = r.trifectaFindings.filter(
     (f) => f.kind === "skill" && f.finding.fence === "none",
   );
+  // An INEFFECTIVE fence (`disallowed-tools:` that closes no leg) keeps its own
+  // line while there are FEW of them — that is the documented intent in
+  // core/lethal-trifecta.ts: it is a genuine mistake, the author believed they had
+  // fenced, so naming the skill is what a reader acts on.
+  //
+  // MEASURED 2026-08-28 that the premise behind that shape — "Rare" — does not
+  // hold: a fixture where every skill carried a naive `disallowed-tools: WebFetch`
+  // put ALL of them in this state, and the ring printed the same ~450-character
+  // paragraph ten times, ~4,500 characters into the terminal report. Past the
+  // threshold it stops being N facts about N skills and becomes one fact about the
+  // harness — exactly the reasoning the `fence: "none"` aggregate already uses.
+  // Names are kept as detail, so nothing is lost, only repetition.
+  const ineffective = r.trifectaFindings.filter(
+    (f) =>
+      f.finding.severity === "advisory" &&
+      !unfenced.includes(f) &&
+      f.kind === "skill" &&
+      f.finding.fence === "ineffective",
+  );
+  const collapseIneffective = ineffective.length > MAX_NAMED_INEFFECTIVE_FENCES;
   for (const f of r.trifectaFindings) {
     if (f.finding.severity !== "advisory") continue;
     if (unfenced.includes(f)) continue;
+    if (collapseIneffective && ineffective.includes(f)) continue;
     findings.push(
       f.kind === "skill"
         ? `${f.name}: ${f.finding.message}`
         : `${f.name} inherits all tools — the "lethal trifecta" (reads data, reaches the web, runs commands) plus every other capability, so a prompt injection could exfiltrate secrets`,
+    );
+  }
+  if (collapseIneffective) {
+    findings.push(
+      `${String(ineffective.length)} skill(s) declare a \`disallowed-tools:\` that closes no lethal-trifecta leg — a leg is closed only when EVERY built-in supplying it is denied: ` +
+        `${ineffective.map((f) => f.name).join(", ")}. ` +
+        `Name every supplier of the leg you mean to close — private-data read = Read, Grep, Glob, Bash; untrusted intake = WebFetch, WebSearch, Bash; exfiltration = WebFetch, WebSearch, Bash.`,
     );
   }
   if (unfenced.length > 0) {
@@ -568,9 +614,20 @@ export function auditScore(
   // of the rings — averaging would let a real problem in one category be diluted
   // by clean siblings. The rings above stay a diagnostic breakdown; Tested and
   // Evaluated (both advisory) are never summed in (neither drags the grade).
-  const { score: overall } = computeIntegrityScore(reportDeductions(report));
+  const { score: summed } = computeIntegrityScore(reportDeductions(report));
+  // A confident breakage caps the headline too, so it can never read `A` while a
+  // surface is definitively dead (score-core.ts::applyBreakageCap).
+  const overall = applyBreakageCap(summed, report);
   return { overall, grade: gradeFor(overall), categories, empty: false };
 }
+
+/**
+ * How many INEFFECTIVE `disallowed-tools:` fences are named one at a time before
+ * the Safety ring collapses them into a single line. Past this it is one fact
+ * about the harness, not N facts about N skills — see the measurement in
+ * {@link safety}.
+ */
+const MAX_NAMED_INEFFECTIVE_FENCES = 3;
 
 // A 22-cell bar gauge ("ring" in the terminal; the real rings are the HTML).
 const BAR_CELLS = 22;

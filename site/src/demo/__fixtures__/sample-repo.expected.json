@@ -28,7 +28,7 @@
       },
       {
         "key": "Structure",
-        "score": 92,
+        "score": 89,
         "weight": 1,
         "findings": ["1 unavailable agent tool (typo / never-available)"]
       },

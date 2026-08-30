@@ -91,13 +91,17 @@ describe("auditScore", () => {
     ]);
   });
 
-  it("buckets a dangling ref into Truthfulness; overall is the summed score", () => {
+  it("buckets a dangling ref into Truthfulness; the overall is the summed score, CAPPED because a broken ref is a confident breakage", () => {
     const s = auditScore(makeReport({ danglingRefs: ["hooks/missing.sh"] }));
     expect(cat(s, "Truthfulness")?.score).toBe(92); // -8, ring
     expect(cat(s, "Structure")?.score).toBe(100);
     // headline = 100 - Σ penalties = 92 (NOT the average of the rings), so the
     // single dangling ref shows up undiluted in the overall.
-    expect(s.overall).toBe(92);
+    // 100 − 8 (W_DANGLING_REF) = 92 by the sum, but a broken intra-plugin
+    // reference means a path is DEAD, so the confident-breakage cap holds the
+    // headline at 89 — it may not read as the healthy band while something is
+    // definitively broken. See score-core.ts::applyBreakageCap.
+    expect(s.overall).toBe(89);
   });
 
   it("buckets a description overlap + no-description into Triggering; overall summed", () => {
@@ -160,7 +164,10 @@ describe("auditScore", () => {
       }),
     );
     // −10 (W_NO_DESCRIPTION) shows on Structure, and the ring sums to the overall.
-    expect(cat(s, "Structure")?.score).toBe(90);
+    // 100 − 10 (W_NO_DESCRIPTION) = 90 by the sum; a functional dir misplaced
+    // inside `.claude-plugin/` is INVISIBLE to the harness, i.e. breakage, so
+    // the ring is capped at 89 rather than sitting on the healthy boundary.
+    expect(cat(s, "Structure")?.score).toBe(89);
     expect(cat(s, "Structure")?.findings.some((f) => /misplaced/.test(f))).toBe(
       true,
     );
@@ -744,5 +751,121 @@ describe("Tested — coverage that rests on a filename says so", () => {
 
   it("says nothing when the report carries no evidence at all — absent is not zero", () => {
     expect(placementOnly(find({}))).toBe(false);
+  });
+});
+
+/**
+ * CONFIDENT-BREAKAGE CAP — a summed score dilutes one real breakage among clean
+ * siblings, so a definitively-dead surface could render as a healthy `●` / `A`.
+ * MEASURED before the fix on a fixture of 10 distinct-description skills plus one
+ * agent naming a never-available tool: Structure scored 92 with a green dot.
+ *
+ * Both halves are asserted on purpose: the cap must BITE on a breakage and stay
+ * SILENT on a clean report — a cap that only ever fires is indistinguishable from
+ * a broken weight, and one that never fires is indistinguishable from absent.
+ */
+describe("confident-breakage cap", () => {
+  it("caps Structure below the healthy band when an agent names a dead tool", () => {
+    const s = auditScore(
+      makeReport({
+        agents: [
+          {
+            name: "broken",
+            tools: ["Read", "AskUserQuestion"],
+            toolIssues: ["AskUserQuestion is never available to a subagent"],
+            mcpToolIssues: [],
+            disallowedToolIssues: [],
+          } as unknown as ScanReport["agents"][number],
+        ],
+      }),
+    );
+    const structure = s.categories.find((c) => c.key === "Structure");
+    expect(structure?.score).not.toBeNull();
+    expect(structure?.score).toBeLessThan(90);
+    expect(s.overall).toBeLessThan(90);
+    expect(s.grade).not.toBe("A");
+  });
+
+  it("stays silent on a clean report — no cap, no dent", () => {
+    const s = auditScore(makeReport());
+    const structure = s.categories.find((c) => c.key === "Structure");
+    expect(structure?.score).toBe(100);
+    expect(s.overall).toBe(100);
+    expect(s.grade).toBe("A");
+  });
+
+  it("does NOT cap on a heuristic finding — a description overlap is a proxy, not breakage", () => {
+    // Capping on the heuristic rings is how a gate earns the reputation that gets
+    // it switched off: an external 517-skill catalog run disabled its gate for
+    // exactly that reason. Overlap dents the score; it must not cap it.
+    const s = auditScore(
+      makeReport({
+        descriptionOverlaps: [
+          { a: "one", b: "two", distance: 0.1 },
+        ] as unknown as ScanReport["descriptionOverlaps"],
+      }),
+    );
+    const structure = s.categories.find((c) => c.key === "Structure");
+    expect(structure?.score).toBe(100); // untouched: overlap is a Triggering signal
+  });
+});
+
+/**
+ * INEFFECTIVE-FENCE COLLAPSE — a `disallowed-tools:` that closes no leg keeps its
+ * own line while there are few of them (the documented intent: it is a genuine
+ * mistake and naming the skill is actionable). Past a threshold it becomes one
+ * fact about the harness, not N facts about N skills.
+ *
+ * MEASURED 2026-08-28: the shape's premise — that this state is "Rare" — does not
+ * hold. A fixture where every skill carried a naive `disallowed-tools: WebFetch`
+ * printed the same ~450-character paragraph ten times (~4,500 chars into the
+ * terminal report).
+ */
+describe("ineffective-fence collapse", () => {
+  const fence = (name: string) => ({
+    path: `skills/${name}/SKILL.md`,
+    kind: "skill" as const,
+    name,
+    finding: {
+      severity: "advisory" as const,
+      fence: "ineffective" as const,
+      message: "`disallowed-tools: WebFetch` closes no lethal-trifecta leg — …",
+    },
+  });
+
+  it("names them individually while there are few", () => {
+    const s = auditScore(
+      makeReport({
+        trifectaFindings: [
+          fence("alpha"),
+          fence("beta"),
+        ] as unknown as ScanReport["trifectaFindings"],
+      }),
+    );
+    const found = cat(s, "Safety")?.findings ?? [];
+    expect(found.some((f) => f.startsWith("alpha:"))).toBe(true);
+    expect(found.some((f) => f.startsWith("beta:"))).toBe(true);
+  });
+
+  it("collapses into ONE line past the threshold, keeping every name", () => {
+    const names = ["a", "b", "c", "d", "e", "f"];
+    const s = auditScore(
+      makeReport({
+        trifectaFindings: names.map(
+          fence,
+        ) as unknown as ScanReport["trifectaFindings"],
+      }),
+    );
+    const found = cat(s, "Safety")?.findings ?? [];
+    // One aggregate line, not six per-skill ones.
+    expect(
+      found.filter((f) => /closes no lethal-trifecta leg/.test(f)),
+    ).toHaveLength(1);
+    // Nothing is lost — every skill is still named in it.
+    const line =
+      found.find((f) => /closes no lethal-trifecta leg/.test(f)) ?? "";
+    for (const n of names) expect(line).toContain(n);
+    // And the repetition is gone: the old shape was ~450 chars × 6.
+    expect(line.length).toBeLessThan(900);
   });
 });
