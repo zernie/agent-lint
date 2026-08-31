@@ -128,11 +128,15 @@ are the normal case, not an edge one.
   relying on a particular link being checked.
 
 - **Link back** from a **documentation** companion to its `SKILL.md` — `../SKILL.md` from a
-  one-level file, and a path computed from the actual depth when it sits deeper (a nested
-  `assets/templates/foo/README.md` needs `../../../SKILL.md`). A prose companion that reads as
-  a standalone procedure is one someone will follow without the gates its parent declares.
-  This applies to readable text only: a script can say it in a comment, a binary asset cannot
-  say it at all.
+  one-level file, and a path computed from the actual depth when it sits deeper (a
+  `references/api/errors.md` needs `../../SKILL.md`). A prose companion that reads as a
+  standalone procedure is one someone will follow without the gates its parent declares.
+
+  Two exemptions, both because the backlink would end up somewhere it does not belong: a
+  script says it in a comment or not at all, and a binary asset cannot say it; and **anything
+  under `assets/` that the skill copies out** — a template's `README.md` is the user's file
+  once it lands, and a backlink there points at a `SKILL.md` that did not travel with it.
+
 - **Keep reference documents one level deep**, linked directly from `SKILL.md` — that is
   what the skill-authoring guidance asks for, and it keeps the reference resolvable by
   inspection. It is a rule for reference docs, not for every bundled resource: `scripts/` may
