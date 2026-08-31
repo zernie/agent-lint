@@ -123,9 +123,10 @@ are the normal case, not an edge one.
 
   🔴 **Do not infer the exact rule from this page.** The detector is deliberately
   conservative: it skips several target shapes and several surrounding phrasings, by design
-  rather than by oversight, and the enumeration lives in exactly one place —
-  [`rules/skill-resource-resolves.md`](rules/skill-resource-resolves.md). Read it before
-  relying on a particular link being checked.
+  rather than by oversight. [`rules/skill-resource-resolves.md`](rules/skill-resource-resolves.md)
+  describes them — and is itself explicit that its lists lag the constants in
+  `src/core/skill-resources.ts`, which are the authority. Read the page before relying on a
+  particular link being checked, and read the constants before concluding that it is.
 
 - **Link back** from a **documentation** companion to its `SKILL.md` — `../SKILL.md` from a
   one-level file, and a path computed from the actual depth when it sits deeper (a
@@ -166,12 +167,12 @@ are the normal case, not an edge one.
 
 Measured 2026-08-31 by planting each defect and checking whether it was reported:
 
-| property                                 | checked                                                                                                                                                                                                                                                                             |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| a link from `SKILL.md` to a companion    | **yes, for the ordinary case** — `skill-resource-resolves`, with the line number. It deliberately skips a number of target shapes and surrounding phrasings; [`rules/skill-resource-resolves.md`](rules/skill-resource-resolves.md) enumerates them and is the only place that does |
-| a link _inside_ a companion resolves     | **no** — resolution is not transitive                                                                                                                                                                                                                                               |
-| a companion no link reaches              | **no** by default — `orphans` is opt-in and scans `docs/`                                                                                                                                                                                                                           |
-| companion prose, tool mentions, trifecta | **no** — these read `SKILL.md`                                                                                                                                                                                                                                                      |
+| property                                 | checked                                                                                                                                                                                                                                                                                                                |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a link from `SKILL.md` to a companion    | **yes, for the ordinary case** — `skill-resource-resolves`, with the line number. It deliberately skips a number of target shapes and surrounding phrasings; [`rules/skill-resource-resolves.md`](rules/skill-resource-resolves.md) describes them, and names the source constants as the authority over its own prose |
+| a link _inside_ a companion resolves     | **no** — resolution is not transitive                                                                                                                                                                                                                                                                                  |
+| a companion no link reaches              | **no** by default — `orphans` is opt-in and scans `docs/`                                                                                                                                                                                                                                                              |
+| companion prose, tool mentions, trifecta | **no** — these read `SKILL.md`                                                                                                                                                                                                                                                                                         |
 
 The first row is the one that matters most, and it works for the ordinary shape; the rest is
 why a companion is not
