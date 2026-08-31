@@ -125,6 +125,7 @@ are the normal case, not an edge one.
   procedure is a companion someone will follow without the gates its parent declares.
 - **Keep it one level deep.** The spec asks for this, and it keeps the reference resolvable
   by inspection.
+- **If the skill has a `.spec.ts`, reference the companion with `file()`, not a markdown link.** `file()` is verified to exist at compile time, so a companion that gets renamed or deleted fails the build instead of being caught later by a linter — the higher rung. Note the two coordinate systems: `file()` resolves from the **repo root**, while a markdown link resolves from the **skill directory**. Writing both means writing the same path twice, in two forms, and only one of them is checked. Write it once, as `file()`.
 - **Companions stay plain markdown even when the skill has a `.spec.ts`.** They carry no
   frontmatter and no tool contract, so there is nothing for a spec to declare, and the
   compiler's integrity mark is for *generated* files — a companion is a **source**. Hashing
