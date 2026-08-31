@@ -101,7 +101,7 @@ declare module "vigiles/generated" {
     | "internal:check"
     | "docs:api";
 
-  /** 393 project files. */
+  /** 394 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -480,6 +480,7 @@ declare module "vigiles/generated" {
     | "src/skill-refs.ts"
     | "src/skill-test.test.ts"
     | "src/skill-test.ts"
+    | "src/spec-loader.test.ts"
     | "src/stats.test.ts"
     | "src/stats.ts"
     | "src/subagent-delivery.test.ts"
@@ -945,6 +946,7 @@ declare module "vigiles/spec" {
       | "src/skill-refs.ts"
       | "src/skill-test.test.ts"
       | "src/skill-test.ts"
+      | "src/spec-loader.test.ts"
       | "src/stats.test.ts"
       | "src/stats.ts"
       | "src/subagent-delivery.test.ts"
