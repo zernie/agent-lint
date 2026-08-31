@@ -38,6 +38,29 @@ const CLI = resolve(ROOT, "dist", "cli.js");
 
 let dir: string;
 
+/**
+ * Can THIS runtime import a .ts file directly?
+ *
+ * Probed, not inferred from `process.version`: native type stripping depends on
+ * the major/minor AND on flags (`--no-strip-types` turns it off on a runtime
+ * that otherwise supports it), so a version comparison would be wrong in both
+ * directions. The repository's own CI runs Node 20, where the answer is no —
+ * see .github/workflows/ci.yml (`node-version: "20"`).
+ */
+async function nativeTypeStripping(): Promise<boolean> {
+  const probeDir = mkdtempSync(join(tmpdir(), "vigiles-strip-probe-"));
+  const probe = join(probeDir, "probe.ts");
+  writeFileSync(probe, "export default 1 as number;\n");
+  try {
+    await import(probe);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    rmSync(probeDir, { recursive: true, force: true });
+  }
+}
+
 /** A minimal, valid skill spec that imports the package's own entrypoint. */
 function writeSpec(at: string, name: string): void {
   mkdirSync(dirname(at), { recursive: true });
@@ -92,7 +115,16 @@ afterAll(() => {
 });
 
 describe("loadSpec", () => {
-  it("compiles a spec with npm and npx REMOVED FROM PATH", () => {
+  it("compiles a spec with npm and npx REMOVED FROM PATH", async (ctx) => {
+    // P1 from review on #178, and it was right: without this gate the assertion
+    // below breaks CI deterministically. On a runtime with no type stripping the
+    // native path cannot work, the stubs make the fallback unusable on purpose,
+    // and «failed to load» is then the CORRECT outcome — the test would be
+    // asserting a capability the runtime does not have.
+    if (!(await nativeTypeStripping())) {
+      ctx.skip();
+      return;
+    }
     // This is the load-bearing assertion. Before the fix the loader could only
     // read a .ts spec by shelling out to `npx tsx`; with npx unreachable every
     // spec failed. Native type stripping needs no subprocess, so this passes.
@@ -171,26 +203,62 @@ describe("describeLoadFailure", () => {
     assert.match(msg, /npm i -D tsx/, "must name the actual remedy");
   });
 
-  it("names the install when tsx cannot be found at all", () => {
+  it("reads exit status 127 — not stderr text — as a missing tsx", () => {
+    const notFound = Object.assign(new Error("Command failed: npx tsx"), {
+      status: 127,
+    });
     const msg = describeLoadFailure(
-      new Error("Unknown file extension"),
-      new Error("npx: command not found"),
+      new Error('Unknown file extension ".ts"'),
+      notFound,
     );
-    assert.match(msg, /Install tsx locally/);
-    assert.match(
+    assert.match(msg, /tsx is not\s+installed/);
+  });
+
+  it("does NOT read a spec's own 'not found' as a missing tsx", () => {
+    // P2 from review on #178: matching the child's stderr misdiagnoses a spec
+    // that fails for its own reasons — e.g. a config it requires is absent —
+    // as a missing runner, and then advises installing something already there.
+    const specFailed = Object.assign(
+      new Error("Command failed: Error: config not found: ./missing.json"),
+      { status: 1 },
+    );
+    const msg = describeLoadFailure(
+      new Error('Unknown file extension ".ts"'),
+      specFailed,
+    );
+    assert.doesNotMatch(msg, /tsx is not installed/);
+    assert.match(msg, /config not found/, "the spec's own error must survive");
+  });
+
+  it("keeps the tsx error when native loading is merely unsupported", () => {
+    // P2 from the same review: on Node < 22.6 the native attempt can only ever
+    // say «Unknown file extension», so leading with it discards the one message
+    // that came from actually running the spec. The repo's CI is Node 20, so
+    // this is the COMMON path there, not an edge case.
+    const msg = describeLoadFailure(
+      new Error('Unknown file extension ".ts" for /tmp/x/SKILL.md.spec.ts'),
+      Object.assign(new Error("SyntaxError: Unexpected token '('"), {
+        status: 1,
+      }),
+    );
+    assert.match(msg, /Unexpected token/, "the actionable error must be shown");
+    assert.doesNotMatch(
       msg,
       /Unknown file extension/,
-      "must carry the native error too",
+      "the expected native-loader noise must not be the headline",
     );
   });
 
-  it("blames the spec when both loaders report a parse error", () => {
+  it("shows BOTH when the native error is informative", () => {
     const msg = describeLoadFailure(
       new SyntaxError("Unexpected token '('"),
-      new Error("exited with 1"),
+      Object.assign(new Error("exited with 1"), { status: 1 }),
     );
-    assert.match(msg, /spec did not load/);
     assert.match(msg, /Unexpected token/);
-    assert.doesNotMatch(msg, /tsx/, "a broken spec is not a tsx problem");
+    assert.match(
+      msg,
+      /tsx said/,
+      "both sides matter when neither is boilerplate",
+    );
   });
 });

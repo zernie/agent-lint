@@ -483,16 +483,22 @@ export function describeLoadFailure(
   nativeError: unknown,
   tsxError: unknown,
 ): string {
-  const tsxMsg =
-    tsxError instanceof Error ? tsxError.message : String(tsxError);
-  const nativeMsg =
-    nativeError instanceof Error ? nativeError.message : String(nativeError);
+  const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+  const tsxMsg = msg(tsxError);
+  const nativeMsg = msg(nativeError);
 
-  // execSync surfaces a timeout as a killed child, not as a message.
-  const killed =
-    typeof tsxError === "object" &&
-    tsxError !== null &&
-    (tsxError as { killed?: boolean; signal?: string }).killed === true;
+  // On Node < 22.6 (or with --no-strip-types) the native attempt ALWAYS fails
+  // this way. It is expected noise, not a diagnosis, so it must never be the
+  // headline — the repository's own CI runs Node 20, where every load takes the
+  // fallback and this is the only thing the native attempt can say.
+  const nativeUnsupported =
+    /Unknown file extension|ERR_UNKNOWN_FILE_EXTENSION|ERR_UNSUPPORTED_/i.test(
+      nativeMsg,
+    );
+
+  const status = (tsxError as { status?: number | null } | null)?.status;
+  const killed = (tsxError as { killed?: boolean } | null)?.killed === true;
+
   if (killed || /ETIMEDOUT|timed out/i.test(tsxMsg)) {
     return (
       "the `npx tsx` fallback timed out after 15s. Install tsx locally " +
@@ -500,14 +506,23 @@ export function describeLoadFailure(
       "Node >= 22.6 where no subprocess is needed."
     );
   }
-  if (/not found|ENOENT|could not determine executable/i.test(tsxMsg)) {
+
+  // 127 is the shell's "command not found". Matching the child's stderr text
+  // instead would misread a SPEC that happens to mention "not found" — e.g. a
+  // missing config it requires — as a missing runner.
+  if (status === 127) {
     return (
-      "neither native import nor `npx tsx` could run this spec. Install tsx " +
-      "locally (`npm i -D tsx`), or upgrade to Node >= 22.6 for native type " +
-      `stripping. Native import said: ${nativeMsg}`
+      "neither native import nor `npx tsx` could run this spec: tsx is not " +
+      "installed. Install it locally (`npm i -D tsx`), or upgrade to " +
+      "Node >= 22.6 for native type stripping."
     );
   }
-  return `the spec did not load. Native import said: ${nativeMsg}`;
+
+  // tsx ran and the spec itself failed: its error is the actionable one.
+  const detail = nativeUnsupported
+    ? tsxMsg
+    : `${nativeMsg} · tsx said: ${tsxMsg}`;
+  return `the spec did not load. ${detail}`;
 }
 
 // ---------------------------------------------------------------------------
