@@ -44,12 +44,20 @@ link. A skill that _teaches_ how to build skills is full of bundle paths used as
 `` `scripts/rotate_pdf.py` `` would be helpful to store", "**Examples**:
 `` `references/finance.md` ``", "- **`` `references/patterns.md` ``** — Common
 patterns". So the two shapes are gated differently, and the asymmetry is deliberate.
-An **inline backtick path** needs BOTH a use directive (`read` / `run` / `see` /
-`load` / …) AND no illustrative cue. A **markdown link** is explicit follow-me
-syntax — the destination IS the reference — so it needs only the absence of a
-cue: `Resources: [the API](references/api.md)` is checked even with no verb in
-the line. An example link — "For example, see `[a report](assets/example.pdf)`" —
-is still suppressed, because the illustrative cue applies to both shapes.
+
+**Two cues suppress a reference, and they apply to BOTH shapes:**
+
+- an **illustrative** cue — `example`, `e.g.`, `such as`, `would be`, `template`, `→`;
+- a **generated-file** cue — the line says the file is _made_, not read:
+  `gitignored`, `.gitignore`, `cached to`, `cache file`, `written to` / `writes to`,
+  `generated at runtime`, `created at runtime`. A file the author states is produced
+  at runtime or kept out of the repository cannot be a missing bundled resource.
+
+On top of that, an **inline backtick path** additionally needs a use directive
+(`read` / `run` / `see` / `load` / …), because a bare mention is noisy. A **markdown
+link** does not: it is explicit follow-me syntax, so `Resources: [the API](references/api.md)`
+is checked even with no verb in the line, while "For example, see
+`[a report](assets/example.pdf)`" is suppressed by the cue.
 
 _(This paragraph previously said a link also required a directive. That was
 true until the link branch was narrowed to cue-only suppression to close an
