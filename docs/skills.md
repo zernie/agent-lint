@@ -124,22 +124,25 @@ are the normal case, not an edge one.
   line also directs the agent to use it.
 - **Link back** from the companion to `../SKILL.md`. A companion that reads as a standalone
   procedure is a companion someone will follow without the gates its parent declares.
-- **Keep it one level deep.** The spec asks for this, and it keeps the reference resolvable
-  by inspection.
-- **If the skill has a `.spec.ts`, keep the markdown link AND add `file()` beside it.** They
-  are not the same path written twice — they answer different questions, and each is wrong
-  without the other:
-  - the **markdown link** is what the agent follows, and it is **skill-relative**, so it
-    survives packaging: the skill directory travels with the skill, and the link keeps
-    pointing at the companion wherever the skill is installed;
-  - **`file()`** is **repo-root-relative** and verified at compile time, so a companion that
-    is renamed or deleted fails the author's build instead of surfacing later as a lint
-    finding.
+- **Keep reference documents one level deep**, linked directly from `SKILL.md` — that is
+  what the skill-authoring guidance asks for, and it keeps the reference resolvable by
+  inspection. It is a rule for reference docs, not for every bundled resource: `scripts/` may
+  be a package with helper modules and `assets/` may hold nested multi-file templates, whose
+  layout and relative paths are part of how they work.
+- **Do not reach for `file()` to verify a companion.** It looks like the higher rung — it is
+  verified to exist at compile time — but `renderFragment` emits a `FileRef` as a **visible
+  backticked path**, and that path is **repo-root-relative**. In a skill that is packaged and
+  installed elsewhere the emitted path resolves nowhere, so the document ends up carrying a
+  working link and a broken pointer side by side, and the agent may follow the second one.
+  Nothing rebases it during packaging.
 
-  🔴 Do not replace the link with `file()`. `file()` compiles to a plain backticked
-  repo-root path, which is correct in the authoring repository and **wrong once the skill is
-  installed somewhere else** — nothing rebases it during packaging. Dropping the link trades
-  a pointer that works for a reader for one that only works for the author.
+  The markdown link is already checked — that is what `skill-resource-resolves` is for. Use
+  the link, and let the linter do the verifying.
+
+  _(`file()` remains right for an instruction file that never leaves its own repository,
+  where the emitted repo-root path is exactly what a reader should see. What does not exist
+  today is a compile-verified reference that stays **skill-relative** and emits nothing —
+  that is the gap, not something an author can work around.)_
 
 - **Documentation companions under `references/` stay plain markdown even when the skill has a `.spec.ts`.** (`scripts/` stays executable source — `.py`, `.sh`; `assets/` stays whatever it is. The point below is about ownership, not file type: every companion is an author-owned source, not a generated artifact.) They carry no
   frontmatter and no tool contract, so there is nothing for a spec to declare, and the
