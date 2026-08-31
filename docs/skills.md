@@ -149,14 +149,16 @@ are the normal case, not an edge one.
 
 Measured 2026-08-31 by planting each defect and checking whether it was reported:
 
-| property                                       | checked                                                   |
-| ---------------------------------------------- | --------------------------------------------------------- |
-| a link from `SKILL.md` to a companion resolves | **yes** — `skill-resource-resolves`, with the line number |
-| a link _inside_ a companion resolves           | **no** — resolution is not transitive                     |
-| a companion no link reaches                    | **no** by default — `orphans` is opt-in and scans `docs/` |
-| companion prose, tool mentions, trifecta       | **no** — these read `SKILL.md`                            |
+| property                                                                  | checked                                                                                                                               |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| a link from `SKILL.md` to a companion **whose path has a file extension** | **yes** — `skill-resource-resolves`, with the line number                                                                             |
+| a link to an **extensionless** target (`[installer](scripts/install)`)    | **no** — the detector skips it deliberately: a bare word is undecidable prose. Give companions an extension, or the link is unchecked |
+| a link _inside_ a companion resolves                                      | **no** — resolution is not transitive                                                                                                 |
+| a companion no link reaches                                               | **no** by default — `orphans` is opt-in and scans `docs/`                                                                             |
+| companion prose, tool mentions, trifecta                                  | **no** — these read `SKILL.md`                                                                                                        |
 
-The first row is the one that matters most and it works; the rest is why a companion is not
+The first row is the one that matters most and it works — within its stated limit; the rest is
+why a companion is not
 a place to move something _because_ it is awkward. The gap is tracked as a roadmap item —
 the fix is to scope by directory and follow the reference closure, not to add a manifest
 field listing companions.
