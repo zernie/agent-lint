@@ -248,6 +248,37 @@ describe("describeLoadFailure", () => {
     assert.match(msg, /npm i -D tsx/, "must name the actual remedy");
   });
 
+  it("does NOT read a spec's own 'timed out' as the fallback timing out", () => {
+    // The other half of the stderr-matching defect (review on #178). execSync
+    // embeds the child's stderr in Error.message, so a spec whose own network
+    // call times out used to be reported as «the npx tsx fallback timed out»
+    // plus advice to install tsx — which is already installed and ran it.
+    const specTimedOut = Object.assign(
+      new Error("Command failed: Error: request to api.example timed out"),
+      { status: 1, killed: false, signal: null },
+    );
+    const msg = describeLoadFailure(
+      new Error('Unknown file extension ".ts"'),
+      specTimedOut,
+    );
+    assert.doesNotMatch(msg, /fallback timed out/);
+    assert.match(
+      msg,
+      /request to api\.example timed out/,
+      "the spec's error must survive",
+    );
+  });
+
+  it("reads a real subprocess timeout from exec metadata", () => {
+    const killed = Object.assign(new Error("Command failed"), {
+      killed: true,
+      signal: "SIGTERM",
+      status: null,
+    });
+    const msg = describeLoadFailure(new Error("unsupported"), killed);
+    assert.match(msg, /timed out after 15s/);
+  });
+
   it("reads exit status 127 — not stderr text — as a missing tsx", () => {
     const notFound = Object.assign(new Error("Command failed: npx tsx"), {
       status: 127,

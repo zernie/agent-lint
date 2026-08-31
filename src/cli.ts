@@ -549,10 +549,26 @@ export function describeLoadFailure(
       nativeMsg,
     );
 
-  const status = (tsxError as { status?: number | null } | null)?.status;
-  const killed = (tsxError as { killed?: boolean } | null)?.killed === true;
+  const meta = tsxError as {
+    status?: number | null;
+    killed?: boolean;
+    signal?: string | null;
+    code?: unknown;
+  } | null;
+  const status = meta?.status;
 
-  if (killed || /ETIMEDOUT|timed out/i.test(tsxMsg)) {
+  // Timeout is read from exec METADATA, never from the child's output. execSync
+  // embeds the child's stderr in Error.message, so text-matching here would
+  // rewrite a spec whose own failure mentions «timed out» — a network call it
+  // makes, say — into fallback-timeout plus advice to install tsx, which is
+  // already installed. Same defect as the `not found` match below, reported in
+  // review on #178 and fixed there first; this is the other half of it.
+  const timedOut =
+    meta?.killed === true ||
+    meta?.code === "ETIMEDOUT" ||
+    meta?.signal === "SIGTERM";
+
+  if (timedOut) {
     return (
       "the `npx tsx` fallback timed out after 15s. Install tsx locally " +
       "(`npm i -D tsx`) so npx does not fetch it over the network, or run on " +
