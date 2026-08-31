@@ -449,9 +449,23 @@ async function loadSpec(specPath: string): Promise<AnySpec | null> {
       return (raw as { default: AnySpec }).default;
     }
     if (raw) return raw;
-    nativeError = new Error("module has no default export");
+    // The module DID evaluate; running it again under tsx would repeat its side
+    // effects to learn the same thing.
+    lastSpecLoadFailure = "the spec has no default export.";
+    return null;
   } catch (err) {
     nativeError = err;
+    // 🔴 ONLY a capability failure may fall through to the subprocess. `import()`
+    // both LOADS and EVALUATES, so this catch also sees exceptions thrown by the
+    // spec itself — and re-running such a spec under tsx executes it a SECOND
+    // time. A spec (or a helper it imports) that writes a file or makes a request
+    // before throwing would do it twice. Reported in review on #178.
+    if (!nativeFailedBeforeEvaluating(err)) {
+      lastSpecLoadFailure = `the spec did not load. ${
+        err instanceof Error ? err.message : String(err)
+      }`;
+      return null;
+    }
   }
 
   // Fallback for runtimes without type stripping: older Node, 22.6-22.17 where it
@@ -481,6 +495,43 @@ async function loadSpec(specPath: string): Promise<AnySpec | null> {
  * of them: a spec that does not parse, a `tsx` that is not installed (so `npx`
  * goes to the registry), and a timeout.
  */
+/**
+ * Did the native `import()` fail BEFORE the module body ran?
+ *
+ * That is the property that matters, not "was it a capability error". The
+ * fallback re-runs the spec in a subprocess, so it is safe exactly when nothing
+ * of the spec has executed yet — resolution, parsing and the missing-loader case
+ * all fail before evaluation and carry no side effects. An exception thrown by
+ * the module body does not, and re-running it would repeat whatever it did
+ * first (write a file, send a request).
+ *
+ * 🔴 `ERR_MODULE_NOT_FOUND` MUST fall through, measured: tsx rewrites a `.js`
+ * specifier to the `.ts` source next to it (the TypeScript ESM convention) and
+ * native Node does not. This repo's own specs import `src/core/spec.js`, a file
+ * that does not exist — native resolution fails, tsx resolves it. Treating that
+ * as a spec failure broke 8 tests in src/cli.test.ts.
+ */
+function nativeFailedBeforeEvaluating(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  if (
+    code === "ERR_UNKNOWN_FILE_EXTENSION" ||
+    code === "ERR_MODULE_NOT_FOUND" ||
+    code === "ERR_PACKAGE_PATH_NOT_EXPORTED" ||
+    code === "ERR_UNSUPPORTED_DIR_IMPORT" ||
+    code === "ERR_INVALID_MODULE_SPECIFIER" ||
+    code === "ERR_UNSUPPORTED_ESM_URL_SCHEME"
+  ) {
+    return true;
+  }
+  // A parse error also precedes execution. Runtimes without type stripping
+  // report TypeScript syntax this way instead of with a code.
+  if (err instanceof SyntaxError) return true;
+  const msg = err instanceof Error ? err.message : String(err);
+  return /Unknown file extension|Cannot find module|Cannot find package/i.test(
+    msg,
+  );
+}
+
 export function describeLoadFailure(
   nativeError: unknown,
   tsxError: unknown,

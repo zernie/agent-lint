@@ -24,7 +24,13 @@
  */
 import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
@@ -158,6 +164,44 @@ describe("loadSpec", () => {
       `compile must succeed without npx on PATH, got:\n${out}`,
     );
     assert.doesNotMatch(out, /failed to load/, `no spec should fail:\n${out}`);
+  });
+
+  it("evaluates a throwing spec EXACTLY ONCE, not once per loader", async (ctx) => {
+    // Reported in review on #178. `import()` both loads and evaluates, so a spec
+    // that throws AFTER a side effect used to fall through to the tsx fallback
+    // and run again — writing the file, making the request, or sending the event
+    // a second time. Only a capability failure may reach the subprocess now.
+    if (!(await nativeTypeStripping())) {
+      ctx.skip();
+      return;
+    }
+    const marks = join(dir, "side-effects.log");
+    const skill = join(
+      dir,
+      ".claude",
+      "skills",
+      "sideeffect",
+      "SKILL.md.spec.ts",
+    );
+    mkdirSync(dirname(skill), { recursive: true });
+    writeFileSync(
+      skill,
+      `import { appendFileSync } from "node:fs";\n` +
+        `appendFileSync(${JSON.stringify(marks)}, "ran\\n");\n` +
+        `throw new Error("spec blew up after its side effect");\n`,
+    );
+
+    const { out } = run(dir, process.env);
+    const ran = readFileSync(marks, "utf-8").trim().split("\n").length;
+    assert.equal(ran, 1, `the spec must run once, ran ${ran} time(s):\n${out}`);
+    assert.match(
+      out,
+      /spec blew up after its side effect/,
+      `and its own error must be reported:\n${out}`,
+    );
+
+    rmSync(dirname(skill), { recursive: true, force: true });
+    rmSync(marks, { force: true });
   });
 
   it("never advises `npm run build` when a spec fails to load", () => {
