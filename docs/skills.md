@@ -125,7 +125,21 @@ are the normal case, not an edge one.
   procedure is a companion someone will follow without the gates its parent declares.
 - **Keep it one level deep.** The spec asks for this, and it keeps the reference resolvable
   by inspection.
-- **If the skill has a `.spec.ts`, reference the companion with `file()`, not a markdown link.** `file()` is verified to exist at compile time, so a companion that gets renamed or deleted fails the build instead of being caught later by a linter — the higher rung. Note the two coordinate systems: `file()` resolves from the **repo root**, while a markdown link resolves from the **skill directory**. Writing both means writing the same path twice, in two forms, and only one of them is checked. Write it once, as `file()`.
+- **If the skill has a `.spec.ts`, keep the markdown link AND add `file()` beside it.** They
+  are not the same path written twice — they answer different questions, and each is wrong
+  without the other:
+  - the **markdown link** is what the agent follows, and it is **skill-relative**, so it
+    survives packaging: the skill directory travels with the skill, and the link keeps
+    pointing at the companion wherever the skill is installed;
+  - **`file()`** is **repo-root-relative** and verified at compile time, so a companion that
+    is renamed or deleted fails the author's build instead of surfacing later as a lint
+    finding.
+
+  🔴 Do not replace the link with `file()`. `file()` compiles to a plain backticked
+  repo-root path, which is correct in the authoring repository and **wrong once the skill is
+  installed somewhere else** — nothing rebases it during packaging. Dropping the link trades
+  a pointer that works for a reader for one that only works for the author.
+
 - **Companions stay plain markdown even when the skill has a `.spec.ts`.** They carry no
   frontmatter and no tool contract, so there is nothing for a spec to declare, and the
   compiler's integrity mark is for _generated_ files — a companion is a **source**. Hashing
