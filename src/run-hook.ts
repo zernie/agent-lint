@@ -271,10 +271,30 @@ export interface HookRunResult extends ScriptRunResult {
   /** Parsed stdout JSON if the hook emitted a JSON decision, else null. */
   readonly json: HookOutput | null;
   /**
-   * Normalized decision: a deny/block via exit 2, `decision:"block"`, or
-   * `permissionDecision:"deny"` all set `blocked = true`.
+   * Normalized decision: the dangerous call did NOT go through. Set by exit 2,
+   * `decision:"block"`, `permissionDecision:"deny"`, or the harness's
+   * halt-the-turn field (Claude Code `{"continue": false}` — see
+   * {@link HookRunResult.haltsTurn}).
+   *
+   * The halt case was missing until 2026-08-31 (#174), and the shape of that bug
+   * is worth keeping written down: `verifyGuardrail` reads this field, so a real
+   * `PreToolUse` guard that stopped every one of the disaster battery's commands
+   * was reported by `assertBlocksDisasters` as blocking NONE of them. A tool
+   * whose stated job is catching a guard that looks fine and silently does
+   * nothing said the opposite about a working guard — the same false-confidence
+   * failure, with the sign flipped.
    */
   readonly blocked: boolean;
+  /**
+   * The hook halted the WHOLE TURN rather than denying one call — the harness's
+   * `haltsTurnField` came back `false`.
+   *
+   * Reported separately because it is strictly stronger than a deny and the two
+   * are worth telling apart when a test asks WHICH mechanism fired. `blocked`
+   * stays the question nearly every caller means ("did the action happen?"), so
+   * a halt sets both.
+   */
+  readonly haltsTurn: boolean;
   /**
    * The decision the hook expressed, preferring the structured
    * `permissionDecision` ("allow"|"deny"|"ask") then legacy `decision`
@@ -307,13 +327,24 @@ export function decideHook(
   exitCode: number,
   json: HookOutput | null,
   protocol: HookProtocol = claudeCodeHookProtocol,
-): { blocked: boolean; decision: HookRunResult["decision"] } {
+): {
+  blocked: boolean;
+  decision: HookRunResult["decision"];
+  haltsTurn: boolean;
+} {
   const permission = json?.hookSpecificOutput?.permissionDecision;
   const decision = permission ?? json?.decision;
+  // The halt field is read from the PORT, never hard-coded: `"continue"` is a
+  // documented Claude Code fact and an unverified one for Codex, so the harness
+  // that has it declares it (core ⊄ adapter). `=== false` and not falsy —
+  // an absent field must not read as a halt.
+  const haltField = protocol.haltsTurnField;
+  const haltsTurn = haltField !== undefined && json?.[haltField] === false;
   const blocked =
     exitCode === protocol.blockExitCode ||
+    haltsTurn ||
     (decision !== undefined && protocol.denyDecisionValues.includes(decision));
-  return { blocked, decision };
+  return { blocked, decision, haltsTurn };
 }
 
 /**
@@ -330,8 +361,8 @@ export function runHookWith(
 ): HookRunResult {
   const res = runScriptWith(command, JSON.stringify(input), opts, deps);
   const json = parseHookOutput(res.stdout);
-  const { blocked, decision } = decideHook(res.exitCode, json);
-  return { ...res, json, blocked, decision };
+  const { blocked, decision, haltsTurn } = decideHook(res.exitCode, json);
+  return { ...res, json, blocked, decision, haltsTurn };
 }
 
 /**

@@ -82,6 +82,7 @@ function fakeHook(blocked: boolean): HookRunResult {
     stderr: "",
     json: null,
     blocked,
+    haltsTurn: false,
     egress: [],
     filesWritten: [],
     decision: blocked ? "deny" : undefined,

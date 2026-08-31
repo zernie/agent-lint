@@ -16,6 +16,8 @@ import {
   assertWroteOnly,
   assertNoWrite,
 } from "./harness-assert.js";
+import { claudeCodeHookProtocol } from "./adapters/claude-code/hook-protocol.js";
+import type { HookProtocol } from "./core/hook-protocol.js";
 import {
   runHook,
   runHookWith,
@@ -105,6 +107,71 @@ test("decideHook: clean exit 0 with no JSON allows", () => {
   const r = decideHook(0, null);
   assert.equal(r.blocked, false);
   assert.equal(r.decision, undefined);
+});
+
+// --- #174: the halt-the-turn field --------------------------------------
+// Both halves, because an advisory verdict cannot be noticed wrong: it must
+// FIRE on the defect AND stay silent on everything adjacent to it.
+
+test("decideHook: continue:false halts the turn, and counts as blocked", () => {
+  const json: HookOutput = { continue: false, stopReason: "no pushing" };
+  const r = decideHook(0, json);
+  // The regression this pins: a real PreToolUse guard that stops every command
+  // in the disaster battery was reported by `assertBlocksDisasters` as blocking
+  // none of them, because this returned false here.
+  assert.equal(r.blocked, true);
+  assert.equal(r.haltsTurn, true);
+  // A halt is not a per-call decision — it carries no deny value.
+  assert.equal(r.decision, undefined);
+});
+
+test("decideHook: continue:true is not a halt", () => {
+  const r = decideHook(0, { continue: true });
+  assert.equal(r.blocked, false);
+  assert.equal(r.haltsTurn, false);
+});
+
+test("decideHook: an ABSENT continue field is not a halt", () => {
+  // `=== false`, never falsy — the whole bug class this guards against is a
+  // missing field reading as a decision.
+  const r = decideHook(0, { reason: "just talking" });
+  assert.equal(r.blocked, false);
+  assert.equal(r.haltsTurn, false);
+});
+
+test("decideHook: a deny sets blocked WITHOUT claiming the turn halted", () => {
+  const json: HookOutput = {
+    hookSpecificOutput: { permissionDecision: "deny" },
+  };
+  const r = decideHook(0, json);
+  assert.equal(r.blocked, true);
+  assert.equal(r.haltsTurn, false, "a deny refuses one call, it does not halt");
+});
+
+test("decideHook: a harness with no haltsTurnField ignores continue", () => {
+  // The field is read from the PORT. `continue` is documented for Claude Code
+  // and unverified for Codex, so a protocol that does not declare it must not
+  // silently inherit the behaviour — this is what keeps the fact out of core.
+  const noHalt: HookProtocol = {
+    ...claudeCodeHookProtocol,
+    name: "no-halt-harness",
+    haltsTurnField: undefined,
+  };
+  const r = decideHook(0, { continue: false }, noHalt);
+  assert.equal(r.blocked, false);
+  assert.equal(r.haltsTurn, false);
+});
+
+test("runHook: a guard that halts the turn reports blocked", () => {
+  // End-to-end through a real process, not just the pure decision: this is the
+  // path `verifyGuardrail` walks.
+  const r = runHook(
+    `printf '%s' '{"continue": false, "stopReason": "blocked: force push"}'`,
+    { hook_event_name: "PreToolUse", tool_name: "Bash" },
+  );
+  assert.equal(r.exitCode, 0, "it halts by field, not by exit code");
+  assert.equal(r.blocked, true);
+  assert.equal(r.haltsTurn, true);
 });
 
 test("runHook: a guard that exits 2 reports blocked", () => {

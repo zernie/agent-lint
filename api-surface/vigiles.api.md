@@ -361,6 +361,7 @@ export function cost(opts: {
 export function decideHook(exitCode: number, json: HookOutput | null, protocol?: HookProtocol): {
     blocked: boolean;
     decision: HookRunResult["decision"];
+    haltsTurn: boolean;
 };
 
 // @public
@@ -767,6 +768,7 @@ export interface HookPropertyResult<E> {
 export interface HookRunResult extends ScriptRunResult {
     readonly blocked: boolean;
     readonly decision: HookOutput["decision"] | "allow" | "deny" | "ask" | undefined;
+    readonly haltsTurn: boolean;
     readonly json: HookOutput | null;
 }
 
@@ -1215,6 +1217,7 @@ export interface TriggerRateReport {
     readonly experimental?: string;
     readonly falsePositiveRate?: number;
     readonly n: number;
+    readonly namespace?: string;
     readonly perIrrelevant?: readonly PromptTriggerStat[];
     // (undocumented)
     readonly perPrompt: readonly PromptTriggerStat[];
