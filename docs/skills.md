@@ -117,15 +117,22 @@ are the normal case, not an edge one.
 
 ### How to write one
 
-- **Point at it from `SKILL.md` with a relative markdown link.** A link is explicit
-  follow-me syntax, so `skill-resource-resolves` checks it with no verb needed — only an
-  illustrative cue (`for example`, `e.g.`, `such as`) suppresses it. The verb matters for the
-  _other_ shape: a bare backticked path like `` `scripts/run.sh` `` is checked only when the
-  line also directs the agent to use it.
-- **Link back** from the companion to its `SKILL.md` — `../SKILL.md` from a one-level
-  companion, and a path computed from the companion's actual depth when it sits deeper (a
-  nested `assets/templates/foo/README.md` needs `../../../SKILL.md`). A companion that reads as a standalone
-  procedure is a companion someone will follow without the gates its parent declares.
+- **Point at it from `SKILL.md` with a relative markdown link**, and write the line as a
+  plain instruction to use the file. `skill-resource-resolves` reports the link when its
+  target is missing.
+
+  🔴 **Do not infer the exact rule from this page.** The detector is deliberately
+  conservative: it skips several target shapes and several surrounding phrasings, by design
+  rather than by oversight, and the enumeration lives in exactly one place —
+  [`rules/skill-resource-resolves.md`](rules/skill-resource-resolves.md). Read it before
+  relying on a particular link being checked.
+
+- **Link back** from a **documentation** companion to its `SKILL.md` — `../SKILL.md` from a
+  one-level file, and a path computed from the actual depth when it sits deeper (a nested
+  `assets/templates/foo/README.md` needs `../../../SKILL.md`). A prose companion that reads as
+  a standalone procedure is one someone will follow without the gates its parent declares.
+  This applies to readable text only: a script can say it in a comment, a binary asset cannot
+  say it at all.
 - **Keep reference documents one level deep**, linked directly from `SKILL.md` — that is
   what the skill-authoring guidance asks for, and it keeps the reference resolvable by
   inspection. It is a rule for reference docs, not for every bundled resource: `scripts/` may
@@ -155,13 +162,12 @@ are the normal case, not an edge one.
 
 Measured 2026-08-31 by planting each defect and checking whether it was reported:
 
-| property                                                                             | checked                                                                                                                                                                                                                                                                                                                                                                                 |
-| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| a link from `SKILL.md` to a companion, **plain relative path with a file extension** | **yes** — `skill-resource-resolves`, with the line number                                                                                                                                                                                                                                                                                                                               |
-| a link whose target is any **ambiguous shape**                                       | **no**, by design — extensionless (`scripts/install`), percent-encoded (`references/User%20Guide.md`), a glob or placeholder, a URL, an absolute path, or a `../` escape out of the skill. The authoritative list is in [`rules/skill-resource-resolves.md`](rules/skill-resource-resolves.md); the principle is don't-cry-wolf, so anything undecidable is skipped rather than guessed |
-| a link _inside_ a companion resolves                                                 | **no** — resolution is not transitive                                                                                                                                                                                                                                                                                                                                                   |
-| a companion no link reaches                                                          | **no** by default — `orphans` is opt-in and scans `docs/`                                                                                                                                                                                                                                                                                                                               |
-| companion prose, tool mentions, trifecta                                             | **no** — these read `SKILL.md`                                                                                                                                                                                                                                                                                                                                                          |
+| property                                 | checked                                                                                                                                                                                                                                                                             |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a link from `SKILL.md` to a companion    | **yes, for the ordinary case** — `skill-resource-resolves`, with the line number. It deliberately skips a number of target shapes and surrounding phrasings; [`rules/skill-resource-resolves.md`](rules/skill-resource-resolves.md) enumerates them and is the only place that does |
+| a link _inside_ a companion resolves     | **no** — resolution is not transitive                                                                                                                                                                                                                                               |
+| a companion no link reaches              | **no** by default — `orphans` is opt-in and scans `docs/`                                                                                                                                                                                                                           |
+| companion prose, tool mentions, trifecta | **no** — these read `SKILL.md`                                                                                                                                                                                                                                                      |
 
 The first row is the one that matters most, and it works for the ordinary shape; the rest is
 why a companion is not
