@@ -14,7 +14,8 @@
  *
  * After installing tsx locally: `npx tsx` 0.712s, compile 0 ✓ / 39 ✗ → 48 ✓ / 2 ✗.
  *
- * The fix tries a NATIVE `import()` first (Node >= 22.6 strips types itself), so
+ * The fix tries a NATIVE `import()` first (Node strips types itself from 22.18 on
+ * the 22 line and 23.6 on 23; 22.6-22.17 need --experimental-strip-types), so
  * the subprocess and the network are not on the happy path at all. The first test
  * below is the one that matters: it removes npm/npx from PATH entirely and
  * asserts compile still works. If someone reverts to tsx-first, that test fails.
@@ -231,7 +232,7 @@ describe("describeLoadFailure", () => {
   });
 
   it("keeps the tsx error when native loading is merely unsupported", () => {
-    // P2 from the same review: on Node < 22.6 the native attempt can only ever
+    // P2 from the same review: without type stripping the native attempt can only ever
     // say «Unknown file extension», so leading with it discards the one message
     // that came from actually running the spec. The repo's CI is Node 20, so
     // this is the COMMON path there, not an edge case.

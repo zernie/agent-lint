@@ -434,7 +434,8 @@ async function loadSpec(specPath: string): Promise<AnySpec | null> {
     }
   }
 
-  // Load the .ts directly. Node >= 22.6 strips types itself, so no subprocess and
+  // Load the .ts directly. Node strips types itself where that is ON BY DEFAULT —
+  // 22.18+ on the 22 line, 23.6+ on 23 — so no subprocess and
   // no network are needed — measured 0.7s against >60s for the `npx tsx` path when
   // tsx is not installed locally. This is tried FIRST for exactly that reason.
   let nativeError: unknown;
@@ -453,7 +454,8 @@ async function loadSpec(specPath: string): Promise<AnySpec | null> {
     nativeError = err;
   }
 
-  // Fallback for runtimes without type stripping (Node < 22.6, or stripping off).
+  // Fallback for runtimes without type stripping: older Node, 22.6-22.17 where it
+  // sits behind --experimental-strip-types, or any runtime with it switched off.
   try {
     const { execSync } =
       require("node:child_process") as typeof import("node:child_process");
@@ -487,7 +489,7 @@ export function describeLoadFailure(
   const tsxMsg = msg(tsxError);
   const nativeMsg = msg(nativeError);
 
-  // On Node < 22.6 (or with --no-strip-types) the native attempt ALWAYS fails
+  // Without type stripping the native attempt ALWAYS fails
   // this way. It is expected noise, not a diagnosis, so it must never be the
   // headline — the repository's own CI runs Node 20, where every load takes the
   // fallback and this is the only thing the native attempt can say.
@@ -503,7 +505,8 @@ export function describeLoadFailure(
     return (
       "the `npx tsx` fallback timed out after 15s. Install tsx locally " +
       "(`npm i -D tsx`) so npx does not fetch it over the network, or run on " +
-      "Node >= 22.6 where no subprocess is needed."
+      "Node >= 22.18 (or >= 23.6), where type stripping is on by default and no " +
+      "subprocess is needed. On 22.6-22.17 it needs --experimental-strip-types."
     );
   }
 
@@ -514,7 +517,8 @@ export function describeLoadFailure(
     return (
       "neither native import nor `npx tsx` could run this spec: tsx is not " +
       "installed. Install it locally (`npm i -D tsx`), or upgrade to " +
-      "Node >= 22.6 for native type stripping."
+      "Node >= 22.18 (or >= 23.6) for native type stripping — 22.6-22.17 have it " +
+      "only behind --experimental-strip-types."
     );
   }
 
