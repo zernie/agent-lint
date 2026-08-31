@@ -5987,6 +5987,7 @@ const COMMAND_HELP: Record<Verb, CommandHelp> = {
       "  vigiles audit [dir...]     Grade it on your machine. Reports everything, fails nothing.",
     detail: [
       "  2+ dirs → a leaderboard. Writes vigiles-report.html + .json (auto-gitignored).",
+      "  --single                   audit this dir as ONE harness, even if it holds many bundles",
       "  The executing checks (run your hooks · live MCP · do skills fire?) run only",
       "  interactively — audit asks once and remembers; automation uses the testing API.",
     ],
@@ -8109,9 +8110,29 @@ async function main(): Promise<void> {
       // carries `market` into its explanation and exits 2 — this repo's own rule
       // that 1 is "I measured, and it's bad" and 2 is "I could not do what you
       // asked". Nothing was measured here, so it is a 2.
+      // `--single` pins the SINGLE-harness reading of the given directory, whatever
+      // is nested inside it. Without it, a repo holding many bundles auto-switches
+      // to the leaderboard and there is no way back — so the full ring report for
+      // the ROOT was simply unreachable, and the reported workaround was a CI job
+      // looping `audit` over 29 directories. The mode branch already existed; this
+      // only stops it being decided for you.
+      const single = args.includes("--single");
+      // `--single` names ONE harness, so more than one explicit directory is a
+      // contradiction. Refuse it (exit 2 = "could not do what you asked") rather
+      // than auditing the first and dropping the rest — silently honouring half
+      // an argument list is the same defect class as the ignored `--out` above.
+      if (single && dirs.length > 1) {
+        console.error(
+          `--single audits ONE directory as one harness, but ${String(dirs.length)} were given. ` +
+            `Drop --single for a leaderboard, or pass a single directory.`,
+        );
+        process.exit(2);
+      }
       const targets =
-        market && market.onDisk.length > 0 ? [...market.onDisk] : dirs;
-      if (targets.length > 1) {
+        !single && market && market.onDisk.length > 0
+          ? [...market.onDisk]
+          : dirs;
+      if (!single && targets.length > 1) {
         // Multiple targets → rank them (the leaderboard engine). `--md` emits the
         // publishable Markdown table (a README / gist / the leaderboard site).
         //

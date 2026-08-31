@@ -99,6 +99,7 @@ export const COMMAND_FLAGS: Record<Verb, readonly FlagSpec[]> = {
   audit: [
     "--json",
     "--md",
+    "--single",
     "--out=",
     "--no-html",
     "--no-json",

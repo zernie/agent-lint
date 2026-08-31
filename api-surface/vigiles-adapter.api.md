@@ -136,6 +136,7 @@ export interface PluginLayout {
     readonly name: string;
     readonly pluginRootToken: string;
     readonly projectRootTokens?: readonly string[];
+    readonly rulesDir?: string;
     readonly settingsFormat: "json" | "toml";
     readonly settingsPath: string;
     readonly skillDir: string;

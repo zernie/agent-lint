@@ -197,6 +197,11 @@ export interface SurfaceClassifier {
    * one. Null for a path this classifier does not call an agent.
    */
   readonly agentName: (f: string) => string | null;
+  /**
+   * A path-scoped RULES file (`<rulesDir>/<name>.md`) — an INSTRUCTION surface,
+   * not an invocable one. Always false for a layout with no `rulesDir`.
+   */
+  readonly isRule: (f: string) => boolean;
 }
 
 function escapeRe(s: string): string {
@@ -210,9 +215,13 @@ export function makeClassifier(layout: PluginLayout): SurfaceClassifier {
   const skill = at(layout.skillDir);
   const agent = at(layout.agentDir);
   const command = at(layout.commandDir);
+  const rules = at(layout.rulesDir ?? "");
   const skillRe = skill ? new RegExp(`${skill}[^/]+/SKILL\\.md$`) : null;
   const agentRe = agent ? new RegExp(`${agent}${AGENT_FILE_LEAF_RE}$`) : null;
   const commandRe = command ? new RegExp(`${command}.+\\.md$`) : null;
+  // Flat `<rulesDir>/<name>.md`, like commands. A layout without a rules dir
+  // yields null and every path below answers false — the additive default.
+  const ruleRe = rules ? new RegExp(`${rules}[^/]+\\.md$`) : null;
   // A subagent lives under the plugin's `agents/` dir AT ANY DEPTH (the harness
   // reads it recursively — see AGENT_FILE_LEAF_RE for the vendor's wording and
   // the measurement), but never under ANOTHER surface dir. Two real-world
@@ -261,6 +270,7 @@ export function makeClassifier(layout: PluginLayout): SurfaceClassifier {
     isSkill,
     isAgent,
     isCommand: (f) => commandRe?.test(f) ?? false,
+    isRule: (f) => ruleRe?.test(f) ?? false,
     agentName: (f) =>
       isAgent(f) ? agentSurfaceName(f, layout.agentDir) : null,
   };
@@ -938,7 +948,11 @@ export function malformedFrontmatterFor(
 ): FrontmatterParseIssue[] {
   const out: FrontmatterParseIssue[] = [];
   for (const [path, md] of Object.entries(files)) {
-    if (!cls.isSkill(path) && !cls.isAgent(path)) continue;
+    // Rules join skills + agents here: `.claude/rules/*.md` carries a `paths:`
+    // frontmatter key that SCOPES the instruction, so unparseable YAML there
+    // silently changes which files the rule applies to — the same defect this
+    // check exists for, on a surface no layout named until now (#175.3).
+    if (!cls.isSkill(path) && !cls.isAgent(path) && !cls.isRule(path)) continue;
     if (!readFrontmatter(md).malformed) continue;
     out.push({
       path,

@@ -49,6 +49,8 @@ import {
   isEvalScript,
   prepareTest,
   type PreparedTest,
+  matchesSurfaceGlob,
+  strongerEvidence,
 } from "./coverage-evidence.js";
 
 // Mirrors src/test-coverage.ts constants. VALUES are re-declared, never imported
@@ -249,13 +251,22 @@ function isColocated(surface: Surface, testPath: string): boolean {
 function coverageOf(
   surface: Surface,
   tests: readonly PreparedTest[],
+  globs: readonly string[],
 ): CoverageDecision | null {
   let best: CoverageDecision | null = null;
   for (const t of tests) {
     if (t.path === surface.path) continue;
-    const ev = evidenceFor(surface, t, isColocated(surface, t.path));
+    const ev = evidenceFor(
+      surface,
+      t,
+      isColocated(surface, t.path),
+      matchesSurfaceGlob(surface, t.path, globs),
+    );
     if (!ev) continue;
-    if (!best) best = { surface, evidence: ev, by: t.path };
+    // Rank, do not first-win: with a colocated harness AND a configured
+    // suite the reported provenance must not depend on glob order.
+    if (!best || strongerEvidence(ev, best.evidence))
+      best = { surface, evidence: ev, by: t.path };
   }
   return best;
 }
@@ -264,12 +275,13 @@ function coverageOf(
 function tierOf(
   considered: readonly Surface[],
   tests: readonly PreparedTest[],
+  globs: readonly string[],
 ): CoverageTier {
   const covered: Surface[] = [];
   const untested: Surface[] = [];
   const decisions: CoverageDecision[] = [];
   for (const s of considered) {
-    const decision = coverageOf(s, tests);
+    const decision = coverageOf(s, tests, globs);
     if (decision) {
       covered.push(s);
       decisions.push(decision);
@@ -308,17 +320,26 @@ export function findUntestedSurfacesInFiles(
   ];
   const considered = surfaces.filter((s) => !s.ignored);
   const tests = discoverTests(files);
-  const union = tierOf(considered, tests);
+  // NO configured `{surface}` globs here, and that is a property of this twin
+  // rather than a gap: the browser engine reads a file MAP, not a repo, so there
+  // is no `.vigilesrc.json` for a user to have configured. Passing an empty list
+  // makes `matchesSurfaceGlob` false for everything, so this path behaves exactly
+  // as it did before the tier existed. Said out loud because a silent asymmetry
+  // between the twins is how they drift.
+  const noConfiguredGlobs: readonly string[] = [];
+  const union = tierOf(considered, tests, noConfiguredGlobs);
   return {
     untested: [...union.untested],
     decisions: union.decisions,
     harness: tierOf(
       considered,
       tests.filter((t) => !isEvalScript(basename(t.path))),
+      noConfiguredGlobs,
     ),
     evals: tierOf(
       considered,
       tests.filter((t) => isEvalScript(basename(t.path))),
+      noConfiguredGlobs,
     ),
   };
 }

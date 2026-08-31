@@ -184,3 +184,86 @@ test("a single-target audit does NOT print the leaderboard warning", () => {
     "here --out works, so warning about it would be the opposite false alarm",
   );
 });
+
+// --- #176.2 -------------------------------------------------------------
+
+test("--single audits a many-bundle dir as ONE harness (#176.2)", () => {
+  // Without it, a repo holding many bundles auto-switches to the leaderboard and
+  // the full ring report for the ROOT is simply unreachable — the reported
+  // workaround was a CI job looping audit over 29 directories.
+  // A marketplace is what makes ONE directory expand into many bundles — the
+  // shape the report came from (29 bundles under one root).
+  bundle(dir, "one");
+  bundle(dir, "two");
+  mkdirSync(join(dir, ".claude-plugin"), { recursive: true });
+  writeFileSync(
+    join(dir, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "fixture-market",
+      plugins: [
+        { name: "one", source: "./one" },
+        { name: "two", source: "./two" },
+      ],
+    }),
+  );
+
+  const board = run([
+    "audit",
+    dir,
+    "--no-interactive",
+    "--no-open",
+    "--no-serve",
+  ]);
+  const single = run([
+    "audit",
+    dir,
+    "--single",
+    "--no-interactive",
+    "--no-open",
+    "--no-serve",
+  ]);
+
+  assert.notEqual(
+    board.out,
+    single.out,
+    "--single must change the mode, not be accepted and ignored",
+  );
+  assert.match(single.out, /Detected harness/, "the single-harness report ran");
+});
+
+test("--single with several directories is REFUSED, not half-honoured", () => {
+  // It names ONE harness, so more than one directory is a contradiction.
+  // Auditing the first and dropping the rest would be the same silent-no-op
+  // class as the ignored --out above.
+  bundle(dir, "a");
+  bundle(dir, "b");
+
+  const r = run([
+    "audit",
+    join(dir, "a"),
+    join(dir, "b"),
+    "--single",
+    "--no-interactive",
+    "--no-open",
+    "--no-serve",
+  ]);
+  assert.equal(r.code, 2, "could not do what you asked ⇒ 2");
+  assert.match(r.out, /--single audits ONE directory/);
+});
+
+test("--single is a REGISTERED flag, not silently swallowed", () => {
+  // audit refuses unknown flags before anything runs; a flag that is real but
+  // unregistered would exit 2 with "unknown flag", which is how a new flag ships
+  // broken.
+  bundle(dir, "solo2");
+  const r = run([
+    "audit",
+    join(dir, "solo2"),
+    "--single",
+    "--no-interactive",
+    "--no-open",
+    "--no-serve",
+  ]);
+  assert.equal(r.out.includes("Unknown flag"), false);
+  assert.equal(r.code, 0);
+});

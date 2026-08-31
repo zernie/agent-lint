@@ -20,6 +20,8 @@ export const claudeCodeLayout: PluginLayout = {
   skillDir: "skills",
   agentDir: "agents",
   commandDir: "commands",
+  // `.claude/rules/*.md` — path-scoped project instructions (see PluginLayout).
+  rulesDir: "rules",
   materializeRoot: ".claude",
   pluginRootToken: "${CLAUDE_PLUGIN_ROOT}",
   // Both names Claude Code uses for the project root (mirrors the

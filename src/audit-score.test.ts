@@ -738,14 +738,20 @@ describe("Tested — coverage that rests on a filename says so", () => {
     f.some((x) => /PLACEMENT only/.test(x));
 
   it("names the count when NOTHING has an execution record", () => {
-    const f = find({ coverageEvidence: { executed: 0, colocated: 26 } });
+    const f = find({
+      coverageEvidence: { executed: 0, colocated: 26, configured: 0 },
+    });
     expect(placementOnly(f)).toBe(true);
     expect(f.join(" ")).toMatch(/26 surface\(s\)/);
   });
 
   it("goes quiet as soon as ONE run is on record — the tier exists, the warning is spent", () => {
     expect(
-      placementOnly(find({ coverageEvidence: { executed: 1, colocated: 25 } })),
+      placementOnly(
+        find({
+          coverageEvidence: { executed: 1, colocated: 25, configured: 0 },
+        }),
+      ),
     ).toBe(false);
   });
 

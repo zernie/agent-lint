@@ -336,6 +336,40 @@ function materializeSurfaces(
     }
   };
 
+  /**
+   * Read the path-scoped RULES dir (`.claude/rules/*.md` on Claude Code).
+   *
+   * DELIBERATELY NOT a `surfaceDirs` entry, and the distinction is the whole
+   * design: `surfaceDirs` decides whether a directory counts as a LOADABLE
+   * MACHINE, and rules are instructions, not an invocable surface — folding them
+   * in would silently change what "an empty machine" means for every harness.
+   * So they are read here, added to `files` for the checks that read text
+   * (frontmatter-valid, the rule map), and left out of `counts` and
+   * `hasLoadable`. A layout with no `rulesDir` reads nothing and behaves exactly
+   * as before. Closes #175.3: a whole instruction layer the audit could not see.
+   */
+  const materializeRules = (): void => {
+    const dir = layout.rulesDir;
+    if (!dir) return;
+    // Read BOTH candidate bases, and NOT the resolved `scopes`. Rules are not
+    // tied to where the invocable surfaces live: a repo can keep its skills at
+    // the root (a published plugin) while its rules sit under `.claude/`, and
+    // keying off scopes then read the wrong directory and found nothing —
+    // measured on exactly that shape while building this.
+    //
+    // Each base keys at its own real path (`rules/…` and `.claude/rules/…`), so
+    // a repo with both loses neither and nothing collides.
+    const bases = [
+      "",
+      ...(layout.userSurfaceRoot !== undefined ? [layout.userSurfaceRoot] : []),
+    ];
+    for (const base of bases) {
+      const tree = surfaceTree(join(root, base, dir));
+      for (const [rel, content] of Object.entries(tree))
+        add(join(base, dir, rel), content, join(root, base, dir, rel));
+    }
+  };
+
   const source = surfaceSource(layout, {
     hasRootSkillFile: existsSync(join(root, "SKILL.md")),
     skillName: basename(root),
@@ -368,6 +402,7 @@ function materializeSurfaces(
       assertDistinctScopeKeys(source.scopes, layout.name);
       for (const scope of source.scopes)
         materializeScope(scope, scope.base === "" ? rootTrees : userTrees);
+      materializeRules();
       return { counts, scopes: source.scopes };
     }
     /* v8 ignore next 2 -- exhaustiveness guard, unreachable given SurfaceSource */
