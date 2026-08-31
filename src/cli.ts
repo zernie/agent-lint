@@ -370,8 +370,29 @@ function findSpecs(pattern?: string): string[] {
 
 type AnySpec = ClaudeSpec | SkillSpec | AgentSpec | Railway;
 
+/**
+ * Why the last `loadSpec()` returned null.
+ *
+ * Exists because the caller used to print «Ensure the spec is compiled: run
+ * `npm run build` first» for EVERY failure, and that advice is wrong for most of
+ * them. Measured 2026-08-31 in a consuming repo: all 50 specs failed to load and
+ * the true cause was that `tsx` was not installed locally, so the `npx tsx`
+ * fallback below went to the network and blew its 15s budget. The message sent
+ * the reader to a build step that does not exist in a consumer install.
+ *
+ * Kept as module state rather than a widened return type on purpose: `loadSpec`
+ * has six call sites and only one of them reports to a human.
+ */
+let lastSpecLoadFailure: string | null = null;
+
+/** Reason the most recent `loadSpec()` returned null, or null if it succeeded. */
+export function specLoadFailureReason(): string | null {
+  return lastSpecLoadFailure;
+}
+
 async function loadSpec(specPath: string): Promise<AnySpec | null> {
   const fullPath = resolve(process.cwd(), specPath);
+  lastSpecLoadFailure = null;
 
   // Try multiple dist/ path strategies
   const candidates: string[] = [];
@@ -413,7 +434,26 @@ async function loadSpec(specPath: string): Promise<AnySpec | null> {
     }
   }
 
-  // Try loading .ts directly via tsx
+  // Load the .ts directly. Node >= 22.6 strips types itself, so no subprocess and
+  // no network are needed — measured 0.7s against >60s for the `npx tsx` path when
+  // tsx is not installed locally. This is tried FIRST for exactly that reason.
+  let nativeError: unknown;
+  try {
+    const { pathToFileURL } = require("node:url") as typeof import("node:url");
+    const mod = (await import(pathToFileURL(fullPath).href)) as {
+      default: AnySpec | { default: AnySpec };
+    };
+    const raw = mod.default;
+    if (raw && typeof raw === "object" && "default" in raw) {
+      return (raw as { default: AnySpec }).default;
+    }
+    if (raw) return raw;
+    nativeError = new Error("module has no default export");
+  } catch (err) {
+    nativeError = err;
+  }
+
+  // Fallback for runtimes without type stripping (Node < 22.6, or stripping off).
   try {
     const { execSync } =
       require("node:child_process") as typeof import("node:child_process");
@@ -426,9 +466,48 @@ async function loadSpec(specPath: string): Promise<AnySpec | null> {
       timeout: 15000,
     });
     return JSON.parse(output.trim()) as AnySpec;
-  } catch {
+  } catch (err) {
+    lastSpecLoadFailure = describeLoadFailure(nativeError, err);
     return null;
   }
+}
+
+/**
+ * Turn the two swallowed errors into one line a reader can act on.
+ *
+ * Three causes need three different fixes, and the old single message named none
+ * of them: a spec that does not parse, a `tsx` that is not installed (so `npx`
+ * goes to the registry), and a timeout.
+ */
+export function describeLoadFailure(
+  nativeError: unknown,
+  tsxError: unknown,
+): string {
+  const tsxMsg =
+    tsxError instanceof Error ? tsxError.message : String(tsxError);
+  const nativeMsg =
+    nativeError instanceof Error ? nativeError.message : String(nativeError);
+
+  // execSync surfaces a timeout as a killed child, not as a message.
+  const killed =
+    typeof tsxError === "object" &&
+    tsxError !== null &&
+    (tsxError as { killed?: boolean; signal?: string }).killed === true;
+  if (killed || /ETIMEDOUT|timed out/i.test(tsxMsg)) {
+    return (
+      "the `npx tsx` fallback timed out after 15s. Install tsx locally " +
+      "(`npm i -D tsx`) so npx does not fetch it over the network, or run on " +
+      "Node >= 22.6 where no subprocess is needed."
+    );
+  }
+  if (/not found|ENOENT|could not determine executable/i.test(tsxMsg)) {
+    return (
+      "neither native import nor `npx tsx` could run this spec. Install tsx " +
+      "locally (`npm i -D tsx`), or upgrade to Node >= 22.6 for native type " +
+      `stripping. Native import said: ${nativeMsg}`
+    );
+  }
+  return `the spec did not load. Native import said: ${nativeMsg}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -673,9 +752,7 @@ async function compile(
     const spec = await loadSpec(specPath);
     if (!spec) {
       console.log(`\n✗ ${specPath} — failed to load`);
-      console.log(
-        `  Ensure the spec is compiled: run \`npm run build\` first.`,
-      );
+      console.log(`  ${specLoadFailureReason() ?? "reason unavailable"}`);
       allValid = false;
       continue;
     }
