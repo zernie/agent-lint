@@ -105,15 +105,15 @@ A skill's **firing** and its **gates** are testable without a spec, from the pub
 ## Companion files — `references/`, `scripts/`, `assets/`
 
 A skill is a **directory**, not a file. The Agent Skills specification says so, and it
-recommends splitting: *"Keep your main `SKILL.md` under 500 lines. Move detailed reference
-material to separate files."* Progressive disclosure is the intended shape, so companions
+recommends splitting: _"Keep your main `SKILL.md` under 500 lines. Move detailed reference
+material to separate files."_ Progressive disclosure is the intended shape, so companions
 are the normal case, not an edge one.
 
-| directory | holds |
-|---|---|
+| directory     | holds                                                                                            |
+| ------------- | ------------------------------------------------------------------------------------------------ |
 | `references/` | documentation the agent reads on demand — a fallback procedure, a long table, a format reference |
-| `scripts/` | executable code the skill runs |
-| `assets/` | everything else the skill ships |
+| `scripts/`    | executable code the skill runs                                                                   |
+| `assets/`     | everything else the skill ships                                                                  |
 
 ### How to write one
 
@@ -128,22 +128,22 @@ are the normal case, not an edge one.
 - **If the skill has a `.spec.ts`, reference the companion with `file()`, not a markdown link.** `file()` is verified to exist at compile time, so a companion that gets renamed or deleted fails the build instead of being caught later by a linter — the higher rung. Note the two coordinate systems: `file()` resolves from the **repo root**, while a markdown link resolves from the **skill directory**. Writing both means writing the same path twice, in two forms, and only one of them is checked. Write it once, as `file()`.
 - **Companions stay plain markdown even when the skill has a `.spec.ts`.** They carry no
   frontmatter and no tool contract, so there is nothing for a spec to declare, and the
-  compiler's integrity mark is for *generated* files — a companion is a **source**. Hashing
+  compiler's integrity mark is for _generated_ files — a companion is a **source**. Hashing
   it would report `manually edited after compilation` on every legitimate edit.
 
 ### What is verified, and what is not
 
 Measured 2026-08-31 by planting each defect and checking whether it was reported:
 
-| property | checked |
-|---|---|
+| property                                       | checked                                                   |
+| ---------------------------------------------- | --------------------------------------------------------- |
 | a link from `SKILL.md` to a companion resolves | **yes** — `skill-resource-resolves`, with the line number |
-| a link *inside* a companion resolves | **no** — resolution is not transitive |
-| a companion no link reaches | **no** by default — `orphans` is opt-in and scans `docs/` |
-| companion prose, tool mentions, trifecta | **no** — these read `SKILL.md` |
+| a link _inside_ a companion resolves           | **no** — resolution is not transitive                     |
+| a companion no link reaches                    | **no** by default — `orphans` is opt-in and scans `docs/` |
+| companion prose, tool mentions, trifecta       | **no** — these read `SKILL.md`                            |
 
 The first row is the one that matters most and it works; the rest is why a companion is not
-a place to move something *because* it is awkward. The gap is tracked as a roadmap item —
+a place to move something _because_ it is awkward. The gap is tracked as a roadmap item —
 the fix is to scope by directory and follow the reference closure, not to add a manifest
 field listing companions.
 
@@ -152,13 +152,13 @@ field listing companions.
 `experimental_skill` carries the prefix, and these are the measured reasons — the
 roadmap for a feature lives with the feature, not on a separate stability page:
 
-- **A compiled `SKILL.md` now has one datapoint as an installed skill — and the header worry is stale.** Measured 2026-08-31 in `zernie/mine`: `outbound-email` was converted to a spec, compiled, and the harness listed it as an available skill with its compiled description. Read the strength honestly — the skill was already present before the conversion, so this shows the compiled form does not *break* loading; it is not a from-scratch install.
+- **A compiled `SKILL.md` now has one datapoint as an installed skill — and the header worry is stale.** Measured 2026-08-31 in `zernie/mine`: `outbound-email` was converted to a spec, compiled, and the harness listed it as an available skill with its compiled description. Read the strength honestly — the skill was already present before the conversion, so this shows the compiled form does not _break_ loading; it is not a from-scratch install.
 
   The specific fear in the previous wording is measurably gone: the `vigiles:sha256:` header no longer precedes the frontmatter. In that compiled file the frontmatter opens on **line 1** and the header sits on **line 10**, after the closing `---`. A reader anchored at `^---` finds the frontmatter exactly where it expects it.
 
   Independent supporting evidence, unchanged: in `examples/harness/dogfood/reviewer-ab.eval.mjs`, real Claude Code loaded a compiled `agents/code-reviewer.md` through `--plugin-dir`, dispatched to it, and the subagent read the file — 100% of trials against real sonnet (2026-06-20).
 
-  ⚠️ Still missing for a clean close: a compiled skill installed somewhere it never existed before, and one shown to *fire* on a prompt rather than merely appear in a listing.
+  ⚠️ Still missing for a clean close: a compiled skill installed somewhere it never existed before, and one shown to _fire_ on a prompt rather than merely appear in a listing.
 
 - **Adoption is all-or-nothing.** `renderSkillSections` composes the whole document in a fixed order, so converting an existing skill rewrites its structure rather than adding a gate to it. There is no "keep my prose, add one verified gate" path.
 - **`inputs` costs more than it looks.** One `input()` adds both the `argument-hint` frontmatter key and a generated `## Arguments` section.
