@@ -163,7 +163,7 @@ Every one of these is **valid markdown** — parses fine, does the wrong thing. 
 | `test`  | Does the harness behave?       | No — a scripted stand-in | Every commit             |
 | `eval`  | Does a skill actually help?    | Yes — your subscription  | On demand                |
 
-**One engine, two doors.** `audit` is the local report; **`lint` is the CI gate** that fails the build on the same deterministic checks — broken refs, bad tool contracts, dead hooks, skill collisions (Proofs 1–2). `test` and `eval` go further: past _does it exist_ to _does it work_. (`init` / `compile` / `eject` manage the optional typed-spec layer for the structural rules no linter can express — a graduation step you rarely run by hand.) [How the verbs relate →](docs/commands-and-how-they-relate.md)
+**One engine, two doors.** `audit` is the local report; **`lint` is the CI gate** that fails the build on the same deterministic checks — broken refs, bad tool contracts, dead hooks, skill collisions (Proofs 1–2). `test` and `eval` go further: past _does it exist_ to _does it work_. (`init` / `compile` / `eject` manage the optional typed-spec layer for the structural rules no linter can express — a graduation step you rarely run by hand. If you use a spec, run `compile` in CI too: it is what re-derives that spec's refs, while `lint` verifies the compiled file is intact.) [How the verbs relate →](docs/commands-and-how-they-relate.md)
 
 ### 🔎 Lint — your instructions stop lying
 
