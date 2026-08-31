@@ -398,10 +398,30 @@ type HostReply =
   | { path: string; ok: true; value: AnySpec }
   | { path: string; ok: false; error: string };
 
+type Settle = (reply: HostReply | "timeout" | "died") => void;
+
 type Host = {
   child: ChildProcessWithoutNullStreams;
-  /** Resolves the pending request; only one is outstanding at a time. */
-  pending: ((reply: HostReply) => void) | null;
+  /**
+   * Outstanding requests keyed BY PATH.
+   *
+   * 🔴 This was a single slot until a `--trace-warnings` run showed
+   * `checkCoverageThresholds` calling `loadSpec` through `Array.map`, i.e.
+   * concurrently. A single slot is overwritten by each new caller, so a reply
+   * settles whichever request happened to be last — `loadSpec` could return
+   * ANOTHER spec's value for the path it was asked about.
+   *
+   * ⚠️ **Honest scope of that claim.** The mispairing is wrong by construction,
+   * but it is NOT observable today: the one concurrent caller aggregates and
+   * never asks which spec it got. Measured — the same `vigiles lint` run with a
+   * last-wins dispatch produces byte-identical output. So this is a latent
+   * defect closed before it had consequences, not a bug anyone hit; the visible
+   * symptom was only the MaxListeners warning. I could not construct an
+   * end-to-end test that fails without keying by path, and the test beside this
+   * file says so rather than implying otherwise. The next concurrent caller
+   * that DOES care about identity is the one this protects.
+   */
+  pending: Map<string, Settle>;
   /** Last spec the host said it had STARTED — the culprit when a deadline fires. */
   started: string | null;
   buffered: string;
@@ -419,7 +439,7 @@ function startHost(): Host {
     cwd: process.cwd(),
     stdio: ["pipe", "pipe", "pipe"],
   });
-  const h: Host = { child, pending: null, started: null, buffered: "" };
+  const h: Host = { child, pending: new Map(), started: null, buffered: "" };
 
   child.stdout.setEncoding("utf-8");
   child.stdout.on("data", (chunk: string) => {
@@ -439,8 +459,8 @@ function startHost(): Host {
         h.started = reply.path;
         continue;
       }
-      const done = h.pending;
-      h.pending = null;
+      const done = h.pending.get(reply.path);
+      h.pending.delete(reply.path);
       done?.(reply);
     }
   });
@@ -455,6 +475,15 @@ function startHost(): Host {
   // then hung forever waiting on a host that had nothing left to say. The
   // in-flight deadline timer keeps the loop alive while a request is pending,
   // which is exactly as long as we need it.
+  // ONE exit listener per host, not one per request: with concurrent callers the
+  // per-request version added a listener each time and Node warned at eleven.
+  // It fails every outstanding request, because a dead host answers none of them.
+  child.once("exit", () => {
+    const waiting = [...h.pending.values()];
+    h.pending.clear();
+    for (const settle of waiting) settle("died");
+  });
+
   // The stdio types are Readable/Writable, which do not declare `unref` — the
   // objects are pipes and do have it. Optional-called so this stays correct if
   // a platform ever hands back a stream that genuinely lacks it.
@@ -467,13 +496,20 @@ function startHost(): Host {
   return h;
 }
 
-/** Kill the host and forget it; the next request starts a fresh one. */
+/**
+ * Kill the host and forget it; the next request starts a fresh one.
+ *
+ * Outstanding requests are failed rather than dropped: a killed host will never
+ * answer them, and a promise nobody settles is a hang wearing a different hat.
+ */
 function dropHost(): void {
   if (!host) return;
   const dying = host;
   host = null;
-  dying.pending = null;
+  const waiting = [...dying.pending.values()];
+  dying.pending.clear();
   dying.child.kill("SIGKILL");
+  for (const settle of waiting) settle("died");
 }
 
 process.on("exit", dropHost);
@@ -507,31 +543,17 @@ async function loadSpec(specPath: string): Promise<AnySpec | null> {
 
   const reply = await new Promise<HostReply | "timeout" | "died">((done) => {
     let settled = false;
-    let cleanup = () => {};
-    const finish = (r: HostReply | "timeout" | "died") => {
+    const finish: Settle = (r) => {
       if (settled) return;
       settled = true;
-      cleanup();
+      clearTimeout(timer);
+      h.pending.delete(fullPath);
       done(r);
     };
     const timer = setTimeout(() => {
       finish("timeout");
     }, SPEC_DEADLINE_MS);
-    // 🔴 The exit listener is REMOVED when the request settles. `once` fires at
-    // most once but stays registered until it does, so one per spec accumulated
-    // for the life of the host and Node warned at eleven:
-    //   MaxListenersExceededWarning: 11 exit listeners added to [ChildProcess]
-    // Found by dogfooding `vigiles lint` on this repo, not by a test — a leak
-    // that only shows past a threshold is invisible to fixtures with few specs.
-    const onExit = () => {
-      finish("died");
-    };
-    h.child.once("exit", onExit);
-    cleanup = () => {
-      clearTimeout(timer);
-      h.child.off("exit", onExit);
-    };
-    h.pending = finish;
+    h.pending.set(fullPath, finish);
     h.child.stdin.write(JSON.stringify({ path: fullPath }) + "\n");
   });
 

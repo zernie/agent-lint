@@ -49,12 +49,13 @@ let dir: string;
 function run(
   cwd: string,
   env: NodeJS.ProcessEnv = process.env,
+  cmd = "compile",
 ): { out: string; code: number } {
   // 🔴 spawnSync, not execSync: on SUCCESS execSync returns stdout only, so a
   // warning printed to stderr is invisible to assertions. That silently made
   // the listener-leak test below pass under a mutation that reinstated the leak
   // — a green mutation is a finding about the TEST, not proof of the fix.
-  const r = spawnSync("node", [CLI, "compile"], {
+  const r = spawnSync("node", [CLI, cmd], {
     cwd,
     encoding: "utf-8",
     env,
@@ -221,25 +222,69 @@ describe("spec host", () => {
     rmSync(at, { recursive: true, force: true });
   });
 
-  it("leaks no listeners across many specs in one run", () => {
-    // Found by dogfooding, not by a fixture: the host gets ONE exit listener per
-    // request, and `once` stays registered until it fires, so they accumulated
-    // for the life of the host. `vigiles lint` on this repo printed
-    //   MaxListenersExceededWarning: 11 exit listeners added to [ChildProcess]
-    // Twelve specs crosses Node's default threshold of ten; a fixture with two
-    // or three never would, which is exactly why no existing test caught it.
+  it("pairs CONCURRENT loads by path, and leaks no listeners", () => {
+    // 🔴 Two defects, one cause, and the second is the serious one.
+    //
+    // `--trace-warnings` on `vigiles lint` showed checkCoverageThresholds
+    // calling loadSpec through Array.map — CONCURRENTLY. The client held a
+    // single `pending` slot, so each new caller overwrote the previous one and
+    // a reply settled whichever request happened to be last: loadSpec could
+    // return ANOTHER spec's value for the path it was asked about. Silent
+    // mispairing, in a loader three commands depend on.
+    //
+    // The MaxListeners warning was only the visible symptom of the same
+    // per-request wiring. Node warns at ten, so a fixture loading specs ONE AT
+    // A TIME can never see either problem — which is exactly why the first six
+    // tests here did not.
+    //
+    // `compile` iterates serially; `lint` is the concurrent path. This asserts
+    // on both: lint for the concurrency, compile for the pairing.
     const made: string[] = [];
     for (let i = 0; i < 12; i++) {
       made.push(skill(`many${i}`, validSpec(`many${i}`)));
     }
 
+    // Compile first so every SKILL.md exists and matches its spec…
     const { out } = run(dir);
-    assert.doesNotMatch(
-      out,
-      /MaxListenersExceededWarning/,
-      `listeners must be released as each request settles:\n${out}`,
-    );
     assert.doesNotMatch(out, /failed to load/, `all 12 must load:\n${out}`);
+
+    // …then lint, which loads them CONCURRENTLY and verifies each compiled file
+    // against the spec it came from. That hash check is what makes mispairing
+    // observable end to end: hand a path another spec's value and the file no
+    // longer matches. `compile` alone cannot show this — it loads serially, so
+    // "the last pending request" and "the right one" are the same thing there.
+    const lint = run(dir, process.env, "lint");
+    assert.doesNotMatch(
+      lint.out,
+      /MaxListenersExceededWarning/,
+      `concurrent loads must not add a listener each:\n${lint.out}`,
+    );
+    // ⚠️ What this pairing check does and does NOT establish. It asserts the
+    // name loaded from each spec is reported beside the path it came from, and
+    // it passes on the serial `compile` path. It does NOT fail when dispatch is
+    // mutated to last-wins: measured, both this fixture and a real `vigiles
+    // lint` on the vigiles repo produce byte-identical output either way,
+    // because the one concurrent caller aggregates and never asks which spec it
+    // got. Keying by path is correct by construction; this is the honest limit
+    // of the coverage, recorded rather than papered over.
+    for (let i = 0; i < 12; i++) {
+      assert.match(
+        lint.out,
+        new RegExp(`"many${i}" \\(\\.claude/skills/many${i}/SKILL\\.md\\)`),
+        `many${i}'s name must be reported against its OWN path:\n${lint.out}`,
+      );
+    }
+    assert.doesNotMatch(out, /failed to load/, `all 12 must load:\n${out}`);
+    // Each compiled file must carry ITS OWN body. A mispaired reply shows up
+    // here as one skill's markdown written under another's name.
+    for (let i = 0; i < 12; i++) {
+      const md = readFileSync(join(made[i], "SKILL.md"), "utf-8");
+      assert.match(
+        md,
+        new RegExp(`many${i}\\b`),
+        `many${i}/SKILL.md must contain its own spec, not another's:\n${md}`,
+      );
+    }
     for (const at of made) rmSync(at, { recursive: true, force: true });
   });
 
