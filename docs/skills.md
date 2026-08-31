@@ -122,7 +122,9 @@ are the normal case, not an edge one.
   illustrative cue (`for example`, `e.g.`, `such as`) suppresses it. The verb matters for the
   _other_ shape: a bare backticked path like `` `scripts/run.sh` `` is checked only when the
   line also directs the agent to use it.
-- **Link back** from the companion to `../SKILL.md`. A companion that reads as a standalone
+- **Link back** from the companion to its `SKILL.md` — `../SKILL.md` from a one-level
+  companion, and a path computed from the companion's actual depth when it sits deeper (a
+  nested `assets/templates/foo/README.md` needs `../../../SKILL.md`). A companion that reads as a standalone
   procedure is a companion someone will follow without the gates its parent declares.
 - **Keep reference documents one level deep**, linked directly from `SKILL.md` — that is
   what the skill-authoring guidance asks for, and it keeps the reference resolvable by
@@ -153,15 +155,15 @@ are the normal case, not an edge one.
 
 Measured 2026-08-31 by planting each defect and checking whether it was reported:
 
-| property                                                                  | checked                                                                                                                               |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| a link from `SKILL.md` to a companion **whose path has a file extension** | **yes** — `skill-resource-resolves`, with the line number                                                                             |
-| a link to an **extensionless** target (`[installer](scripts/install)`)    | **no** — the detector skips it deliberately: a bare word is undecidable prose. Give companions an extension, or the link is unchecked |
-| a link _inside_ a companion resolves                                      | **no** — resolution is not transitive                                                                                                 |
-| a companion no link reaches                                               | **no** by default — `orphans` is opt-in and scans `docs/`                                                                             |
-| companion prose, tool mentions, trifecta                                  | **no** — these read `SKILL.md`                                                                                                        |
+| property                                                                             | checked                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a link from `SKILL.md` to a companion, **plain relative path with a file extension** | **yes** — `skill-resource-resolves`, with the line number                                                                                                                                                                                                                                                                                                                               |
+| a link whose target is any **ambiguous shape**                                       | **no**, by design — extensionless (`scripts/install`), percent-encoded (`references/User%20Guide.md`), a glob or placeholder, a URL, an absolute path, or a `../` escape out of the skill. The authoritative list is in [`rules/skill-resource-resolves.md`](rules/skill-resource-resolves.md); the principle is don't-cry-wolf, so anything undecidable is skipped rather than guessed |
+| a link _inside_ a companion resolves                                                 | **no** — resolution is not transitive                                                                                                                                                                                                                                                                                                                                                   |
+| a companion no link reaches                                                          | **no** by default — `orphans` is opt-in and scans `docs/`                                                                                                                                                                                                                                                                                                                               |
+| companion prose, tool mentions, trifecta                                             | **no** — these read `SKILL.md`                                                                                                                                                                                                                                                                                                                                                          |
 
-The first row is the one that matters most and it works — within its stated limit; the rest is
+The first row is the one that matters most, and it works for the ordinary shape; the rest is
 why a companion is not
 a place to move something _because_ it is awkward. The gap is tracked as a roadmap item —
 the fix is to scope by directory and follow the reference closure, not to add a manifest
