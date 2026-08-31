@@ -32,6 +32,7 @@ import {
   isAbsolute,
   sep as pathSep,
 } from "node:path";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { globSync } from "glob";
 import { generateTypes } from "./core/generate-types.js";
 import {
@@ -373,15 +374,8 @@ type AnySpec = ClaudeSpec | SkillSpec | AgentSpec | Railway;
 /**
  * Why the last `loadSpec()` returned null.
  *
- * Exists because the caller used to print «Ensure the spec is compiled: run
- * `npm run build` first» for EVERY failure, and that advice is wrong for most of
- * them. Measured 2026-08-31 in a consuming repo: all 50 specs failed to load and
- * the true cause was that `tsx` was not installed locally, so the `npx tsx`
- * fallback below went to the network and blew its 15s budget. The message sent
- * the reader to a build step that does not exist in a consumer install.
- *
- * Kept as module state rather than a widened return type on purpose: `loadSpec`
- * has six call sites and only one of them reports to a human.
+ * Kept as module state rather than a widened return type: `loadSpec` has six
+ * call sites and only one of them reports to a human.
  */
 let lastSpecLoadFailure: string | null = null;
 
@@ -390,210 +384,168 @@ export function specLoadFailureReason(): string | null {
   return lastSpecLoadFailure;
 }
 
+/**
+ * How long one spec may take to evaluate before the host is killed.
+ *
+ * Overridable because 15s is a guess that fits the specs we have seen, not a
+ * law; a repo with genuinely slow specs should be able to raise it rather than
+ * discover the number by hitting it.
+ */
+const SPEC_DEADLINE_MS = Number(process.env.VIGILES_SPEC_TIMEOUT_MS) || 15_000;
+
+type HostReply =
+  | { path: string; phase: "start" }
+  | { path: string; ok: true; value: AnySpec }
+  | { path: string; ok: false; error: string };
+
+type Host = {
+  child: ChildProcessWithoutNullStreams;
+  /** Resolves the pending request; only one is outstanding at a time. */
+  pending: ((reply: HostReply) => void) | null;
+  /** Last spec the host said it had STARTED — the culprit when a deadline fires. */
+  started: string | null;
+  buffered: string;
+};
+
+let host: Host | null = null;
+
+/** The compiled host entry, beside this file in `dist/`. */
+function hostEntry(): string {
+  return resolve(__dirname, "spec-host.mjs");
+}
+
+function startHost(): Host {
+  const child = spawn(process.execPath, [hostEntry()], {
+    cwd: process.cwd(),
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  const h: Host = { child, pending: null, started: null, buffered: "" };
+
+  child.stdout.setEncoding("utf-8");
+  child.stdout.on("data", (chunk: string) => {
+    h.buffered += chunk;
+    let nl: number;
+    while ((nl = h.buffered.indexOf("\n")) >= 0) {
+      const line = h.buffered.slice(0, nl).trim();
+      h.buffered = h.buffered.slice(nl + 1);
+      if (!line) continue;
+      let reply: HostReply;
+      try {
+        reply = JSON.parse(line) as HostReply;
+      } catch {
+        continue; // not ours; a spec writing to stdout cannot corrupt the stream
+      }
+      if ("phase" in reply) {
+        h.started = reply.path;
+        continue;
+      }
+      const done = h.pending;
+      h.pending = null;
+      done?.(reply);
+    }
+  });
+
+  // Anything the child says on stderr is the spec's own noise; keep it out of
+  // our stdout so `--json` consumers are not corrupted, but do not lose it.
+  child.stderr.setEncoding("utf-8");
+  child.stderr.on("data", (chunk: string) => process.stderr.write(chunk));
+
+  // 🔴 Unreferenced, or the CLI never exits. A piped child and its three
+  // streams each hold the event loop open, so `compile` finished its work and
+  // then hung forever waiting on a host that had nothing left to say. The
+  // in-flight deadline timer keeps the loop alive while a request is pending,
+  // which is exactly as long as we need it.
+  // The stdio types are Readable/Writable, which do not declare `unref` — the
+  // objects are pipes and do have it. Optional-called so this stays correct if
+  // a platform ever hands back a stream that genuinely lacks it.
+  const unref = (s: unknown) => (s as { unref?: () => void })?.unref?.();
+  child.unref();
+  unref(child.stdin);
+  unref(child.stdout);
+  unref(child.stderr);
+
+  return h;
+}
+
+/** Kill the host and forget it; the next request starts a fresh one. */
+function dropHost(): void {
+  if (!host) return;
+  const dying = host;
+  host = null;
+  dying.pending = null;
+  dying.child.kill("SIGKILL");
+}
+
+process.on("exit", dropHost);
+
+/**
+ * Load one spec in the spec host.
+ *
+ * 🔴 **Why a child process rather than `import()` here.** A module evaluation
+ * cannot be cancelled once started — `Promise.race` hands control back but the
+ * evaluation keeps running and holds the event loop — so an in-process loader
+ * gives a stalled spec an unbounded hang in `compile`, `test` and `audit`. It
+ * also cannot tell whether a failed spec already ran (Node reports
+ * `ERR_MODULE_NOT_FOUND` and `SyntaxError` both before and during evaluation),
+ * which is what made the previous two-loader arrangement unfixable rather than
+ * merely buggy: it had to guess whether re-running was safe.
+ *
+ * The host is spawned with `process.execPath` — never `npx` — so nothing is
+ * fetched and nothing needs installing.
+ */
 async function loadSpec(specPath: string): Promise<AnySpec | null> {
   const fullPath = resolve(process.cwd(), specPath);
   lastSpecLoadFailure = null;
 
-  // Try multiple dist/ path strategies
-  const candidates: string[] = [];
-
-  // src/ → dist/ mapping (e.g., src/CLAUDE.md.spec.ts → dist/CLAUDE.md.spec.js)
-  if (fullPath.includes("/src/")) {
-    candidates.push(
-      fullPath.replace(/\/src\//, "/dist/").replace(/\.ts$/, ".js"),
-    );
+  if (!existsSync(fullPath)) {
+    lastSpecLoadFailure = `no such file: ${specPath}`;
+    return null;
   }
 
-  // Root-level spec → dist/ (e.g., CLAUDE.md.spec.ts → dist/CLAUDE.md.spec.js)
-  const dir = fullPath.substring(0, fullPath.lastIndexOf("/"));
-  const base = fullPath.substring(fullPath.lastIndexOf("/") + 1);
-  candidates.push(resolve(dir, "dist", base.replace(/\.ts$/, ".js")));
+  host ??= startHost();
+  const h = host;
 
-  // examples/ → dist/examples/ mapping
-  candidates.push(
-    fullPath
-      .replace(/\.ts$/, ".js")
-      .replace(process.cwd(), resolve(process.cwd(), "dist")),
-  );
-
-  for (const distPath of candidates) {
-    if (existsSync(distPath)) {
-      try {
-        const mod = (await import(distPath)) as {
-          default: AnySpec | { default: AnySpec };
-        };
-        // CJS double-default: `{ default: { default: spec } }`.
-        const raw = mod.default;
-        if (raw && typeof raw === "object" && "default" in raw) {
-          return (raw as { default: AnySpec }).default;
-        }
-        return raw;
-      } catch {
-        // Try next candidate
-      }
-    }
-  }
-
-  // Load the .ts directly. Node strips types itself where that is ON BY DEFAULT —
-  // 22.18+ on the 22 line, 23.6+ on 23 — so no subprocess and
-  // no network are needed — measured 0.7s against >60s for the `npx tsx` path when
-  // tsx is not installed locally. This is tried FIRST for exactly that reason.
-  let nativeError: unknown;
-  try {
-    const { pathToFileURL } = require("node:url") as typeof import("node:url");
-    const mod = (await import(pathToFileURL(fullPath).href)) as {
-      default: AnySpec | { default: AnySpec };
+  const reply = await new Promise<HostReply | "timeout" | "died">((done) => {
+    let settled = false;
+    const finish = (r: HostReply | "timeout" | "died") => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      done(r);
     };
-    const raw = mod.default;
-    if (raw && typeof raw === "object" && "default" in raw) {
-      return (raw as { default: AnySpec }).default;
-    }
-    if (raw) return raw;
-    // The module DID evaluate; running it again under tsx would repeat its side
-    // effects to learn the same thing.
-    lastSpecLoadFailure = "the spec has no default export.";
-    return null;
-  } catch (err) {
-    nativeError = err;
-    // 🔴 ONLY a capability failure may fall through to the subprocess. `import()`
-    // both LOADS and EVALUATES, so this catch also sees exceptions thrown by the
-    // spec itself — and re-running such a spec under tsx executes it a SECOND
-    // time. A spec (or a helper it imports) that writes a file or makes a request
-    // before throwing would do it twice. Reported in review on #178.
-    if (!nativeFailedBeforeEvaluating(err)) {
-      lastSpecLoadFailure = `the spec did not load. ${
-        err instanceof Error ? err.message : String(err)
-      }`;
-      return null;
-    }
-  }
-
-  // Fallback for runtimes without type stripping: older Node, 22.6-22.17 where it
-  // sits behind --experimental-strip-types, or any runtime with it switched off.
-  try {
-    const { execSync } =
-      require("node:child_process") as typeof import("node:child_process");
-    // Handle ESM/CJS double-default: m.default may itself have a .default
-    const script = `import(${JSON.stringify(fullPath)}).then(m => { const d = m.default?.default ?? m.default; console.log(JSON.stringify(d)); })`;
-    const output = execSync(`npx tsx -e '${script.replace(/'/g, "'\\''")}'`, {
-      encoding: "utf-8",
-      cwd: process.cwd(),
-      stdio: ["pipe", "pipe", "pipe"],
-      timeout: 15000,
+    const timer = setTimeout(() => {
+      finish("timeout");
+    }, SPEC_DEADLINE_MS);
+    h.pending = finish;
+    h.child.once("exit", () => {
+      finish("died");
     });
-    return JSON.parse(output.trim()) as AnySpec;
-  } catch (err) {
-    lastSpecLoadFailure = describeLoadFailure(nativeError, err);
+    h.child.stdin.write(JSON.stringify({ path: fullPath }) + "\n");
+  });
+
+  if (reply === "timeout") {
+    // The host's last `start` names the spec that stalled. Without it a hang
+    // produced N identical failures and no culprit.
+    const culprit = h.started ?? fullPath;
+    dropHost();
+    lastSpecLoadFailure =
+      `evaluating ${relative(process.cwd(), culprit)} exceeded ` +
+      `${SPEC_DEADLINE_MS}ms and was killed. Set VIGILES_SPEC_TIMEOUT_MS to ` +
+      `raise the limit, or look for a top-level await that never settles.`;
     return null;
   }
-}
-
-/**
- * Turn the two swallowed errors into one line a reader can act on.
- *
- * Three causes need three different fixes, and the old single message named none
- * of them: a spec that does not parse, a `tsx` that is not installed (so `npx`
- * goes to the registry), and a timeout.
- */
-/**
- * Did the native `import()` fail BEFORE the module body ran?
- *
- * That is the property that matters, not "was it a capability error". The
- * fallback re-runs the spec in a subprocess, so it is safe exactly when nothing
- * of the spec has executed yet — resolution, parsing and the missing-loader case
- * all fail before evaluation and carry no side effects. An exception thrown by
- * the module body does not, and re-running it would repeat whatever it did
- * first (write a file, send a request).
- *
- * 🔴 `ERR_MODULE_NOT_FOUND` MUST fall through, measured: tsx rewrites a `.js`
- * specifier to the `.ts` source next to it (the TypeScript ESM convention) and
- * native Node does not. This repo's own specs import `src/core/spec.js`, a file
- * that does not exist — native resolution fails, tsx resolves it. Treating that
- * as a spec failure broke 8 tests in src/cli.test.ts.
- */
-function nativeFailedBeforeEvaluating(err: unknown): boolean {
-  const code = (err as { code?: unknown } | null)?.code;
-  if (
-    code === "ERR_UNKNOWN_FILE_EXTENSION" ||
-    code === "ERR_MODULE_NOT_FOUND" ||
-    code === "ERR_PACKAGE_PATH_NOT_EXPORTED" ||
-    code === "ERR_UNSUPPORTED_DIR_IMPORT" ||
-    code === "ERR_INVALID_MODULE_SPECIFIER" ||
-    code === "ERR_UNSUPPORTED_ESM_URL_SCHEME"
-  ) {
-    return true;
+  if (reply === "died") {
+    dropHost();
+    lastSpecLoadFailure = "the spec host exited unexpectedly.";
+    return null;
   }
-  // A parse error also precedes execution. Runtimes without type stripping
-  // report TypeScript syntax this way instead of with a code.
-  if (err instanceof SyntaxError) return true;
-  const msg = err instanceof Error ? err.message : String(err);
-  return /Unknown file extension|Cannot find module|Cannot find package/i.test(
-    msg,
-  );
-}
-
-export function describeLoadFailure(
-  nativeError: unknown,
-  tsxError: unknown,
-): string {
-  const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
-  const tsxMsg = msg(tsxError);
-  const nativeMsg = msg(nativeError);
-
-  // Without type stripping the native attempt ALWAYS fails
-  // this way. It is expected noise, not a diagnosis, so it must never be the
-  // headline — the repository's own CI runs Node 20, where every load takes the
-  // fallback and this is the only thing the native attempt can say.
-  const nativeUnsupported =
-    /Unknown file extension|ERR_UNKNOWN_FILE_EXTENSION|ERR_UNSUPPORTED_/i.test(
-      nativeMsg,
-    );
-
-  const meta = tsxError as {
-    status?: number | null;
-    killed?: boolean;
-    signal?: string | null;
-    code?: unknown;
-  } | null;
-  const status = meta?.status;
-
-  // Timeout is read from exec METADATA, never from the child's output. execSync
-  // embeds the child's stderr in Error.message, so text-matching here would
-  // rewrite a spec whose own failure mentions «timed out» — a network call it
-  // makes, say — into fallback-timeout plus advice to install tsx, which is
-  // already installed. Same defect as the `not found` match below, reported in
-  // review on #178 and fixed there first; this is the other half of it.
-  const timedOut =
-    meta?.killed === true ||
-    meta?.code === "ETIMEDOUT" ||
-    meta?.signal === "SIGTERM";
-
-  if (timedOut) {
-    return (
-      "the `npx tsx` fallback timed out after 15s. Install tsx locally " +
-      "(`npm i -D tsx`) so npx does not fetch it over the network, or run on " +
-      "Node >= 22.18 (or >= 23.6), where type stripping is on by default and no " +
-      "subprocess is needed. On 22.6-22.17 it needs --experimental-strip-types."
-    );
+  if (!("ok" in reply) || !reply.ok) {
+    lastSpecLoadFailure = `the spec did not load. ${
+      "error" in reply ? reply.error : "no reason given"
+    }`;
+    return null;
   }
-
-  // 127 is the shell's "command not found". Matching the child's stderr text
-  // instead would misread a SPEC that happens to mention "not found" — e.g. a
-  // missing config it requires — as a missing runner.
-  if (status === 127) {
-    return (
-      "neither native import nor `npx tsx` could run this spec: tsx is not " +
-      "installed. Install it locally (`npm i -D tsx`), or upgrade to " +
-      "Node >= 22.18 (or >= 23.6) for native type stripping — 22.6-22.17 have it " +
-      "only behind --experimental-strip-types."
-    );
-  }
-
-  // tsx ran and the spec itself failed: its error is the actionable one.
-  const detail = nativeUnsupported
-    ? tsxMsg
-    : `${nativeMsg} · tsx said: ${tsxMsg}`;
-  return `the spec did not load. ${detail}`;
+  return reply.value;
 }
 
 // ---------------------------------------------------------------------------
