@@ -507,19 +507,31 @@ async function loadSpec(specPath: string): Promise<AnySpec | null> {
 
   const reply = await new Promise<HostReply | "timeout" | "died">((done) => {
     let settled = false;
+    let cleanup = () => {};
     const finish = (r: HostReply | "timeout" | "died") => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      cleanup();
       done(r);
     };
     const timer = setTimeout(() => {
       finish("timeout");
     }, SPEC_DEADLINE_MS);
-    h.pending = finish;
-    h.child.once("exit", () => {
+    // 🔴 The exit listener is REMOVED when the request settles. `once` fires at
+    // most once but stays registered until it does, so one per spec accumulated
+    // for the life of the host and Node warned at eleven:
+    //   MaxListenersExceededWarning: 11 exit listeners added to [ChildProcess]
+    // Found by dogfooding `vigiles lint` on this repo, not by a test — a leak
+    // that only shows past a threshold is invisible to fixtures with few specs.
+    const onExit = () => {
       finish("died");
-    });
+    };
+    h.child.once("exit", onExit);
+    cleanup = () => {
+      clearTimeout(timer);
+      h.child.off("exit", onExit);
+    };
+    h.pending = finish;
     h.child.stdin.write(JSON.stringify({ path: fullPath }) + "\n");
   });
 

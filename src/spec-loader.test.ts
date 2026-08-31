@@ -36,7 +36,7 @@ import {
 } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { tmpdir } from "node:os";
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 
 // NB: `__dirname`, not `import.meta` — this package builds to CommonJS and tsc
 // rejects import.meta here (TS1470). The idiom is legal in scripts/ next door,
@@ -50,22 +50,17 @@ function run(
   cwd: string,
   env: NodeJS.ProcessEnv = process.env,
 ): { out: string; code: number } {
-  try {
-    const out = execSync(`node ${JSON.stringify(CLI)} compile`, {
-      cwd,
-      encoding: "utf-8",
-      env,
-      stdio: ["pipe", "pipe", "pipe"],
-      timeout: 120_000,
-    });
-    return { out, code: 0 };
-  } catch (e) {
-    const err = e as { stdout?: string; stderr?: string; status?: number };
-    return {
-      out: (err.stdout ?? "") + (err.stderr ?? ""),
-      code: err.status ?? 1,
-    };
-  }
+  // 🔴 spawnSync, not execSync: on SUCCESS execSync returns stdout only, so a
+  // warning printed to stderr is invisible to assertions. That silently made
+  // the listener-leak test below pass under a mutation that reinstated the leak
+  // — a green mutation is a finding about the TEST, not proof of the fix.
+  const r = spawnSync("node", [CLI, "compile"], {
+    cwd,
+    encoding: "utf-8",
+    env,
+    timeout: 120_000,
+  });
+  return { out: (r.stdout ?? "") + (r.stderr ?? ""), code: r.status ?? 1 };
 }
 
 /** Write a spec at `<dir>/.claude/skills/<name>/SKILL.md.spec.ts`. */
@@ -224,6 +219,28 @@ describe("spec host", () => {
     const { out } = run(dir);
     assert.match(out, /no default export/, `got:\n${out}`);
     rmSync(at, { recursive: true, force: true });
+  });
+
+  it("leaks no listeners across many specs in one run", () => {
+    // Found by dogfooding, not by a fixture: the host gets ONE exit listener per
+    // request, and `once` stays registered until it fires, so they accumulated
+    // for the life of the host. `vigiles lint` on this repo printed
+    //   MaxListenersExceededWarning: 11 exit listeners added to [ChildProcess]
+    // Twelve specs crosses Node's default threshold of ten; a fixture with two
+    // or three never would, which is exactly why no existing test caught it.
+    const made: string[] = [];
+    for (let i = 0; i < 12; i++) {
+      made.push(skill(`many${i}`, validSpec(`many${i}`)));
+    }
+
+    const { out } = run(dir);
+    assert.doesNotMatch(
+      out,
+      /MaxListenersExceededWarning/,
+      `listeners must be released as each request settles:\n${out}`,
+    );
+    assert.doesNotMatch(out, /failed to load/, `all 12 must load:\n${out}`);
+    for (const at of made) rmSync(at, { recursive: true, force: true });
   });
 
   it("never advises `npm run build` when a spec fails to load", () => {
