@@ -46,20 +46,31 @@ const CLI = resolve(ROOT, "dist", "cli.js");
 let dir: string;
 
 /**
- * Can THIS runtime import a .ts file directly?
+ * Can the runtime the CLI ACTUALLY RUNS IN import a .ts file directly?
  *
- * Probed, not inferred from `process.version`: native type stripping depends on
- * the major/minor AND on flags (`--no-strip-types` turns it off on a runtime
- * that otherwise supports it), so a version comparison would be wrong in both
- * directions. The repository's own CI runs Node 20, where the answer is no —
- * see .github/workflows/ci.yml (`node-version: "20"`).
+ * 🔴 Probed in a CHILD `node` process, not with `import()` here. The first
+ * version of this probe called `import()` inside the test and was WRONG in a way
+ * CI caught: vitest intercepts dynamic import and hands it to Vite, which
+ * transpiles TypeScript regardless of the Node version. So the probe answered
+ * "can Vite load .ts" — always yes — instead of "can Node". On the Node 20 CI
+ * runner the gated test therefore did not skip, ran, and failed.
+ *
+ * The child process is also the RIGHT scope: the assertions below spawn
+ * `node dist/cli.js`, so the capability that matters is that child's, not this
+ * test process's.
+ *
+ * Probed rather than compared against `process.version` because stripping also
+ * depends on flags (`--no-strip-types` turns it off where it is otherwise on).
  */
-async function nativeTypeStripping(): Promise<boolean> {
+function nativeTypeStripping(): boolean {
   const probeDir = mkdtempSync(join(tmpdir(), "vigiles-strip-probe-"));
   const probe = join(probeDir, "probe.ts");
   writeFileSync(probe, "export default 1 as number;\n");
   try {
-    await import(probe);
+    execSync(
+      `node --input-type=module -e ${JSON.stringify(`import(${JSON.stringify(probe)})`)}`,
+      { stdio: ["pipe", "pipe", "pipe"], timeout: 20_000 },
+    );
     return true;
   } catch {
     return false;
@@ -122,13 +133,13 @@ afterAll(() => {
 });
 
 describe("loadSpec", () => {
-  it("compiles a spec with npm and npx REMOVED FROM PATH", async (ctx) => {
+  it("compiles a spec with npm and npx REMOVED FROM PATH", (ctx) => {
     // P1 from review on #178, and it was right: without this gate the assertion
     // below breaks CI deterministically. On a runtime with no type stripping the
     // native path cannot work, the stubs make the fallback unusable on purpose,
     // and «failed to load» is then the CORRECT outcome — the test would be
     // asserting a capability the runtime does not have.
-    if (!(await nativeTypeStripping())) {
+    if (!nativeTypeStripping()) {
       ctx.skip();
       return;
     }
@@ -166,12 +177,12 @@ describe("loadSpec", () => {
     assert.doesNotMatch(out, /failed to load/, `no spec should fail:\n${out}`);
   });
 
-  it("evaluates a throwing spec EXACTLY ONCE, not once per loader", async (ctx) => {
+  it("evaluates a throwing spec EXACTLY ONCE, not once per loader", (ctx) => {
     // Reported in review on #178. `import()` both loads and evaluates, so a spec
     // that throws AFTER a side effect used to fall through to the tsx fallback
     // and run again — writing the file, making the request, or sending the event
     // a second time. Only a capability failure may reach the subprocess now.
-    if (!(await nativeTypeStripping())) {
+    if (!nativeTypeStripping()) {
       ctx.skip();
       return;
     }
