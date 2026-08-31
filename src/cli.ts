@@ -32,6 +32,7 @@ import {
   isAbsolute,
   sep as pathSep,
 } from "node:path";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { globSync } from "glob";
 import { generateTypes } from "./core/generate-types.js";
 import {
@@ -370,65 +371,215 @@ function findSpecs(pattern?: string): string[] {
 
 type AnySpec = ClaudeSpec | SkillSpec | AgentSpec | Railway;
 
+/**
+ * Why the last `loadSpec()` returned null.
+ *
+ * Kept as module state rather than a widened return type: `loadSpec` has six
+ * call sites and only one of them reports to a human.
+ */
+let lastSpecLoadFailure: string | null = null;
+
+/** Reason the most recent `loadSpec()` returned null, or null if it succeeded. */
+export function specLoadFailureReason(): string | null {
+  return lastSpecLoadFailure;
+}
+
+/**
+ * How long one spec may take to evaluate before the host is killed.
+ *
+ * Overridable because 15s is a guess that fits the specs we have seen, not a
+ * law; a repo with genuinely slow specs should be able to raise it rather than
+ * discover the number by hitting it.
+ */
+const SPEC_DEADLINE_MS = Number(process.env.VIGILES_SPEC_TIMEOUT_MS) || 15_000;
+
+type HostReply =
+  | { path: string; phase: "start" }
+  | { path: string; ok: true; value: AnySpec }
+  | { path: string; ok: false; error: string };
+
+type Settle = (reply: HostReply | "timeout" | "died") => void;
+
+type Host = {
+  child: ChildProcessWithoutNullStreams;
+  /**
+   * Outstanding requests keyed BY PATH.
+   *
+   * 🔴 This was a single slot until a `--trace-warnings` run showed
+   * `checkCoverageThresholds` calling `loadSpec` through `Array.map`, i.e.
+   * concurrently. A single slot is overwritten by each new caller, so a reply
+   * settles whichever request happened to be last — `loadSpec` could return
+   * ANOTHER spec's value for the path it was asked about.
+   *
+   * ⚠️ **Honest scope of that claim.** The mispairing is wrong by construction,
+   * but it is NOT observable today: the one concurrent caller aggregates and
+   * never asks which spec it got. Measured — the same `vigiles lint` run with a
+   * last-wins dispatch produces byte-identical output. So this is a latent
+   * defect closed before it had consequences, not a bug anyone hit; the visible
+   * symptom was only the MaxListeners warning. I could not construct an
+   * end-to-end test that fails without keying by path, and the test beside this
+   * file says so rather than implying otherwise. The next concurrent caller
+   * that DOES care about identity is the one this protects.
+   */
+  pending: Map<string, Settle>;
+  /** Last spec the host said it had STARTED — the culprit when a deadline fires. */
+  started: string | null;
+  buffered: string;
+};
+
+let host: Host | null = null;
+
+/** The compiled host entry, beside this file in `dist/`. */
+function hostEntry(): string {
+  return resolve(__dirname, "spec-host.mjs");
+}
+
+function startHost(): Host {
+  const child = spawn(process.execPath, [hostEntry()], {
+    cwd: process.cwd(),
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  const h: Host = { child, pending: new Map(), started: null, buffered: "" };
+
+  child.stdout.setEncoding("utf-8");
+  child.stdout.on("data", (chunk: string) => {
+    h.buffered += chunk;
+    let nl: number;
+    while ((nl = h.buffered.indexOf("\n")) >= 0) {
+      const line = h.buffered.slice(0, nl).trim();
+      h.buffered = h.buffered.slice(nl + 1);
+      if (!line) continue;
+      let reply: HostReply;
+      try {
+        reply = JSON.parse(line) as HostReply;
+      } catch {
+        continue; // not ours; a spec writing to stdout cannot corrupt the stream
+      }
+      if ("phase" in reply) {
+        h.started = reply.path;
+        continue;
+      }
+      const done = h.pending.get(reply.path);
+      h.pending.delete(reply.path);
+      done?.(reply);
+    }
+  });
+
+  // Anything the child says on stderr is the spec's own noise; keep it out of
+  // our stdout so `--json` consumers are not corrupted, but do not lose it.
+  child.stderr.setEncoding("utf-8");
+  child.stderr.on("data", (chunk: string) => process.stderr.write(chunk));
+
+  // 🔴 Unreferenced, or the CLI never exits. A piped child and its three
+  // streams each hold the event loop open, so `compile` finished its work and
+  // then hung forever waiting on a host that had nothing left to say. The
+  // in-flight deadline timer keeps the loop alive while a request is pending,
+  // which is exactly as long as we need it.
+  // ONE exit listener per host, not one per request: with concurrent callers the
+  // per-request version added a listener each time and Node warned at eleven.
+  // It fails every outstanding request, because a dead host answers none of them.
+  child.once("exit", () => {
+    const waiting = [...h.pending.values()];
+    h.pending.clear();
+    for (const settle of waiting) settle("died");
+  });
+
+  // The stdio types are Readable/Writable, which do not declare `unref` — the
+  // objects are pipes and do have it. Optional-called so this stays correct if
+  // a platform ever hands back a stream that genuinely lacks it.
+  const unref = (s: unknown) => (s as { unref?: () => void })?.unref?.();
+  child.unref();
+  unref(child.stdin);
+  unref(child.stdout);
+  unref(child.stderr);
+
+  return h;
+}
+
+/**
+ * Kill the host and forget it; the next request starts a fresh one.
+ *
+ * Outstanding requests are failed rather than dropped: a killed host will never
+ * answer them, and a promise nobody settles is a hang wearing a different hat.
+ */
+function dropHost(): void {
+  if (!host) return;
+  const dying = host;
+  host = null;
+  const waiting = [...dying.pending.values()];
+  dying.pending.clear();
+  dying.child.kill("SIGKILL");
+  for (const settle of waiting) settle("died");
+}
+
+process.on("exit", dropHost);
+
+/**
+ * Load one spec in the spec host.
+ *
+ * 🔴 **Why a child process rather than `import()` here.** A module evaluation
+ * cannot be cancelled once started — `Promise.race` hands control back but the
+ * evaluation keeps running and holds the event loop — so an in-process loader
+ * gives a stalled spec an unbounded hang in `compile`, `test` and `audit`. It
+ * also cannot tell whether a failed spec already ran (Node reports
+ * `ERR_MODULE_NOT_FOUND` and `SyntaxError` both before and during evaluation),
+ * which is what made the previous two-loader arrangement unfixable rather than
+ * merely buggy: it had to guess whether re-running was safe.
+ *
+ * The host is spawned with `process.execPath` — never `npx` — so nothing is
+ * fetched and nothing needs installing.
+ */
 async function loadSpec(specPath: string): Promise<AnySpec | null> {
   const fullPath = resolve(process.cwd(), specPath);
+  lastSpecLoadFailure = null;
 
-  // Try multiple dist/ path strategies
-  const candidates: string[] = [];
-
-  // src/ → dist/ mapping (e.g., src/CLAUDE.md.spec.ts → dist/CLAUDE.md.spec.js)
-  if (fullPath.includes("/src/")) {
-    candidates.push(
-      fullPath.replace(/\/src\//, "/dist/").replace(/\.ts$/, ".js"),
-    );
-  }
-
-  // Root-level spec → dist/ (e.g., CLAUDE.md.spec.ts → dist/CLAUDE.md.spec.js)
-  const dir = fullPath.substring(0, fullPath.lastIndexOf("/"));
-  const base = fullPath.substring(fullPath.lastIndexOf("/") + 1);
-  candidates.push(resolve(dir, "dist", base.replace(/\.ts$/, ".js")));
-
-  // examples/ → dist/examples/ mapping
-  candidates.push(
-    fullPath
-      .replace(/\.ts$/, ".js")
-      .replace(process.cwd(), resolve(process.cwd(), "dist")),
-  );
-
-  for (const distPath of candidates) {
-    if (existsSync(distPath)) {
-      try {
-        const mod = (await import(distPath)) as {
-          default: AnySpec | { default: AnySpec };
-        };
-        // CJS double-default: `{ default: { default: spec } }`.
-        const raw = mod.default;
-        if (raw && typeof raw === "object" && "default" in raw) {
-          return (raw as { default: AnySpec }).default;
-        }
-        return raw;
-      } catch {
-        // Try next candidate
-      }
-    }
-  }
-
-  // Try loading .ts directly via tsx
-  try {
-    const { execSync } =
-      require("node:child_process") as typeof import("node:child_process");
-    // Handle ESM/CJS double-default: m.default may itself have a .default
-    const script = `import(${JSON.stringify(fullPath)}).then(m => { const d = m.default?.default ?? m.default; console.log(JSON.stringify(d)); })`;
-    const output = execSync(`npx tsx -e '${script.replace(/'/g, "'\\''")}'`, {
-      encoding: "utf-8",
-      cwd: process.cwd(),
-      stdio: ["pipe", "pipe", "pipe"],
-      timeout: 15000,
-    });
-    return JSON.parse(output.trim()) as AnySpec;
-  } catch {
+  if (!existsSync(fullPath)) {
+    lastSpecLoadFailure = `no such file: ${specPath}`;
     return null;
   }
+
+  host ??= startHost();
+  const h = host;
+
+  const reply = await new Promise<HostReply | "timeout" | "died">((done) => {
+    let settled = false;
+    const finish: Settle = (r) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      h.pending.delete(fullPath);
+      done(r);
+    };
+    const timer = setTimeout(() => {
+      finish("timeout");
+    }, SPEC_DEADLINE_MS);
+    h.pending.set(fullPath, finish);
+    h.child.stdin.write(JSON.stringify({ path: fullPath }) + "\n");
+  });
+
+  if (reply === "timeout") {
+    // The host's last `start` names the spec that stalled. Without it a hang
+    // produced N identical failures and no culprit.
+    const culprit = h.started ?? fullPath;
+    dropHost();
+    lastSpecLoadFailure =
+      `evaluating ${relative(process.cwd(), culprit)} exceeded ` +
+      `${SPEC_DEADLINE_MS}ms and was killed. Set VIGILES_SPEC_TIMEOUT_MS to ` +
+      `raise the limit, or look for a top-level await that never settles.`;
+    return null;
+  }
+  if (reply === "died") {
+    dropHost();
+    lastSpecLoadFailure = "the spec host exited unexpectedly.";
+    return null;
+  }
+  if (!("ok" in reply) || !reply.ok) {
+    lastSpecLoadFailure = `the spec did not load. ${
+      "error" in reply ? reply.error : "no reason given"
+    }`;
+    return null;
+  }
+  return reply.value;
 }
 
 // ---------------------------------------------------------------------------
@@ -673,9 +824,7 @@ async function compile(
     const spec = await loadSpec(specPath);
     if (!spec) {
       console.log(`\n✗ ${specPath} — failed to load`);
-      console.log(
-        `  Ensure the spec is compiled: run \`npm run build\` first.`,
-      );
+      console.log(`  ${specLoadFailureReason() ?? "reason unavailable"}`);
       allValid = false;
       continue;
     }
