@@ -2089,6 +2089,16 @@ export interface TriggerRateReport {
    */
   readonly competitors: number;
   /**
+   * The plugin namespace the skills actually installed under — the `<plugin>`
+   * half of the `<plugin>:<skill>` id `skillResolved` matches.
+   *
+   * Reported because with `skillsDir` the name is chosen by the packager, not by
+   * the caller, so the single most common cause of a 0% run was a value the
+   * caller had no way to know. Optional so a report recorded before this field
+   * still parses.
+   */
+  readonly namespace?: string;
+  /**
    * Runs EXCLUDED because the turn errored / was rate-limited (detected by the
    * driver's `runError`), present only when > 0. These are NOT counted in `n` or
    * as misses — so `rate` reflects only valid runs. A large `errored` relative to
@@ -2465,6 +2475,7 @@ function resolveTriggerPluginDir(spec: TriggerRateSpec): {
   pluginDir: string;
   packaged?: string;
   competitors: number;
+  namespace: string;
 } {
   if (spec.pluginDir && spec.skillsDir)
     throw new Error(
@@ -2504,6 +2515,7 @@ function resolveTriggerPluginDir(spec: TriggerRateSpec): {
     pluginDir,
     packaged,
     competitors: Math.max(0, countSkills(pluginDir) - 1),
+    namespace: underTestSource(spec).name,
   };
 }
 
@@ -2662,7 +2674,8 @@ export async function measureTriggerRateWith(
         "(raise the model, or lower `minModel` for a deliberately cheap run).",
     );
 
-  const { pluginDir, packaged, competitors } = resolveTriggerPluginDir(spec);
+  const { pluginDir, packaged, competitors, namespace } =
+    resolveTriggerPluginDir(spec);
   const cfg: TriggerRunConfig = {
     trials: spec.trials ?? 1,
     // Sonnet, not haiku: trigger-rate is a selection measurement and haiku
@@ -2712,6 +2725,7 @@ export async function measureTriggerRateWith(
           n: relevant.n,
           perPrompt: relevant.perPrompt,
           competitors,
+          namespace,
           errored: positiveOrUndefined(relevant.errored),
           usage: aggregateUsage(relevant.usages),
         };
@@ -2839,8 +2853,17 @@ export function formatTriggerRateReport(report: TriggerRateReport): string {
   if (report.n > 0 && report.rate === 0)
     lines.push(
       "⚠ nothing fired on ANY prompt. That is usually SETUP, not the description — check, in order:\n" +
-        "  1. the id in `fired` — `skillResolved` matches the NAMESPACED id " +
-        "(`<plugin>:<skill>`); a bare name silently never matches;\n" +
+        // The runtime RESOLVED the namespace before spending a token, so it
+        // prints the id that should have matched instead of telling the reader
+        // to go work it out. With `skillsDir` the name is not even the user's
+        // choice — the packager picks it — so "check the id" was advice about a
+        // value they had never seen.
+        (report.namespace !== undefined
+          ? "  1. the id in `fired` — your skills installed under " +
+            `\`${report.namespace}\`, so \`skillResolved\` matches ` +
+            `\`${report.namespace}:<skill>\`; a bare name silently never matches;\n`
+          : "  1. the id in `fired` — `skillResolved` matches the NAMESPACED id " +
+            "(`<plugin>:<skill>`); a bare name silently never matches;\n") +
         "  2. the install field — a loose `.claude/skills` dir needs `skillsDir`, " +
         "not `pluginDir` (which wants a full plugin manifest);\n" +
         "  3. the `fixture` — a run starts in an EMPTY cwd, so a prompt about a " +

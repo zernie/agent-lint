@@ -337,6 +337,7 @@ export interface TriggerRateReport {
     readonly experimental?: string;
     readonly falsePositiveRate?: number;
     readonly n: number;
+    readonly namespace?: string;
     readonly perIrrelevant?: readonly PromptTriggerStat[];
     // (undocumented)
     readonly perPrompt: readonly PromptTriggerStat[];

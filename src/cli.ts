@@ -649,7 +649,22 @@ function compileClaudeToFile(
   if (errors.length > 0) {
     console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
     printErrors(specPath, errors);
-    writeFileSync(resolve(basePath, primaryOutput), markdown);
+    // 🔴 NOTHING IS WRITTEN ON A FAILED COMPILE (#173).
+    //
+    // It used to write the artifact anyway, and the result was the exact
+    // false-confidence object this tool exists to prevent: a `CLAUDE.md`
+    // carrying refs already KNOWN to be dead, stamped with a VALID integrity
+    // hash. `lint` then verified the hash, found it intact, and exited 0 — so
+    // the command the README calls "the CI gate … broken refs" went green over
+    // breakage `compile` had printed minutes earlier. Compile locally, get
+    // distracted, commit: CI never mentions it again.
+    //
+    // Not writing leaves the LAST GOOD artifact in place, which is strictly
+    // better than replacing it with a broken one: the error is on screen, the
+    // exit code is 1, and no green hash is minted over a known-bad file.
+    console.log(
+      `  → ${primaryOutput} was NOT written; the previous version is left in place.`,
+    );
     return false;
   }
   writeFileSync(resolve(basePath, primaryOutput), markdown);
@@ -2674,6 +2689,17 @@ function scaffoldSpec(args: string[]): void {
         `Adopted ${target} → ${specPath} (${tier}, ${String(sectionCount)} section${sectionCount === 1 ? "" : "s"}). ` +
           `Run \`vigiles compile\` and review the diff; the \`/strengthen\` skill upgrades prose to verified rules.`,
       );
+      // Adoption is faithful by design: it infers NO rules and extracts NO refs,
+      // so a raw adoption verifies nothing on its own. Saying so is the whole
+      // fix — the cost (the file becomes a build artifact, edits move into TS)
+      // lands immediately, and without this line the benefit reads as zero
+      // rather than as not-yet-claimed. Deliberately not a heuristic extractor:
+      // guessing refs out of prose is what got `doc-refs` disabled.
+      if (tier === "raw")
+        console.log(
+          `  ℹ 0 refs extracted — this spec verifies nothing yet. Wrap paths in \`file()\` ` +
+            `and commands in \`cmd()\` to make \`compile\` check them.`,
+        );
     }
     return;
   }
@@ -4657,7 +4683,13 @@ function checkSkillResourceResolves(
   if (found.length > 0 && !silent) {
     console.log("\nSkill-resource check:\n");
     for (const s of found) {
-      const msg = `${s.name}: bundled resource "${s.finding.ref}" (line ${String(s.finding.line)}) is referenced but missing — the agent reads the instruction and gets nothing.`;
+      const msg =
+        `${s.name}: bundled resource "${s.finding.ref}" (line ${String(s.finding.line)}) is referenced but missing — the agent reads the instruction and gets nothing.` +
+        // The main false-positive source in a skills monorepo, where a SKILL.md
+        // legitimately names a repo-root path. The fix already exists and works;
+        // it was documented only in docs/skills-monorepo.md, so a CI log gave no
+        // hint and the rule read as broken rather than misconfigured.
+        ` If it resolves from the repo root instead, add its directory to \`sharedDirs\` in .vigilesrc.json.`;
       console.log(`  ${sev === "error" ? "✗" : "⚠"} ${s.path}: ${msg}`);
       ghAnnotate(sev === "error" ? "error" : "warning", msg, s.path);
     }
@@ -6108,7 +6140,12 @@ function printUsage(command: string | undefined): void {
   console.log("New here? Start with `vigiles audit .`");
   if (command && command !== "--help") {
     console.log(`\nUnknown command: "${command}"`);
-    process.exit(1);
+    // 2, not 1 — `docs/cli.md` fixes the contract as 1 = "I ran, and what you
+    // asked about is bad", 2 = "I could not do what you asked". A typo'd verb is
+    // the second, and the unknown-FLAG path (cli-flag-check.ts) already exits 2.
+    // A script telling "found problems" from "could not start" by exit code read
+    // a mistyped command as a finding.
+    process.exit(2);
   }
 }
 
@@ -7468,6 +7505,13 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
  */
 function ensureReportGitignored(cwd: string, entries: readonly string[]): void {
   if (entries.length === 0) return;
+  // An `--out` outside the repo produced entries like
+  // `../../../../private/tmp/x/vigiles-report.json`, which ignore NOTHING —
+  // .gitignore does not reach outside its own tree — and accumulate one dead
+  // block per output path. Worse in principle than in practice: `audit` is
+  // documented as a read-only report, and this made it edit a tracked file for
+  // no benefit at all. Inside the repo the write is expected and documented.
+  if (entries.some((e) => e.startsWith("..") || isAbsolute(e))) return;
   const gi = resolve(cwd, ".gitignore");
   try {
     if (!existsSync(gi)) {
@@ -8070,6 +8114,17 @@ async function main(): Promise<void> {
       if (targets.length > 1) {
         // Multiple targets → rank them (the leaderboard engine). `--md` emits the
         // publishable Markdown table (a README / gist / the leaderboard site).
+        //
+        // `--out` writes nothing here: the per-bundle HTML/JSON report is built
+        // in the single-target branch below, and this one only prints a table.
+        // SAY SO. A silent no-op is how a CI job ships an empty artifact and
+        // stays green — which is exactly how this was found, and the same
+        // never-fail-silently shape as the rest of this file.
+        if (args.some((a) => a.startsWith("--out=")) && !json)
+          console.log(
+            `⚠ --out is ignored here: ${String(targets.length)} bundles → leaderboard mode, ` +
+              `which produces no per-bundle report. Run audit per directory to write one.`,
+          );
         const scores = rankPlugins(targets);
         const text = args.includes("--md")
           ? formatLeaderboardMarkdown(scores)
