@@ -117,10 +117,11 @@ are the normal case, not an edge one.
 
 ### How to write one
 
-- **Point at it from `SKILL.md` with a relative markdown link**, and phrase the line as an
-  instruction — `see`, `read`, `run`. That phrasing is not style: `skill-resource-resolves`
-  treats a reference as real only when the line directs the agent to use the file, so an
-  illustrative mention stays quiet.
+- **Point at it from `SKILL.md` with a relative markdown link.** A link is explicit
+  follow-me syntax, so `skill-resource-resolves` checks it with no verb needed — only an
+  illustrative cue (`for example`, `e.g.`, `such as`) suppresses it. The verb matters for the
+  _other_ shape: a bare backticked path like `` `scripts/run.sh` `` is checked only when the
+  line also directs the agent to use it.
 - **Link back** from the companion to `../SKILL.md`. A companion that reads as a standalone
   procedure is a companion someone will follow without the gates its parent declares.
 - **Keep it one level deep.** The spec asks for this, and it keeps the reference resolvable
@@ -140,7 +141,7 @@ are the normal case, not an edge one.
   installed somewhere else** — nothing rebases it during packaging. Dropping the link trades
   a pointer that works for a reader for one that only works for the author.
 
-- **Companions stay plain markdown even when the skill has a `.spec.ts`.** They carry no
+- **Documentation companions under `references/` stay plain markdown even when the skill has a `.spec.ts`.** (`scripts/` stays executable source — `.py`, `.sh`; `assets/` stays whatever it is. The point below is about ownership, not file type: every companion is an author-owned source, not a generated artifact.) They carry no
   frontmatter and no tool contract, so there is nothing for a spec to declare, and the
   compiler's integrity mark is for _generated_ files — a companion is a **source**. Hashing
   it would report `manually edited after compilation` on every legitimate edit.
