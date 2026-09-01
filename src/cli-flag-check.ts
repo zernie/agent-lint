@@ -82,7 +82,7 @@ export const COMMAND_FLAGS: Record<Verb, readonly FlagSpec[]> = {
   ],
   compile: [],
   eject: ["--keep-spec"],
-  lint: ["--summary", "--json"],
+  lint: ["--bundles=", "--summary", "--json", "--json-out="],
   // handleRunScripts (free tier — no lock flags).
   test: ["--min=", "--all", "--yes", "--no-interactive", "--no-skip"],
   // handleRunScripts + resolveEvalLockEnv + the trials knob.

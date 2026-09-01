@@ -13,6 +13,7 @@
 import { spawn } from "node:child_process";
 import { availableParallelism } from "node:os";
 import { resolve, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { globSync } from "glob";
@@ -324,10 +325,25 @@ export async function runScripts(
         return;
       }
       const countFile = join(countDir, `${String(i)}.count`);
-      const child = spawn("node", argv, {
+      // Resolve a harness's bare `vigiles` import from the CLI's OWN install, so
+      // running the gate does not require installing the package into the
+      // project — which, in a repo that already has a package.json, drags in the
+      // entire dependency tree (measured at 840 packages against vigiles' 42,
+      // #184). Only rescues that specifier, and only after normal resolution
+      // fails, so a locally installed copy still wins.
+      const selfRoot = resolve(__dirname, "..", "..", "..");
+      const hook = pathToFileURL(
+        join(selfRoot, "dist", "harness-resolve-hooks.mjs"),
+      ).href;
+      const child = spawn("node", ["--import", hookImport(hook), ...argv], {
         cwd,
         stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env, ...env, [CHECK_COUNT_ENV]: countFile },
+        env: {
+          ...process.env,
+          ...env,
+          VIGILES_SELF_ROOT: selfRoot,
+          [CHECK_COUNT_ENV]: countFile,
+        },
       });
       const chunks: Buffer[] = [];
       child.stdout.on("data", (c: Buffer) => chunks.push(c));
@@ -476,4 +492,15 @@ export function formatScriptSummary(
     );
   }
   return lines.join("\n");
+}
+
+/**
+ * A `--import` argument that registers the resolver hook without a temp file:
+ * a data: URL calling `module.register`. Inline because writing a shim into the
+ * user's tree to run their tests would be a side effect the runner has no
+ * business having.
+ */
+function hookImport(hookHref: string): string {
+  const src = `import {register} from "node:module";register(${JSON.stringify(hookHref)});`;
+  return `data:text/javascript,${encodeURIComponent(src)}`;
 }

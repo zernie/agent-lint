@@ -60,6 +60,24 @@ const INSTRUCTION_FILES: readonly string[] = ["CLAUDE.md", "AGENTS.md"];
 const DEFAULT_FILES: string[] = [INSTRUCTION_FILES[0]];
 
 export const DEFAULT_RULES: Required<RulesConfig> = {
+  // 🔴 BOTH DROP TO "warn", and that is a deliberate behaviour change.
+  //
+  // They used to feed the exit code directly and could not be tiered at all
+  // (#181), so a single unreferenced doc turned a PR red with no way to say
+  // "report it, do not block". Naming them as rules made the contradiction
+  // visible: both are HEURISTIC-BEHAVIORAL (an NCD similarity proxy, an
+  // "unreferenced" guess that an OSS sweep measured at ~100% false positives on
+  // nav-managed doc sites), and this repo's own calibration rule is that a
+  // heuristic never defaults to `error` because it cries wolf. `orphan-docs`
+  // already DECLARED `warn` in its meta while behaving as `error` — the gate
+  // caught that disagreement the moment the rule was registered properly.
+  //
+  // Set either to `"error"` to keep the old blocking behaviour.
+  // Hard error, like `compile` itself: a dead reference is decidable from the
+  // filesystem, not a proxy — the calibration rule's `external-decidable` tier.
+  "spec-refs": "error",
+  "orphan-docs": "warn",
+  "duplicate-rules": "warn",
   "require-instructions-spec": "warn",
   // Default OFF — the consistent `require-<surface>-spec` parallel. Skills are
   // legitimately hand-written, so requiring a .spec.ts per SKILL.md is the wrong
