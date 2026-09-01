@@ -76,6 +76,10 @@ export {
 } from "./run-hook.js";
 export type {
   HookRunResult,
+  // Named in HookRunResult.blockedBy, so a consumer must be able to name it too
+  // — a type that appears in a public signature and cannot be imported is a
+  // surface you can read but not write against.
+  BlockMechanism,
   RunHookOptions,
   HookInput,
   HookOutput,

@@ -88,6 +88,7 @@ export function compileAgent(spec: AgentSpec, options: {
 
 // @public (undocumented)
 export interface CompileAgentResult {
+    artifact: StampedMarkdown | null;
     // (undocumented)
     errors: CompileError[];
     // (undocumented)
@@ -150,6 +151,7 @@ export interface CompileRailwayOptions {
 
 // @public (undocumented)
 export interface CompileRailwayResult {
+    artifact: StampedMarkdown | null;
     // (undocumented)
     errors: CompileError[];
     // (undocumented)
@@ -165,6 +167,7 @@ export function compileSkill(spec: SkillSpec, options?: {
 
 // @public (undocumented)
 export interface CompileSkillResult {
+    artifact: StampedMarkdown | null;
     // (undocumented)
     errors: CompileError[];
     // (undocumented)

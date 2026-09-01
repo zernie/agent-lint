@@ -14,7 +14,7 @@
  */
 import { test, beforeEach, afterEach } from "vitest";
 import assert from "node:assert/strict";
-import { writeFileSync, existsSync, readFileSync } from "node:fs";
+import { writeFileSync, existsSync, readFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 
@@ -133,5 +133,65 @@ test("lint no longer goes green over an artifact compile refused to write", () =
     linted.out.includes("hash valid"),
     false,
     "there is no artifact to call intact, so lint cannot report one",
+  );
+});
+
+// --- the same hole in the SIBLING compilers (found red-teaming #186) --------
+
+test("a SKILL spec with a dead ref writes nothing either", () => {
+  // #173 was fixed in `compileClaudeToFile` only. The identical three lines —
+  // write, THEN check errors — sat unchanged in the skill, subagent, railway and
+  // generator compilers, and all four stamped unconditionally. Worse than the
+  // original: `spec-refs` skips non-`claude` specs, so there was no lint-side
+  // backstop at all. Reproduced on the built CLI before the fix: a stamped
+  // SKILL.md on disk and `lint` reporting `✓ hash valid`, exit 0.
+  //
+  // Guarding four call sites would have left the fifth writable, so the write
+  // takes a `StampedMarkdown` that an erroring compile never mints.
+  const specEntry = resolve(__dirname, "..", "dist", "core", "spec.js");
+  mkdirSync(join(dir, "skills", "demo"), { recursive: true });
+  writeFileSync(
+    join(dir, "skills", "demo", "SKILL.md.spec.ts"),
+    `import { experimental_skill, file } from ${JSON.stringify(specEntry)};\n` +
+      `export default experimental_skill({\n` +
+      `  name: "demo",\n` +
+      `  description: "A demo skill whose body references a file that is gone.",\n` +
+      `  tools: ["Read"],\n` +
+      `  body: ["Read the guide: ", file("docs/never-existed.md")],\n` +
+      `});\n`,
+  );
+
+  const r = run("compile", "skills/demo/SKILL.md.spec.ts");
+  assert.notEqual(r.code, 0, "a dead ref fails the compile");
+  assert.match(r.out, /never-existed/);
+  assert.equal(
+    existsSync(join(dir, "skills", "demo", "SKILL.md")),
+    false,
+    "no stamped artifact: `lint` would have called it hash-valid",
+  );
+});
+
+test("a CLEAN skill spec still compiles and writes", () => {
+  // The other half — refusing to write must not become refusing to work.
+  const specEntry = resolve(__dirname, "..", "dist", "core", "spec.js");
+  mkdirSync(join(dir, "skills", "ok"), { recursive: true });
+  writeFileSync(
+    join(dir, "skills", "ok", "SKILL.md.spec.ts"),
+    `import { experimental_skill } from ${JSON.stringify(specEntry)};\n` +
+      `export default experimental_skill({\n` +
+      `  name: "ok",\n` +
+      `  description: "A skill with no references at all, so nothing can be stale.",\n` +
+      `  tools: ["Read"],\n` +
+      `  body: "Do the thing.",\n` +
+      `});\n`,
+  );
+
+  assert.equal(run("compile", "skills/ok/SKILL.md.spec.ts").code, 0);
+  const out = join(dir, "skills", "ok", "SKILL.md");
+  assert.equal(existsSync(out), true);
+  assert.match(
+    readFileSync(out, "utf-8"),
+    /vigiles:sha256/,
+    "and it is stamped",
   );
 });

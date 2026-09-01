@@ -296,6 +296,13 @@ export interface HookRunResult extends ScriptRunResult {
    */
   readonly haltsTurn: boolean;
   /**
+   * Every block mechanism that fired, from the closed {@link BlockMechanism}
+   * set. Reported so the next mechanism needs no new boolean on this interface —
+   * `haltsTurn` exists because the halt case was added as a one-off, and this is
+   * the shape that stops the pattern repeating.
+   */
+  readonly blockedBy: readonly BlockMechanism[];
+  /**
    * The decision the hook expressed, preferring the structured
    * `permissionDecision` ("allow"|"deny"|"ask") then legacy `decision`
    * ("approve"|"block"), else undefined.
@@ -320,8 +327,54 @@ export function parseHookOutput(stdout: string): HookOutput | null {
 }
 
 /**
+ * The ways a hook can stop an action — a CLOSED set, listed once.
+ *
+ * 🔴 WHY A TABLE AND NOT THREE `||` TERMS. `decideHook` used to be a boolean
+ * expression over three mechanisms while `HookOutput` declared a fourth,
+ * `continue`, that nothing read (#174). The consequence was not a missed
+ * detection but an INVERTED verdict in the flagship feature: a real guard that
+ * stopped every command in the disaster battery was reported by
+ * `assertBlocksDisasters` as blocking none of them.
+ *
+ * A `||` chain has no shape that can be incomplete — every term is optional by
+ * construction, so nothing can say "you declared a mechanism and did not handle
+ * it". `Record<BlockMechanism, …>` can: adding a member to the union without
+ * adding its row is a tsc error, the same device that keeps `RULE_META` honest.
+ */
+export type BlockMechanism = "exit-code" | "deny-decision" | "halt-field";
+
+interface BlockContext {
+  readonly exitCode: number;
+  readonly json: HookOutput | null;
+  readonly protocol: HookProtocol;
+}
+
+const BLOCK_MECHANISMS: Record<BlockMechanism, (ctx: BlockContext) => boolean> =
+  {
+    "exit-code": ({ exitCode, protocol }) =>
+      exitCode === protocol.blockExitCode,
+    "deny-decision": ({ json, protocol }) => {
+      const decision =
+        json?.hookSpecificOutput?.permissionDecision ?? json?.decision;
+      return (
+        decision !== undefined && protocol.denyDecisionValues.includes(decision)
+      );
+    },
+    // Read from the PORT, never hard-coded: `"continue"` is a documented Claude
+    // Code fact and unverified for Codex, so the harness that has it declares it
+    // (core ⊄ adapter). `=== false` and not falsy — an absent field is not a halt.
+    "halt-field": ({ json, protocol }) => {
+      const field = protocol.haltsTurnField;
+      return field !== undefined && json?.[field] === false;
+    },
+  };
+
+/**
  * Decide whether a hook result blocked, and the normalized decision. Pure, so
  * the policy is unit-testable independent of spawning anything.
+ *
+ * Folds the closed {@link BLOCK_MECHANISMS} table rather than testing three
+ * conditions inline, so a mechanism cannot be declared and left unhandled.
  */
 export function decideHook(
   exitCode: number,
@@ -331,20 +384,24 @@ export function decideHook(
   blocked: boolean;
   decision: HookRunResult["decision"];
   haltsTurn: boolean;
+  blockedBy: readonly BlockMechanism[];
 } {
   const permission = json?.hookSpecificOutput?.permissionDecision;
   const decision = permission ?? json?.decision;
-  // The halt field is read from the PORT, never hard-coded: `"continue"` is a
-  // documented Claude Code fact and an unverified one for Codex, so the harness
-  // that has it declares it (core ⊄ adapter). `=== false` and not falsy —
-  // an absent field must not read as a halt.
-  const haltField = protocol.haltsTurnField;
-  const haltsTurn = haltField !== undefined && json?.[haltField] === false;
-  const blocked =
-    exitCode === protocol.blockExitCode ||
-    haltsTurn ||
-    (decision !== undefined && protocol.denyDecisionValues.includes(decision));
-  return { blocked, decision, haltsTurn };
+  const ctx: BlockContext = { exitCode, json, protocol };
+  // EVERY mechanism is evaluated, not the first match: a hook may both exit 2
+  // and halt the turn, and reporting only the first would make `haltsTurn`
+  // depend on the table's order.
+  const blockedBy = (Object.keys(BLOCK_MECHANISMS) as BlockMechanism[]).filter(
+    (kind) => BLOCK_MECHANISMS[kind](ctx),
+  );
+  return {
+    blocked: blockedBy.length > 0,
+    decision,
+    // Derived, not computed twice — the next mechanism needs no new boolean.
+    haltsTurn: blockedBy.includes("halt-field"),
+    blockedBy,
+  };
 }
 
 /**
@@ -361,8 +418,11 @@ export function runHookWith(
 ): HookRunResult {
   const res = runScriptWith(command, JSON.stringify(input), opts, deps);
   const json = parseHookOutput(res.stdout);
-  const { blocked, decision, haltsTurn } = decideHook(res.exitCode, json);
-  return { ...res, json, blocked, decision, haltsTurn };
+  const { blocked, decision, haltsTurn, blockedBy } = decideHook(
+    res.exitCode,
+    json,
+  );
+  return { ...res, json, blocked, decision, haltsTurn, blockedBy };
 }
 
 /**
