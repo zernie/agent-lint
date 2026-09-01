@@ -33,6 +33,7 @@ function run(args: string[], cwd = dir): { code: number; out: string } {
       cwd,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
+      env: childEnv(),
     });
     return { code: 0, out };
   } catch (e) {
@@ -42,6 +43,23 @@ function run(args: string[], cwd = dir): { code: number; out: string } {
       out: `${err.stdout ?? ""}${err.stderr ?? ""}`,
     };
   }
+}
+
+/**
+ * The child's env with GitHub's annotation mode OFF.
+ *
+ * 🔴 Found by CI, not locally: under `GITHUB_ACTIONS` every finding is ALSO
+ * emitted as a `::warning::` annotation carrying the same message, so counting
+ * occurrences of a finding's text in the output doubles it — this file asserted
+ * 2 and got 4 on the runner while passing on a laptop. The tests here are about
+ * the HUMAN-READABLE run, so the annotation stream is noise that must be off
+ * rather than a number to double.
+ */
+function childEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.GITHUB_ACTIONS;
+  delete env.GITHUB_STEP_SUMMARY;
+  return env;
 }
 
 /** A skill whose description is deliberately over the 500-char budget. */

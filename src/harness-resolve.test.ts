@@ -39,6 +39,9 @@ function runTest(): { code: number; out: string } {
         cwd: dir,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "pipe"],
+        // Same reason as lint-contract.test.ts: annotation mode duplicates
+        // message text and makes occurrence counts environment-dependent.
+        env: { ...process.env, GITHUB_ACTIONS: undefined } as NodeJS.ProcessEnv,
       }),
     };
   } catch (e) {
