@@ -371,6 +371,15 @@ export const RULE_META: Record<RuleName, RuleMeta> = {
       "Near-duplicate rules within one spec (NCD similarity) — two rules saying the same thing.",
     detector: "findDuplicateRules",
   },
+  "spec-refs": {
+    id: "spec-refs",
+    bucket: "external-decidable",
+    surface: ["instruction"],
+    defaultSeverity: "error",
+    summary:
+      "A compiled instruction file whose spec references a file/script that no longer exists.",
+    detector: "compileClaude",
+  },
   "orphan-docs": {
     id: "orphan-docs",
     bucket: "heuristic-behavioral",

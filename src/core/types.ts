@@ -125,6 +125,17 @@ export interface RulesConfig {
    */
   "orphan-docs"?: RuleSeverity;
   /**
+   * Re-derive a compiled instruction file's references from its `.spec.ts` and
+   * report the dead ones.
+   *
+   * The integrity hash answers "is this file still what the spec compiled to";
+   * it says nothing about whether the paths and scripts it NAMES still exist. So
+   * an artifact committed while its refs were live stayed green forever after
+   * the target was deleted — `compile` errored, `lint` said "hash valid" and
+   * exited 0 (#173). Default: "error", matching `compile`.
+   */
+  "spec-refs"?: RuleSeverity;
+  /**
    * Near-duplicate rules WITHIN one spec, by NCD similarity — spec bloat, two
    * rules saying the same thing in different words.
    *

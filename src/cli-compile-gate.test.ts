@@ -107,9 +107,19 @@ test("a failed compile leaves the LAST GOOD artifact alone, not a broken one", (
     "the previous good artifact must survive a failed compile untouched",
   );
 
-  // And the gate must still be green on it — it IS intact, and saying otherwise
-  // would be the opposite false alarm.
-  assert.equal(run("lint", ".").code, 0);
+  // 🔴 THIS ASSERTION USED TO SAY `lint` MUST BE GREEN HERE, and that expectation
+  // was the hole itself. The surviving artifact IS intact — its hash matches what
+  // the spec compiled to — but the spec it came from now names a file that does
+  // not exist, so calling the repo clean is exactly the false confidence #173 was
+  // filed about. The hash is an integrity claim, not a reference claim.
+  //
+  // `spec-refs` closes that residue, so a dead reference is reported even though
+  // the artifact is untouched. What the surviving-artifact half of this test
+  // still pins is the FILE: refusing to write must not mean destroying what is
+  // there, which is asserted above by comparing the bytes.
+  const linted = run("lint", ".");
+  assert.equal(linted.code, 2, "the dead reference is caught, not the file");
+  assert.match(linted.out, /never-existed/);
 });
 
 test("lint no longer goes green over an artifact compile refused to write", () => {

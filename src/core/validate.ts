@@ -73,6 +73,9 @@ export const DEFAULT_RULES: Required<RulesConfig> = {
   // caught that disagreement the moment the rule was registered properly.
   //
   // Set either to `"error"` to keep the old blocking behaviour.
+  // Hard error, like `compile` itself: a dead reference is decidable from the
+  // filesystem, not a proxy — the calibration rule's `external-decidable` tier.
+  "spec-refs": "error",
   "orphan-docs": "warn",
   "duplicate-rules": "warn",
   "require-instructions-spec": "warn",

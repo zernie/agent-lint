@@ -478,6 +478,7 @@ describe("loadConfig", () => {
       // Both were untierable until 2026-09 — they fed the exit code with no rule
       // id to address them (#181). Registered as real rules, they land at "warn"
       // like every other heuristic proxy.
+      "spec-refs": "error",
       "orphan-docs": "warn",
       "duplicate-rules": "warn",
       "require-instructions-spec": "warn",

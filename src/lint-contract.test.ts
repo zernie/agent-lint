@@ -17,7 +17,13 @@
  */
 import { test, beforeEach, afterEach } from "vitest";
 import assert from "node:assert/strict";
-import { writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
+import {
+  writeFileSync,
+  mkdirSync,
+  readFileSync,
+  existsSync,
+  rmSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 
@@ -227,4 +233,77 @@ test("--json still replaces stdout, unchanged", () => {
   const out = run(["lint", ".", "--json"]).out;
   assert.doesNotMatch(out, /finding\(s\):/);
   JSON.parse(out); // throws if stdout is not pure JSON
+});
+
+// --- #173 (residual): a committed artifact whose refs went dead -----------
+
+test("lint catches a committed artifact whose spec refs died (#173 residual)", () => {
+  // The half deleting the write-on-error did not close. An artifact committed
+  // while its refs were live stays hash-valid forever; delete the target and
+  // `compile` errors while `lint` said "✓ hash valid — All compiled files
+  // intact" and exited 0. A hash is an integrity claim, not a reference claim.
+  writeFileSync(
+    join(dir, "package.json"),
+    JSON.stringify({ name: "f", version: "0.0.0", scripts: {} }),
+  );
+  mkdirSync(join(dir, "docs"), { recursive: true });
+  writeFileSync(join(dir, "docs", "guide.md"), "# Guide\n");
+  const specEntry = resolve(__dirname, "..", "dist", "core", "spec.js");
+  writeFileSync(
+    join(dir, "CLAUDE.md.spec.ts"),
+    `import { instructionFile, file } from ${JSON.stringify(specEntry)};\n` +
+      `export default instructionFile({\n` +
+      `  sections: { Overview: \`x\`, Routing: [file("docs/guide.md")] },\n` +
+      `  rules: {},\n` +
+      `});\n`,
+  );
+
+  assert.equal(run(["compile", "CLAUDE.md.spec.ts"]).code, 0, "compiles clean");
+  assert.equal(
+    run(["lint", "."]).code,
+    0,
+    "and lints clean while the ref lives",
+  );
+
+  // The reference dies AFTER the artifact was committed.
+  rmSync(join(dir, "docs", "guide.md"));
+
+  const after = run(["lint", "."]);
+  assert.equal(after.code, 2, "a dead ref fails the gate");
+  assert.match(after.out, /docs\/guide\.md/, "…and names the reference");
+});
+
+test("spec-refs is tierable, and silent when every ref is alive", () => {
+  // Both halves: it must not fire on a healthy repo, and `warn` must report
+  // without failing — the property #181 was filed about, applied to a new rule
+  // so it does not repeat the untierable mistake.
+  writeFileSync(
+    join(dir, "package.json"),
+    JSON.stringify({ name: "f", version: "0.0.0", scripts: {} }),
+  );
+  mkdirSync(join(dir, "docs"), { recursive: true });
+  writeFileSync(join(dir, "docs", "guide.md"), "# Guide\n");
+  const specEntry = resolve(__dirname, "..", "dist", "core", "spec.js");
+  writeFileSync(
+    join(dir, "CLAUDE.md.spec.ts"),
+    `import { instructionFile, file } from ${JSON.stringify(specEntry)};\n` +
+      `export default instructionFile({\n` +
+      `  sections: { Overview: \`x\`, Routing: [file("docs/guide.md")] },\n` +
+      `  rules: {},\n` +
+      `});\n`,
+  );
+  run(["compile", "CLAUDE.md.spec.ts"]);
+
+  const healthy = run(["lint", "."]);
+  assert.equal(healthy.code, 0);
+  assert.equal(healthy.out.includes("Spec reference check"), false);
+
+  rmSync(join(dir, "docs", "guide.md"));
+  writeFileSync(
+    join(dir, ".vigilesrc.json"),
+    JSON.stringify({ rules: { "spec-refs": "warn" } }),
+  );
+  const warned = run(["lint", "."]);
+  assert.equal(warned.code, 0, "warn does not fail the build");
+  assert.match(warned.out, /guide\.md/, "…but still reports");
 });

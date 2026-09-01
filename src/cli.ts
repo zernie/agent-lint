@@ -1141,6 +1141,8 @@ interface LintReport {
   inlineRules: number;
   frontmatterErrors: number;
   frontmatterRules: number;
+  specRefIssues: number;
+  specRefErrors: number;
   duplicatePairs: number;
   /** Severity of `duplicate-instructions` — carried so the exit code can tier it. */
   duplicateSeverity: RuleSeverity;
@@ -1377,7 +1379,8 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     // it to "error", so it belongs in the hard tier with every other explicit
     // error — it used to sit at exit 1 because it fired unasked and could not be
     // turned off.
-    report.docRefErrors > 0
+    report.docRefErrors > 0 ||
+    report.specRefErrors > 0
   )
     return 2;
   // Tierable now: a `warn` orphan/duplicate finding is reported and does NOT
@@ -1817,6 +1820,71 @@ function overBundles<T extends Record<string, number>>(
   return total;
 }
 
+/**
+ * Re-derive a compiled artifact's references from its SPEC, and report the dead
+ * ones — the half of #173 that deleting the write-on-error did not close.
+ *
+ * 🔴 THE HOLE. `lint` verifies the integrity HASH, which answers "is this file
+ * still what the spec compiled to" and says nothing about whether the things it
+ * NAMES still exist. So a `CLAUDE.md` committed while its refs were live stays
+ * green forever after the referenced file is deleted: `compile` errors, `lint`
+ * prints "hash valid — All compiled files intact" and exits 0. Reproduced:
+ *
+ *     $ vigiles compile CLAUDE.md.spec.ts
+ *     ✗ [stale-file] File not found: "docs/guide.md"
+ *     $ vigiles lint .
+ *     ✓ CLAUDE.md — hash valid       # exit 0
+ *
+ * The reporter named this residue himself when filing #173 and I deferred it;
+ * it is the gap between what `README.md` promises of `lint` ("the CI gate …
+ * broken refs") and what it checked. A hash is an integrity claim, not a
+ * reference claim, and the two were being read as one.
+ *
+ * Cost is bounded: only specs whose compiled target actually EXISTS are loaded,
+ * so a repo with no specs does no extra work at all.
+ */
+async function checkSpecRefs(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+  dialect: HarnessDialect,
+): Promise<{ issues: number; errors: number }> {
+  const sev = ruleSeverity(config?.rules?.["spec-refs"]) ?? "error";
+  if (!sev) return { issues: 0, errors: 0 };
+  const found: string[] = [];
+  for (const specPath of findSpecs()) {
+    const target = specPath.replace(/\.spec\.ts$/, "");
+    if (!existsSync(target)) continue; // never compiled — `compile` reports it
+    const spec = await loadSpec(specPath);
+    if (!spec || spec._specType !== "claude") continue;
+    try {
+      const { errors } = compileClaude(spec, {
+        basePath: process.cwd(),
+        specFile: specPath,
+        dialect,
+        maxRules: config?.maxRules,
+        maxTokens: config?.maxTokens,
+        maxSectionLines: config?.maxSectionLines,
+        catalogOnly: config?.catalogOnly,
+        linters: config?.linters,
+      });
+      for (const e of errors)
+        found.push(`${target}: ${e.message} (from ${specPath})`);
+    } catch {
+      // A spec that will not load is `compile`'s finding, not this one's —
+      // reporting it here would double-report and blame the wrong command.
+      continue;
+    }
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nSpec reference check:\n");
+    for (const msg of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${msg}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", msg);
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
 async function runLint(
   restArgs: string[],
   flags: string[],
@@ -1993,6 +2061,10 @@ async function runLint(
   // 7b. Untested-surface check — skills/agents/hooks shipping without a test or
   // eval. Warning by default (a nudge, exit 0); set rules.untested-{skill,agent,
   // hook} to "error" to gate CI. See src/test-coverage.ts and docs/rules/.
+  // A compiled artifact's refs, re-derived from its spec — the hash says the file
+  // is unchanged, not that what it names still exists (#173).
+  const specRefs = await checkSpecRefs(config, silent, adapter.dialect);
+
   const untested = overBundles(
     checkUntestedSurfaces,
     config,
@@ -2291,6 +2363,8 @@ async function runLint(
     inlineRules,
     frontmatterErrors,
     frontmatterRules,
+    specRefIssues: specRefs.issues,
+    specRefErrors: specRefs.errors,
     duplicatePairs: dups.pairCount,
     duplicateSeverity:
       ruleSeverity(config?.rules?.["duplicate-rules"]) ?? "warn",
