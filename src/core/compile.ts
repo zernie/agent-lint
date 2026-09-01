@@ -62,7 +62,29 @@ export function computeHash(content: string): string {
 }
 
 /** @internal Prepend a hash comment to compiled content. */
-export function addHash(content: string, specFile: string): string {
+/**
+ * A compiled body that carries a valid integrity stamp — mintable ONLY by
+ * {@link addHash}, and by construction only handed out for a CLEAN compile.
+ *
+ * 🔴 WHY A BRAND AND NOT A CHECK AT THE WRITE SITE. #173 was a `CLAUDE.md`
+ * written while its refs were known-dead: `compile` printed the errors, exited
+ * 1, and wrote the file anyway, stamped. `lint` then verified the stamp and
+ * exited 0 over an artifact that names files which do not exist. The fix that
+ * shipped moved the write behind an error check in ONE compiler — and the same
+ * three lines sat unchanged in four siblings (skill, subagent, railway,
+ * generator), where the lint-side backstop does not even reach because
+ * `spec-refs` only inspects `claude` specs. Reproduced end to end after that
+ * fix: a skill spec with a stale ref still produced a stamped `SKILL.md` and a
+ * green `lint`.
+ *
+ * Fixing five write sites leaves the class writable — the sixth compiler would
+ * be written the same way. Branding the STAMP moves the guarantee to where it is
+ * produced: `writeArtifact` accepts nothing else, and an erroring compile has no
+ * stamp to give it.
+ */
+export type StampedMarkdown = string & { readonly __stamped: unique symbol };
+
+export function addHash(content: string, specFile: string): StampedMarkdown {
   // 🔴 THE LAST GATE BEFORE A COMPILED FILE IS WRITTEN. Every compile path returns through here
   // (four call sites), which makes it the one place a whole class of defect can be stopped.
   //
@@ -82,7 +104,32 @@ export function addHash(content: string, specFile: string): string {
         `input()/file()/cmd() and friends: they take strings, not option objects.`,
     );
   }
-  return placeIntegrityHeader(content, computeHash(content), specFile);
+  // The ONE mint. Every stamped artifact in the codebase originates here, which
+  // is what makes the brand meaningful rather than decorative.
+  return placeIntegrityHeader(
+    content,
+    computeHash(content),
+    specFile,
+  ) as StampedMarkdown;
+}
+
+/**
+ * How every compiler finishes: the rendered body, plus a STAMPED artifact that
+ * exists only when the compile is clean.
+ *
+ * `markdown` stays a plain string because callers legitimately want the draft
+ * even when it is wrong — `adoptDiff` diffs "what the spec WOULD produce"
+ * against the file on disk, and a stale ref must not stop that. `artifact` is
+ * what a writer needs, and it is `null` the moment there is an error, so the
+ * write cannot happen without narrowing.
+ */
+export function seal(
+  body: string,
+  errors: readonly CompileError[],
+  specFile: string,
+): { markdown: string; artifact: StampedMarkdown | null } {
+  const stamped = addHash(body, specFile);
+  return { markdown: stamped, artifact: errors.length === 0 ? stamped : null };
 }
 
 /** @internal Check if a file's hash matches its content. Returns null if no hash found. */
@@ -956,6 +1003,11 @@ function checkInlineCode(markdown: string, max: number): CompileError[] {
 }
 
 export interface CompileSkillResult {
+  /**
+   * The stamped artifact — present ONLY when `errors` is empty. `null` is what
+   * makes a failed compile unwritable: `writeArtifact` accepts nothing else.
+   */
+  artifact: StampedMarkdown | null;
   markdown: string;
   errors: CompileError[];
   /** Non-blocking advisories (e.g. an over-long inline code block). */
@@ -1086,7 +1138,7 @@ export function compileSkill(
     (marker ? marker + "\n\n" : "") +
     sections.trim() +
     "\n";
-  return { markdown: addHash(content, specFile), errors, warnings };
+  return { ...seal(content, errors, specFile), errors, warnings };
 }
 
 // ---------------------------------------------------------------------------
@@ -1237,6 +1289,11 @@ function renderAgentRules(rules: Record<string, Rule>): string {
 }
 
 export interface CompileAgentResult {
+  /**
+   * The stamped artifact — present ONLY when `errors` is empty. `null` is what
+   * makes a failed compile unwritable: `writeArtifact` accepts nothing else.
+   */
+  artifact: StampedMarkdown | null;
   markdown: string;
   errors: CompileError[];
   /** Non-blocking advisories (e.g. an over-long inline code block). */
@@ -1321,7 +1378,7 @@ export function compileAgent(
     (marker ? marker + "\n\n" : "") +
     body.trim() +
     "\n";
-  return { markdown: addHash(content, specFile), errors, warnings };
+  return { ...seal(content, errors, specFile), errors, warnings };
 }
 
 // ---------------------------------------------------------------------------
@@ -1342,6 +1399,11 @@ export interface CompileRailwayOptions {
 }
 
 export interface CompileRailwayResult {
+  /**
+   * The stamped artifact — present ONLY when `errors` is empty. `null` is what
+   * makes a failed compile unwritable: `writeArtifact` accepts nothing else.
+   */
+  artifact: StampedMarkdown | null;
   markdown: string;
   errors: CompileError[];
 }
@@ -1428,7 +1490,7 @@ export function compileRailway(
   const errors = validateRailway(rw, options.knownAgents);
   const specFile = options.specFile ?? `${rw.name}.railway.spec.ts`;
   const content = renderRailwayMarkdown(rw) + "\n";
-  return { markdown: addHash(content, specFile), errors };
+  return { ...seal(content, errors, specFile), errors };
 }
 
 // ---------------------------------------------------------------------------

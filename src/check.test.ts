@@ -72,6 +72,7 @@ function hookResult(over: Partial<HookRunResult> = {}): HookRunResult {
     json: null,
     blocked: false,
     haltsTurn: false,
+    blockedBy: [],
     egress: [],
     filesWritten: [],
     decision: undefined,

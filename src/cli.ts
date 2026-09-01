@@ -34,6 +34,7 @@ import {
   join,
 } from "node:path";
 import { minimatch } from "minimatch";
+import { repoRelative, type RepoRelativePath } from "./core/repo-path.js";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { globSync } from "glob";
 import { generateTypes } from "./core/generate-types.js";
@@ -201,6 +202,7 @@ import {
   addHash,
   validateFileRef,
   validateCommandRef,
+  type StampedMarkdown,
 } from "./core/compile.js";
 import type { CompileError } from "./core/compile.js";
 import type { ClaudeSpec, SkillSpec, AgentSpec, Railway } from "./core/spec.js";
@@ -615,11 +617,13 @@ function compileGeneratorSkillToFile(
   source: string,
 ): boolean {
   const outputPath = specPath.replace(/\.spec\.ts$/, "");
-  const { markdown, errors } = compileGeneratorSkill(source, {
+  const { artifact, errors } = compileGeneratorSkill(source, {
     basePath: process.cwd(),
     specFile: specPath,
   });
-  writeFileSync(resolve(process.cwd(), outputPath), markdown);
+  // Written only when the compile is clean: `artifact` is null otherwise, and
+  // `writeArtifact` takes nothing else.
+  if (artifact) writeArtifact(outputPath, artifact);
   if (errors.length === 0) {
     console.log(`\n✓ ${specPath} → ${outputPath} (generator skill)`);
     return true;
@@ -732,14 +736,16 @@ function compileSkillToFile(
   dialect: HarnessDialect,
 ): boolean {
   const outputPath = specPath.replace(/\.spec\.ts$/, "");
-  const { markdown, errors, warnings } = compileSkill(spec, {
+  const { artifact, errors, warnings } = compileSkill(spec, {
     basePath: process.cwd(),
     specFile: specPath,
     // The SKILL.md frontmatter profile comes from the resolved harness — a Codex
     // repo gets a minimal (name + description) SKILL.md; CC gets the full set.
     dialect,
   });
-  writeFileSync(resolve(process.cwd(), outputPath), markdown);
+  // Written only when the compile is clean: `artifact` is null otherwise, and
+  // `writeArtifact` takes nothing else.
+  if (artifact) writeArtifact(outputPath, artifact);
   if (errors.length === 0) {
     console.log(`\n✓ ${specPath} → ${outputPath}`);
     printWarnings(specPath, warnings);
@@ -758,12 +764,14 @@ function compileAgentToFile(
   dialect: HarnessDialect,
 ): boolean {
   const outputPath = specPath.replace(/\.spec\.ts$/, "");
-  const { markdown, errors, warnings } = compileAgent(spec, {
+  const { artifact, errors, warnings } = compileAgent(spec, {
     basePath: process.cwd(),
     specFile: specPath,
     dialect,
   });
-  writeFileSync(resolve(process.cwd(), outputPath), markdown);
+  // Written only when the compile is clean: `artifact` is null otherwise, and
+  // `writeArtifact` takes nothing else.
+  if (artifact) writeArtifact(outputPath, artifact);
   if (errors.length === 0) {
     console.log(`\n✓ ${specPath} → ${outputPath}`);
     printWarnings(specPath, warnings);
@@ -786,11 +794,13 @@ function compileRailwayToFile(
   knownAgents: readonly string[],
 ): boolean {
   const outputPath = specPath.replace(/\.spec\.ts$/, "");
-  const { markdown, errors } = compileRailway(spec, {
+  const { artifact, errors } = compileRailway(spec, {
     specFile: specPath,
     knownAgents,
   });
-  writeFileSync(resolve(process.cwd(), outputPath), markdown);
+  // Written only when the compile is clean: `artifact` is null otherwise, and
+  // `writeArtifact` takes nothing else.
+  if (artifact) writeArtifact(outputPath, artifact);
   if (errors.length === 0) {
     console.log(`\n✓ ${specPath} → ${outputPath}`);
     return true;
@@ -1883,6 +1893,19 @@ async function checkSpecRefs(
     }
   }
   return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Write a compiled artifact. Accepts ONLY a {@link StampedMarkdown}, so a body
+ * that failed to compile cannot reach the disk — there is no stamp to pass.
+ *
+ * This replaces four copies of `writeFileSync(path, markdown)` that ran BEFORE
+ * their error check (#173, reproduced in the skill/subagent/railway/generator
+ * compilers after the CLAUDE.md one was fixed). Guarding four call sites would
+ * have left the fifth writable; the type leaves nothing to remember.
+ */
+function writeArtifact(outputPath: string, artifact: StampedMarkdown): void {
+  writeFileSync(resolve(process.cwd(), outputPath), artifact);
 }
 
 async function runLint(
@@ -7902,15 +7925,17 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
  * one-line nudge rather than creating one silently. Best-effort — a failure here
  * never breaks the audit. `entries` are paths relative to the git root (cwd).
  */
-function ensureReportGitignored(cwd: string, entries: readonly string[]): void {
+function ensureReportGitignored(
+  cwd: string,
+  entries: readonly RepoRelativePath[],
+): void {
   if (entries.length === 0) return;
-  // An `--out` outside the repo produced entries like
-  // `../../../../private/tmp/x/vigiles-report.json`, which ignore NOTHING —
-  // .gitignore does not reach outside its own tree — and accumulate one dead
-  // block per output path. Worse in principle than in practice: `audit` is
-  // documented as a read-only report, and this made it edit a tracked file for
-  // no benefit at all. Inside the repo the write is expected and documented.
-  if (entries.some((e) => e.startsWith("..") || isAbsolute(e))) return;
+  // 🔴 THE GUARD THAT USED TO BE HERE IS GONE, and its absence is the point.
+  // It checked at the write site that no entry escaped the repo (#176.8) — which
+  // worked, and left the bug writable: the next caller to build an entry list
+  // still got a bare `string[]`. `RepoRelativePath` moves the check into the
+  // TYPE, so an escaping path cannot be handed to this function at all. One
+  // place mints them (`repoRelative`), and it returns null instead.
   const gi = resolve(cwd, ".gitignore");
   try {
     if (!existsSync(gi)) {
@@ -8965,10 +8990,19 @@ async function main(): Promise<void> {
         // backslashes (`relative()` yields `reports\x` on Windows, which would
         // never match `reports/x`).
         if (wroteReports.length > 0) {
-          const rel = wroteReports.map((f) => {
-            const r = relative(process.cwd(), resolve(outDir, f)) || f;
-            return pathSep === "/" ? r : r.split(pathSep).join("/");
-          });
+          // Only paths that PROVABLY sit inside the repo can be minted, so an
+          // `--out` pointing elsewhere yields nothing to write rather than a
+          // dead `../../..` entry.
+          const rel = wroteReports
+            .map((f) =>
+              repoRelative(process.cwd(), resolve(outDir, f), {
+                relative,
+                resolve,
+                isAbsolute,
+                sep: pathSep,
+              }),
+            )
+            .filter((p): p is RepoRelativePath => p !== null);
           ensureReportGitignored(process.cwd(), rel);
         }
         // A shareable deep-link for a public GitHub repo: the in-browser demo

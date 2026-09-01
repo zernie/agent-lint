@@ -245,6 +245,9 @@ export interface BaselineFile {
 export function blocked(): Check<HookRunResult>;
 
 // @public
+export type BlockMechanism = "exit-code" | "deny-decision" | "halt-field";
+
+// @public
 export function cacheTokens(opts: {
     maxCreation?: number;
     maxRead?: number;
@@ -362,6 +365,7 @@ export function decideHook(exitCode: number, json: HookOutput | null, protocol?:
     blocked: boolean;
     decision: HookRunResult["decision"];
     haltsTurn: boolean;
+    blockedBy: readonly BlockMechanism[];
 };
 
 // @public
@@ -767,6 +771,7 @@ export interface HookPropertyResult<E> {
 // @public (undocumented)
 export interface HookRunResult extends ScriptRunResult {
     readonly blocked: boolean;
+    readonly blockedBy: readonly BlockMechanism[];
     readonly decision: HookOutput["decision"] | "allow" | "deny" | "ask" | undefined;
     readonly haltsTurn: boolean;
     readonly json: HookOutput | null;

@@ -30,7 +30,7 @@ import ts from "typescript";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { readPackageScripts, addHash } from "./compile.js";
+import { readPackageScripts, seal, type StampedMarkdown } from "./compile.js";
 
 export interface GeneratorError {
   type: "stale-file" | "stale-command";
@@ -288,6 +288,11 @@ function extractMeta(obj: ts.ObjectLiteralExpression): SkillMeta {
 }
 
 export interface CompileGeneratorSkillResult {
+  /**
+   * The stamped artifact — present ONLY when `errors` is empty. `null` is what
+   * makes a failed compile unwritable: `writeArtifact` accepts nothing else.
+   */
+  artifact: StampedMarkdown | null;
   markdown: string;
   errors: GeneratorError[];
 }
@@ -317,6 +322,9 @@ export function compileGeneratorSkill(
   ) {
     return {
       markdown: "",
+      // No stamp for a spec that did not compile — the error branch has nothing
+      // to write, which is the whole point of the field.
+      artifact: null,
       errors: [
         {
           type: "stale-command",
@@ -340,7 +348,7 @@ export function compileGeneratorSkill(
   }
   fm.push("", "---");
   const content = `${fm.join("\n")}\n\n${body.trim()}\n`;
-  return { markdown: addHash(content, specFile), errors };
+  return { ...seal(content, errors, specFile), errors };
 }
 
 /**

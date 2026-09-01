@@ -959,3 +959,32 @@ test("fileToolEvents: the two spellings are never the same string", () => {
     assert.notEqual(p(rel), p(a), `root ${String(root)} collapsed the pair`);
   }
 });
+
+// --- the closed block-mechanism table -------------------------------------
+
+test("decideHook reports WHICH mechanisms fired, not just that one did", () => {
+  // The shape that stops #174 repeating: a hook can block several ways at once,
+  // and each new mechanism reports itself instead of needing a fresh boolean.
+  const both = decideHook(2, { continue: false });
+  assert.deepEqual([...both.blockedBy].sort(), ["exit-code", "halt-field"]);
+  assert.equal(both.blocked, true);
+  assert.equal(both.haltsTurn, true);
+});
+
+test("haltsTurn is DERIVED from the table, not computed twice", () => {
+  // Order-independent: evaluating only the first match would make `haltsTurn`
+  // depend on where `halt-field` sits in the table.
+  const exitOnly = decideHook(2, null);
+  assert.deepEqual(exitOnly.blockedBy, ["exit-code"]);
+  assert.equal(exitOnly.haltsTurn, false);
+
+  const haltOnly = decideHook(0, { continue: false });
+  assert.deepEqual(haltOnly.blockedBy, ["halt-field"]);
+  assert.equal(haltOnly.haltsTurn, true);
+});
+
+test("a clean run fires no mechanism at all", () => {
+  const clean = decideHook(0, null);
+  assert.deepEqual(clean.blockedBy, []);
+  assert.equal(clean.blocked, false);
+});
