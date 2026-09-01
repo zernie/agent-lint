@@ -114,6 +114,25 @@ export interface TestCoverageConfig {
 
 export interface RulesConfig {
   /**
+   * Opt-in: a doc in a configured dir (default `docs/`) that no other `.md`
+   * references. The `orphans` block turns the SCAN on; this turns the FINDING
+   * into a warning or an error.
+   *
+   * It lived outside this interface until 2026-09 and therefore could not be
+   * set at all: `"warn"` and `"off"` were both ignored and the check always
+   * exited 1, so a repo's only choice was an always-blocking check or deleting
+   * the `orphans` block (#181). Default: "error", matching the old behaviour.
+   */
+  "orphan-docs"?: RuleSeverity;
+  /**
+   * Near-duplicate rules WITHIN one spec, by NCD similarity — spec bloat, two
+   * rules saying the same thing in different words.
+   *
+   * Also previously untierable, and worse: it had no rule id at all, so there
+   * was no name a config could even mention (#181). Default: "error".
+   */
+  "duplicate-rules"?: RuleSeverity;
+  /**
    * Require a `.spec.ts` behind each instruction file (CLAUDE.md / AGENTS.md) —
    * the file must be compiled from a typed spec, not hand-written. NARROW: only a
    * `.spec.ts` sibling (or an explicit `<!-- vigiles-disable
@@ -396,6 +415,20 @@ export interface VigilesConfig {
   /** Custom linter configs (rulesDir). */
   linters?: Record<string, { rulesDir?: string | string[] }>;
   /** Orphan-docs check configuration. Include/exclude globs, tsconfig-style. */
+  /**
+   * Which bundles `lint` scores: `"root"` (default) or `"all"`.
+   *
+   * A monorepo holding `skills/` plus `plugins/  * /skills/` had its nested skills
+   * silently uncounted — the counters looked complete while whole surfaces were
+   * never read (#185). `"all"` scores every discovered bundle in one pass, so a
+   * CI gate keeps ONE exit code over the whole repo.
+   *
+   * Root-only remains the default because descending unconditionally would score
+   * vendored third-party plugins (a repo may keep a pinned corpus on disk) as if
+   * they were the project's own. The default no longer hides the skip: `lint`
+   * names the bundles it did not score.
+   */
+  bundles?: "root" | "all";
   orphans?: OrphansConfig;
   /**
    * Glob patterns of instruction/skill files to EXCLUDE from `lint` discovery

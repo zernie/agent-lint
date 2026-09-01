@@ -101,7 +101,7 @@ declare module "vigiles/generated" {
     | "internal:check"
     | "docs:api";
 
-  /** 400 project files. */
+  /** 403 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -388,6 +388,8 @@ declare module "vigiles/generated" {
     | "src/guardrail-check.ts"
     | "src/harness-assert.test.ts"
     | "src/harness-assert.ts"
+    | "src/harness-resolve-hooks.mts"
+    | "src/harness-resolve.test.ts"
     | "src/harness-test.test.ts"
     | "src/harness-test.ts"
     | "src/hook-dogfood.test.ts"
@@ -405,6 +407,7 @@ declare module "vigiles/generated" {
     | "src/judge.ts"
     | "src/leaderboard.test.ts"
     | "src/leaderboard.ts"
+    | "src/lint-contract.test.ts"
     | "src/linting.ts"
     | "src/load-hook.test.ts"
     | "src/load-hook.ts"
@@ -860,6 +863,8 @@ declare module "vigiles/spec" {
       | "src/guardrail-check.ts"
       | "src/harness-assert.test.ts"
       | "src/harness-assert.ts"
+      | "src/harness-resolve-hooks.mts"
+      | "src/harness-resolve.test.ts"
       | "src/harness-test.test.ts"
       | "src/harness-test.ts"
       | "src/hook-dogfood.test.ts"
@@ -877,6 +882,7 @@ declare module "vigiles/spec" {
       | "src/judge.ts"
       | "src/leaderboard.test.ts"
       | "src/leaderboard.ts"
+      | "src/lint-contract.test.ts"
       | "src/linting.ts"
       | "src/load-hook.test.ts"
       | "src/load-hook.ts"

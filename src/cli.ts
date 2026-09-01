@@ -31,7 +31,9 @@ import {
   relative,
   isAbsolute,
   sep as pathSep,
+  join,
 } from "node:path";
+import { minimatch } from "minimatch";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { globSync } from "glob";
 import { generateTypes } from "./core/generate-types.js";
@@ -1140,12 +1142,16 @@ interface LintReport {
   frontmatterErrors: number;
   frontmatterRules: number;
   duplicatePairs: number;
+  /** Severity of `duplicate-instructions` — carried so the exit code can tier it. */
+  duplicateSeverity: RuleSeverity;
   coverageEnabled: number;
   coverageDocumented: number;
   strengthenSuggestions: number;
   integrityErrors: number;
   coverageErrors: number;
   orphanCount: number;
+  /** Severity of `orphan-docs` — carried so the exit code can tier it (#181). */
+  orphanSeverity: RuleSeverity;
   untestedSurfaces: number;
   untestedErrors: number;
   toolContractIssues: number;
@@ -1192,6 +1198,12 @@ interface LintReport {
   symbolRefErrors: number;
   mcpRefErrors: number;
   files: string[];
+  /**
+   * Findings / errors / warnings for the whole run — the same numbers the
+   * human-readable summary line prints, so a consumer never has to reconstruct
+   * them by counting output lines (#183, and the generic-consumer half of #181).
+   */
+  totals?: { findings: number; errors: number; warnings: number };
 }
 
 /**
@@ -1272,6 +1284,64 @@ async function verifyMarkdownMcpRefs(
 }
 
 /** Exit codes: 0 clean, 1 warnings only, 2 hard errors. */
+/**
+ * The run's totals, derived from the report itself.
+ *
+ * 🔴 ONE SOURCE, because the two numbers disagreeing IS the bug (#183). The
+ * human-readable log had no total, and counting its `⚠` lines gave a different
+ * number from the JSON — 21 against 88 on a real repo — because some checks print
+ * one line per finding and others one line carrying a count. Both numbers were
+ * right and nothing said why they differed, so "vigiles reports 21 warnings" and
+ * "88 warnings" were equally defensible readings of one run.
+ *
+ * Counted GENERICALLY off the `*Issues` / `*Errors` / count keys rather than a
+ * hand-maintained list, so a rule added later is included by existing, not by
+ * somebody remembering. `orphanCount` and `duplicatePairs` are named explicitly
+ * only because they predate the `*Issues` convention (#181).
+ */
+export function lintTotals(report: LintReport): {
+  findings: number;
+  errors: number;
+  warnings: number;
+} {
+  let errors = 0;
+  let findings = 0;
+  for (const [key, value] of Object.entries(report)) {
+    if (typeof value !== "number" || value === 0) continue;
+    if (key === "files") continue;
+    // Informational counters: not findings, they describe the corpus.
+    if (
+      key === "inlineRules" ||
+      key === "frontmatterRules" ||
+      key === "coverageEnabled" ||
+      key === "coverageDocumented" ||
+      key === "strengthenSuggestions"
+    )
+      continue;
+    if (key.endsWith("Errors")) {
+      errors += value;
+      findings += value;
+      continue;
+    }
+    // `*Issues` counts EVERY finding of that rule; when the rule is at "error"
+    // the same findings are also in `*Errors`, so they must not be counted twice.
+    if (key.endsWith("Issues")) {
+      const paired = (report as unknown as Record<string, number>)[
+        `${key.slice(0, -"Issues".length)}Errors`
+      ];
+      findings += paired && paired > 0 ? 0 : value;
+      continue;
+    }
+    if (
+      key === "orphanCount" ||
+      key === "duplicatePairs" ||
+      key === "untestedSurfaces"
+    )
+      findings += value;
+  }
+  return { findings, errors, warnings: findings - errors };
+}
+
 function lintExitCode(report: LintReport): 0 | 1 | 2 {
   if (
     report.hashErrors > 0 ||
@@ -1310,7 +1380,12 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.docRefErrors > 0
   )
     return 2;
-  if (report.duplicatePairs > 0 || report.orphanCount > 0) return 1;
+  // Tierable now: a `warn` orphan/duplicate finding is reported and does NOT
+  // change the exit code. Both used to feed the exit directly, which is what
+  // made them the only untierable findings in the tool.
+  if (report.orphanCount > 0 && report.orphanSeverity === "error") return 1;
+  if (report.duplicatePairs > 0 && report.duplicateSeverity === "error")
+    return 1;
   // Guidance counts are informational, not failures
   return 0;
 }
@@ -1636,6 +1711,112 @@ function sharedDirsRootFor(scanTarget: string): string {
   return underCwd ? cwd : target;
 }
 
+/**
+ * Nested plugin bundles under a lint root — a directory that is itself a harness
+ * (its own `.claude-plugin/plugin.json`, or its own skills dir) and is NOT the
+ * root being linted.
+ *
+ * 🔴 WHY THIS EXISTS. Every per-surface check reads ONE root, so in a monorepo
+ * holding `skills/` plus `plugins/  * /skills/` the nested skills were never scored
+ * and nothing said so. Measured on a fixture: 4 skills over the description
+ * budget, `lint .` reported 2, exit 0 — a repo reads that as green-with-2 while
+ * the other 2 carry the same defect (#185). The failure is silent, which is the
+ * shape this repo treats as worse than a loud one.
+ *
+ * Deliberately shallow (one level under a container dir): deep recursion would
+ * sweep vendored corpora — this repo's own `test/dogfood/` holds real pinned
+ * third-party plugins — and scoring someone else's vendored plugin as if it were
+ * yours is the false-positive that gets a gate switched off.
+ */
+export function discoverNestedBundles(
+  root: string,
+  exclude: readonly string[] = [],
+): string[] {
+  const out: string[] = [];
+  const skip = new Set([
+    "node_modules",
+    ".git",
+    "dist",
+    "coverage",
+    ".vigiles",
+  ]);
+  const isBundle = (dir: string): boolean =>
+    existsSync(join(dir, ".claude-plugin", "plugin.json")) ||
+    existsSync(join(dir, "skills"));
+  const excluded = (rel: string): boolean =>
+    exclude.some(
+      (pattern) =>
+        rel === pattern ||
+        rel.startsWith(`${pattern}/`) ||
+        minimatch(rel, pattern) ||
+        minimatch(rel, `${pattern}/**`),
+    );
+
+  let entries: string[];
+  try {
+    entries = readdirSync(root, { withFileTypes: true })
+      .filter(
+        (e) => e.isDirectory() && !skip.has(e.name) && !e.name.startsWith("."),
+      )
+      .map((e) => e.name);
+  } catch {
+    return out;
+  }
+  for (const name of entries) {
+    const dir = join(root, name);
+    if (excluded(name)) continue;
+    // A container (`plugins/`) holds bundles; a bundle may also sit directly.
+    if (isBundle(dir)) {
+      out.push(dir);
+      continue;
+    }
+    let inner: string[];
+    try {
+      inner = readdirSync(dir, { withFileTypes: true })
+        .filter((e) => e.isDirectory() && !e.name.startsWith("."))
+        .map((e) => e.name);
+    } catch {
+      continue;
+    }
+    for (const child of inner) {
+      const sub = join(dir, child);
+      if (excluded(`${name}/${child}`)) continue;
+      if (isBundle(sub)) out.push(sub);
+    }
+  }
+  return out.sort();
+}
+
+/**
+ * Run one per-surface check over EVERY root and sum its counters.
+ *
+ * The checks all share `(config, silent, adapter, root)` and return a small
+ * record of numbers, so one wrapper covers all twenty rather than twenty edits —
+ * and a check added later is swept in by using it, not by remembering to.
+ */
+function overBundles<T extends Record<string, number>>(
+  fn: (
+    config: VigilesConfig | undefined,
+    silent: boolean,
+    adapter: HarnessAdapter,
+    root: string,
+  ) => T,
+  config: VigilesConfig | undefined,
+  silent: boolean,
+  adapter: HarnessAdapter,
+  roots: readonly string[],
+): T {
+  const [first, ...rest] = roots;
+  const total = { ...fn(config, silent, adapter, first) };
+  for (const root of rest) {
+    const next = fn(config, silent, adapter, root);
+    for (const key of Object.keys(next) as (keyof T)[])
+      (total as Record<keyof T, number>)[key] =
+        (total[key] ?? 0) + (next[key] ?? 0);
+  }
+  return total;
+}
+
 async function runLint(
   restArgs: string[],
   flags: string[],
@@ -1675,6 +1856,33 @@ async function runLint(
     configHarness: normalizeHarnessList(config?.harness),
   });
   const adapter = lintSelection.adapter;
+
+  // 🔴 WHICH ROOTS GET SCORED, and saying so either way (#185).
+  //
+  // Every per-surface check reads ONE root, so a monorepo with `skills/` plus
+  // `plugins/*/skills/` scored only the first and said nothing — measured at 2
+  // findings reported against 4 real ones, exit 0. A skipped surface that is not
+  // announced reads as a clean surface.
+  //
+  // Default stays ROOT-ONLY on purpose: descending by default would start
+  // scoring vendored third-party corpora (this repo's own `test/dogfood/` holds
+  // pinned real plugins), and scoring someone else's plugin as if it were yours
+  // is the false positive that gets a gate turned off. So the DEFAULT fixes the
+  // SILENCE, and `bundles: "all"` fixes the COVERAGE — one exit code over the
+  // whole repo, which is what a CI gate needs.
+  const nestedBundles = discoverNestedBundles(scanRoot, config?.exclude ?? []);
+  const scoreAll = flags.includes("--bundles=all") || config?.bundles === "all";
+  const lintRoots = scoreAll ? [scanRoot, ...nestedBundles] : [scanRoot];
+  if (!silent && nestedBundles.length > 0) {
+    const rel = nestedBundles.map((b) => relative(scanRoot, b) || b);
+    console.log(
+      scoreAll
+        ? `\nScoring ${String(lintRoots.length)} bundles: the root + ${rel.join(", ")}`
+        : `\n⚠ ${String(nestedBundles.length)} nested bundle(s) discovered but NOT scored: ${rel.join(", ")}\n` +
+            `  Their skills/agents/hooks are not in the counters below. Add \`"bundles": "all"\` to ` +
+            `.vigilesrc.json (or pass --bundles=all) to score them in this run.`,
+    );
+  }
 
   // Discover the compiled files whose integrity is verified. Include the active
   // harness's subagent dir (dogfood E2): a compiled `agents/<name>.md` carries a
@@ -1746,7 +1954,14 @@ async function runLint(
   // declares the block; its `include` defaults to docs/ (research/ etc. are
   // opted into explicitly). `enforce("vigiles/orphan-docs")` in a spec only
   // validates the rule NAME — the block is what drives the scan.
-  const orphansCfg = config?.orphans;
+  // 🔴 SEVERITY IS READ, not just the block's presence (#181). `orphan-docs` had
+  // a RULE_META entry and a documented severity, and nothing ever read it: both
+  // `"warn"` and `"off"` still exited 1, so a repo could only choose between an
+  // always-blocking check and deleting the `orphans` block. `warn` now reports
+  // without touching the exit code and `false`/`"off"` skips the scan, exactly
+  // like every other rule.
+  const orphanSeverity = ruleSeverity(config?.rules?.["orphan-docs"]) ?? "warn";
+  const orphansCfg = orphanSeverity ? config?.orphans : undefined;
   if (!silent) console.log("\nOrphan docs check:\n");
   let orphanReport: ReturnType<typeof findOrphanDocs> = {
     include: [],
@@ -1778,142 +1993,218 @@ async function runLint(
   // 7b. Untested-surface check — skills/agents/hooks shipping without a test or
   // eval. Warning by default (a nudge, exit 0); set rules.untested-{skill,agent,
   // hook} to "error" to gate CI. See src/test-coverage.ts and docs/rules/.
-  const untested = checkUntestedSurfaces(config, silent, adapter, scanRoot);
+  const untested = overBundles(
+    checkUntestedSurfaces,
+    config,
+    silent,
+    adapter,
+    lintRoots,
+  );
 
   // 7c. Subagent tool-contract check — cross-reference each subagent's `tools:`
   // rail against the harness catalog (the moat). n/a on a harness with no
   // subagents. Off by default unless a severity is configured; warning surfaces
   // a typo/never-available tool, error gates CI.
-  const toolContract = checkSubagentToolContracts(
+  const toolContract = overBundles(
+    checkSubagentToolContracts,
     config,
     silent,
     adapter,
-    scanRoot,
+    lintRoots,
   );
 
   // 7d. Hook-event check — a hook registered under an event the harness doesn't
   // define never fires. High-precision (close typos only). Off unless configured.
-  const hookEvents = checkHookEvents(config, silent, adapter, scanRoot);
-
-  // 7e. Subagent-frontmatter check — a subagent missing required frontmatter
-  // (name + description) won't register. n/a on a harness with no subagents.
-  const frontmatter = checkFrontmatterSchema(config, silent, adapter, scanRoot);
-
-  // 7f. MCP-config check — a declared MCP server with no command/url can't start.
-  const mcpConfig = checkMcpConfig(config, silent, adapter, scanRoot);
-
-  // 7g. Skill-frontmatter — RECOMMEND explicit name/description on skills (a
-  // reliable trigger surface). Best-practice nudge; skills load without it.
-  const skillFm = checkSkillFrontmatter(config, silent, adapter, scanRoot);
-
-  // 7h. MCP tool-resolution — an `mcp__server__tool` in a contract whose server
-  // the plugin doesn't declare can't resolve (the MCP half of the tool moat).
-  const mcpToolResolves = checkMcpToolResolves(
+  const hookEvents = overBundles(
+    checkHookEvents,
     config,
     silent,
     adapter,
-    scanRoot,
+    lintRoots,
+  );
+
+  // 7e. Subagent-frontmatter check — a subagent missing required frontmatter
+  // (name + description) won't register. n/a on a harness with no subagents.
+  const frontmatter = overBundles(
+    checkFrontmatterSchema,
+    config,
+    silent,
+    adapter,
+    lintRoots,
+  );
+
+  // 7f. MCP-config check — a declared MCP server with no command/url can't start.
+  const mcpConfig = overBundles(
+    checkMcpConfig,
+    config,
+    silent,
+    adapter,
+    lintRoots,
+  );
+
+  // 7g. Skill-frontmatter — RECOMMEND explicit name/description on skills (a
+  // reliable trigger surface). Best-practice nudge; skills load without it.
+  const skillFm = overBundles(
+    checkSkillFrontmatter,
+    config,
+    silent,
+    adapter,
+    lintRoots,
+  );
+
+  // 7h. MCP tool-resolution — an `mcp__server__tool` in a contract whose server
+  // the plugin doesn't declare can't resolve (the MCP half of the tool moat).
+  const mcpToolResolves = overBundles(
+    checkMcpToolResolves,
+    config,
+    silent,
+    adapter,
+    lintRoots,
   );
 
   // 7i. Hook-script existence — a hook command referencing a missing script file
   // never runs (matches Anthropic's own `claude plugin validate`).
-  const hookScripts = checkHookScriptExists(config, silent, adapter, scanRoot);
-
-  // 7j. Disallowed-tools — a `disallowedTools:` block-list typo blocks nothing
-  // (the deny-side mirror of subagent-tool-contract; close-typo only).
-  const disallowedTools = checkDisallowedTools(
+  const hookScripts = overBundles(
+    checkHookScriptExists,
     config,
     silent,
     adapter,
-    scanRoot,
+    lintRoots,
+  );
+
+  // 7j. Disallowed-tools — a `disallowedTools:` block-list typo blocks nothing
+  // (the deny-side mirror of subagent-tool-contract; close-typo only).
+  const disallowedTools = overBundles(
+    checkDisallowedTools,
+    config,
+    silent,
+    adapter,
+    lintRoots,
   );
 
   // 7k. Description-overlap — two model-invocable skills with near-identical
   // descriptions collide in the selector (deterministic NCD precision proxy).
-  const descriptionOverlap = checkDescriptionOverlap(
+  const descriptionOverlap = overBundles(
+    checkDescriptionOverlap,
     config,
     silent,
     adapter,
-    scanRoot,
+    lintRoots,
   );
 
   // 7k². Skill-description-budget — a model-invocable skill whose description is
   // so long the trigger signal is buried (heuristic proxy; degrades recall +
   // precision). Generous 500-char budget; warn-tier, never gates.
-  const descriptionBudget = checkDescriptionBudget(
+  const descriptionBudget = overBundles(
+    checkDescriptionBudget,
     config,
     silent,
     adapter,
-    scanRoot,
+    lintRoots,
   );
 
   // 7l. Frontmatter-valid — a `---` block that isn't valid YAML (warn; js-yaml is
   // stricter than some loaders, so verify before enforcing).
-  const frontmatterValid = checkFrontmatterValid(
+  const frontmatterValid = overBundles(
+    checkFrontmatterValid,
     config,
     silent,
     adapter,
-    scanRoot,
+    lintRoots,
   );
 
   // 7m. MCP hook-target — a `type: mcp_tool` hook action that's incomplete or
   // targets an undeclared server (the moat applied to the hook surface).
-  const mcpHookTargets = checkMcpHookTargets(config, silent, adapter, scanRoot);
-
-  // 7n. Prefer-compiled-hooks — ONE discovery nudge (not per-hook) toward
-  // compiled `vigiles/hook` artifacts when hand-written hooks ship. Recommendation.
-  const preferCompiledHooks = checkPreferCompiledHooks(
+  const mcpHookTargets = overBundles(
+    checkMcpHookTargets,
     config,
     silent,
     adapter,
-    scanRoot,
+    lintRoots,
+  );
+
+  // 7n. Prefer-compiled-hooks — ONE discovery nudge (not per-hook) toward
+  // compiled `vigiles/hook` artifacts when hand-written hooks ship. Recommendation.
+  const preferCompiledHooks = overBundles(
+    checkPreferCompiledHooks,
+    config,
+    silent,
+    adapter,
+    lintRoots,
   );
 
   // 7o. Lethal-trifecta — a unit (subagent / model-invocable skill) whose tools
   // hold all three legs (read-private + ingest-untrusted + exfiltrate) is a
   // prompt-injection exfil path (Rule of Two). Capability SET-intersection.
-  const lethalTrifecta = checkLethalTrifecta(config, silent, adapter, scanRoot);
-
-  // 7p. Skill-resource — a SKILL.md body referencing a bundled file that doesn't
-  // exist on disk under the skill dir (the agent gets nothing). FP-safe.
-  const skillResources = checkSkillResourceResolves(
+  const lethalTrifecta = overBundles(
+    checkLethalTrifecta,
     config,
     silent,
     adapter,
-    scanRoot,
+    lintRoots,
+  );
+
+  // 7p. Skill-resource — a SKILL.md body referencing a bundled file that doesn't
+  // exist on disk under the skill dir (the agent gets nothing). FP-safe.
+  const skillResources = overBundles(
+    checkSkillResourceResolves,
+    config,
+    silent,
+    adapter,
+    lintRoots,
   );
 
   // 7q. Skill-missing-fence — a SKILL.md opening with `name:`/`description:` but no
   // `---` fence loads as plain body (invisible — no name/description/trigger).
-  const skillFence = checkSkillMissingFence(config, silent, adapter, scanRoot);
-
-  // 7r. Plugin-dir-layout — functional surface dirs (skills/agents/commands) nested
-  // inside the `.claude-plugin/` manifest dir where the harness can't see them.
-  const pluginLayout = checkPluginDirLayout(config, silent, adapter, scanRoot);
-
-  // 7s. Delegation-trifecta — a lethal trifecta that emerges across a delegation
-  // edge (a subagent's own ∪ delegated-to capability) though no single unit trips it.
-  const delegationTrifecta = checkDelegationTrifecta(
+  const skillFence = overBundles(
+    checkSkillMissingFence,
     config,
     silent,
     adapter,
-    scanRoot,
+    lintRoots,
+  );
+
+  // 7r. Plugin-dir-layout — functional surface dirs (skills/agents/commands) nested
+  // inside the `.claude-plugin/` manifest dir where the harness can't see them.
+  const pluginLayout = overBundles(
+    checkPluginDirLayout,
+    config,
+    silent,
+    adapter,
+    lintRoots,
+  );
+
+  // 7s. Delegation-trifecta — a lethal trifecta that emerges across a delegation
+  // edge (a subagent's own ∪ delegated-to capability) though no single unit trips it.
+  const delegationTrifecta = overBundles(
+    checkDelegationTrifecta,
+    config,
+    silent,
+    adapter,
+    lintRoots,
   );
 
   // 7t. Hook-block-ineffective — a hook that looks like it blocks but silently
   // doesn't (block decision on a non-blocking event, or the legacy `decision`
   // field on a permission-gated event). The #1 verified hook pain (#19009).
-  const hookBlock = checkHookBlockIneffective(
+  const hookBlock = overBundles(
+    checkHookBlockIneffective,
     config,
     silent,
     adapter,
-    scanRoot,
+    lintRoots,
   );
 
   // 7u. Hook-matcher — a hook `matcher` that doesn't fire as written (tool-name
   // typo, an uncompilable or unreachable MCP pattern, one too narrow for real
   // server naming, or an undeclared MCP server).
-  const hookMatcher = checkHookMatcher(config, silent, adapter, scanRoot);
+  const hookMatcher = overBundles(
+    checkHookMatcher,
+    config,
+    silent,
+    adapter,
+    lintRoots,
+  );
 
   // 8. Validate vigiles builder calls inside markdown code blocks — the
   // `doc-refs` rule, DEFAULT OFF. Illustrative blocks opt out via
@@ -2001,12 +2292,15 @@ async function runLint(
     frontmatterErrors,
     frontmatterRules,
     duplicatePairs: dups.pairCount,
+    duplicateSeverity:
+      ruleSeverity(config?.rules?.["duplicate-rules"]) ?? "warn",
     coverageEnabled: coverage.enabled,
     coverageDocumented: coverage.documented,
     strengthenSuggestions: guidanceCount,
     integrityErrors,
     coverageErrors,
     orphanCount: orphanReport.orphans.length,
+    orphanSeverity: orphanSeverity,
     untestedSurfaces: untested.untested,
     untestedErrors: untested.errors,
     toolContractIssues: toolContract.issues,
@@ -2058,13 +2352,43 @@ async function runLint(
     files,
   };
 
-  if (summary) {
-    printLintSummary(report);
-  } else if (json) {
-    console.log(JSON.stringify(report, null, 2));
+  // The totals both surfaces quote, computed ONCE (#183). Attaching them to the
+  // report is what makes the log line and `--json` incapable of disagreeing —
+  // the previous gap was not a wrong number, it was two right numbers with
+  // nothing explaining the difference.
+  const totals = lintTotals(report);
+  const reported: LintReport = { ...report, totals };
+
+  // `--json-out=<file>` writes the JSON to disk while stdout keeps the
+  // human-readable run — one scan, both artefacts (#182). A CI job needed both
+  // (the log is what a human opens; the JSON is what the PR comment is built
+  // from) and had to scan the repo TWICE to get them, which is the same work
+  // done twice and grows with the corpus.
+  const jsonOutFlag = flags.find((f) => f.startsWith("--json-out="));
+  if (jsonOutFlag) {
+    const dest = resolve(jsonOutFlag.slice("--json-out=".length));
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, `${JSON.stringify(reported, null, 2)}\n`);
+    if (!silent) console.log(`\n✓ JSON report written to ${dest}`);
   }
 
-  return report;
+  if (summary) {
+    printLintSummary(reported);
+  } else if (json) {
+    console.log(JSON.stringify(reported, null, 2));
+  } else {
+    // The one number a reader can quote. Counting `⚠` lines gives a DIFFERENT
+    // number, because some checks print one line per finding and others one line
+    // carrying a count — so the log now states the finding total outright rather
+    // than leaving the reader to infer it from line shapes.
+    const code = lintExitCode(reported);
+    console.log(
+      `\n${String(totals.findings)} finding(s): ${String(totals.errors)} error, ` +
+        `${String(totals.warnings)} warning — exit ${String(code)}`,
+    );
+  }
+
+  return reported;
 }
 
 /** Single-line lint summary for SessionStart hooks — minimal token cost. */

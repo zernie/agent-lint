@@ -488,6 +488,44 @@ npx vigiles audit ./marketplace-repo --single  # ...or audit that root as ONE ha
 npx vigiles audit ./repo --harness=codex # override harness detection
 ```
 
+### `lint` in a monorepo, and getting both artefacts from one run
+
+**Nested bundles.** `lint` scores the root bundle. If the repo holds more
+(`plugins/*/skills/`), it now NAMES them rather than leaving them out silently:
+
+```
+⚠ 2 nested bundle(s) discovered but NOT scored: plugins/alpha, plugins/beta
+```
+
+Score them all in one pass — one exit code over the whole repo, which is what a
+CI gate needs — with `--bundles=all`, or `"bundles": "all"` in `.vigilesrc.json`.
+Root-only stays the default because descending unconditionally would also score
+vendored third-party plugins as if they were yours.
+
+**Both artefacts, one scan.** `--json` replaces stdout; `--json-out=<file>`
+writes the JSON to disk and leaves stdout human-readable, so a CI job that wants
+the log for a human AND the JSON for a PR comment scans once:
+
+```bash
+npx vigiles lint . --json-out=reports/lint.json
+```
+
+**One number to quote.** Every run ends with a total that matches `--json`:
+
+```
+88 finding(s): 0 error, 88 warning — exit 0
+```
+
+Counting `⚠` lines gives a different number — some checks print one line per
+finding, others one line carrying a count — so the total is computed from the
+report, not from the output.
+
+**Running the harness tier without installing into the project.** A harness
+imports `vigiles` by name, and in a repo that already has a `package.json` a root
+install pulls the entire dependency tree. `vigiles test` now resolves that import
+from the CLI's own installation, so `npx vigiles@<version> test` works with
+nothing installed in the project. A locally installed vigiles still wins.
+
 #### `--single` — audit a many-bundle root as one harness
 
 A marketplace root switches to the leaderboard automatically, which means the

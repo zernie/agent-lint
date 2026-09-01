@@ -55,7 +55,7 @@ export type RuleSurface =
 export type RuleDefaultSeverity = "error" | "warn" | "off";
 
 /** Every named rule: the `RulesConfig` keys plus the built-in `orphan-docs`. */
-export type RuleName = keyof RulesConfig | "orphan-docs";
+export type RuleName = keyof RulesConfig;
 
 /**
  * The declared shape of one rule — co-located metadata in the ESLint `meta`
@@ -362,6 +362,15 @@ export const RULE_META: Record<RuleName, RuleMeta> = {
   },
 
   // --- Docs hygiene ---------------------------------------------------------
+  "duplicate-rules": {
+    id: "duplicate-rules",
+    bucket: "heuristic-behavioral",
+    surface: ["instruction"],
+    defaultSeverity: "warn",
+    summary:
+      "Near-duplicate rules within one spec (NCD similarity) — two rules saying the same thing.",
+    detector: "findDuplicateRules",
+  },
   "orphan-docs": {
     id: "orphan-docs",
     bucket: "heuristic-behavioral",
