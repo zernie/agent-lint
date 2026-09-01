@@ -312,6 +312,7 @@ const report = await measureTriggerRate({
   trials: 2,
   concurrency: 4, //              parallelize the prompts × trials grid
   minModel: "sonnet", //          fail before spending a token if pointed below
+  effort: "low", //               reasoning budget — pin it to reproduce a number
   minPrompts: 10, //              diversity-gate floor
 });
 assertTriggerRate(report, { min: 0.8, maxFalsePositive: 0.1 });
@@ -328,6 +329,26 @@ assertTriggerRate(report, { min: 0.8, maxFalsePositive: 0.1 });
 - **Model** — defaults to `"sonnet"` (the realistic selector; a weaker model
   under-selects — dogfooded 0.50 on haiku vs 0.90 on sonnet). The `minModel` floor
   fails a too-weak run up front. Model lives in the spec, not an env override.
+- **`effort`** — the reasoning budget the run is pinned to (`"low"`, `"high"`, an
+  integer — whatever your harness build accepts). Set it when you are reproducing
+  or publishing a number: a result measured at one budget is not a result at
+  another, so effort is hashed into both the eval lock and the local cache, and a
+  recorded report is **stale** for a run at a different budget. It is also an arm
+  in its own right — `arms: { cheap: { effort: "low" }, rich: { effort: "high" } }`
+  answers "does my harness still hold on the cheaper budget?" through the same
+  significance machinery, exactly as model-as-an-arm does.
+
+  Three things worth knowing before you rely on it:
+
+  |                                               |                                                                                                                                                                                                                                                                        |
+  | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | **It is pinned, not merely passed**           | The harness also reads `CLAUDE_CODE_EFFORT_LEVEL`, and that env var outranks the flag. vigiles sets it for the run — and **deletes an inherited one when you omit `effort`** — so an exported value in your shell can never silently become the budget a lock records. |
+  | **A value the harness rejects fails the run** | It does not fail on a bad level; it warns and quietly uses its default. vigiles turns that warning into an error, because a number produced by a configuration nobody asked for is the problem this field exists to avoid.                                             |
+  | **Omitting it means the harness default**     | Not a fixed level: the default is per-model and can move between builds. An effort-less lock is reproducible only modulo that — the same kind of caveat as the harness version.                                                                                        |
+
+  Not supported on Codex: no mapping has been measured, so a spec declaring
+  `effort` there **fails loudly** rather than recording a budget the run did not use.
+
 - **`fixture`** — each run defaults to an empty cwd (faithful for opening-move
   skills); pass `fixture` to seed the repo state a skill claims to fire on.
 - **`installSet`** — by default the skill competes against the other skills in the

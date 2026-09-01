@@ -35,6 +35,13 @@ export type CacheMode = "off" | "read" | "readwrite";
 export interface CacheKeyInput {
   readonly task: string;
   readonly model: string;
+  /**
+   * Reasoning budget (`--effort`). Keyed for the same reason `model` is: it moves
+   * the output distribution, so a replay across effort levels would serve a result
+   * the caller did not ask for. `undefined` (the harness default) drops out of the
+   * hash via JSON, so entries recorded before effort existed stay valid.
+   */
+  readonly effort?: string | number;
   readonly tools: readonly string[];
   /** The resolved fixture + arm + plugin files written before the run. */
   readonly files: Record<string, string>;

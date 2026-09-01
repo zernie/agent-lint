@@ -131,6 +131,13 @@ export interface EvalArm {
    * use the eval-level model. See `research/eval-architecture.md` (model strategy).
    */
   readonly model?: string;
+  /**
+   * Reasoning budget for the run (`claude --effort`, e.g. `"low"` or an integer).
+   * Lives here beside `model` because it is part of the MEASUREMENT — it moves the
+   * output distribution, not the sample size — so it is hashed into the lock and
+   * the cache, and never read from an env var. Omit for the harness default.
+   */
+  readonly effort?: string | number;
 }
 
 /** Per-run resource use, parsed from the terminal `result` event (0 when absent). */
@@ -184,6 +191,13 @@ export interface EvalSpec<M extends Metrics> {
   readonly trials?: number;
   /** Model alias. Default "haiku". */
   readonly model?: string;
+  /**
+   * Reasoning budget for the run (`claude --effort`, e.g. `"low"` or an integer).
+   * Lives here beside `model` because it is part of the MEASUREMENT — it moves the
+   * output distribution, not the sample size — so it is hashed into the lock and
+   * the cache, and never read from an env var. Omit for the harness default.
+   */
+  readonly effort?: string | number;
   /** Tools the agent may use. Default: Read Edit Write Bash. */
   readonly allowedTools?: readonly string[];
   /** Per-run timeout ms. Default 240000. */
@@ -332,6 +346,19 @@ export interface AgentRunArgs {
   readonly task: string;
   readonly cwd: string;
   readonly model: string;
+  /**
+   * Reasoning-budget level for the run (`claude --effort`). Part of the
+   * MEASUREMENT, not a run knob: it changes the model's output distribution, not
+   * the sample size — so it lives on the spec next to `model` (never an env),
+   * and it is hashed into both the cache key and the eval lock. Deliberately
+   * `string | number` rather than a literal union: the binary accepts an alias
+   * map, is case-insensitive, and takes an integer budget, and its own valid set
+   * MOVED between builds (2.1.42 had no `xhigh`, 2.1.257 does) — a hard-coded
+   * union would reject a valid level after any upstream addition. A wrong value
+   * is caught at RUNTIME instead, by {@link effortRejection}, which is what the
+   * binary actually tells us. Omit for the harness default.
+   */
+  readonly effort?: string | number;
   readonly tools: readonly string[];
   readonly hasSettings: boolean;
   readonly pluginDir: string | undefined;
@@ -366,39 +393,151 @@ export type AgentRunner = (args: AgentRunArgs) => Promise<RunOut>;
  * leak the host environment into an untrusted, model-driven run.
  */
 export function resolveSpawnEnv(
-  a: Pick<AgentRunArgs, "env" | "replaceEnv">,
+  a: Pick<AgentRunArgs, "env" | "replaceEnv" | "effort">,
   base: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv {
-  return a.replaceEnv ? (a.env ?? {}) : { ...base, ...a.env };
+  const resolved = a.replaceEnv ? (a.env ?? {}) : { ...base, ...a.env };
+  return pinEffortEnv(resolved, a.effort);
 }
 
+/**
+ * The env var name the harness reads for the reasoning budget. It sits ABOVE the
+ * `--effort` flag in the CLI's own precedence chain, so passing the flag alone
+ * does NOT pin the level.
+ */
+export const EFFORT_ENV_VAR = "CLAUDE_CODE_EFFORT_LEVEL";
+
+/**
+ * Pin the effort the run actually gets, so the recorded effort is the effort
+ * that ran.
+ *
+ * WHY THIS EXISTS AND WHY IT IS NOT OPTIONAL. Effort has THREE inputs — the
+ * `--effort` flag, the `effortLevel` settings key, and `CLAUDE_CODE_EFFORT_LEVEL`
+ * — and the env var wins over the flag. `EPHEMERAL_ALLOW_PREFIXES` passes
+ * `CLAUDE_*` through by design (the CLI reads several such knobs and dropping one
+ * is the failure mode), so an ambient `CLAUDE_CODE_EFFORT_LEVEL=max` in the
+ * author's shell survives even the SCRUBBED ephemeral env. Without this pin,
+ * hashing effort into the lock would make the lock CONFIDENTLY WRONG: it would
+ * record `low` over a run that executed at `max` — the exact defect the feature
+ * exists to prevent, reintroduced by the fix for it.
+ *
+ * Both directions matter, so both are handled:
+ *  - effort DECLARED  → set the var, overriding whatever the shell had.
+ *  - effort OMITTED   → DELETE an inherited var, so "omit" means the harness
+ *                       default rather than "whatever this machine happened to
+ *                       export". An omitted effort must not be a hidden input.
+ */
+export function pinEffortEnv(
+  env: NodeJS.ProcessEnv,
+  effort: string | number | undefined,
+): NodeJS.ProcessEnv {
+  // Rebuilt WITHOUT the key rather than deleting or assigning `undefined`:
+  // omission has to be provable here, and whether a spawn drops an
+  // `undefined`-valued env entry is a Node-version detail we should not lean on.
+  const { [EFFORT_ENV_VAR]: _inherited, ...rest } = env;
+  return effort === undefined
+    ? rest
+    : { ...rest, [EFFORT_ENV_VAR]: String(effort) };
+}
+
+/**
+ * The harness's own rejection of an `--effort` value, or null. Pure.
+ *
+ * The CLI does NOT fail on a bad level — it prints this to stderr and silently
+ * runs at its default. That silent substitution is precisely the bug class this
+ * feature addresses (a number produced by a configuration nobody asked for), so
+ * a rejected value must never become a sample. Matched on the binary's own
+ * wording, the same shape as {@link isRateLimited}.
+ */
+export function effortRejection(out: RunOut): string | null {
+  const text = `${out.stderr ?? ""}\n${out.stdout}`;
+  const m = /Unknown --effort value[^\n]*/.exec(text);
+  return m ? m[0].trim() : null;
+}
+
+/**
+ * Wrap a runner so a run the harness rejected on `--effort` FAILS LOUDLY.
+ *
+ * Applied ONCE, around the real runner, rather than as a guard repeated at each
+ * of the five `runner(...)` call sites — a guard per call site is the shape that
+ * left four of five compilers unprotected in #173.
+ *
+ * It THROWS rather than counting the trial as `runError`. A `runError` trial is
+ * dropped from the denominator, which is right for a transient (a rate limit) and
+ * wrong here: an unusable effort value is deterministic and repeatable, so every
+ * trial fails it and the run would report a rate computed over ZERO samples. A
+ * configuration mistake should stop the run and name itself.
+ */
+export function withEffortGuard(runner: AgentRunner): AgentRunner {
+  // 🔴 DELIBERATELY NOT `async`. An `async` wrapper turns the wrapped runner's
+  // SYNCHRONOUS throws into rejected promises, and the real runner refuses
+  // synchronously on purpose — `refuseDuringEvalLoad` / `refuseUnderForeignRunner`
+  // stop a paid eval from billing when a foreign test runner collects it. Making
+  // this `async` silently downgraded those refusals from "throws at the call" to
+  // "returns a promise that rejects", which `assert.throws` cannot see and an
+  // un-awaited caller would not notice. Caught by the full suite, not by the
+  // targeted one; pinned below by `withEffortGuard preserves a SYNCHRONOUS throw`.
+  return (a) => {
+    const pending = runner(a);
+    return pending.then((out) => {
+      const rejection = effortRejection(out);
+      if (rejection !== null) {
+        throw new Error(
+          `the harness rejected effort ${JSON.stringify(a.effort)}: ${rejection}`,
+        );
+      }
+      return out;
+    });
+  };
+}
+
+/**
+ * Build the real runner's argv. Pure and exported so the FLAGS are provable —
+ * `spawnAgentRaw` is `v8 ignore`d (it spawns a subprocess), so an argv assembled
+ * inline there could not be asserted at all. Mirrors `buildCodexArgs`.
+ */
+export function buildAgentArgs(a: AgentRunArgs): string[] {
+  return [
+    "-p",
+    a.task,
+    // stream-json (+ --verbose, required with -p) so the per-turn tool_use
+    // events survive into `ctx.toolCalls` — the unified Trace, same as the
+    // harness tier. The terminal `result` event still carries num_turns/output.
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--model",
+    a.model,
+    ...(a.effort !== undefined ? ["--effort", String(a.effort)] : []),
+    "--permission-mode",
+    "acceptEdits",
+    ...(a.pluginDir !== undefined
+      ? ["--plugin-dir", resolve(a.pluginDir)]
+      : []),
+    ...(a.hasSettings ? ["--settings", "settings.json"] : []),
+    "--allowedTools",
+    ...a.tools,
+  ];
+}
+
+/**
+ * The real `claude`-spawning runner (composition root). Exported so other
+ * real-model entries (e.g. the `audit` trigger tier) bind the same runner.
+ *
+ * The effort guard is composed in HERE, at the single definition, rather than at
+ * each of the places that bind this runner — so every consumer, including ones
+ * not yet written, is covered by construction. Guarding each call site instead is
+ * the shape that left four of five compilers unprotected in #173.
+ */
+export const spawnAgent: AgentRunner = withEffortGuard(spawnAgentRaw);
+
 /* v8 ignore start -- real claude subprocess; exercised by bench/, not the unit gate */
-/** The real `claude`-spawning runner (composition root). Exported so other
- *  real-model entries (e.g. the `audit` trigger tier) bind the same runner. */
-export function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
+/** The unguarded spawn itself; wrapped by {@link spawnAgent}, never bound raw. */
+function spawnAgentRaw(a: AgentRunArgs): Promise<RunOut> {
   refuseDuringEvalLoad("spawning `claude`");
   refuseUnderForeignRunner("spawning `claude`");
   return new Promise((resolvePromise) => {
-    const args = [
-      "-p",
-      a.task,
-      // stream-json (+ --verbose, required with -p) so the per-turn tool_use
-      // events survive into `ctx.toolCalls` — the unified Trace, same as the
-      // harness tier. The terminal `result` event still carries num_turns/output.
-      "--output-format",
-      "stream-json",
-      "--verbose",
-      "--model",
-      a.model,
-      "--permission-mode",
-      "acceptEdits",
-      ...(a.pluginDir !== undefined
-        ? ["--plugin-dir", resolve(a.pluginDir)]
-        : []),
-      ...(a.hasSettings ? ["--settings", "settings.json"] : []),
-      "--allowedTools",
-      ...a.tools,
-    ];
+    const args = buildAgentArgs(a);
     const child = spawn(claudeCodeRuntime.agentBinary, args, {
       cwd: a.cwd,
       // The security-critical env resolution (overlay vs. scrubbed replacement)
@@ -521,6 +660,13 @@ export interface MeasureSpec {
   readonly trials?: number;
   /** Model alias. Default "sonnet" — measure on the model your users run. */
   readonly model?: string;
+  /**
+   * Reasoning budget for the run (`claude --effort`, e.g. `"low"` or an integer).
+   * Lives here beside `model` because it is part of the MEASUREMENT — it moves the
+   * output distribution, not the sample size — so it is hashed into the lock and
+   * the cache, and never read from an env var. Omit for the harness default.
+   */
+  readonly effort?: string | number;
   /** Tools the agent may use. */
   readonly allowedTools?: readonly string[];
   /** Per-run timeout ms. */
@@ -594,6 +740,7 @@ export async function measureWith(
         task: spec.task,
         trials: spec.trials ?? 5,
         model: spec.model ?? "sonnet",
+        effort: spec.effort,
         allowedTools: spec.allowedTools,
         timeoutMs: spec.timeoutMs,
         spacingSec: spec.spacingSec,
@@ -658,6 +805,13 @@ export interface ArmsMeasureSpec {
   readonly model?: string;
   readonly allowedTools?: readonly string[];
   readonly timeoutMs?: number;
+  /**
+   * Reasoning budget for the run (`claude --effort`, e.g. `"low"` or an integer).
+   * Lives here beside `model` because it is part of the MEASUREMENT — it moves the
+   * output distribution, not the sample size — so it is hashed into the lock and
+   * the cache, and never read from an env var. Omit for the harness default.
+   */
+  readonly effort?: string | number;
   readonly spacingSec?: number;
 }
 
@@ -683,6 +837,7 @@ export async function measureArmsWith(
         task: spec.task,
         trials: spec.trials ?? 5,
         model: spec.model ?? "sonnet",
+        effort: spec.effort,
         allowedTools: spec.allowedTools,
         timeoutMs: spec.timeoutMs,
         spacingSec: spec.spacingSec,
@@ -1037,6 +1192,7 @@ export async function runSkillSelectionTrial(args: {
   readonly runner: AgentRunner;
   readonly parse?: ModelOutputParser;
   readonly model: string;
+  readonly effort?: string | number;
   readonly tools?: readonly string[];
   readonly timeoutMs?: number;
   readonly fixture?: Record<string, string>;
@@ -1049,6 +1205,7 @@ export async function runSkillSelectionTrial(args: {
       task: args.prompt,
       cwd,
       model: args.model,
+      effort: args.effort,
       tools: args.tools ?? ["Read", "Edit", "Write", "Bash", "Skill"],
       hasSettings: false,
       pluginDir: args.pluginDir,
@@ -1126,6 +1283,7 @@ export function aggregateUsage(usages: readonly EvalUsage[]): ArmUsage {
 /** Resolved per-run settings shared across an eval's trials. */
 interface RunConfig {
   readonly model: string;
+  readonly effort?: string | number;
   readonly tools: readonly string[];
   readonly timeoutMs: number;
   readonly cache: CacheMode;
@@ -1152,6 +1310,7 @@ async function runWithCache(
   const key = cacheKey({
     task: runArgs.task,
     model: runArgs.model,
+    effort: runArgs.effort,
     tools: runArgs.tools,
     files: keyParts.files,
     settings: keyParts.settings,
@@ -1513,6 +1672,7 @@ async function executeTrial<M extends Metrics>(
         cwd,
         // A model comparison is a harness A/B: an arm may override the model.
         model: arm.model ?? cfg.model,
+        effort: arm.effort ?? cfg.effort,
         tools: cfg.tools,
         hasSettings,
         pluginDir: arm.pluginDir,
@@ -1692,6 +1852,7 @@ async function withEvalLock<R>(
     readonly name: string | undefined;
     readonly inputs: unknown;
     readonly model: string;
+    readonly effort?: string | number;
     readonly lock: ResolvedLock;
   },
   produce: () => Promise<R>,
@@ -1718,8 +1879,16 @@ async function withEvalLock<R>(
     return produce();
   }
   if (!isDatedModel(args.model)) warnFloatingModel(args.model);
+  // OVERLAP, DELIBERATE — do not delete this as dead. Effort reaches the hash
+  // twice: here (the CHOKEPOINT every seam passes through, so a future seam that
+  // forgets to fold effort into its own `inputs` is still covered) and inside
+  // each seam's `inputs` (which alone can see a PER-ARM override this line
+  // cannot). Measured 2026-09-01: removing either one alone leaves the suite
+  // green; removing BOTH fails `changing effort makes a committed lock STALE`.
+  // That is two populations covered, not one line duplicated.
   const inputsHash = evalInputsHash({
     model: args.model,
+    effort: args.effort,
     evalApiVersion: lock.evalApiVersion,
     inputs: args.inputs,
   });
@@ -1732,6 +1901,7 @@ async function withEvalLock<R>(
     name: args.name,
     inputsHash,
     model: args.model,
+    effort: args.effort,
     harnessVersionKey: harnessVersion(),
     evalApiVersion: lock.evalApiVersion,
     builtAt: new Date().toISOString(),
@@ -1788,6 +1958,10 @@ function evalArmsInputs<M extends Metrics>(
     const absRoot = arm.plugin ? resolve(process.cwd(), arm.plugin) : "";
     arms[name] = {
       model: arm.model ?? cfg.model,
+      // The per-ARM half of the overlap documented at `inputsHash` — the
+      // chokepoint sees only the eval-level effort, so an arm that overrides it
+      // would otherwise hash identically to its sibling.
+      effort: arm.effort ?? cfg.effort,
       tools: [...cfg.tools].sort(),
       files: stripPluginRoot(resolved.files, absRoot),
       settings: stripPluginRoot(resolved.settings, absRoot),
@@ -1831,6 +2005,7 @@ export async function runEvalWith<M extends Metrics>(
   const backoffMs = spec.retryBackoffMs ?? 1000;
   const cfg: RunConfig = {
     model: spec.model ?? "haiku",
+    effort: spec.effort,
     tools: spec.allowedTools ?? ["Read", "Edit", "Write", "Bash"],
     timeoutMs: spec.timeoutMs ?? 240000,
     cache: spec.cache ?? "off",
@@ -1868,7 +2043,7 @@ export async function runEvalWith<M extends Metrics>(
   // without ever entering the run pool — so no model is driven in CI.
   const inputs = lock.mode === "off" ? undefined : evalArmsInputs(spec, cfg);
   return withEvalLock(
-    { name: spec.name, inputs, model: cfg.model, lock },
+    { name: spec.name, inputs, model: cfg.model, effort: cfg.effort, lock },
     async () => {
       const results = await runPool(units, concurrency, worker);
       const { arms, totalCostUsd } = aggregateArms<M>(
@@ -2020,6 +2195,13 @@ export interface TriggerRateSpec {
    * 0.50 on haiku vs 0.90 on Sonnet). Override for a cheaper-but-pessimistic run.
    */
   readonly model?: string;
+  /**
+   * Reasoning budget for the run (`claude --effort`, e.g. `"low"` or an integer).
+   * Lives here beside `model` because it is part of the MEASUREMENT — it moves the
+   * output distribution, not the sample size — so it is hashed into the lock and
+   * the cache, and never read from an env var. Omit for the harness default.
+   */
+  readonly effort?: string | number;
   /**
    * Minimum model tier this eval may run on (haiku<sonnet<opus by family). The
    * run **fails** if the resolved `model` is weaker — trigger-rate under-measures
@@ -2523,6 +2705,7 @@ function resolveTriggerPluginDir(spec: TriggerRateSpec): {
 interface TriggerRunConfig {
   readonly trials: number;
   readonly model: string;
+  readonly effort?: string | number;
   readonly tools: readonly string[];
   readonly timeoutMs: number;
   readonly spacing: number;
@@ -2552,6 +2735,7 @@ async function runTriggerTrial(
       task: prompt,
       cwd,
       model: cfg.model,
+      effort: cfg.effort,
       tools: cfg.tools,
       hasSettings: false,
       pluginDir: cfg.pluginDir,
@@ -2681,6 +2865,7 @@ export async function measureTriggerRateWith(
     // Sonnet, not haiku: trigger-rate is a selection measurement and haiku
     // under-selects, producing false-negative recall (see TriggerRateSpec.model).
     model,
+    effort: spec.effort,
     tools: spec.allowedTools ?? ["Read", "Edit", "Write", "Bash", "Skill"],
     timeoutMs: spec.timeoutMs ?? 240000,
     spacing: (spec.spacingSec ?? 4) * 1000,
@@ -2708,6 +2893,7 @@ export async function measureTriggerRateWith(
               ? [...spec.irrelevantPrompts]
               : undefined,
             model: cfg.model,
+            effort: cfg.effort,
             tools: [...cfg.tools].sort(),
             fixture: spec.fixture,
             competitors,
@@ -2717,7 +2903,13 @@ export async function measureTriggerRateWith(
             harness,
           };
     return await withEvalLock(
-      { name: spec.name, inputs: triggerInputs, model: cfg.model, lock },
+      {
+        name: spec.name,
+        inputs: triggerInputs,
+        model: cfg.model,
+        effort: cfg.effort,
+        lock,
+      },
       async () => {
         const relevant = await runTriggerSet(spec.prompts, cfg, runner);
         const base: TriggerRateReport = {

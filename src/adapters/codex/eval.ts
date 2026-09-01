@@ -193,6 +193,33 @@ export function installCodexSkills(pluginDir: string, cwd: string): number {
   return n;
 }
 
+/**
+ * Refuse an `effort` this adapter cannot honour, LOUDLY.
+ *
+ * The Claude runner pins the reasoning budget through `--effort` plus the env var
+ * it sits under. Codex exposes no mapping we have measured — its config carries a
+ * `model_reasoning_effort` key, but nothing here has driven the real binary
+ * through it, so claiming support would assert something unverified.
+ *
+ * The alternative — forwarding `task`/`cwd`/`timeoutMs` and dropping `effort` on
+ * the floor, as this runner does today — is the silent CC-only path the
+ * harness-parity rule forbids: a spec would declare `effort: "low"`, the lock
+ * would RECORD `low`, and the run would happen at whatever Codex defaults to.
+ * A stale number is recoverable; a confidently mislabelled one is not.
+ *
+ * Pure so the deferral itself is tested rather than living inside the ignored
+ * subprocess region.
+ */
+export function refuseCodexEffort(effort: string | number | undefined): void {
+  if (effort === undefined) return;
+  throw new Error(
+    `effort (${JSON.stringify(effort)}) is not supported on the Codex adapter: ` +
+      `vigiles has not measured a mapping for it, so honouring the spec here ` +
+      `would record an effort the run did not use. Drop \`effort\` for this ` +
+      `harness, or run the eval on Claude Code.`,
+  );
+}
+
 /* v8 ignore start -- real codex subprocess; validated against the binary, not the unit gate */
 /**
  * The Codex eval-tier `AgentRunner`: install the run's skills into `.codex/skills`
@@ -201,6 +228,7 @@ export function installCodexSkills(pluginDir: string, cwd: string): number {
  * codexEvalDriver })` dispatches through.
  */
 export function codexEvalAgentRunner(args: AgentRunArgs): Promise<RunOut> {
+  refuseCodexEffort(args.effort);
   if (args.pluginDir) installCodexSkills(args.pluginDir, args.cwd);
   return Promise.resolve(
     codexEvalRunner({
