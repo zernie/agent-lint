@@ -119,7 +119,8 @@
     "unevaluated": 3,
     "coverageEvidence": {
       "executed": 0,
-      "colocated": 0
+      "colocated": 0,
+      "configured": 0
     }
   },
   "brokenReferences": ["hooks/guard.sh"]
