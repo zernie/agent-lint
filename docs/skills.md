@@ -102,20 +102,102 @@ A skill's **firing** and its **gates** are testable without a spec, from the pub
 - **Does the gate ladder behave?** `vigiles hook-runtime run-skill <SKILL.md>` runs the markers directly, so a test can assert the exit code.
 - **Live E2E** (`test/e2e`, `npm run test:cli-e2e`): drives the _real_ `claude` CLI against a scripted mock Anthropic endpoint (`ANTHROPIC_BASE_URL`), asserting the tool-use loop and Stop-hook enforcement with no real model.
 
+## Companion files — `references/`, `scripts/`, `assets/`
+
+A skill is a **directory**, not a file. The Agent Skills specification says so, and it
+recommends splitting: _"Keep your main `SKILL.md` under 500 lines. Move detailed reference
+material to separate files."_ Progressive disclosure is the intended shape, so companions
+are the normal case, not an edge one.
+
+| directory     | holds                                                                                            |
+| ------------- | ------------------------------------------------------------------------------------------------ |
+| `references/` | documentation the agent reads on demand — a fallback procedure, a long table, a format reference |
+| `scripts/`    | executable code the skill runs                                                                   |
+| `assets/`     | everything else the skill ships                                                                  |
+
+### How to write one
+
+- **Point at it from `SKILL.md` with a relative markdown link**, and write the line as a
+  plain instruction to use the file. `skill-resource-resolves` reports the link when its
+  target is missing.
+
+  🔴 **Do not infer the exact rule from this page.** The detector is deliberately
+  conservative: it skips several target shapes and several surrounding phrasings, by design
+  rather than by oversight. [`rules/skill-resource-resolves.md`](rules/skill-resource-resolves.md)
+  describes them — and is itself explicit that its lists lag the constants in
+  `src/core/skill-resources.ts`, which are the authority. Read the page before relying on a
+  particular link being checked, and read the constants before concluding that it is.
+
+- **Link back** from a **documentation** companion to its `SKILL.md` — `../SKILL.md` from a
+  one-level file, and a path computed from the actual depth when it sits deeper (a
+  `references/api/errors.md` needs `../../SKILL.md`). A prose companion that reads as a
+  standalone procedure is one someone will follow without the gates its parent declares.
+
+  Two exemptions, both because the backlink would end up somewhere it does not belong: a
+  script says it in a comment or not at all, and a binary asset cannot say it; and **anything
+  under `assets/` that the skill copies out** — a template's `README.md` is the user's file
+  once it lands, and a backlink there points at a `SKILL.md` that did not travel with it.
+
+- **Keep reference documents one level deep**, linked directly from `SKILL.md` — that is
+  what the skill-authoring guidance asks for, and it keeps the reference resolvable by
+  inspection. It is a rule for reference docs, not for every bundled resource: `scripts/` may
+  be a package with helper modules and `assets/` may hold nested multi-file templates, whose
+  layout and relative paths are part of how they work.
+- **Do not reach for `file()` to verify a companion.** It looks like the higher rung — it is
+  verified to exist at compile time — but `renderFragment` emits a `FileRef` as a **visible
+  backticked path**, and that path is **repo-root-relative**. In a skill that is packaged and
+  installed elsewhere the emitted path resolves nowhere, so the document ends up carrying a
+  working link and a broken pointer side by side, and the agent may follow the second one.
+  Nothing rebases it during packaging.
+
+  The markdown link is already checked — that is what `skill-resource-resolves` is for. Use
+  the link, and let the linter do the verifying.
+
+  _(`file()` remains right for an instruction file that never leaves its own repository,
+  where the emitted repo-root path is exactly what a reader should see. What does not exist
+  today is a compile-verified reference that stays **skill-relative** and emits nothing —
+  that is the gap, not something an author can work around.)_
+
+- **Documentation companions under `references/` stay plain markdown even when the skill has a `.spec.ts`.** (`scripts/` stays executable source — `.py`, `.sh`; `assets/` stays whatever it is. The point below is about ownership, not file type: every companion is an author-owned source, not a generated artifact.) They carry no
+  frontmatter and no tool contract, so there is nothing for a spec to declare, and the
+  compiler's integrity mark is for _generated_ files — a companion is a **source**. Hashing
+  it would report `manually edited after compilation` on every legitimate edit.
+
+### What is verified, and what is not
+
+Measured 2026-08-31 by planting each defect and checking whether it was reported:
+
+| property                                 | checked                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a link from `SKILL.md` to a companion    | **yes, for the ordinary case** — `skill-resource-resolves`. ⚠️ Its reported line is counted in the BODY: `scanSkills` strips the frontmatter before the detector sees the text, so on a file with frontmatter the number is short by that block. It deliberately skips a number of target shapes and surrounding phrasings; [`rules/skill-resource-resolves.md`](rules/skill-resource-resolves.md) describes them, and names the source constants as the authority over its own prose |
+| a link _inside_ a companion resolves     | **no** — resolution is not transitive                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| a companion no link reaches              | **no** by default — `orphans` is opt-in and scans `docs/`                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| companion prose, tool mentions, trifecta | **no** — these read `SKILL.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+
+The first row is the one that matters most, and it works for the ordinary shape; the rest is
+why a companion is not
+a place to move something _because_ it is awkward. The gap is tracked as a roadmap item —
+the fix is to scope by directory and follow the reference closure, not to add a manifest
+field listing companions.
+
 ## Status / pending
 
 `experimental_skill` carries the prefix, and these are the measured reasons — the
 roadmap for a feature lives with the feature, not on a separate stability page:
 
-- **A compiled `SKILL.md` has never been exercised as an installed skill.** Every `SKILL.md` in this repo that a harness actually loads — all of vigiles's own — is hand-written; the only two carrying the `vigiles:sha256:` header live under `examples/`. So the compiled path is untested end-to-end for skills, and adopting one means being the first to try it.
+- **A compiled `SKILL.md` now has one datapoint as an installed skill — and the header worry is stale.** Measured 2026-08-31 in `zernie/mine`: `outbound-email` was converted to a spec, compiled, and the harness listed it as an available skill with its compiled description. Read the strength honestly — the skill was already present before the conversion, so this shows the compiled form does not _break_ loading; it is not a from-scratch install.
 
-  Note what this is _not_: the header is **not** known to break loading. It does push the YAML frontmatter off line 1, and a reader anchored at `^---` finds none — but the sibling surface is measured working with exactly that shape. In `examples/harness/dogfood/reviewer-ab.eval.mjs`, real Claude Code loaded a compiled `agents/code-reviewer.md` **carrying the header** through `--plugin-dir`, dispatched to it, and the subagent read the file — 100% of trials against real sonnet (2026-06-20). Treat compiled skills as unproven, not as broken.
+  The specific fear in the previous wording is measurably gone: the `vigiles:sha256:` header no longer precedes the frontmatter. In that compiled file the frontmatter opens on **line 1** and the header sits on **line 10**, after the closing `---`. A reader anchored at `^---` finds the frontmatter exactly where it expects it.
+
+  Independent supporting evidence, unchanged: in `examples/harness/dogfood/reviewer-ab.eval.mjs`, real Claude Code loaded a compiled `agents/code-reviewer.md` through `--plugin-dir`, dispatched to it, and the subagent read the file — 100% of trials against real sonnet (2026-06-20).
+
+  ⚠️ Still missing for a clean close: a compiled skill installed somewhere it never existed before, and one shown to _fire_ on a prompt rather than merely appear in a listing.
 
 - **Adoption is all-or-nothing.** `renderSkillSections` composes the whole document in a fixed order, so converting an existing skill rewrites its structure rather than adding a gate to it. There is no "keep my prose, add one verified gate" path.
 - **`inputs` costs more than it looks.** One `input()` adds both the `argument-hint` frontmatter key and a generated `## Arguments` section.
 - The generator authoring mode (`genSkill` / `act` / `checkpoint` / `finish`) is **parked** and undocumented. It compiles, but it is reachable from no package subpath, so it is not part of the public API.
 
-**What would have to be true to drop the prefix:** a real skill corpus converted to it (today: two example specs), and a compiled `SKILL.md` shown to load and run as an installed skill — the first bullet above.
+**What would have to be true to drop the prefix:** a real skill corpus converted to it (today: two example specs), and a compiled `SKILL.md` shown to load and run as an installed skill. The first bullet above moves that second condition **partway** and no further — it shows a converted skill still being listed, not a fresh install, and firing was never measured. Treat the milestone as unmet.
 
 **Why the helpers hang off the builder.** `experimental_skill.input()` and `experimental_skill.step()` are exported through the builder rather than beside it, and that placement is the point: both are used **only** by skill specs, so making them reachable only through the prefixed name makes the marking structural for the whole family. `cmd`, `file`, `project` and `result` are shared with subagents and stay top-level. Honest limit: `const { input } = experimental_skill` strips the marker inside one file — what the shape guarantees is narrower, that an unmarked name never crosses the package boundary.
 

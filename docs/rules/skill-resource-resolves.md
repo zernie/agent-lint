@@ -43,13 +43,26 @@ link. A skill that _teaches_ how to build skills is full of bundle paths used as
 **examples** of what a skill _could_ contain, not files it ships — "a
 `` `scripts/rotate_pdf.py` `` would be helpful to store", "**Examples**:
 `` `references/finance.md` ``", "- **`` `references/patterns.md` ``** — Common
-patterns". So a reference — an inline path **or** a markdown link — is treated as
-real **only when the line directs the agent to use the file** (`read` / `run` /
-`see` / `load` / …) **and carries no illustrative cue** (`example`, `e.g.`,
-`such as`, `would be`, `template`, `→`). A markdown link is a higher-confidence
-shape than a bare backtick span, but an example link — "For example, see
-`[a report](assets/example.pdf)`" — is still a prose illustration, not a real dead
-ref, so the same prose gate applies to both.
+patterns". So the two shapes are gated differently, and the asymmetry is deliberate.
+
+**Two cues suppress a reference, and they apply to BOTH shapes:**
+
+- an **illustrative** cue — `example`, `e.g.`, `such as`, `would be`, `template`, `→`;
+- a **generated-file** cue — the line says the file is _made_, not read:
+  `gitignored`, `.gitignore`, `cached to`, `cache file`, `written to` / `writes to`,
+  `generated at runtime`, `created at runtime`. A file the author states is produced
+  at runtime or kept out of the repository cannot be a missing bundled resource.
+
+On top of that, an **inline backtick path** additionally needs a use directive
+(`read` / `run` / `see` / `load` / …), because a bare mention is noisy. A **markdown
+link** does not: it is explicit follow-me syntax, so `Resources: [the API](references/api.md)`
+is checked even with no verb in the line, while "For example, see
+`[a report](assets/example.pdf)`" is suppressed by the cue.
+
+_(This paragraph previously said a link also required a directive. That was
+true until the link branch was narrowed to cue-only suppression to close an
+under-detection; `candidateFor` in `src/core/skill-resources.ts` and the
+"plain resource link with NO use directive" test are the authority.)_
 
 **A heading counts as a directive.** The verb gate reads prose, and a heading is
 not prose — it is the section's label — so the most common way a skill points at
