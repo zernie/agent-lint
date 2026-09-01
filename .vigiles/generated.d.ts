@@ -101,7 +101,7 @@ declare module "vigiles/generated" {
     | "internal:check"
     | "docs:api";
 
-  /** 396 project files. */
+  /** 400 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -187,7 +187,9 @@ declare module "vigiles/generated" {
     | "src/check.ts"
     | "src/ci-path-filter.test.ts"
     | "src/claude-code.ts"
+    | "src/cli-adopter-reports.test.ts"
     | "src/cli-commands.ts"
+    | "src/cli-compile-gate.test.ts"
     | "src/cli-coverage-record.test.ts"
     | "src/cli-flag-check.test.ts"
     | "src/cli-flag-check.ts"
@@ -428,6 +430,7 @@ declare module "vigiles/generated" {
     | "src/rule-routing.test.ts"
     | "src/rule-routing.ts"
     | "src/rule-signals.ts"
+    | "src/rules-layer.test.ts"
     | "src/run-hook.e2e.test.ts"
     | "src/run-hook.test.ts"
     | "src/run-hook.ts"
@@ -483,6 +486,7 @@ declare module "vigiles/generated" {
     | "src/spec-hooks.mts"
     | "src/spec-host.mts"
     | "src/spec-loader.test.ts"
+    | "src/stability-verbs.test.ts"
     | "src/stats.test.ts"
     | "src/stats.ts"
     | "src/subagent-delivery.test.ts"
@@ -655,7 +659,9 @@ declare module "vigiles/spec" {
       | "src/check.ts"
       | "src/ci-path-filter.test.ts"
       | "src/claude-code.ts"
+      | "src/cli-adopter-reports.test.ts"
       | "src/cli-commands.ts"
+      | "src/cli-compile-gate.test.ts"
       | "src/cli-coverage-record.test.ts"
       | "src/cli-flag-check.test.ts"
       | "src/cli-flag-check.ts"
@@ -896,6 +902,7 @@ declare module "vigiles/spec" {
       | "src/rule-routing.test.ts"
       | "src/rule-routing.ts"
       | "src/rule-signals.ts"
+      | "src/rules-layer.test.ts"
       | "src/run-hook.e2e.test.ts"
       | "src/run-hook.test.ts"
       | "src/run-hook.ts"
@@ -951,6 +958,7 @@ declare module "vigiles/spec" {
       | "src/spec-hooks.mts"
       | "src/spec-host.mts"
       | "src/spec-loader.test.ts"
+      | "src/stability-verbs.test.ts"
       | "src/stats.test.ts"
       | "src/stats.ts"
       | "src/subagent-delivery.test.ts"

@@ -12,6 +12,9 @@ export const claudeCodeHookProtocol: HookProtocol = {
   blockExitCode: 2,
   denyDecisionValues: ["block", "deny"],
   eventEnvVars: [],
+  // `{"continue": false}` stops the turn outright and returns `stopReason` to
+  // the agent — a stronger stop than a per-call deny, and a documented one.
+  haltsTurnField: "continue",
   // Events that honor `hookSpecificOutput.additionalContext` (developer-context
   // injection). Covers vigiles's shipped inject hooks: the SessionStart lint
   // summary and the PostToolUse refs / eval-lock nudges.

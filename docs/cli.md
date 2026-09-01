@@ -484,8 +484,26 @@ npx vigiles audit ./some-plugin --json   # structured, for pipelines
 npx vigiles audit ./plugins/*/           # ≥2 targets → ranked health leaderboard
 npx vigiles audit ./plugins/*/ --md      # ranked leaderboard as a Markdown table (publishable)
 npx vigiles audit ./marketplace-repo     # a marketplace.json root → ranks every member
+npx vigiles audit ./marketplace-repo --single  # ...or audit that root as ONE harness
 npx vigiles audit ./repo --harness=codex # override harness detection
 ```
+
+#### `--single` — audit a many-bundle root as one harness
+
+A marketplace root switches to the leaderboard automatically, which means the
+full ring report **for that root** has no way to be asked for. `--single` pins
+the single-harness reading regardless of what is nested inside:
+
+```bash
+npx vigiles audit . --single    # rings for the root itself, not a table of members
+```
+
+It names ONE harness, so passing several directories alongside it is refused
+(exit 2) rather than auditing the first and dropping the rest.
+
+Note `--out` writes a report only in single-harness mode; in leaderboard mode
+there is no per-bundle report to write, and `audit` now says so instead of
+ignoring the flag silently.
 
 #### Leaderboard — rank many plugins
 

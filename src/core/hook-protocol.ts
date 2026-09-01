@@ -46,4 +46,18 @@ export interface HookProtocol {
    * shell-hook harness declares a non-empty set.
    */
   readonly injectableEvents: readonly string[];
+  /**
+   * The boolean stdout field whose `false` value HALTS THE WHOLE TURN, if the
+   * harness has one (Claude Code: `"continue"`). Distinct from a deny: a deny
+   * refuses one tool call, this stops the iteration and hands `stopReason` back
+   * to the agent as text — so authors reach for it exactly when they want to
+   * explain themselves, and a guard written that way still prevents the action.
+   *
+   * Optional (additive, non-breaking) and per-harness on purpose. It is
+   * DOCUMENTED for Claude Code and UNVERIFIED for Codex, whose protocol notes
+   * only record the shared exit-2 / `decision` / `permissionDecision` model — so
+   * Codex leaves it unset rather than inheriting a claim nobody measured. Read
+   * by `decideHook`; absent ⇒ no field halts the turn on this harness.
+   */
+  readonly haltsTurnField?: string;
 }

@@ -82,6 +82,7 @@
  * impossible there and its count is 0 — see `test-coverage-files.ts`.
  */
 import { readFrontmatter, frontmatterScalar } from "./core/frontmatter-read.js";
+import { minimatch } from "minimatch";
 import { basename, dirname } from "./posix-path.js";
 
 import { scriptRefPattern } from "./core/source-refs.js";
@@ -96,7 +97,34 @@ import { scriptRefPattern } from "./core/source-refs.js";
  * conventions: one is about a process that ran, the other about a directory
  * listing. See the module header.
  */
-export type CoverageEvidence = "executed" | "colocated";
+export type CoverageEvidence = "executed" | "colocated" | "configured";
+
+/**
+ * Rank, strongest first — what "the STRONGEST evidence" is measured against.
+ *
+ * It exists because `coverageOf` promised strongest-not-first-found while
+ * actually keeping the first match, which was harmless only while `colocated`
+ * was the sole surviving tier: one tier cannot be out-ranked. Adding
+ * `configured` made the promise load-bearing again — a surface with both a
+ * colocated harness and a configured suite would otherwise be reported as
+ * whichever the glob list happened to yield first, so the provenance summary
+ * would depend on the ORDER of a config array. Colocation ranks higher because
+ * it is the stronger statement: the filesystem enforces the binding rather than
+ * a pattern asserting it.
+ */
+const EVIDENCE_RANK: Record<CoverageEvidence, number> = {
+  executed: 0,
+  colocated: 1,
+  configured: 2,
+};
+
+/** Is `a` stronger evidence than `b`? */
+export function strongerEvidence(
+  a: CoverageEvidence,
+  b: CoverageEvidence,
+): boolean {
+  return EVIDENCE_RANK[a] < EVIDENCE_RANK[b];
+}
 
 /** The minimum a surface must expose to be matched — structural, no import cycle. */
 export interface CoverableSurface {
@@ -298,8 +326,72 @@ export function evidenceFor(
   _surface: CoverableSurface,
   _test: PreparedTest,
   colocated: boolean,
+  configured = false,
 ): CoverageEvidence | null {
-  return colocated ? "colocated" : null;
+  if (colocated) return "colocated";
+  return configured ? "configured" : null;
+}
+
+/**
+ * The `{surface}` placeholder in a user's `testGlobs` — the ONE thing that makes
+ * a centralized test layout expressible without weakening what coverage MEANS.
+ *
+ * The retired `declared` and `name-mentioned` tiers died because they could
+ * credit a surface no test touched: a mention is a substring, and a substring
+ * matched this file's own fixtures. `{surface}` cannot do that. The user writes
+ * `tests/{surface}/evals/promptfooconfig*.yaml`, and the placeholder is replaced
+ * with the surface's NAME before matching — so the binding between test and
+ * surface is still the name, exactly as under colocation. Only the PLACE moves.
+ *
+ * What it costs, stated plainly because it is the argument colocation was chosen
+ * on: `ls` beside the skill no longer answers "is this tested?" — you have to
+ * know where the project keeps its tests. That is a real loss, and it is why
+ * this is opt-in per repo rather than a second default. A project that has
+ * already centralized its suites has paid that cost anyway.
+ */
+export const SURFACE_TOKEN = "{surface}";
+
+/** Does this glob delegate its surface binding to the placeholder? */
+export function hasSurfaceToken(glob: string): boolean {
+  return glob.includes(SURFACE_TOKEN);
+}
+
+/**
+ * The pattern to DISCOVER files with: the placeholder widened to `*` so one
+ * glob pass finds every candidate. Narrowing back to the right surface happens
+ * at match time — discovery must stay surface-agnostic or it would be one glob
+ * pass per surface.
+ */
+export function discoveryGlob(glob: string): string {
+  return glob.split(SURFACE_TOKEN).join("*");
+}
+
+/**
+ * Does this test file sit at a `{surface}` path configured FOR THIS SURFACE?
+ *
+ * The placeholder is replaced with the surface's own name, so
+ * `tests/{surface}/evals/*.yaml` credits `tests/mysql-designer/evals/x.yaml` to
+ * `mysql-designer` and to nothing else. A glob WITHOUT the placeholder returns
+ * false here on purpose: a plain custom glob widens what counts as a test file,
+ * which it always did, but it says nothing about WHICH surface the file is for
+ * — and inferring that from a substring is exactly the retired `name-mentioned`
+ * tier that credited surfaces nothing had touched.
+ *
+ * `minimatch` (already a direct dependency, pure JS) so the browser twin can
+ * share this instead of growing a second matcher that disagrees.
+ */
+export function matchesSurfaceGlob(
+  surface: Pick<CoverableSurface, "name">,
+  testPath: string,
+  globs: readonly string[],
+): boolean {
+  const test = posixly(testPath);
+  return globs.some((g) => {
+    if (!hasSurfaceToken(g)) return false;
+    return minimatch(test, g.split(SURFACE_TOKEN).join(surface.name), {
+      dot: true,
+    });
+  });
 }
 
 /** Per-evidence tallies — the provenance summary the report prints. */
@@ -307,6 +399,8 @@ export interface EvidenceCounts {
   /** Decided by a recorded run against this version of the surface. */
   readonly executed: number;
   readonly colocated: number;
+  /** Decided by a `{surface}` testGlob — the name still binds, the place moved. */
+  readonly configured: number;
 }
 
 /** Tally a list of decisions by evidence kind. */
@@ -315,11 +409,13 @@ export function countEvidence(
 ): EvidenceCounts {
   let executed = 0;
   let colocated = 0;
+  let configured = 0;
   for (const d of decisions) {
     if (d.evidence === "executed") executed += 1;
+    else if (d.evidence === "configured") configured += 1;
     else colocated += 1;
   }
-  return { executed, colocated };
+  return { executed, colocated, configured };
 }
 
 /**
@@ -344,6 +440,13 @@ export function formatEvidence(counts: EvidenceCounts): string {
     parts.push(
       `${String(counts.colocated)} colocated — a test NAMED after the surface, ` +
         `in the surface's own place. This says the file EXISTS, not that it ran`,
+    );
+  }
+  if (counts.configured > 0) {
+    parts.push(
+      `${String(counts.configured)} configured — a test NAMED after the surface ` +
+        `at a \`{surface}\` path you configured. Same name binding as colocation, ` +
+        `different place; still only says the file EXISTS`,
     );
   }
   if (parts.length === 0) return "";

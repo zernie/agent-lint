@@ -1,6 +1,6 @@
 # Stability
 
-> vigiles is at **v12** — but read that as _"still moving fast,"_ not
+> vigiles is at **v21** — but read that as _"still moving fast,"_ not
 > _"battle-hardened."_ `semantic-release` cuts a **new major on every breaking
 > API change**, and there have been a lot of them. The number is an artifact of
 > how it ships, not a claim of maturity. This page says what I try hardest not
@@ -11,8 +11,8 @@ their exit codes. Most of the churn is in the library API underneath it.
 
 ## What's stable — depend on it
 
-- **The CLI** — the verbs (`init`, `compile`, `lint`, `test`, `eval`,
-  `scan`, `generate`), their flags, and their **exit codes**
+- **The CLI** — the verbs (`init`, `compile`, `eject`, `lint`, `test`, `eval`,
+  `audit`, `generate`), their flags, and their **exit codes**
   (`0` clean / `1` warn / `2` error). This is the narrowest, steadiest contract
   and the surface almost everyone touches — including the GitHub Action, which wraps it.
 - **The authoring + testing library entry points:**

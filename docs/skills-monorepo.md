@@ -90,6 +90,28 @@ legitimate authoring style):
 | `Read ~/.claude/docs/x.md`                                 | an external home/global path — **skipped** |
 | `${CLAUDE_PLUGIN_ROOT}/x`, `https://…`, `/abs/path`        | var / URL / absolute — **skipped**         |
 
+## Centralized tests — `{surface}` in `testGlobs`
+
+A skills monorepo usually keeps its suites in one tree
+(`tests/<skill>/evals/…`) rather than beside each skill. Say so with the
+`{surface}` placeholder, which is replaced with each skill's own name before
+matching:
+
+```json
+{
+  "rules": {
+    "untested-skill": [
+      "warn",
+      { "testGlobs": ["tests/{surface}/evals/promptfooconfig*.yaml"] }
+    ]
+  }
+}
+```
+
+Without the placeholder a custom glob widens what counts as a test file but
+never says which skill a file covers, so it credits nothing.
+[Full rules and the trade-off →](rules/untested-skill.md)
+
 ## Which surfaces gate CI
 
 `audit` is a **local report** (like Lighthouse). For CI, use `vigiles lint` — the

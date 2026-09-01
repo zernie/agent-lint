@@ -222,3 +222,68 @@ describe("robustness", () => {
     assert.equal(findings.length, 1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// `continue: false` — a suppressor, never a block attempt (#174)
+// ---------------------------------------------------------------------------
+
+describe("the halt-the-turn field", () => {
+  it("a halt on a NO-EFFECT event is NOT flagged wrong-event", () => {
+    // The load-bearing one. #174 proposed treating `continue: false` as a block
+    // attempt; that would fire here — and be wrong, because a halt is not
+    // event-scoped. It ends the turn from SessionStart too.
+    const script = "/hooks/halt-on-session-start.sh";
+    const entries: HookScriptEntry[] = [
+      { event: "SessionStart", command: `bash ${script}`, scriptPath: script },
+    ];
+    const findings = hookBlockIssues(
+      entries,
+      withFiles({ [script]: `printf '{"continue": false}'\n` }),
+    );
+    assert.deepEqual(findings, [], "a working halt must not be called broken");
+  });
+
+  it("a halt SUPPRESSES wrong-field when paired with the legacy decision", () => {
+    // The legacy field is ignored on PreToolUse, but the halt beside it still
+    // stops the action — so there is nothing to warn about.
+    const script = "/hooks/belt-and-braces.sh";
+    const entries: HookScriptEntry[] = [
+      { event: "PreToolUse", command: `bash ${script}`, scriptPath: script },
+    ];
+    const findings = hookBlockIssues(
+      entries,
+      withFiles({
+        [script]: `printf '{"decision":"block","continue":false}'\n`,
+      }),
+    );
+    assert.deepEqual(findings, []);
+  });
+
+  it("the legacy decision ALONE is still flagged wrong-field", () => {
+    // The other half: the suppressor must not blanket-silence the rule.
+    const script = "/hooks/legacy-only.sh";
+    const entries: HookScriptEntry[] = [
+      { event: "PreToolUse", command: `bash ${script}`, scriptPath: script },
+    ];
+    const findings = hookBlockIssues(
+      entries,
+      withFiles({ [script]: `printf '{"decision":"block"}'\n` }),
+    );
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0]?.kind, "wrong-field");
+  });
+
+  it("`continue: true` suppresses nothing", () => {
+    const script = "/hooks/continue-true.sh";
+    const entries: HookScriptEntry[] = [
+      { event: "PreToolUse", command: `bash ${script}`, scriptPath: script },
+    ];
+    const findings = hookBlockIssues(
+      entries,
+      withFiles({
+        [script]: `printf '{"decision":"block","continue":true}'\n`,
+      }),
+    );
+    assert.equal(findings.length, 1, "only a `false` halt is a halt");
+  });
+});

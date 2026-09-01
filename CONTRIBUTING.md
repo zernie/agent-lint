@@ -49,7 +49,10 @@ npm run build        # Compile TypeScript → dist/
 npm test             # Build + run all tests
 ```
 
-Tests use Node.js built-in test runner (`node:test`) and `node:assert/strict`. No extra test framework needed.
+Tests run under **vitest** (`npm test` = build + `vitest run`), with assertions from
+`node:assert/strict`. Unit tests live beside their source as `src/**/*.test.ts`.
+Optional `vitest` / `jest` matcher adapters ship for CONSUMERS (`vigiles/vitest`,
+`vigiles/jest`); they are not what this repo's own suite uses.
 
 ### Format
 
@@ -67,10 +70,13 @@ npx tsc --noEmit     # Type-check without emitting
 ### Run locally
 
 ```bash
-npx vigiles CLAUDE.md                          # Validate a file
-npx vigiles --markers=headings,checkboxes .    # Custom markers
-npx vigiles                                    # Auto-discover instruction files
+node dist/cli.js audit .     # The zero-config report (build first)
+node dist/cli.js lint .      # The deterministic gate CI runs
+node dist/cli.js --help      # Every verb and its flags
 ```
+
+There is no bare `npx vigiles <file>` form — the CLI dispatches on a VERB, and an
+unknown one exits 2.
 
 ## TypeScript conventions
 
@@ -87,15 +93,38 @@ This project uses **TypeScript strict mode** with these compiler options enabled
 - **No `any`** — use `unknown` and narrow with type guards when the type is truly unknown.
 - Import types with `import type { ... }` when only used in type positions.
 - Use `.js` extensions in import paths (required by Node16 module resolution).
-- Keep the single-file core architecture — `validate.ts` contains all validation logic.
+- Respect the hexagonal boundary: `src/core/` is the harness-agnostic domain,
+  `src/adapters/<harness>/` holds per-harness facts, and core must never import an
+  adapter (enforced by `eslint-plugin-boundaries`, not by convention).
 
 ## Adding a new validation rule
 
-1. Add the rule name and default value to `RulesConfig` in `src/types.ts`.
-2. Add the default to `RULE_PACKS` in `src/validate.ts`.
-3. Implement the check inside the `validate()` function.
-4. Add tests in `src/validate.test.ts`.
-5. Document the rule in `README.md` and `CLAUDE.md`.
+Every step below names a file that exists; the previous version of this section
+pointed at `src/types.ts`, `src/validate.ts` and a `validate()` function, none of
+which have existed for a long time (reported in #176).
+
+A rule is a PURE DETECTOR plus registrations. The detector has ONE home and is
+reused by both `lint` (the gate) and `audit` (the report), so the two can never
+disagree — see the `one-detector-no-drift` rule in `CLAUDE.md`.
+
+1. Write the detector in `src/core/<name>.ts` — pure, IO injected, no `node:fs`
+   import, no Claude Code literals (the core is harness-agnostic; read tool and
+   event catalogs from the injected dialect). Unit-test it beside itself.
+2. Add the rule name to `RulesConfig` in `src/core/types.ts`.
+3. Add its default severity to the rule GROUPS in `src/setup-plan.ts`
+   (`STRUCTURAL_RULES` / `WORKFLOW_RULES` / `NUDGE_RULES`) — severity tracks
+   CONFIDENCE, not importance.
+4. Declare it in `src/core/rule-meta.ts` with its decidability bucket, surface and
+   detector. `Record<RuleName, RuleMeta>` makes a missing entry a `tsc` error, and
+   `src/core/rule-meta.test.ts` binds the registry to `docs/rules/*.md` as an exact
+   set match.
+5. Call the same detector from `src/scan.ts` and wire the severity in `src/cli.ts`.
+6. Write `docs/rules/<name>.md` and add its row to the matrix in
+   `docs/verifying-instruction-files.md`.
+
+For a rule that can be wired at `error`, a FALSE POSITIVE is worse than a miss: a
+miss costs a detection, a false positive costs the build — and a rule that fails
+correct code gets switched off rather than fixed. Err toward silence.
 
 ## Adding a new linter
 
@@ -124,7 +153,9 @@ step-by-step lives in the `add-a-linter` contributor skill
 
 ## Architecture decisions
 
-- **Single-file core**: All validation logic lives in `validate.ts` for portability and minimal dependency surface.
+- **Hexagonal core**: the domain (`src/core/`) knows nothing about how an agent runs;
+  every harness-specific fact sits behind one of five injectable ports. Adding a
+  harness is writing one adapter object, not editing the core.
 - **Zero config by default**: vigiles works out of the box. Config exists only for overrides.
 - **Two rule packs**: `"recommended"` (permissive defaults) and `"strict"` (tighter constraints).
 - **Linter auto-detection**: No need to declare which linters you use — vigiles discovers them.

@@ -237,6 +237,42 @@ point `testGlobs` at those files **and place them beside the skill they cover**:
 A file in `testGlobs` counts only where it sits. One central config naming every
 skill covers none of them — that is the content-reference rule that was removed.
 
+### A centralized layout: the `{surface}` placeholder
+
+If your suites live in a **central tree** rather than beside each skill —
+`tests/<skill>/evals/promptfooconfig.yaml` is the common shape — write the
+placeholder `{surface}` where the skill's name goes:
+
+```json
+{
+  "rules": {
+    "untested-skill": [
+      "warn",
+      { "testGlobs": ["tests/{surface}/evals/promptfooconfig*.yaml"] }
+    ]
+  }
+}
+```
+
+`{surface}` is replaced with each skill's own name before matching, so
+`tests/mysql-designer/evals/promptfooconfig.yaml` covers `mysql-designer` — and
+nothing else.
+
+**A `testGlobs` entry WITHOUT `{surface}` still credits nothing on its own.**
+It widens what counts as a _test file_ but says nothing about which _surface_ a
+file is for, and inferring that from a substring is exactly the
+content-reference rule that was removed for crediting surfaces no test had
+touched.
+
+**What it costs, so you can decide honestly:** `ls` beside the skill no longer
+answers "is this tested?" — you have to know where the project keeps its tests.
+That is the property colocation was chosen for, which is why this is opt-in per
+repo rather than a second default. If your suites are already centralized, you
+have paid that cost anyway.
+
+Where both exist, **colocation wins** and is what the report names, regardless of
+the order of your `testGlobs` array.
+
 ## Exemptions
 
 **Every** skill is held to this — invocation mode does **not** exempt anything. A

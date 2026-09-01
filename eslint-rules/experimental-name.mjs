@@ -276,6 +276,20 @@ export default {
        */
       ExportDefaultDeclaration(node) {
         const d = node.declaration;
+        // `export default widget;` — the declaration and its tag sit ELSEWHERE
+        // in the file, so this statement carries no tag of its own and the
+        // inline path below finds nothing. Recorded like an export specifier and
+        // judged at `Program:exit`, once the tagged locals are known.
+        //
+        // 🔴 FOUND BY THE CORPUS, not by review (#170). It is the same shape the
+        // rule already learned for `export { x }` in an earlier round — a tagged
+        // local exported by a later statement — and it went unnamed anyway,
+        // which is precisely the argument for enumerating against the grammar
+        // instead of patching per report.
+        if (d?.type === "Identifier") {
+          pending.push({ node: d, local: d.name });
+          return;
+        }
         const id =
           (d?.type === "FunctionDeclaration" ||
             d?.type === "ClassDeclaration") &&

@@ -84,3 +84,85 @@ test("the COMPILED hook blocks all 7 disasters by construction (closes the gaps)
     },
   );
 });
+
+// ---------------------------------------------------------------------------
+// #174 — a guard that halts the turn instead of denying the call
+// ---------------------------------------------------------------------------
+
+/**
+ * The SAME coverage as a correct exit-2 guard, expressed through the other
+ * documented mechanism: `{"continue": false}` stops the whole turn and hands
+ * `stopReason` back to the agent as text. Authors reach for it when they want to
+ * explain the refusal rather than just refuse.
+ *
+ * Reported by a vigiles adopter (#174) on a real `github-helper` write-guard.
+ * Until 2026-08-31 `verifyGuardrail` read only exit 2 / `decision` /
+ * `permissionDecision`, so this guard — which stops every disaster in the
+ * battery — was reported as blocking NONE of them, and `assertBlocksDisasters`
+ * failed the build over a working guard. The tool whose stated job is catching
+ * "a guard that looks fine and silently does nothing" said exactly that about a
+ * guard that does not.
+ */
+const HALTING_GUARD = `#!/usr/bin/env bash
+cat > /dev/null
+printf '%s' '{"continue": false, "stopReason": "blocked by policy"}'
+exit 0
+`;
+
+/** The same shape, but permissive — the control that keeps the test honest. */
+const HALTING_GUARD_NOOP = `#!/usr/bin/env bash
+cat > /dev/null
+printf '%s' '{"continue": true}'
+exit 0
+`;
+
+test("a guard that halts the turn is credited with blocking (#174)", () => {
+  const dir = makeTmpDir();
+  try {
+    const guard = resolve(dir, "halting-guard.sh");
+    writeFileSync(guard, HALTING_GUARD);
+    chmodSync(guard, 0o755);
+
+    const results = verifyGuardrail(`bash ${guard}`);
+    const missed = unblockedDisasters(results).map((m) => m.event.id);
+
+    assert.deepEqual(
+      missed,
+      [],
+      "a guard halting the turn prevents every disaster; reporting misses here is the #174 inversion",
+    );
+    // Every result exits 0 — so the verdict cannot be coming from the exit code.
+    assert.ok(
+      results.every((r) => r.exitCode === 0),
+      "the guard blocks by field, not by exit code",
+    );
+    // The gate itself must now pass on it.
+    assert.doesNotThrow(() => {
+      assertBlocksDisasters(`bash ${guard}`);
+    });
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("a guard that only says continue:true still fails the battery", () => {
+  // The other half: the widened verdict must not credit a hook that permits.
+  // Without this, "blocked" could be satisfied by the mere PRESENCE of a
+  // `continue` key, which is the bug with the sign flipped.
+  const dir = makeTmpDir();
+  try {
+    const guard = resolve(dir, "noop-guard.sh");
+    writeFileSync(guard, HALTING_GUARD_NOOP);
+    chmodSync(guard, 0o755);
+
+    assert.throws(
+      () => {
+        assertBlocksDisasters(`bash ${guard}`);
+      },
+      /did NOT block/,
+      "a permissive guard must still be reported as false confidence",
+    );
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});

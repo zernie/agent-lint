@@ -108,6 +108,7 @@ export interface HookProtocol {
     readonly blockExitCode: number;
     readonly denyDecisionValues: readonly string[];
     readonly eventEnvVars: readonly string[];
+    readonly haltsTurnField?: string;
     readonly injectableEvents: readonly string[];
     readonly matcherStyle?: "exact" | "regex";
     readonly name: string;
@@ -135,6 +136,7 @@ export interface PluginLayout {
     readonly name: string;
     readonly pluginRootToken: string;
     readonly projectRootTokens?: readonly string[];
+    readonly rulesDir?: string;
     readonly settingsFormat: "json" | "toml";
     readonly settingsPath: string;
     readonly skillDir: string;

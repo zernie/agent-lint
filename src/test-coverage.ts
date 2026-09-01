@@ -85,6 +85,9 @@ import {
   type CoverageEvidence,
   type EvidenceCounts,
   type PreparedTest,
+  discoveryGlob,
+  matchesSurfaceGlob,
+  strongerEvidence,
 } from "./coverage-evidence.js";
 import {
   canonicalScript,
@@ -494,7 +497,14 @@ function discoverTests(
   // skill (matched by the explicit-dot `.claude/skills/*/SKILL.md` pattern) is
   // still discovered — so the surface looks untested even after the user adds
   // exactly the suggested file. DEFAULT_IGNORE still drops .git/node_modules/etc.
-  const found = globSync([...globs], { cwd: basePath, ignore, dot: true });
+  // `{surface}` is widened to `*` for DISCOVERY so one pass finds every
+  // candidate; the narrowing back to a specific surface happens at match time
+  // (matchesSurfaceGlob). Globbing once per surface would be quadratic in I/O.
+  const found = globSync(globs.map(discoveryGlob), {
+    cwd: basePath,
+    ignore,
+    dot: true,
+  });
   // Prepared ONCE per file (comment-strip + declaration parse), not once per
   // (surface × file) pair — the matching below is quadratic by nature.
   return found.map((path) => prepareTest(path));
@@ -544,13 +554,22 @@ function isColocated(surface: Surface, testPath: string): boolean {
 function coverageOf(
   surface: Surface,
   tests: readonly PreparedTest[],
+  globs: readonly string[],
 ): CoverageDecision | null {
   let best: CoverageDecision | null = null;
   for (const t of tests) {
     if (t.path === surface.path) continue;
-    const ev = evidenceFor(surface, t, isColocated(surface, t.path));
+    const ev = evidenceFor(
+      surface,
+      t,
+      isColocated(surface, t.path),
+      matchesSurfaceGlob(surface, t.path, globs),
+    );
     if (!ev) continue;
-    if (!best) best = { surface, evidence: ev, by: t.path };
+    // Rank, do not first-win: with a colocated harness AND a configured suite
+    // the reported provenance must not depend on glob order.
+    if (!best || strongerEvidence(ev, best.evidence))
+      best = { surface, evidence: ev, by: t.path };
   }
   return best;
 }
@@ -606,12 +625,13 @@ function tierOf(
   tests: readonly PreparedTest[],
   index: ReadonlyMap<string, ExecutedRecord[]>,
   tier: CoverageTierName | undefined,
+  globs: readonly string[],
 ): CoverageTier {
   const covered: Surface[] = [];
   const untested: Surface[] = [];
   const decisions: CoverageDecision[] = [];
   for (const s of considered) {
-    const decision = executedOf(s, index, tier) ?? coverageOf(s, tests);
+    const decision = executedOf(s, index, tier) ?? coverageOf(s, tests, globs);
     if (decision) {
       covered.push(s);
       decisions.push(decision);
@@ -677,7 +697,7 @@ export function findUntestedSurfaces(
     // the artifact records whichever one was typed.
     (by) => existsSync(join(basePath, canonicalScript(by, basePath))),
   );
-  const union = tierOf(considered, tests, runIndex, undefined);
+  const union = tierOf(considered, tests, runIndex, undefined, globs);
 
   return {
     total: considered.length,
@@ -702,8 +722,8 @@ export function findUntestedSurfaces(
       .filter((path) => read(join(basePath, path)).includes(LEGACY_COVERS)),
     retiredTestNames: retiredTestNamesFor(basePath, union.untested),
     decisions: union.decisions,
-    harness: tierOf(considered, split.harness, runIndex, "harness"),
-    evals: tierOf(considered, split.evals, runIndex, "eval"),
+    harness: tierOf(considered, split.harness, runIndex, "harness", globs),
+    evals: tierOf(considered, split.evals, runIndex, "eval", globs),
   };
 }
 
@@ -1089,14 +1109,18 @@ export function formatUntestedReport(report: UntestedReport): string {
   if (provenance) lines.push(`  ${provenance}`);
   lines.push(...coverageCaveats(report));
   // Already testing these another way (a promptfoo suite, a home-grown evals
-  // file)? Point `testGlobs` at it so it counts toward coverage (issue #113) —
-  // and put the file NEXT TO the surface, which is the only placement that
-  // counts now. See docs/rules/untested-skill.md.
+  // file)? Two shapes are accepted, and the message names BOTH — it used to
+  // name only `testGlobs`, which does not by itself make a centralized suite
+  // count, so a reader who followed it exactly saw the number not move (#175.2).
+  // See docs/rules/untested-skill.md.
   lines.push(
-    `  Testing these another way (promptfoo / a home-grown eval loop)? Add its ` +
-      `files to \`testGlobs\` in .vigilesrc.json AND name each after the surface ` +
-      `it covers, next to it (\`<surface>/<surface>.eval.mjs\`) — placement says ` +
-      `where a file sits, the name says what it is about. ` +
+    `  Testing these another way (promptfoo / a home-grown eval loop)? Either ` +
+      `put the file NEXT TO the surface and name it after it ` +
+      `(\`<surface>/<surface>.eval.mjs\`), or — for a centralized layout — point ` +
+      `\`testGlobs\` at it USING THE \`{surface}\` placeholder, e.g. ` +
+      `\`"tests/{surface}/evals/promptfooconfig*.yaml"\`. A \`testGlobs\` entry ` +
+      `WITHOUT \`{surface}\` widens what counts as a test file but never says ` +
+      `which surface it covers, so it credits nothing on its own. ` +
       `See docs/rules/untested-skill.md.`,
   );
   return lines.join("\n");

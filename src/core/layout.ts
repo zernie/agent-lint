@@ -58,6 +58,21 @@ export interface PluginLayout {
   readonly agentDir: string;
   /** Slash-commands dir, holding flat `<dir>/<name>.md`, e.g. `commands`. */
   readonly commandDir: string;
+  /**
+   * Path-scoped RULES dir, holding flat `<dir>/<name>.md`, e.g. `rules`
+   * (`""` or absent = this harness has no such layer).
+   *
+   * Claude Code loads `.claude/rules/*.md` as project instructions, scoped by a
+   * `paths:` frontmatter key. It is an INSTRUCTION surface — often where a
+   * team's hardest policies actually live — and until now no layout named it, so
+   * `frontmatter-valid` and the rule map simply never saw those files. An
+   * adopter reported five such files arriving in a session labelled "project
+   * instructions" while `lint` did not mention them at all (#175.3).
+   *
+   * Optional and additive: a layout that omits it behaves exactly as before, so
+   * this adds a directory to the existing checks rather than a new check.
+   */
+  readonly rulesDir?: string;
   /** Dir the surfaces are materialized under, e.g. `.claude`. */
   readonly materializeRoot: string;
   /** Env token expanded to the plugin's absolute root in hook commands. */

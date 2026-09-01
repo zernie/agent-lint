@@ -141,6 +141,25 @@ const DECISION_BLOCK = /"decision"\s*:\s*"(block|deny)"/;
  */
 const PERMISSION_DENY = /"permissionDecision"\s*:\s*"(deny|ask)"/;
 
+/**
+ * A `"continue": false` halt — the OTHER documented way a Claude Code hook stops
+ * an action (it ends the turn and returns `stopReason` to the agent).
+ *
+ * Read ONLY as a SUPPRESSOR of `wrong-field`, never as a block ATTEMPT, and the
+ * asymmetry is the whole point. #174 proposed adding it alongside the three
+ * mechanisms above; doing that would have made `wrong-event` fire on a hook that
+ * works, because a halt is NOT event-scoped — it stops the turn from
+ * `SessionStart` just as it does from `PreToolUse`, which is precisely the set
+ * `wrong-event` flags. For a rule that can be wired at `error`, a false positive
+ * costs more than a miss: it fails a correct build, and a rule that fails
+ * correct builds gets switched off rather than fixed.
+ *
+ * What it legitimately fixes is the reverse: a hook on a permission-gated event
+ * that pairs a legacy `"decision":"block"` with a real halt was told "nothing is
+ * blocked" while it blocked.
+ */
+const CONTINUE_FALSE = /"continue"\s*:\s*false/;
+
 // ---------------------------------------------------------------------------
 // Detector
 // ---------------------------------------------------------------------------
@@ -195,7 +214,9 @@ export function hookBlockIssues(
     const hasExit2 = EXIT_2.test(text) || EXIT_2_CODE.test(text);
     const hasDecisionBlock = DECISION_BLOCK.test(text);
     const hasPermissionDeny = PERMISSION_DENY.test(text);
+    const hasContinueFalse = CONTINUE_FALSE.test(text);
 
+    // Deliberately NOT `|| hasContinueFalse` — see CONTINUE_FALSE.
     const triesBlock = hasExit2 || hasDecisionBlock || hasPermissionDeny;
     if (!triesBlock) continue;
 
@@ -215,7 +236,10 @@ export function hookBlockIssues(
     } else if (
       permissionDecisionEvents.has(entry.event) &&
       hasDecisionBlock &&
-      !hasPermissionDeny
+      !hasPermissionDeny &&
+      // A halt alongside the legacy field DOES stop the action, so the legacy
+      // field being ignored costs nothing. Flagging it would be a false alarm.
+      !hasContinueFalse
     ) {
       // wrong-field: on a permission-gated event, uses the legacy field.
       kind = "wrong-field";

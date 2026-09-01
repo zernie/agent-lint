@@ -787,6 +787,7 @@ test("a runtime-path harness covers nothing until its tests are colocated", () =
   assert.deepEqual(coverageEvidenceCounts(after), {
     executed: 0,
     colocated: 1,
+    configured: 0,
   });
   cleanupTmpDir(dir);
 });
@@ -814,7 +815,11 @@ test("an EMPTY colocated file still counts — the known, reported hole", () => 
   write(dir, "skills/foo/foo.eval.mjs", "");
   const r = findUntestedSurfaces({ basePath: dir });
   assert.equal(r.untested.length, 0);
-  assert.deepEqual(coverageEvidenceCounts(r), { executed: 0, colocated: 1 });
+  assert.deepEqual(coverageEvidenceCounts(r), {
+    executed: 0,
+    colocated: 1,
+    configured: 0,
+  });
   cleanupTmpDir(dir);
 });
 
@@ -1200,6 +1205,7 @@ test("a recorded run covers a surface that has NO file named after it", () => {
   assert.deepEqual(coverageEvidenceCounts(after), {
     executed: 1,
     colocated: 0,
+    configured: 0,
   });
   cleanupTmpDir(dir);
 });
@@ -1216,7 +1222,11 @@ test("execution OUTRANKS colocation, and the report words them differently", () 
     { path: "skills/alpha/SKILL.md", name: "alpha", sha: surfaceSha(alpha) },
   ]);
   const r = findUntestedSurfaces({ basePath: dir });
-  assert.deepEqual(coverageEvidenceCounts(r), { executed: 1, colocated: 1 });
+  assert.deepEqual(coverageEvidenceCounts(r), {
+    executed: 1,
+    colocated: 1,
+    configured: 0,
+  });
   const text = formatUntestedReport(r);
   // "measured by a run" and "there is a file with a matching name" are two
   // different facts. A reader who cannot tell them apart has the old number.
@@ -1273,6 +1283,7 @@ test("a record whose HARNESS was deleted grants nothing — and that is the perm
   assert.deepEqual(coverageEvidenceCounts(before), {
     executed: 1,
     colocated: 0,
+    configured: 0,
   });
 
   // FIRES: exactly one change — the harness is gone.
@@ -1282,6 +1293,7 @@ test("a record whose HARNESS was deleted grants nothing — and that is the perm
   assert.deepEqual(coverageEvidenceCounts(after), {
     executed: 0,
     colocated: 0,
+    configured: 0,
   });
   // Not "measured, but not this version" either: the surface was never edited,
   // so calling it stale would name the wrong file.
@@ -1308,7 +1320,11 @@ test("…and a RENAMED harness is the same case, because the old name never retu
   rmSync(join(dir, "test/old-name.harness.mjs"));
   write(dir, "test/new-name.harness.mjs", "// same file, new name\n");
   const r = findUntestedSurfaces({ basePath: dir });
-  assert.deepEqual(coverageEvidenceCounts(r), { executed: 0, colocated: 0 });
+  assert.deepEqual(coverageEvidenceCounts(r), {
+    executed: 0,
+    colocated: 0,
+    configured: 0,
+  });
   cleanupTmpDir(dir);
 });
 
@@ -1337,7 +1353,7 @@ test("…but a spelling of the SAME file still counts — presence, not string e
     ]);
     assert.deepEqual(
       coverageEvidenceCounts(findUntestedSurfaces({ basePath: dir })),
-      { executed: 1, colocated: 0 },
+      { executed: 1, colocated: 0, configured: 0 },
       by,
     );
   }
@@ -1382,7 +1398,11 @@ test("a re-run refreshes the surface and the stale notice goes away", () => {
   const r = findUntestedSurfaces({ basePath: dir });
   assert.equal(r.untested.length, 0);
   assert.deepEqual(r.staleRuns, [], "a permanent notice is an ignored notice");
-  assert.deepEqual(coverageEvidenceCounts(r), { executed: 1, colocated: 0 });
+  assert.deepEqual(coverageEvidenceCounts(r), {
+    executed: 1,
+    colocated: 0,
+    configured: 0,
+  });
   cleanupTmpDir(dir);
 });
 
@@ -1419,7 +1439,11 @@ test("NO artifact ⇒ byte-for-byte the old behaviour, including the report text
     r.untested.map((s) => s.name),
     ["alpha"],
   );
-  assert.deepEqual(coverageEvidenceCounts(r), { executed: 0, colocated: 1 });
+  assert.deepEqual(coverageEvidenceCounts(r), {
+    executed: 0,
+    colocated: 1,
+    configured: 0,
+  });
   const text = formatUntestedReport(r);
   assert.doesNotMatch(text, /MEASURED BY A RUN/);
   assert.doesNotMatch(text, /BEFORE their current/);
@@ -1676,4 +1700,142 @@ test("…and nothing at all in a repo with no such file", () => {
   assert.deepEqual(report.retiredTestNames, []);
   assert.doesNotMatch(formatUntestedReport(report), /vitest\/jest/);
   cleanupTmpDir(dir);
+});
+
+// ---------------------------------------------------------------------------
+// `{surface}` in testGlobs — a centralized layout, without weakening what
+// coverage MEANS (#175.2)
+// ---------------------------------------------------------------------------
+
+test("a {surface} testGlob credits a centralized test", () => {
+  // The reported layout: suites live in tests/<skill>/evals/, not beside the
+  // skill. `testGlobs` alone did not move the number (35 before, 35 after),
+  // because it widens what counts as a TEST FILE and says nothing about which
+  // SURFACE the file is for.
+  const dir = makeTmpDir();
+  try {
+    mkdirSync(join(dir, "skills", "mysql-designer"), { recursive: true });
+    writeFileSync(
+      join(dir, "skills", "mysql-designer", "SKILL.md"),
+      "---\nname: mysql-designer\ndescription: Designs schemas.\n---\n\nBody.\n",
+    );
+    mkdirSync(join(dir, "tests", "mysql-designer", "evals"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(dir, "tests", "mysql-designer", "evals", "promptfooconfig.yaml"),
+      "prompts: []\n",
+    );
+
+    const before = findUntestedSurfaces({ basePath: dir });
+    assert.equal(before.untested.length, 1, "uncovered without the glob");
+
+    const after = findUntestedSurfaces({
+      basePath: dir,
+      testGlobs: ["tests/{surface}/evals/promptfooconfig*.yaml"],
+    });
+    assert.equal(after.untested.length, 0);
+    assert.equal(after.decisions[0]?.evidence, "configured");
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("a {surface} glob credits ONLY the surface it names", () => {
+  // The load-bearing half. The retired `name-mentioned` tier died because a
+  // substring credited surfaces nothing had touched; the placeholder must not
+  // reintroduce that. One skill has a suite, its neighbour does not.
+  const dir = makeTmpDir();
+  try {
+    for (const name of ["alpha", "beta"]) {
+      mkdirSync(join(dir, "skills", name), { recursive: true });
+      writeFileSync(
+        join(dir, "skills", name, "SKILL.md"),
+        `---\nname: ${name}\ndescription: Does ${name}.\n---\n\nBody.\n`,
+      );
+    }
+    mkdirSync(join(dir, "tests", "alpha", "evals"), { recursive: true });
+    writeFileSync(
+      join(dir, "tests", "alpha", "evals", "promptfooconfig.yaml"),
+      "prompts: []\n",
+    );
+
+    const r = findUntestedSurfaces({
+      basePath: dir,
+      testGlobs: ["tests/{surface}/evals/promptfooconfig*.yaml"],
+    });
+    assert.deepEqual(
+      r.untested.map((s) => s.name),
+      ["beta"],
+      "alpha's suite must not cover beta",
+    );
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("a plain custom glob still credits NOTHING by itself", () => {
+  // Unchanged behaviour, pinned: without the placeholder there is no name
+  // binding, and inferring one from a substring is the tier that was retired.
+  const dir = makeTmpDir();
+  try {
+    mkdirSync(join(dir, "skills", "gamma"), { recursive: true });
+    writeFileSync(
+      join(dir, "skills", "gamma", "SKILL.md"),
+      "---\nname: gamma\ndescription: Does gamma.\n---\n\nBody.\n",
+    );
+    mkdirSync(join(dir, "tests", "gamma", "evals"), { recursive: true });
+    writeFileSync(
+      join(dir, "tests", "gamma", "evals", "promptfooconfig.yaml"),
+      "prompts: []\n",
+    );
+
+    const r = findUntestedSurfaces({
+      basePath: dir,
+      testGlobs: ["tests/*/evals/promptfooconfig*.yaml"],
+    });
+    assert.equal(r.untested.length, 1, "no placeholder ⇒ no surface binding");
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("colocation still wins, and is reported as colocation", () => {
+  // Precedence: a repo doing both must not be relabelled by the new tier.
+  const dir = makeTmpDir();
+  try {
+    mkdirSync(join(dir, "skills", "delta"), { recursive: true });
+    writeFileSync(
+      join(dir, "skills", "delta", "SKILL.md"),
+      "---\nname: delta\ndescription: Does delta.\n---\n\nBody.\n",
+    );
+    writeFileSync(
+      join(dir, "skills", "delta", "delta.harness.mjs"),
+      "// a colocated harness\n",
+    );
+    mkdirSync(join(dir, "tests", "delta", "evals"), { recursive: true });
+    writeFileSync(
+      join(dir, "tests", "delta", "evals", "promptfooconfig.yaml"),
+      "prompts: []\n",
+    );
+
+    // BOTH glob orders, because the point is that the answer does NOT depend on
+    // the order. A first-found implementation passes one of these and fails the
+    // other — which is exactly how the stale "strongest, not first-found" doc
+    // comment was caught: it described a ranking the code did not do.
+    for (const testGlobs of [
+      ["**/*.harness.mjs", "tests/{surface}/evals/promptfooconfig*.yaml"],
+      ["tests/{surface}/evals/promptfooconfig*.yaml", "**/*.harness.mjs"],
+    ]) {
+      const r = findUntestedSurfaces({ basePath: dir, testGlobs });
+      assert.equal(r.untested.length, 0);
+      assert.equal(
+        r.decisions[0]?.evidence,
+        "colocated",
+        `colocation must win with globs ordered ${JSON.stringify(testGlobs)}`,
+      );
+    }
+  } finally {
+    cleanupTmpDir(dir);
+  }
 });

@@ -36,6 +36,8 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
+import { taggedDeclarations } from "./lib/tagged-declarations.mjs";
+
 const ROOT = resolve(process.argv[2] ?? ".");
 const PREFIX = "experimental_";
 function walk(dir, out = []) {
@@ -89,88 +91,37 @@ function publicSymbols() {
  *    types in would have opened with 6 cosmetic renames against 1 real finding,
  *    and a gate that arrives 86% noise is muted within the day.
  */
+
 /**
- * ⚠️ `export default` IS matched, and was not until 2026-08-21. Both this matcher
- * and the api-report one above omitted the modifier, so an `@internal` symbol
- * exported as default was invisible to BOTH halves at once — the source side saw
- * no declaration and the report side saw no public name, and the two absences
- * cancelled into a clean `findings: 0`. A default export is an ordinary public
- * API shape, so the check simply did not hold for it.
+ * Every tagged declaration in one file, ASKED OF THE PARSER.
  *
- * An ANONYMOUS default (`export default function () {}`) is still out of reach:
- * it has no name for the api report to list, so there is nothing to correlate.
- * Stated rather than left as silence.
- */
-const VALUE_DECL =
-  /^\s*export\s+(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(function|const|let|var|class)\s+([A-Za-z0-9_$]+)/;
-
-/**
- * A TSDoc tag, with or without prose after it.
+ * 🔴 THIS USED TO BE REGEXES, and that is the finding, not a detail. A doc-block
+ * scanner paired with a `VALUE_DECL` shape-matcher had been extended four times,
+ * each after a reviewer named a form it did not know, and it still missed
+ * `const x = …; export { x }` — the case #170 carried open. Every extension
+ * looked complete and none was, because a shape-matcher recognizes only shapes
+ * somebody remembered to write down. `scripts/lib/tagged-declarations.mjs` asks
+ * the TypeScript compiler instead, so the whole class stops being expressible;
+ * the forms it is expected to handle are enumerated in
+ * `scripts/lib/export-forms.mjs` and asserted in the test beside this file.
  *
- * 🔴 The first version of this required the tag ALONE on its line
- * (`@experimental\s*$`). Real tags carry prose — `@internal Experimental
- * typed-composition surface — …` on `pipe`, and two in `services.ts` — so the
- * check silently skipped them. Measured the day it shipped: 2 of 8 tagged
- * `@experimental` declarations and 31 of 39 `@internal` ones were invisible to
- * it. A stricter pattern read as a safer one and was the opposite.
+ * The `@internal` over `@experimental` precedence is unchanged and still
+ * load-bearing: the reporting loop below acts only on `@internal`, so recording
+ * the weaker tag for a both-tagged symbol swallowed it silently while the run
+ * still printed `checked: 1` — a counter that counts a symbol it then ignores is
+ * worse than one that misses it, because the number reads as coverage.
+ * On the merits too: `@experimental` says "this may change", `@internal` says
+ * "this is not API at all", and the stronger claim is the contradiction worth
+ * reporting.
  */
-const tagRe = (tag) => new RegExp(`^\\s*\\*\\s*@${tag}\\b`, "m");
-
-/**
- * The next value declaration after a doc block, skipping anything that is not
- * one — `pipe` has an `/* eslint-disable ... *\/` between its JSDoc and its
- * first overload, and anchoring at the very next character missed it. Only
- * comments and blank lines may intervene; real code ends the search, so a doc
- * block that documents nothing does not silently adopt a distant declaration.
- */
-function declAfter(src, from) {
-  let rest = src.slice(from);
-  for (;;) {
-    const skipped = rest.replace(
-      /^(?:\s*(?:\/\/[^\n]*|\/\*[\s\S]*?\*\/)\s*)+/,
-      "",
-    );
-    const decl = VALUE_DECL.exec(skipped);
-    if (decl) return decl;
-    if (skipped === rest) return null;
-    rest = skipped;
-  }
-}
-
 function taggedExperimental(file) {
   const src = readFileSync(file, "utf8");
-  const out = [];
-  const BLOCK = /\/\*\*[\s\S]*?\*\//g;
-  let m;
-  while ((m = BLOCK.exec(src)) !== null) {
-    const block = m[0];
-    const experimental = tagRe("experimental").test(block);
-    const internal = tagRe("internal").test(block);
-    if (!experimental && !internal) continue;
-    if (/@module\b/.test(block)) continue; // file-level tag, not a symbol
-    const decl = declAfter(src, m.index + block.length);
-    if (!decl) continue;
-    const line = src.slice(0, m.index + block.length).split("\n").length;
-    out.push({
-      name: decl[2],
-      line,
-      // 🔴 `@internal` WINS when both tags are present, and the opposite order
-      // was a live bug for as long as this file had one job. It reads as a
-      // harmless tie-break, and it is not: since the split, the reporting loop
-      // acts only on `@internal`, so recording `@experimental` for a
-      // both-tagged symbol swallowed it silently — and the run still printed
-      // `checked: 1`, claiming it had looked. A counter that counts a symbol it
-      // then ignores is worse than one that misses it, because the number reads
-      // as coverage.
-      //
-      // Precedence is also right on the merits: `@experimental` says "this may
-      // change", `@internal` says "this is not API at all". The second is the
-      // stronger claim about an exported symbol, and the stronger claim is the
-      // contradiction worth reporting.
-      tag: internal ? "@internal" : "@experimental",
-    });
-  }
-  return out;
+  return taggedDeclarations(src, ["internal", "experimental"]).map((d) => ({
+    name: d.name,
+    line: d.line,
+    kind: d.kind,
+    tag: d.tags.includes("internal") ? "@internal" : "@experimental",
+  }));
 }
 
 const { names: pub, reports } = publicSymbols();
@@ -184,12 +135,35 @@ if (reports.length === 0) {
 
 let checked = 0;
 let findings = 0;
+let skippedTypes = 0;
 for (const file of walk(join(ROOT, "src"))) {
   for (const d of taggedExperimental(file)) {
     const doors = pub.get(d.name);
     // Not exported from any subpath: the tag is a note to maintainers and
     // promises nothing to anyone. Both tags are fine there, unchecked.
     if (!doors) continue;
+
+    // 🔴 TYPES ARE OUT OF SCOPE, and this is a DECISION, not an oversight —
+    // it has to be stated because until the parser landed it was neither.
+    // The old regex matched `function|const|let|var|class` and therefore could
+    // not see a type at all; the moment it could, seven exported-and-@internal
+    // types appeared at once, every one of them deliberate. They are typed-
+    // composition machinery (`Supplies`, `Pipeline`, `Handoff`, …) exported
+    // ONLY so a user's inference resolves — nobody writes those names, and
+    // `@internal` is the truthful way to say so. Failing the build over them
+    // would force either a meaningless rename or dropping a true tag.
+    //
+    // It also matches the sibling rule: `local/experimental-name` excludes
+    // types for the same reason — the convention is about CALL SITES, and a
+    // type annotation is not one.
+    //
+    // Counted and REPORTED rather than dropped: this file's own history is a
+    // counter that counted a symbol it then ignored, and the number read as
+    // coverage. A silent skip here would repeat it exactly.
+    if (d.kind === "type") {
+      skippedTypes++;
+      continue;
+    }
     checked++;
 
     // `vigiles.api.md` is the root subpath: label it `vigiles`, not `vigiles/vigiles`.
@@ -214,7 +188,11 @@ for (const file of walk(join(ROOT, "src"))) {
 }
 
 console.log(
-  `\npublic @experimental/@internal declarations checked: ${checked}  (across ${reports.length} api reports)`,
+  `\npublic @experimental/@internal VALUE declarations checked: ${checked}  (across ${reports.length} api reports)`,
 );
+if (skippedTypes > 0)
+  console.log(
+    `types skipped (out of scope, see the comment above): ${skippedTypes}`,
+  );
 console.log(`findings: ${findings}`);
 process.exit(findings ? 1 : 0);
