@@ -3101,21 +3101,28 @@ function scaffoldSpec(args: string[]): void {
       writeFileSync(specAbs, source);
       logAdoptedSurface(target, specPath, "subagent", unmappedKeys);
     } else {
-      const { source, tier, sectionCount } = adoptMarkdown(
+      const { source, tier, sectionCount, adoptedRefs } = adoptMarkdown(
         md,
         basename(target),
+        // RESOLVE-NOW, not a heuristic. The undecidable question is "is this OUR
+        // path or one inside the repo this document DESCRIBES" — the wall that
+        // disabled `doc-refs`. Asking "does it resolve here, right now?" sidesteps
+        // it: a described repo's path does not exist locally, so only already-green
+        // refs are emitted and adoption can never turn a passing file red.
+        { exists: (ref) => existsSync(resolve(process.cwd(), ref)) },
       );
       writeFileSync(specAbs, source);
       console.log(
         `Adopted ${target} → ${specPath} (${tier}, ${String(sectionCount)} section${sectionCount === 1 ? "" : "s"}). ` +
+          (adoptedRefs && adoptedRefs.length > 0
+            ? `${String(adoptedRefs.length)} reference${adoptedRefs.length === 1 ? "" : "s"} resolved and became verified \`file()\` calls — they now fail the build if the file moves. `
+            : "") +
           `Run \`vigiles compile\` and review the diff; the \`/strengthen\` skill upgrades prose to verified rules.`,
       );
-      // Adoption is faithful by design: it infers NO rules and extracts NO refs,
-      // so a raw adoption verifies nothing on its own. Saying so is the whole
-      // fix — the cost (the file becomes a build artifact, edits move into TS)
-      // lands immediately, and without this line the benefit reads as zero
-      // rather than as not-yet-claimed. Deliberately not a heuristic extractor:
-      // guessing refs out of prose is what got `doc-refs` disabled.
+      // Adoption infers NO RULES (that stays `strengthen`'s job) but it DOES now
+      // extract refs that resolve — measured 2026-08-28 on a 51-skill monorepo,
+      // where extracting nothing meant the cost landed at once (build artifact,
+      // edits into TS) while the payoff waited on a manual pass nobody ran.
       if (tier === "raw")
         console.log(
           `  ℹ 0 refs extracted — this spec verifies nothing yet. Wrap paths in \`file()\` ` +
