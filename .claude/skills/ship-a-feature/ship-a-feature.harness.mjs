@@ -66,6 +66,8 @@ function fixture({
   reachable = true,
   neighbourDocumented = true,
   documented = true,
+  findable = true,
+  crossLinked = false,
   tag = false,
   symbol = "shipFeature",
 } = {}) {
@@ -91,7 +93,20 @@ function fixture({
   );
   w(
     "docs/guide.md",
-    documented ? `Use \`${symbol}()\` here.\n` : "Nothing yet.\n",
+    documented
+      ? `## Doing ${symbol} things \u2014 the long way\n\nUse \`${symbol}()\` here.\n`
+      : "Nothing yet.\n",
+  );
+  // A second page. DOCUMENTED is satisfied by one; FINDABLE wants a reader who
+  // is NOT already inside guide.md to be able to reach the capability — either
+  // because a second page names it, or because one links to its section.
+  w(
+    "docs/sibling.md",
+    documented && findable
+      ? `See \`${symbol}()\` for this.\n`
+      : crossLinked
+        ? `See [the section](guide.md#doing-${symbol.toLowerCase()}-things--the-long-way).\n`
+        : "An unrelated page.\n",
   );
   // Baseline surface: only the neighbour, documented. Committed, so the diff the
   // script READS is exactly what regenerating after the change would show.
@@ -136,7 +151,13 @@ const cases = [
           !text(r).includes("✗"),
           `clean run printed a finding:\n${text(r)}`,
         );
-        for (const c of ["REACHABLE", "SURFACE", "DOCUMENTED", "MARKED"])
+        for (const c of [
+          "REACHABLE",
+          "SURFACE",
+          "DOCUMENTED",
+          "FINDABLE",
+          "MARKED",
+        ])
           assert(text(r).includes(`✓ ${c}`), `no ✓ ${c} line:\n${text(r)}`);
       } finally {
         rmSync(root, { recursive: true, force: true });
@@ -261,6 +282,56 @@ const cases = [
         assert(
           r.exitCode === 3,
           `expected the command's exit 3, got ${String(r.exitCode)}:\n${text(r)}`,
+        );
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  ],
+  [
+    "FINDABLE fires when one page names it and nothing links to that section",
+    () => {
+      // The measured 2026-09-02 shape: experimental_equivalentDisasters was
+      // documented, once, under its own heading in a guide about a DIFFERENT
+      // feature, with no inbound link. DOCUMENTED passed; a reader could not
+      // get there. Both halves are asserted, because a FINDABLE that fired on
+      // the clean fixture too would be telling us nothing.
+      const root = fixture({ findable: false });
+      try {
+        const r = check(root, 'shipFeature --stable "two consumers"');
+        assert(
+          text(r).includes("✗ FINDABLE"),
+          `no ✗ FINDABLE on the one-page shape:\n${text(r)}`,
+        );
+        assert(
+          text(r).includes("✓ DOCUMENTED"),
+          `DOCUMENTED should still pass — the fault is reach, not absence:\n${text(r)}`,
+        );
+        assert(
+          r.exitCode !== 0,
+          `unreachable docs must fail the run:\n${text(r)}`,
+        );
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  ],
+  [
+    "FINDABLE accepts one page when another LINKS to its section anchor",
+    () => {
+      // The cheap real fix is a pointer, not a duplicated explanation, so the
+      // check has to accept a pointer. Without this case the rule would push
+      // authors to copy prose onto a second page.
+      const root = fixture({ findable: false, crossLinked: true });
+      try {
+        const r = check(root, 'shipFeature --stable "two consumers"');
+        assert(
+          text(r).includes("✓ FINDABLE"),
+          `a linked anchor should satisfy FINDABLE:\n${text(r)}`,
+        );
+        assert(
+          !text(r).includes("✗"),
+          `cross-linked fixture printed a finding:\n${text(r)}`,
         );
       } finally {
         rmSync(root, { recursive: true, force: true });

@@ -36,7 +36,17 @@ node .claude/skills/ship-a-feature/scripts/ship-check.mjs <symbol> [--stable "<w
 | **REACHABLE**  | `import()`s every `exports` subpath from the built `dist/`; the symbol must be a key on ≥ 1        | `equivalentDisasters` in `src/guardrail-check.ts`, never in `src/test.ts` → `undefined` (1)          |
 | **SURFACE**    | regenerates `api-surface/` (`api:report`), then READS `git diff`: any `+… (undocumented)` fails    | inserted between `verifyGuardrail`'s JSDoc and its declaration; the diff said so, nobody read it (2) |
 | **DOCUMENTED** | `\b<symbol>\b` must occur in `docs/**/*.md` or `README.md`                                         | no public home until asked (3)                                                                       |
+| **FINDABLE**   | two pages must name it — or one names it and another LINKS to that section's anchor                | documented once, inside a guide about a DIFFERENT feature, with no inbound link (5)                  |
 | **MARKED**     | declaration's JSDoc has `@experimental`, or the name is prefixed, or you passed `--stable "<why>"` | exported one day old, no tag, no prefix; the lint rule had nothing to hold (4)                       |
+
+**DOCUMENTED and FINDABLE are different questions.** The first asks whether the
+capability is written down anywhere. The second asks whether a reader who does
+not already know which file to open can get to it. `experimental_equivalentDisasters`
+passed the first and failed the second: it was explained once, under its own
+heading, inside the guide for a different feature, and nothing linked there — so
+the testing guide, where someone asking "does my guard actually block?" looks,
+named it zero times. A pointer satisfies FINDABLE; you do not have to repeat the
+explanation.
 
 `✗` means fix and re-run; the script prints the fix beside each finding. A `✓ MARKED
 stable` line carries your reason — paste it into the PR body.
@@ -73,4 +83,5 @@ gate ran. Three measured ways a gate lies, all closed by running it this way:
 ## 4. Done means
 
 The five ✓ lines, a `✓ GATE` line, and the PR body naming door · stability
-decision · doc section. A feature nobody can `import` is not a feature.
+decision · doc section. A feature nobody can `import` is not a feature, and one
+nobody can navigate to is not documented.

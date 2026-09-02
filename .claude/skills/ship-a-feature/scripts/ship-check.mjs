@@ -238,12 +238,16 @@ function checkDocumented(symbol) {
     .filter((p) => wordRe(symbol).test(readFileSync(p, "utf8")))
     .map((p) => relative(root, p));
   if (homes.length === 0)
-    return bad(
-      "DOCUMENTED",
-      `\`${symbol}\` is named nowhere under docs/ or README.md`,
-      "write its WHY into the docs/ section whose claim it changes (document-the-why); a bare mention is not enough, but zero mentions is impossible",
+    return (
+      bad(
+        "DOCUMENTED",
+        `\`${symbol}\` is named nowhere under docs/ or README.md`,
+        "write its WHY into the docs/ section whose claim it changes (document-the-why); a bare mention is not enough, but zero mentions is impossible",
+      ),
+      []
     );
   ok("DOCUMENTED", `named in ${homes.join(", ")}`);
+  return homes;
 }
 
 // ─── MARKED (4) ──────────────────────────────────────────────────────────────
@@ -304,11 +308,72 @@ function checkMarked(symbol) {
   );
 }
 
+// ─── FINDABLE (5) ────────────────────────────────────────────────────────────
+// DOCUMENTED asks whether the capability is written down. This asks whether a
+// reader who does not already know where to look can REACH what was written.
+//
+// The measured failure (2026-09-02): `experimental_equivalentDisasters` was
+// documented, once, under its own heading inside `docs/compiled-hooks.md` — a
+// guide about a DIFFERENT feature. Nothing linked to that heading, and the
+// testing guide, where someone asking "does my guard actually block?" would
+// look, named it zero times. Written down, unreachable.
+//
+// Two ways to pass, because both are real findability and neither is a proxy:
+//   a) two different pages name it — a second entry point exists; or
+//   b) one page names it, and another page LINKS to that section's anchor.
+// One page, one mention, no inbound link is the shape that fails.
+function checkFindable(symbol, homes) {
+  if (homes.length === 0) return; // DOCUMENTED already reported the harder fault
+  if (homes.length > 1)
+    return ok(
+      "FINDABLE",
+      `named from ${String(homes.length)} pages: ${homes.join(", ")}`,
+    );
+
+  const home = homes[0];
+  const body = readFileSync(join(root, home), "utf8");
+  // github-slugger: lowercase, drop punctuation, then replace EACH space with a
+  // hyphen WITHOUT collapsing runs — so "a — b" is "a--b", not "a-b".
+  const slug = (h) =>
+    h
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, "")
+      .replace(/ /g, "-");
+  const anchors = [];
+  for (const m of body.matchAll(/^#{2,6} +(.+)$/gm))
+    if (wordRe(symbol).test(m[1])) anchors.push(slug(m[1]));
+
+  if (anchors.length) {
+    const others = walk(join(root, "docs"), (p) => p.endsWith(".md"));
+    const readme = join(root, "README.md");
+    if (existsSync(readme)) others.push(readme);
+    for (const p of others) {
+      if (relative(root, p) === home) continue;
+      const t = readFileSync(p, "utf8");
+      const hit = anchors.find((a) => t.includes(`#${a}`));
+      if (hit)
+        return ok(
+          "FINDABLE",
+          `${home}#${hit} is linked from ${relative(root, p)}`,
+        );
+    }
+  }
+
+  bad(
+    "FINDABLE",
+    `\`${symbol}\` is named only in ${home}, and no other page links to it there`,
+    anchors.length
+      ? `link \`${home}#${anchors[0]}\` from the page a reader with this problem actually opens — a section reachable only by someone already inside ${home} is not findable`
+      : `name it on a second page too (the guide for the problem it solves, or a one-line README pointer), or give it its own heading and link that heading from there`,
+  );
+}
+
 for (const symbol of symbols) {
   console.log(`── ${symbol}`);
   await checkReachable(symbol);
   checkSurface(symbol);
-  checkDocumented(symbol);
+  const homes = checkDocumented(symbol);
+  checkFindable(symbol, homes ?? []);
   checkMarked(symbol);
 }
 if (findings.length) {
