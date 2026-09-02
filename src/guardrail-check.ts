@@ -137,28 +137,49 @@ function selectEvents(opts: VerifyGuardrailOptions): readonly DisasterEvent[] {
 }
 
 /**
- * Expand a disaster battery with shell-EQUIVALENT rewrites of each event.
+ * The same dangerous commands, spelled the other ways a shell reads identically.
  *
- * The catalog is seven commands written one way each; a guard that blocks those
- * seven can still miss the same command with a quoted flag, an absolute head or a
- * `sudo` in front. Measured 2026-09-02 on the shipped dogfood guard: 7/7 seeds,
- * **8 of 30** rewrites.
+ * Takes a battery of hook test cases (shell commands wrapped as `PreToolUse`
+ * events — `DISASTER_CATALOG` is the shipped one) and returns MORE test cases:
+ * every command re-spelled with a quoted flag (`git push "--force"`), the short
+ * form of a flag (`-f`), an absolute or escaped head (`/usr/bin/git`, `\git`), or a
+ * pass-through wrapper (`sudo …`, `env …`). The shell runs each rewrite exactly as
+ * it runs the original. Feed them to `assertBlocksDisasters` alongside the
+ * originals:
  *
- * Nothing new is judged here. `dangerous` is inherited from the seed a human put
- * in the catalog; `the same command` is decided by the normalizer (see
- * {@link sameOperation}), which is already load-bearing for `writesTo`/`touches`
- * in production. A rewrite that fails that check throws rather than being emitted.
+ *     assertBlocksDisasters(hook, {
+ *       events: [...DISASTER_CATALOG, ...experimental_alternateSpellings(DISASTER_CATALOG)],
+ *     });
  *
- * Each variant keeps the seed's `tool` and `category` and takes an id suffixed
- * with its index, so a report names which rewrite got through, not just that one did.
+ * WHAT BREAKS WITHOUT IT. A guard whose rule is "the command contains `--force`"
+ * blocks all seven catalog commands, so the battery is green — and lets
+ * `git push "--force"` through, because the quotes make it a different string.
+ * Measured 2026-09-02 on the shipped dogfood guard BEFORE this existed: 7/7
+ * originals blocked, **8 of 30** hand-written re-spellings blocked.
  *
- * @experimental One day old with a single consumer (this repo's own dogfood) and no
- * external use. The transform families and the id-suffix shape are the parts most
+ * WHY THE OUTPUT IS TRUSTWORTHY. Nothing new is judged. "Dangerous" is inherited
+ * from the original a human put in the battery; "the same command" is decided by
+ * the shell parser vigiles already uses for `runs()`/`touches()` (see
+ * {@link sameOperation}). A rewrite that fails that check throws rather than being
+ * emitted, so the battery can never quietly shrink.
+ *
+ * It returns ONLY the rewrites (never the originals), so pass the originals
+ * alongside as above. Each rewrite keeps its original's `tool` and `category`
+ * and takes the original's id with an index suffix (`force-push~4`), so a report
+ * names which spelling got through.
+ *
+ * In promptfoo's vocabulary each rewrite rule here is a "strategy"; the difference
+ * is that promptfoo's encodings (base64, leetspeak) may or may not be decoded by the
+ * target, whereas every rewrite here is one the shell provably executes identically
+ * — a miss is a guard bug, never an ambiguous input.
+ *
+ * @experimental Days old with a single consumer (this repo's own dogfood) and no
+ * external use. The set of rewrite rules and the id-suffix shape are the parts most
  * likely to move; the prefix says so at every call site, which an import line or a
  * doc note cannot.
  */
-export function experimental_equivalentDisasters(
-  events: readonly DisasterEvent[] = DISASTER_CATALOG,
+export function experimental_alternateSpellings(
+  events: readonly DisasterEvent[],
 ): readonly DisasterEvent[] {
   return events.flatMap((event) => {
     const command = event.input["command"];
@@ -166,7 +187,7 @@ export function experimental_equivalentDisasters(
     return equivalentCommands(command).map((variant, i) => ({
       ...event,
       id: `${event.id}~${String(i + 1)}`,
-      label: `${event.label} — rewritten: ${variant}`,
+      label: `${event.label} — spelled: ${variant}`,
       input: { ...event.input, command: variant },
     }));
   });

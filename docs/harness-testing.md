@@ -167,21 +167,31 @@ It works on **any** hook — hand-written shell, a compiled one, anything the
 harness can run. It drives the hook the way the harness does and reads only the
 block/allow decision.
 
-⚠️ **Seven commands, seven spellings.** A guard can block `git push --force` and
-let `git push "--force"` or `sudo git push --force` straight through. We measured
-this on our own guard: all seven blocked, then **8 of 30** hand-written
-re-spellings. `experimental_equivalentDisasters()` generates the re-spellings, so
-the battery tests the command rather than one way of writing it:
+⚠️ **Seven commands, but only seven spellings.** `experimental_alternateSpellings(events)`
+takes those test cases and returns more of them: the same commands re-spelled
+every way the shell runs identically — `git push "--force"`, `git push -f`,
+`sudo git push --force`, `/usr/bin/git push --force`. It generates inputs for
+your hook; it checks nothing by itself.
+
+Without it, a guard whose rule is "contains `--force`" passes the battery and
+lets `git push "--force"` through, because the quotes make it a different
+string. We measured this on our own guard before the generator existed: all
+seven originals blocked, then **8 of 30** hand-written re-spellings.
+
+It returns only the rewrites, so spread the originals in alongside:
 
 ```ts
-import { DISASTER_CATALOG, experimental_equivalentDisasters } from "vigiles";
+import { DISASTER_CATALOG, experimental_alternateSpellings } from "vigiles";
 
 assertBlocksDisasters("bash hooks/safety-guard.sh", {
-  events: [...DISASTER_CATALOG, ...experimental_equivalentDisasters()],
+  events: [
+    ...DISASTER_CATALOG,
+    ...experimental_alternateSpellings(DISASTER_CATALOG),
+  ],
 });
 ```
 
-[How the re-spellings are made, and what it deliberately leaves out →](compiled-hooks.md#one-command-many-spellings--experimental_equivalentdisasters)
+[How the re-spellings are made, and what it deliberately leaves out →](compiled-hooks.md#one-command-many-spellings--experimental_alternatespellings)
 
 ⚠️ **Also check that ordinary commands still pass.** A guard that blocks
 everything scores 100% here. Run `git push origin main` and `git commit -m fix`

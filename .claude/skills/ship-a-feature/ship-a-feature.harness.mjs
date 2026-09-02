@@ -291,8 +291,8 @@ const cases = [
   [
     "FINDABLE fires when one page names it and nothing links to that section",
     () => {
-      // The measured 2026-09-02 shape: experimental_equivalentDisasters was
-      // documented, once, under its own heading in a guide about a DIFFERENT
+      // The measured 2026-09-02 shape: experimental_equivalentDisasters (since
+      // renamed experimental_alternateSpellings) was documented, once, under its own heading in a guide about a DIFFERENT
       // feature, with no inbound link. DOCUMENTED passed; a reader could not
       // get there. Both halves are asserted, because a FINDABLE that fired on
       // the clean fixture too would be telling us nothing.

@@ -38,7 +38,7 @@ export default defineEval({
       "Implement a new hook-vocabulary word `touchesEnv()` for compiled hooks.",
       "Add a --effort flag to the eval CLI and expose it in the API.",
       "New feature: a helper that stubs MCP tool results for the eval tier.",
-      "I've just written equivalentDisasters in guardrail-check.ts — what's left to ship it?",
+      "I've just written alternateSpellings in guardrail-check.ts — what's left to ship it?",
       "Expose parseHookOutput publicly so consumers can decode hook stdout.",
       "Add a new lint rule for hook matchers that name undeclared MCP servers.",
       "Build a new capability: measure how often two skills collide, as a public API.",

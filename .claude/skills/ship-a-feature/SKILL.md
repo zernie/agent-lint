@@ -1,7 +1,7 @@
 ---
 name: ship-a-feature
 description: Ship a NEW capability to vigiles so it actually reaches a user — a new export, public function, subpath, CLI flag, or hook-vocabulary word. Use when about to add, or having just added, a feature / export / public API to this repo. Runs the executable checks a green `npm run check` does NOT make — reachable from a public door, API-surface diff READ, a public doc home, the experimental_ decision, a gate on a frozen tree. NOT for bug fixes, refactors, doc-only or test-only edits.
-argument-hint: <the exported symbol, e.g. "equivalentDisasters">
+argument-hint: <the exported symbol, e.g. "alternateSpellings">
 ---
 
 # Ship a feature (so it ships, not half-ships)
@@ -42,7 +42,7 @@ node .claude/skills/ship-a-feature/scripts/ship-check.mjs <symbol> [--stable "<w
 **DOCUMENTED and FINDABLE are different questions.** The first asks whether the
 capability is written down anywhere. The second asks whether a reader who does
 not already know which file to open can get to it. `experimental_equivalentDisasters`
-passed the first and failed the second: it was explained once, under its own
+(since renamed `experimental_alternateSpellings`) passed the first and failed the second: it was explained once, under its own
 heading, inside the guide for a different feature, and nothing linked there — so
 the testing guide, where someone asking "does my guard actually block?" looks,
 named it zero times. A pointer satisfies FINDABLE; you do not have to repeat the

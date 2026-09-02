@@ -598,6 +598,9 @@ export interface EvalUsage {
 }
 
 // @public
+export function experimental_alternateSpellings(events: readonly DisasterEvent[]): readonly DisasterEvent[];
+
+// @public
 export function experimental_assertEmittedOk(toolCalls: readonly ToolCall[], contract: OutputContract, options?: {
     readonly name?: string;
 }): Record<string, unknown>;
@@ -609,9 +612,6 @@ export const experimental_dockerRuntime: ContainerRuntime;
 export function experimental_emitTool(contract: OutputContract, options?: {
     readonly name?: string;
 }): ExperimentalEmitTool;
-
-// @public
-export function experimental_equivalentDisasters(events?: readonly DisasterEvent[]): readonly DisasterEvent[];
 
 // @public
 export function experimental_makeDockerRuntime(deps?: {

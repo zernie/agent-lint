@@ -312,8 +312,8 @@ function checkMarked(symbol) {
 // DOCUMENTED asks whether the capability is written down. This asks whether a
 // reader who does not already know where to look can REACH what was written.
 //
-// The measured failure (2026-09-02): `experimental_equivalentDisasters` was
-// documented, once, under its own heading inside `docs/compiled-hooks.md` — a
+// The measured failure (2026-09-02): `experimental_equivalentDisasters` (since
+// renamed `experimental_alternateSpellings`) was documented, once, under its own heading inside `docs/compiled-hooks.md` — a
 // guide about a DIFFERENT feature. Nothing linked to that heading, and the
 // testing guide, where someone asking "does my guard actually block?" would
 // look, named it zero times. Written down, unreachable.
