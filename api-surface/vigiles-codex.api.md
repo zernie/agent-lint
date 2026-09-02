@@ -108,6 +108,9 @@ export function parseResponsesRequest(body: string): {
 };
 
 // @public
+export function refuseCodexEffort(effort: string | number | undefined): void;
+
+// @public
 export function renderResponsesSSE(text: string, opts?: {
     model?: string;
 }): string;

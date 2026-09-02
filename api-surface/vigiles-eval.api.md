@@ -8,6 +8,7 @@
 export interface AgentRunArgs {
     // (undocumented)
     readonly cwd: string;
+    readonly effort?: string | number;
     readonly env?: Record<string, string>;
     // (undocumented)
     readonly hasSettings: boolean;
@@ -49,6 +50,7 @@ export interface ArmsMeasureSpec {
     readonly arms: Record<string, EvalArm>;
     // (undocumented)
     readonly checks: readonly Check<RunContext>[];
+    readonly effort?: string | number;
     // (undocumented)
     readonly fixture?: Record<string, string>;
     // (undocumented)
@@ -117,6 +119,7 @@ export interface CheckResult {
 
 // @public
 export interface EvalArm {
+    readonly effort?: string | number;
     readonly files?: Record<string, string>;
     readonly interceptTools?: readonly ToolIntercept[];
     readonly model?: string;
@@ -156,6 +159,7 @@ export interface EvalSpec<M extends Metrics> {
     readonly cache?: CacheMode;
     readonly cacheDir?: string;
     readonly concurrency?: number;
+    readonly effort?: string | number;
     readonly ephemeralEnv?: boolean;
     readonly fixture?: Record<string, string>;
     readonly lock?: EvalLockOptions;
@@ -199,6 +203,7 @@ export type JudgeFn = (opts: {
 export interface MeasureSpec {
     readonly allowedTools?: readonly string[];
     readonly checks: readonly Check<RunContext>[];
+    readonly effort?: string | number;
     readonly fixture?: Record<string, string>;
     readonly interceptTools?: readonly ToolIntercept[];
     readonly model?: string;
@@ -350,6 +355,7 @@ export interface TriggerRateReport {
 export interface TriggerRateSpec {
     readonly allowedTools?: readonly string[];
     readonly concurrency?: number;
+    readonly effort?: string | number;
     readonly fired: (trace: Trace) => boolean;
     readonly fixture?: Record<string, string>;
     readonly installSet?: readonly string[];

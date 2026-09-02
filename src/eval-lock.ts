@@ -87,6 +87,18 @@ export interface EvalLockInputs {
   /** Model id used (folded in; a floating alias can't detect weight drift — warned). */
   readonly model: string;
   /**
+   * Reasoning budget (`--effort`) the run was pinned to, or undefined for the
+   * harness default. Hashed because it steers the model — the criterion this
+   * interface already states — so a committed report recorded at one effort is
+   * STALE for a run at another. `undefined` is dropped by `JSON.stringify`, so
+   * locks committed before effort existed keep their hash and still replay.
+   *
+   * Caveat kept honest: "omitted" means the harness's own default, which is
+   * per-model and can move between builds — reproducible only modulo that, the
+   * same class of provenance caveat as `harnessVersion` below.
+   */
+  readonly effort?: string | number;
+  /**
    * A hand-bumped behavior epoch the project owns (`.vigilesrc.json`
    * `eval.apiVersion`), bumped when a harness-side change YOU made (a CLAUDE.md
    * edit, a global hook) would shift eval outputs but isn't otherwise in the
@@ -129,6 +141,13 @@ export interface EvalLock {
   readonly inputsHash: string;
   /** The model id the report was produced against (for the drift warning). */
   readonly model: string;
+  /**
+   * The effort the report was produced at, or undefined for the harness default
+   * (provenance; already in the hash). Recorded because the complaint that
+   * motivated effort support was not only that it could not be SET — it was that
+   * nothing in the run record said which effort produced the numbers.
+   */
+  readonly effort?: string | number;
   /** The harness version token at record time (provenance; already in the hash). */
   readonly harnessVersionKey: string;
   /** The behavior epoch at record time (provenance; already in the hash). */
@@ -269,6 +288,7 @@ export function buildLock(args: {
   readonly name: string;
   readonly inputsHash: string;
   readonly model: string;
+  readonly effort?: string | number;
   readonly harnessVersionKey: string;
   readonly evalApiVersion: number;
   readonly builtAt: string;

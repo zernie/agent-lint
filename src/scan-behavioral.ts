@@ -340,6 +340,16 @@ export interface SelectionOptions {
   readonly trials?: number;
   /** Selector model — defaults to Sonnet (a weaker model under-selects). */
   readonly model?: string;
+  /**
+   * Reasoning budget (`claude --effort`) for the selector, or undefined for the
+   * harness default. Present for {@link measureSelectionMatrix}, the ASSERTABLE
+   * test primitive, where the configuration a number came from has to be pinnable.
+   *
+   * Deliberately NOT exposed as an `audit` CLI flag: `audit` is a local report,
+   * not a reproducibility surface, and a flag nobody can act on is surface without
+   * a use. The audit probe therefore leaves this unset and runs at the default.
+   */
+  readonly effort?: string | number;
   /** Parallel runs across the prompts × trials grid (default 1). */
   readonly concurrency?: number;
   /** Which harness drives it (default `"claude-code"`; others report n/a). */
@@ -534,6 +544,7 @@ export async function measurePluginSelectionWith(
           parse: d.parse,
           runError: d.runError,
           model: opts.model ?? "sonnet",
+          effort: opts.effort,
         }),
     );
     const runs: SelectionRun[] = [];
