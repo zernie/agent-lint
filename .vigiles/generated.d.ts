@@ -101,7 +101,7 @@ declare module "vigiles/generated" {
     | "internal:check"
     | "docs:api";
 
-  /** 407 project files. */
+  /** 408 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -219,6 +219,7 @@ declare module "vigiles/generated" {
     | "src/core/bash-effects-normalized.test.ts"
     | "src/core/bash-effects.test.ts"
     | "src/core/bash-effects.ts"
+    | "src/core/bash-equivalents.test.ts"
     | "src/core/bash-equivalents.ts"
     | "src/core/capability-diff.test.ts"
     | "src/core/capability-diff.ts"
@@ -698,6 +699,7 @@ declare module "vigiles/spec" {
       | "src/core/bash-effects-normalized.test.ts"
       | "src/core/bash-effects.test.ts"
       | "src/core/bash-effects.ts"
+      | "src/core/bash-equivalents.test.ts"
       | "src/core/bash-equivalents.ts"
       | "src/core/capability-diff.test.ts"
       | "src/core/capability-diff.ts"

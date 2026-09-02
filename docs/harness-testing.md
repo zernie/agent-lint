@@ -170,8 +170,9 @@ block/allow decision.
 ⚠️ **Seven commands, but only seven spellings.** `experimental_alternateSpellings(events)`
 takes those test cases and returns more of them: the same commands re-spelled
 every way the shell runs identically — `git push "--force"`, `git push -f`,
-`sudo git push --force`, `/usr/bin/git push --force`. It generates inputs for
-your hook; it checks nothing by itself.
+`sudo git push --force`, `/usr/bin/git push --force`, `g""it push --force`,
+`g\it push --force`, `git<TAB>push<TAB>--force`. Seven commands become 122. It
+generates inputs for your hook; it checks nothing by itself.
 
 Without it, a guard whose rule is "contains `--force`" passes the battery and
 lets `git push "--force"` through, because the quotes make it a different
@@ -191,7 +192,11 @@ assertBlocksDisasters("bash hooks/safety-guard.sh", {
 });
 ```
 
-[How the re-spellings are made, and what it deliberately leaves out →](compiled-hooks.md#one-command-many-spellings--experimental_alternatespellings)
+It decides "same command" with the parser your compiled guard uses, so it tests
+whether a guard matches the _operation_ rather than one spelling — it cannot
+find a blind spot in that parser, because it would share it.
+
+[How the re-spellings are made, what it deliberately leaves out, and how it maps to promptfoo's strategies →](compiled-hooks.md#one-command-many-spellings--experimental_alternatespellings)
 
 ⚠️ **Also check that ordinary commands still pass.** A guard that blocks
 everything scores 100% here. Run `git push origin main` and `git commit -m fix`

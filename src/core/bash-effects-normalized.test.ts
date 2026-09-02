@@ -297,3 +297,45 @@ test("the mvdan redirect-op table is PINNED to the installed parser", () => {
     assert.equal(r?.writes, writes, `write classification for ${op}`);
   }
 });
+
+// --- the shell's own obfuscations resolve to the plain word ------------------
+// mvdan-sh keeps a backslash as written (`Lit("g\\it")`); the shell drops it.
+// Found 2026-09-02 by a reader, not by the battery — the battery shares this
+// normalizer, so it could not (see bash-equivalents.ts).
+
+test("g\\it (backslash before an ordinary character) → head git", () => {
+  const l = one("g\\it push --force origin main");
+  assert.equal(l.head, "git");
+  assert.ok(l.hasFlag("force"));
+});
+
+test("backslash inside an argument is dropped too: --fo\\rce → force", () => {
+  assert.ok(one("git push --fo\\rce origin main").hasFlag("force"));
+});
+
+test('inside double quotes only \\$ \\` \\" \\\\ are escapes: "g\\it" stays g\\it', () => {
+  // The shell keeps the backslash here, so this is NOT git — and we must not say it is.
+  assert.equal(one('"g\\it" push').head, "g\\it");
+  assert.equal(one('"a\\"b"').head, 'a"b');
+});
+
+test("$'git' (ANSI-C quoting, no escapes) → head git", () => {
+  assert.equal(one("$'git' push --force").head, "git");
+});
+
+test('g""it and gi"t" (a quote pair inside the word) → head git', () => {
+  assert.equal(one('g""it push --force').head, "git");
+  assert.equal(one('gi"t" push --force').head, "git");
+});
+
+test("tabs and runs of spaces between words are one separator", () => {
+  const l = one("git\tpush   --force\t\torigin main");
+  assert.equal(l.head, "git");
+  assert.deepEqual(l.args, ["push", "--force", "origin", "main"]);
+});
+
+test("a dynamic head is STILL refused after unescaping: \\$CMD is literal, $CMD is not", () => {
+  // `\$CMD` is the literal string "$CMD" — a real (if useless) head, not git.
+  assert.equal(one("\\$CMD push").head, "$CMD");
+  assert.deepEqual(leafCommandsNormalized("$CMD push --force"), []);
+});

@@ -118,7 +118,90 @@ const FAMILIES: readonly Family[] = [
     name: "wrapper prefix",
     rewrite: (c) => WRAPPER_PREFIXES.map((w) => `${w} ${c.trimStart()}`),
   },
+  // The four families below are the shell's OWN obfuscations — what promptfoo's
+  // base64/leetspeak strategies are for a model, these are for `sh`: the shell
+  // itself decodes them, so they pass the equivalence check, and a guard that
+  // matches the source string (a grep, a substring) does not see them.
+  {
+    // `g""it`, `"git"`, `gi"t"` — a quote pair inside or around a word is removed
+    // by the shell before the word runs; a substring guard sees the quotes.
+    name: "quoted head",
+    rewrite: (c) => {
+      const { head, rest } = splitHead(c);
+      if (!head || !/^[A-Za-z][\w.-]*$/.test(head)) return [];
+      return [
+        `${head.slice(0, 1)}""${head.slice(1)}${rest}`,
+        `"${head}"${rest}`,
+        `${head.slice(0, -1)}"${head.slice(-1)}"${rest}`,
+      ];
+    },
+  },
+  {
+    // `$'git'` — ANSI-C quoting; with no escape inside it is the plain word.
+    name: "ansi-c quoted head",
+    rewrite: (c) => {
+      const { head, rest } = splitHead(c);
+      if (!head || !/^[A-Za-z][\w.-]*$/.test(head)) return [];
+      return [`$'${head}'${rest}`];
+    },
+  },
+  {
+    // `g\it` — a backslash before an ordinary character is that character.
+    // Distinct from the leading `\git` in "absolute or escaped head": that one
+    // is the alias-bypass idiom people actually type; this one nobody types,
+    // which is exactly why a hand-written matcher never lists it.
+    name: "escaped character in head",
+    rewrite: (c) => {
+      const { head, rest } = splitHead(c);
+      if (!head || !/^[A-Za-z]{2,}[\w.-]*$/.test(head)) return [];
+      return [`${head.slice(0, 1)}\\${head.slice(1)}${rest}`];
+    },
+  },
+  {
+    // `git   push    --force` / `git<TAB>push<TAB>--force` — any run of blanks
+    // between words is one separator to the shell; blanks inside quotes are kept.
+    name: "whitespace between words",
+    rewrite: (c) => [joinWords(c, "   "), joinWords(c, "\t")],
+  },
 ];
+
+/** The first word of a command and everything after it, leading blanks dropped. */
+function splitHead(cmd: string): { head: string; rest: string } {
+  const trimmed = cmd.trimStart();
+  const head = trimmed.split(/\s+/)[0] ?? "";
+  return { head, rest: trimmed.slice(head.length) };
+}
+
+/**
+ * Replace every run of blanks OUTSIDE quotes with `sep`. Quote-aware by hand
+ * because the point is to re-spell the SOURCE; a run inside `'skip hooks'` is
+ * data and must survive as written.
+ */
+function joinWords(cmd: string, sep: string): string {
+  let out = "";
+  let quote: "'" | '"' | null = null;
+  let i = 0;
+  const src = cmd.trim();
+  while (i < src.length) {
+    const ch = src[i] ?? "";
+    if (quote) {
+      out += ch;
+      if (ch === quote) quote = null;
+      i++;
+    } else if (ch === "'" || ch === '"') {
+      quote = ch;
+      out += ch;
+      i++;
+    } else if (ch === " " || ch === "\t") {
+      while (src[i] === " " || src[i] === "\t") i++;
+      out += sep;
+    } else {
+      out += ch;
+      i++;
+    }
+  }
+  return out;
+}
 
 /**
  * Every shell-equivalent rewrite of `seed` the families can produce.

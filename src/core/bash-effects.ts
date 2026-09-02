@@ -659,15 +659,18 @@ export const LONG_TO_SHORT: Readonly<Record<string, string>> = {
  */
 function normalizeParts(
   parts: readonly MvdanNode[] | undefined,
+  inDoubleQuotes = false,
 ): string | null {
   if (!parts) return null;
   let out = "";
   for (const p of parts) {
     const t = sh.syntax.NodeType(p);
-    if (t === "Lit" || t === "SglQuoted") {
+    if (t === "Lit") {
+      out += unescapeLit(p.Value ?? "", inDoubleQuotes);
+    } else if (t === "SglQuoted") {
       out += p.Value ?? "";
     } else if (t === "DblQuoted") {
-      const inner = normalizeParts((p as MvdanWord).Parts);
+      const inner = normalizeParts((p as MvdanWord).Parts, true);
       if (inner === null) return null;
       out += inner;
     } else if (t === "ParamExp") {
@@ -679,6 +682,25 @@ function normalizeParts(
     }
   }
   return out;
+}
+
+/**
+ * Resolve the backslashes a shell removes before it runs a word. mvdan-sh keeps
+ * them as written (`g\it` parses as `Lit("g\\it")`), yet `sh -c 'g\it --version'`
+ * runs git: outside quotes a backslash makes the next character literal and is
+ * itself dropped; inside double quotes it does so only before `$`, `` ` ``, `"`, `\\`
+ * and a newline. Without this, `g\it push --force` normalized to head `g\it` — a
+ * spelling the shell reads as the dangerous command and a `runs("git push")` guard
+ * did not (found 2026-09-02 by a reader, not by the battery, which shares this
+ * normalizer and so could not). Deliberately NOT expansion: `$VAR`, `eval`, `$(…)`
+ * and friends still return null one level up.
+ */
+function unescapeLit(raw: string, inDoubleQuotes: boolean): string {
+  if (!raw.includes("\\")) return raw;
+  const joined = raw.replace(/\\\n/g, ""); // `\<newline>` is a continuation: both go
+  return inDoubleQuotes
+    ? joined.replace(/\\([$`"\\])/g, "$1")
+    : joined.replace(/\\(.)/g, "$1");
 }
 
 /** Normalize a command head to its basename, stripping one leading backslash. */

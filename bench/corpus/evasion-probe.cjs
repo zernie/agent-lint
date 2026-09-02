@@ -5,7 +5,8 @@
 // shipped guards and reported which got through. Its result on the guard behind
 // the published 7/7 headline: 7/7 on the seeds, **8 of 30** on the rewrites.
 //
-// It is superseded as a MECHANISM by `equivalentDisasters()` in
+// It is superseded as a MECHANISM by `experimental_alternateSpellings()` (born
+// `equivalentDisasters()`, renamed 2026-09-02) in
 // src/guardrail-check.ts, which generates the variants instead of listing them —
 // the list below is hand-written, and a hand-written list is exactly the bounded
 // set that produced the gap (the generated battery is 73 and found one more miss

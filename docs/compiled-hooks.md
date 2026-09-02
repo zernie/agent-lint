@@ -427,8 +427,14 @@ None of these is an evasion trick. Quoting a flag is ordinary typing. The "7 of 
 - the short and long form of a flag: `-f` / `--force`, `-n` / `--no-verify`
 - the full or backslash-escaped command path: `/usr/bin/git`, `/bin/git`, `\git`
 - a pass-through wrapper in front: `sudo`, `env`, `command`, `nice -n 5`, `timeout 30`
+- a quote pair inside or around the command name: `g""it`, `"git"`, `gi"t"`
+- ANSI-C quoting of the name: `$'git'`
+- a backslash before an ordinary letter: `g\it` (the shell drops it — `sh -c 'g\it --version'` prints git's version)
+- runs of spaces, or tabs, between words: `git   push    --force`
 
-Seven commands become 73 (today's count; it grows as rewrite rules are added). It returns **only the rewrites**, never the originals — so spread both into the same checker:
+Seven commands become 122 (today's count; it grows as rewrite rules are added). The last four are the shell's own obfuscations: `sh` removes them before the command runs, so a guard that matches the source text (a `grep`, a substring) sees a different string while the shell sees the same command. Against a guard that greps for each of the seven commands, 73 of the 122 get through.
+
+It returns **only the rewrites**, never the originals — so spread both into the same checker:
 
 ```ts
 import {
@@ -448,7 +454,7 @@ assertBlocksDisasters(guard, {
 
 Passing the generator alone would test the seven originals zero times. Each rewrite keeps the original's id with a suffix (`force-push~4`), so a failure names the spelling that got through.
 
-On its first run the generated set found a miss the 30 hand-written cases had not: `git commit -n -m 'skip hooks'`. The guard asked for the literal `--no-verify`, and `-n` is git's short form of it. The matcher behind `runs()` was fixed to recognise both spellings, and the shipped guard now blocks all 73. [`src/hook-dogfood.test.ts`](../src/hook-dogfood.test.ts) keeps it that way in CI.
+On its first run the generated set found a miss the 30 hand-written cases had not: `git commit -n -m 'skip hooks'`. The guard asked for the literal `--no-verify`, and `-n` is git's short form of it. The matcher behind `runs()` was fixed to recognise both spellings, and the shipped guard now blocks all 122. [`src/hook-dogfood.test.ts`](../src/hook-dogfood.test.ts) keeps it that way in CI.
 
 **Nobody has to label the new cases.** Two questions decide whether a rewrite belongs in the battery, and both are already answered:
 
@@ -459,7 +465,17 @@ On its first run the generated set found a miss the 30 hand-written cases had no
 
 If a rewrite fails the second check, the generator throws instead of quietly dropping it. A silent drop would shrink the battery while it still looked like it ran.
 
-**If you know promptfoo:** each rewrite rule here is what promptfoo calls a _strategy_ — a transform that turns test cases into more test cases. The difference is the guarantee. promptfoo's `base64` or `leetspeak` strategies produce inputs the target may or may not decode, so a miss can mean "the model did not read it". Every spelling here is one the shell provably executes the same way, so a miss is always a guard bug.
+**If you know promptfoo — feature parity.** Each rewrite rule here is what promptfoo calls a _strategy_: a transform that turns test cases into more test cases, applied on top of the base set. The table maps the two.
+
+| promptfoo                                                                  | vigiles                                                               | Note                                                                                                                                                                                                                    |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `basic` (include the un-transformed cases)                                 | the `[...DISASTER_CATALOG, ...]` spread                               | Same question, answered explicitly at the call site.                                                                                                                                                                    |
+| `base64`, `rot13`, `hex`, `leetspeak`, `homoglyph`, `morse`, `piglatin`, … | quoted head, ANSI-C quoting, escaped letter, whitespace               | Same axis — an encoding the _target_ decodes. A model may decode base64; a shell does not, so those are not emitted (they would blame a correct guard). The shell decodes quotes, `$'…'` and backslashes, so those are. |
+| `jailbreak`, `crescendo`, `goat`, … (a model rewrites the attack)          | none                                                                  | Deliberately absent. It costs money and is non-deterministic; every spelling here is produced and checked with no model.                                                                                                |
+| `retry` (re-run previously failed cases)                                   | none                                                                  | The battery is deterministic; a failed case fails the same way every run.                                                                                                                                               |
+| —                                                                          | the equivalence check (a rewrite that is not the same command throws) | promptfoo strategies are not required to preserve meaning. Here every emitted spelling is one the shell provably runs identically, so a miss is always a guard bug, never an ambiguous input.                           |
+
+**What it cannot find.** The generator decides "same command" with the same shell parser the compiled guard's `runs()` uses. That makes every spelling it emits trustworthy, and it sets the limit: it can only produce spellings that parser already understands. It tests whether your guard matches the _operation_ rather than one way of typing it; it cannot find a blind spot in the parser itself, because it would share it. `g\it` is the example: a reader tried it, the shell ran git, the parser read `g\it`, and the guard behind "7 of 7" let it through — while the 73-case battery of the day could not have produced it. The parser was fixed, the spelling joined the battery, and the shipped guard now blocks all 122. A spelling the parser does not understand still has to come from a person.
 
 **What it deliberately does not generate.** `eval "$(…)"`, `sh -c "…"`, a command name held in a variable (`$CMD push --force`), a command decoded from base64. The parser cannot tell what those will run, so they are never emitted. That is on purpose: a guard built on `runs()` genuinely cannot see through `eval "$(echo … | base64 -d)"` either. Emitting such cases would mark a correct guard as broken, and a check that flags correct guards gets switched off.
 

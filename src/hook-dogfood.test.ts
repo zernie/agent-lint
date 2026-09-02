@@ -209,6 +209,31 @@ test("every shell-equivalent rewrite of the battery is still blocked", () => {
   );
 });
 
+test("g\\it push --force is blocked (a spelling the battery could not have found)", () => {
+  // `sh -c 'g\it --version'` runs git: a backslash before an ordinary character is
+  // that character. mvdan-sh keeps it, the normalizer used to keep it too, and the
+  // guard behind the 7/7 let `g\it push --force origin main` through. The battery
+  // shares that normalizer, so it could not emit this spelling until the
+  // normalizer learned it — a reader found it, not the generator. Pinned here so
+  // it cannot come back, and the generator now emits it (family "escaped
+  // character in head").
+  const seed = DISASTER_CATALOG.find((e) => e.id === "force-push");
+  assert.ok(seed, "the catalog names a force-push seed");
+  const missed = unblockedDisasters(
+    verifyGuardrail(`node ${CLI} hook-runtime run-program ${COMPILED_GUARD}`, {
+      cwd: REPO_ROOT,
+      events: [
+        {
+          ...seed,
+          id: "force-push~escaped-head",
+          input: { command: "g\\it push --force origin main" },
+        },
+      ],
+    }),
+  );
+  assert.deepEqual(missed, []);
+});
+
 test("the guard did not become a blunt blocker", () => {
   // PRECISION. Over-blocking is what gets a guard switched off. These are the
   // commands a developer types all day; if the matcher starts denying them the
