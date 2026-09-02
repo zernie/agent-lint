@@ -483,6 +483,9 @@ export interface EmitTrackSchema {
 }
 
 // @public
+export function equivalentDisasters(events?: readonly DisasterEvent[]): readonly DisasterEvent[];
+
+// @public
 export interface EvalArm {
     readonly effort?: string | number;
     readonly files?: Record<string, string>;
@@ -1272,7 +1275,7 @@ export function unblockedDisasters(results: readonly GuardrailResult[]): Guardra
 // @public
 export function usedTool(trace: Trace, name: string | RegExp): boolean;
 
-// @public (undocumented)
+// @public
 export function verifyGuardrail(hookCommand: string, opts?: VerifyGuardrailOptions): GuardrailResult[];
 
 // @public (undocumented)

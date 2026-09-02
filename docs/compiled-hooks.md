@@ -405,6 +405,46 @@ See [Testing your harness](harness-testing.md) for the tiers in full.
 
 We pointed the [`DISASTER_CATALOG`](../README.md#-test--does-your-harness-do-its-job) battery (force-push, compound force-push, `reset --hard`, `rm -rf`, `--no-verify`, private-SSH-key read, `curl | sh`) at the widely-copied `disler/claude-code-hooks-mastery` safety hook: it blocks **2 of 7**, silently missing the other five. The compiled equivalent ([`examples/harness/safe-bash-guard.mjs`](../examples/harness/safe-bash-guard.mjs)) blocks **7 of 7** by construction — same intent, no blind spots, no protocol bug. The contrast is a runnable, model-free regression test ([`src/hook-dogfood.test.ts`](../src/hook-dogfood.test.ts)).
 
+### One command, many spellings — `equivalentDisasters()`
+
+Those seven are seven commands written **one way each**, and that turned out to matter. Measured
+2026-09-02 on the compiled guard above: it blocked all seven seeds and **8 of 30** rewrites of
+them — `git push "--force" origin main` got through, and so did `sudo git push --force` and
+`/usr/bin/git push --force`. Quoting a flag is not an evasion technique; it is what people type.
+
+So the battery is no longer a list. `equivalentDisasters()` rewrites every event into the forms a
+shell reads identically, and you feed the result to the same checker:
+
+```ts
+import { equivalentDisasters, assertBlocksDisasters } from "vigiles";
+
+// The seven seeds, plus every spelling of them the shell treats the same way.
+assertBlocksDisasters("node … hook-runtime run-program guard.mjs", {
+  events: equivalentDisasters(),
+});
+```
+
+**Why this needs no one to label the new cases.** Inventing a _new_ dangerous command would need a
+human to say it is dangerous. Rewriting an _already-labelled_ one does not:
+
+|                         | comes from                                               |
+| ----------------------- | -------------------------------------------------------- |
+| is it dangerous?        | inherited from the seed a human put in the catalog       |
+| is it the same command? | decided by the operation-normalizer vigiles already uses |
+
+Neither half is a fresh judgement, so a generated case carries exactly the authority its seed had.
+
+**What it deliberately will not generate.** `eval`, `sh -c`, a `$VAR` command name, base64 — the
+normalizer cannot reduce those to an operation, so a rewrite built from them fails the internal
+equivalence check and is never emitted. That is on purpose: a matcher genuinely cannot see through
+`eval "$(echo … | base64 -d)"`, and a battery that demanded it would be failing correct guards —
+after which people switch the check off. A rewrite that fails the check throws rather than being
+dropped, so a bug in the generator cannot quietly shrink your battery.
+
+⚠️ **It measures coverage, so measure over-blocking too.** A guard that denies everything scores
+100% here. Run a handful of ordinary commands (`git push origin main`, `git commit -m fix`) through
+`verifyGuardrail` and assert they are allowed — the dogfood test does both halves for this reason.
+
 Beyond the headline number, the **structural** wins over hand-written guards — each isolated in CI ([`src/hook-oss-comparison.test.ts`](../src/hook-oss-comparison.test.ts)) so it's non-circular — are:
 
 - **Evasion** — the AST catches the compound `cd … && git push -f` a substring/glob misses.
