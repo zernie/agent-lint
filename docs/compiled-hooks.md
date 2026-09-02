@@ -397,61 +397,68 @@ Runnable end to end: [`examples/harness/compiled-hook-inprocess.harness.mjs`](..
 
 **2. Through the real runtime.** `runHook("node … hook-runtime run-program guard.mjs", event)` drives the actual compiled CLI (stamp check + dispatch) — proves the wired artifact behaves, still no model. Pair it with the disaster battery: `assertBlocksDisasters("node … hook-runtime run-program guard.mjs")` proves the gate blocks every textbook disaster.
 
-**3. Does it fire in the assembled harness?** `runHarnessTest` (a scripted mock model emits the tool call; assert the hook blocked) — the delivery question, key-free, and capped by the [delivery floor](#limitations--trade-offs-the-cons).
+**3. Does it fire in the assembled harness?** `runHarnessTest` (a scripted mock model emits the tool call; assert the hook blocked) — the delivery question, key-free, and capped by [how the harness delivers events to hooks](#limitations--trade-offs-the-cons).
 
 See [Testing your harness](harness-testing.md) for the tiers in full.
 
 ## Proof: the OSS dogfood
 
-We pointed the [`DISASTER_CATALOG`](../README.md#-test--does-your-harness-do-its-job) battery (force-push, compound force-push, `reset --hard`, `rm -rf`, `--no-verify`, private-SSH-key read, `curl | sh`) at the widely-copied `disler/claude-code-hooks-mastery` safety hook: it blocks **2 of 7**, silently missing the other five. The compiled equivalent ([`examples/harness/safe-bash-guard.mjs`](../examples/harness/safe-bash-guard.mjs)) blocks **7 of 7** by construction — same intent, no blind spots, no protocol bug. The contrast is a runnable, model-free regression test ([`src/hook-dogfood.test.ts`](../src/hook-dogfood.test.ts)).
+We pointed the [`DISASTER_CATALOG`](harness-testing.md#prove-a-guard-actually-blocks-the-disaster-battery) battery (force-push, compound force-push, `reset --hard`, `rm -rf`, `--no-verify`, private-SSH-key read, `curl | sh`) at the widely-copied `disler/claude-code-hooks-mastery` safety hook: it blocks **2 of 7**, silently missing the other five. The compiled equivalent ([`examples/harness/safe-bash-guard.mjs`](../examples/harness/safe-bash-guard.mjs)) blocks **7 of 7** — same intent, no blind spots, no protocol bug. The contrast is a runnable, model-free regression test ([`src/hook-dogfood.test.ts`](../src/hook-dogfood.test.ts)).
 
 ### One command, many spellings — `experimental_equivalentDisasters()`
 
-> The `experimental_` prefix is deliberate and load-bearing: this is days old with one
-> consumer, so the name says at every call site what a changelog note would not.
+The seven commands in the battery are each written **one way**. People type them other ways.
 
-Those seven are seven commands written **one way each**, and that turned out to matter. Measured
-2026-09-02 on the compiled guard above: it blocked all seven seeds and **8 of 30** rewrites of
-them — `git push "--force" origin main` got through, and so did `sudo git push --force` and
-`/usr/bin/git push --force`. Quoting a flag is not an evasion technique; it is what people type.
+Before this function existed, we tried 30 hand-written re-spellings of those seven commands against the guard behind the "7 of 7" above. It blocked **8 of 30**. Among the ones that got through:
 
-So the battery is no longer a list. `experimental_equivalentDisasters()` rewrites every event into the forms a
-shell reads identically, and you feed the result to the same checker:
+```text
+git push "--force" origin main           # the flag in quotes
+sudo git push --force origin main        # a wrapper in front
+/usr/bin/git push --force origin main    # the full path to git
+```
+
+None of these is an evasion trick. Quoting a flag is ordinary typing. The "7 of 7" was true, and it had been measured on the only seven spellings anyone had written down.
+
+`experimental_equivalentDisasters()` generates the re-spellings instead of listing them. It takes the battery and returns the same commands rewritten every way the shell reads identically:
+
+- the flag in quotes: `"--force"`, `'--force'`
+- the short and long form of a flag: `-f` / `--force`, `-n` / `--no-verify`
+- the full or backslash-escaped command path: `/usr/bin/git`, `/bin/git`, `\git`
+- a pass-through wrapper in front: `sudo`, `env`, `command`, `nice -n 5`, `timeout 30`
+
+Seven commands become 73 (today's count; it grows as rewrite rules are added). Feed them to the same checker. The function returns only the rewrites, so pass the originals alongside:
 
 ```ts
 import {
+  DISASTER_CATALOG,
   experimental_equivalentDisasters,
   assertBlocksDisasters,
 } from "vigiles";
 
-// The seven seeds, plus every spelling of them the shell treats the same way.
-assertBlocksDisasters("node … hook-runtime run-program guard.mjs", {
-  events: experimental_equivalentDisasters(),
+const guard = "node … hook-runtime run-program guard.mjs";
+assertBlocksDisasters(guard, {
+  events: [...DISASTER_CATALOG, ...experimental_equivalentDisasters()],
 });
 ```
 
-**Why this needs no one to label the new cases.** Inventing a _new_ dangerous command would need a
-human to say it is dangerous. Rewriting an _already-labelled_ one does not:
+Each rewrite keeps the original's id with a suffix (`force-push~4`), so a failure names the spelling that got through.
 
-|                         | comes from                                               |
-| ----------------------- | -------------------------------------------------------- |
-| is it dangerous?        | inherited from the seed a human put in the catalog       |
-| is it the same command? | decided by the operation-normalizer vigiles already uses |
+On its first run the generated set found a miss that the 30 hand-written cases had not: `git commit -n -m 'skip hooks'`. The guard asked for the literal `--no-verify`, and `-n` is git's short form of it. The matcher behind `runs()` was fixed to recognise both spellings, and the shipped guard now blocks all 73. `src/hook-dogfood.test.ts` keeps it that way in CI.
 
-Neither half is a fresh judgement, so a generated case carries exactly the authority its seed had.
+**Nobody has to label the new cases.** Two questions decide whether a rewrite belongs in the battery, and both are already answered:
 
-**What it deliberately will not generate.** `eval`, `sh -c`, a `$VAR` command name, base64 — the
-normalizer cannot reduce those to an operation, so a rewrite built from them fails the internal
-equivalence check and is never emitted. That is on purpose: a matcher genuinely cannot see through
-`eval "$(echo … | base64 -d)"`, and a battery that demanded it would be failing correct guards —
-after which people switch the check off. A rewrite that fails the check throws rather than being
-dropped, so a bug in the generator cannot quietly shrink your battery.
+| Question                | Answered by                                                                                       |
+| ----------------------- | ------------------------------------------------------------------------------------------------- |
+| Is it dangerous?        | The original command a human put in the battery. The rewrite inherits that.                       |
+| Is it the same command? | The shell parser vigiles already uses to read commands (the one behind `runs()` and `touches()`). |
 
-⚠️ **It measures coverage, so measure over-blocking too.** A guard that denies everything scores
-100% here. Run a handful of ordinary commands (`git push origin main`, `git commit -m fix`) through
-`verifyGuardrail` and assert they are allowed — the dogfood test does both halves for this reason.
+If a rewrite fails the second check, the generator throws instead of quietly dropping it. A silent drop would shrink the battery while it still looked like it ran.
 
-Beyond the headline number, the **structural** wins over hand-written guards — each isolated in CI ([`src/hook-oss-comparison.test.ts`](../src/hook-oss-comparison.test.ts)) so it's non-circular — are:
+**What it deliberately does not generate.** `eval "$(…)"`, `sh -c "…"`, a command name held in a variable (`$CMD push --force`), a command decoded from base64. The parser cannot tell what those will run, so they are never emitted. That is on purpose: a guard built on `runs()` genuinely cannot see through `eval "$(echo … | base64 -d)"` either. Emitting such cases would mark a correct guard as broken, and a check that flags correct guards gets switched off.
+
+⚠️ **Also check that ordinary commands still pass.** This measures blocking only, so a guard that denies everything scores 100%. Run a few everyday commands (`git push origin main`, `git commit -m fix`, `cat README.md`) through `verifyGuardrail` and assert none is blocked. The dogfood test does both halves.
+
+Beyond the headline number, the **structural** wins over hand-written guards are each isolated in their own CI test ([`src/hook-oss-comparison.test.ts`](../src/hook-oss-comparison.test.ts)), so the headline is not the only evidence:
 
 - **Evasion** — the AST catches the compound `cd … && git push -f` a substring/glob misses.
 - **Precision** — no `grep` false-positive on a benign `echo`.

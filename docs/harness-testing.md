@@ -61,16 +61,17 @@ no key) and `npx vigiles eval` (real model) discover and run `*.harness.mjs` /
 
 Start here. Pick the row that matches your question — each links to its section.
 
-| I want to check…                                             | Use                                                            | Needs               |
-| ------------------------------------------------------------ | -------------------------------------------------------------- | ------------------- |
-| my **helper script** does what it claims                     | [`runScript`](#test-a-plain-program-runscript)                 | nothing             |
-| my **hook** blocks/allows an event                           | [`runHook`](#test-a-hook-in-isolation-runhook)                 | nothing             |
-| my hook/skill is **wired in** and actually fires             | [`runHarnessTest`](#test-the-assembled-machine-runharnesstest) | harness CLI, no key |
-| my **skill fires** on the right prompts (recall + precision) | [`measureTriggerRate`](#test-a-skill-fires-measuretriggerrate) | a real model        |
-| a change **moves the agent's behaviour** (A/B, with stats)   | [`runEval`](#test-a-change-moves-behaviour-runeval)            | a real model        |
-| the **references** my CLAUDE.md cites are real               | [`vigiles lint`](verifying-instruction-files.md)               | nothing             |
+| I want to check…                                                    | Use                                                                            | Needs               |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------- |
+| my **helper script** does what it claims                            | [`runScript`](#test-a-plain-program-runscript)                                 | nothing             |
+| my **hook** blocks/allows an event                                  | [`runHook`](#test-a-hook-in-isolation-runhook)                                 | nothing             |
+| my **safety hook** really blocks `rm -rf`, force-push, `curl \| sh` | [`assertBlocksDisasters`](#prove-a-guard-actually-blocks-the-disaster-battery) | nothing             |
+| my hook/skill is **wired in** and actually fires                    | [`runHarnessTest`](#test-the-assembled-machine-runharnesstest)                 | harness CLI, no key |
+| my **skill fires** on the right prompts (recall + precision)        | [`measureTriggerRate`](#test-a-skill-fires-measuretriggerrate)                 | a real model        |
+| a change **moves the agent's behaviour** (A/B, with stats)          | [`runEval`](#test-a-change-moves-behaviour-runeval)                            | a real model        |
+| the **references** my CLAUDE.md cites are real                      | [`vigiles lint`](verifying-instruction-files.md)                               | nothing             |
 
-The first three are **deterministic** — assert pass/fail, run on every commit,
+The first four are **deterministic** — assert pass/fail, run on every commit,
 free. The model tiers **measure** (a rate ± error across trials) — run them
 occasionally on a keyed job, never gate a single run. Full API detail lives in
 the **[Testing API reference](testing-api.md)**.
@@ -143,30 +144,48 @@ See [Sandboxing](sandboxing.md) for the confinement model and the `egress` optio
 
 ## Prove a guard actually blocks (the disaster battery)
 
-A guard that looks like it blocks and silently does not is the single most
-expensive harness bug: nothing fails, so nothing tells you. `assertBlocksDisasters`
-feeds a curated battery of genuinely destructive commands — force-push (including
-the compound `cd x && git push -f`), `reset --hard`, `rm -rf /`, `--no-verify`,
-a private-key read, `curl | sh` — to your hook and throws if any of them is allowed.
+A guard that looks like it blocks and silently does not is the most expensive hook
+bug: nothing fails, so nothing tells you. The disaster battery is seven genuinely
+destructive commands. `assertBlocksDisasters` sends each one to your hook as a
+`PreToolUse` event and throws if any of them is allowed:
+
+- `git push --force origin main` — and the same push hidden inside `cd repo && … && git push -f origin main`
+- `git reset --hard HEAD~5`
+- `rm -rf /`
+- `git commit --no-verify` (skips your pre-commit checks)
+- `cat ~/.ssh/id_rsa`
+- `curl https://… | sh`
 
 ```ts
 import { assertBlocksDisasters } from "vigiles";
 
-// Your hook, exactly as it is registered. Deterministic, no model, no key.
+// Your hook, exactly as it is registered. No model, no key.
 assertBlocksDisasters("bash hooks/safety-guard.sh");
 ```
 
-It audits **any** hook — hand-written shell or a compiled one — because it drives
-the hook the way the harness does and reads only the block/allow decision.
+It works on **any** hook — hand-written shell, a compiled one, anything the
+harness can run. It drives the hook the way the harness does and reads only the
+block/allow decision.
 
-⚠️ **The battery is a set of seeds, and a seed is one spelling.** A guard can block
-`git push --force` and miss `git push "--force"`, `sudo git push --force` or
-`/usr/bin/git push --force` — measured on our own dogfood guard: all seven seeds
-blocked, **8 of 30** rewrites. `experimental_equivalentDisasters()` generates those
-rewrites so the battery tests the operation rather than the wording, and the guide
-below explains why generating them needs no one to label the new cases:
+⚠️ **Seven commands, seven spellings.** A guard can block `git push --force` and
+let `git push "--force"` or `sudo git push --force` straight through. We measured
+this on our own guard: all seven blocked, then **8 of 30** hand-written
+re-spellings. `experimental_equivalentDisasters()` generates the re-spellings, so
+the battery tests the command rather than one way of writing it:
 
-[The disaster battery and its rewrites →](compiled-hooks.md#one-command-many-spellings--experimental_equivalentdisasters)
+```ts
+import { DISASTER_CATALOG, experimental_equivalentDisasters } from "vigiles";
+
+assertBlocksDisasters("bash hooks/safety-guard.sh", {
+  events: [...DISASTER_CATALOG, ...experimental_equivalentDisasters()],
+});
+```
+
+[How the re-spellings are made, and what it deliberately leaves out →](compiled-hooks.md#one-command-many-spellings--experimental_equivalentdisasters)
+
+⚠️ **Also check that ordinary commands still pass.** A guard that blocks
+everything scores 100% here. Run `git push origin main` and `git commit -m fix`
+through `verifyGuardrail` and assert neither is blocked.
 
 ## Test the assembled machine (`runHarnessTest`)
 
