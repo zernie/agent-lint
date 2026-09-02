@@ -717,9 +717,21 @@ export function commandView(raw: string, root?: string): CommandView {
           runsSeq(argv, tokens) && (opts?.force ? hasForce(argv) : true),
       );
       if (rawHit) return true;
+      // A FLAG named in the pattern is asked of `hasFlag`, not matched as a
+      // literal token. The normalized leaf already records every flag in BOTH
+      // short and long form, so `runs("git commit --no-verify")` also catches
+      // `git commit -n` — which the literal path cannot, because `-n` is simply
+      // a different string. Found by the generated battery on its first real
+      // run: 72/73, and the one miss was exactly this
+      // (`git commit -n -m 'skip hooks'`). The `{force:true}` option exists
+      // because force needed this for `-f`; every other flag needed it too and
+      // nobody noticed, since nobody wrote the short form down by hand.
+      const flagTokens = tokens.filter((t) => t.startsWith("-"));
+      const plainTokens = tokens.filter((t) => !t.startsWith("-"));
       return normalized.some(
         (leaf) =>
-          runsSeq(leaf.argv, tokens) &&
+          runsSeq(leaf.argv, plainTokens) &&
+          flagTokens.every((t) => leaf.hasFlag(t.replace(/^-+/, ""))) &&
           (opts?.force ? leaf.hasFlag("force", "f") : true),
       );
     },

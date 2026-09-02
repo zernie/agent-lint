@@ -636,13 +636,15 @@ export interface NormalizedLeaf {
  * a caller always gates on the head (e.g. only treats `index-url` as supply-chain
  * when the head is `pip`), so recording both forms unconditionally is safe.
  */
-const SHORT_TO_LONG: Readonly<Record<string, string>> = {
+/** @internal — read by `bash-equivalents.ts` to generate shell-equivalent variants. */
+export const SHORT_TO_LONG: Readonly<Record<string, string>> = {
   f: "force",
   n: "no-verify",
   r: "recursive",
   i: "index-url",
 };
-const LONG_TO_SHORT: Readonly<Record<string, string>> = {
+/** @internal — read by `bash-equivalents.ts` to generate shell-equivalent variants. */
+export const LONG_TO_SHORT: Readonly<Record<string, string>> = {
   force: "f",
   "no-verify": "n",
   recursive: "r",
@@ -724,7 +726,8 @@ function buildFlags(args: readonly string[]): Set<string> {
 // (bare `env`, `env -i`) is preserved as-is, so the env-dump predicate still fires.
 // ---------------------------------------------------------------------------
 
-const WRAPPER_HEADS = new Set([
+/** @internal — read by `bash-equivalents.ts` to generate shell-equivalent variants. */
+export const WRAPPER_HEADS = new Set([
   "env",
   "command",
   "nice",

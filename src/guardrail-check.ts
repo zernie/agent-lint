@@ -22,6 +22,7 @@
  * the scaffold-test generator emits a test that calls these, and the same engine
  * backs an informational coverage report.
  */
+import { equivalentCommands } from "./core/bash-equivalents.js";
 import { runHook, type RunHookOptions } from "./run-hook.js";
 
 /** A category of dangerous action a guard might be meant to block. */
@@ -141,6 +142,37 @@ function selectEvents(opts: VerifyGuardrailOptions): readonly DisasterEvent[] {
  * `npx vigiles hook-runtime guard`); it receives each disaster as a PreToolUse event on stdin,
  * exactly as Claude Code would deliver it.
  */
+/**
+ * Expand a disaster battery with shell-EQUIVALENT rewrites of each event.
+ *
+ * The catalog is seven commands written one way each; a guard that blocks those
+ * seven can still miss the same command with a quoted flag, an absolute head or a
+ * `sudo` in front. Measured 2026-09-02 on the shipped dogfood guard: 7/7 seeds,
+ * **8 of 30** rewrites.
+ *
+ * Nothing new is judged here. `dangerous` is inherited from the seed a human put
+ * in the catalog; `the same command` is decided by the normalizer (see
+ * {@link sameOperation}), which is already load-bearing for `writesTo`/`touches`
+ * in production. A rewrite that fails that check throws rather than being emitted.
+ *
+ * Each variant keeps the seed's `tool` and `category` and takes an id suffixed
+ * with its index, so a report names which rewrite got through, not just that one did.
+ */
+export function equivalentDisasters(
+  events: readonly DisasterEvent[] = DISASTER_CATALOG,
+): readonly DisasterEvent[] {
+  return events.flatMap((event) => {
+    const command = event.input["command"];
+    if (typeof command !== "string") return [];
+    return equivalentCommands(command).map((variant, i) => ({
+      ...event,
+      id: `${event.id}~${String(i + 1)}`,
+      label: `${event.label} — rewritten: ${variant}`,
+      input: { ...event.input, command: variant },
+    }));
+  });
+}
+
 export function verifyGuardrail(
   hookCommand: string,
   opts: VerifyGuardrailOptions = {},

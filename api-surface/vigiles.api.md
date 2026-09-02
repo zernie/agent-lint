@@ -1272,7 +1272,7 @@ export function unblockedDisasters(results: readonly GuardrailResult[]): Guardra
 // @public
 export function usedTool(trace: Trace, name: string | RegExp): boolean;
 
-// @public
+// @public (undocumented)
 export function verifyGuardrail(hookCommand: string, opts?: VerifyGuardrailOptions): GuardrailResult[];
 
 // @public (undocumented)
