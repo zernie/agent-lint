@@ -405,22 +405,28 @@ See [Testing your harness](harness-testing.md) for the tiers in full.
 
 We pointed the [`DISASTER_CATALOG`](../README.md#-test--does-your-harness-do-its-job) battery (force-push, compound force-push, `reset --hard`, `rm -rf`, `--no-verify`, private-SSH-key read, `curl | sh`) at the widely-copied `disler/claude-code-hooks-mastery` safety hook: it blocks **2 of 7**, silently missing the other five. The compiled equivalent ([`examples/harness/safe-bash-guard.mjs`](../examples/harness/safe-bash-guard.mjs)) blocks **7 of 7** by construction — same intent, no blind spots, no protocol bug. The contrast is a runnable, model-free regression test ([`src/hook-dogfood.test.ts`](../src/hook-dogfood.test.ts)).
 
-### One command, many spellings — `equivalentDisasters()`
+### One command, many spellings — `experimental_equivalentDisasters()`
+
+> The `experimental_` prefix is deliberate and load-bearing: this is days old with one
+> consumer, so the name says at every call site what a changelog note would not.
 
 Those seven are seven commands written **one way each**, and that turned out to matter. Measured
 2026-09-02 on the compiled guard above: it blocked all seven seeds and **8 of 30** rewrites of
 them — `git push "--force" origin main` got through, and so did `sudo git push --force` and
 `/usr/bin/git push --force`. Quoting a flag is not an evasion technique; it is what people type.
 
-So the battery is no longer a list. `equivalentDisasters()` rewrites every event into the forms a
+So the battery is no longer a list. `experimental_equivalentDisasters()` rewrites every event into the forms a
 shell reads identically, and you feed the result to the same checker:
 
 ```ts
-import { equivalentDisasters, assertBlocksDisasters } from "vigiles";
+import {
+  experimental_equivalentDisasters,
+  assertBlocksDisasters,
+} from "vigiles";
 
 // The seven seeds, plus every spelling of them the shell treats the same way.
 assertBlocksDisasters("node … hook-runtime run-program guard.mjs", {
-  events: equivalentDisasters(),
+  events: experimental_equivalentDisasters(),
 });
 ```
 

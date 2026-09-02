@@ -151,8 +151,13 @@ function selectEvents(opts: VerifyGuardrailOptions): readonly DisasterEvent[] {
  *
  * Each variant keeps the seed's `tool` and `category` and takes an id suffixed
  * with its index, so a report names which rewrite got through, not just that one did.
+ *
+ * @experimental One day old with a single consumer (this repo's own dogfood) and no
+ * external use. The transform families and the id-suffix shape are the parts most
+ * likely to move; the prefix says so at every call site, which an import line or a
+ * doc note cannot.
  */
-export function equivalentDisasters(
+export function experimental_equivalentDisasters(
   events: readonly DisasterEvent[] = DISASTER_CATALOG,
 ): readonly DisasterEvent[] {
   return events.flatMap((event) => {

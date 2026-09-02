@@ -72,7 +72,7 @@ THE SHIPPED PLUGIN (root-level by Claude Code plugin convention — these MUST s
 
 THIS REPO'S OWN HARNESS (how Claude Code behaves when a CONTRIBUTOR works in-repo — NOT shipped; \`.claude/\` is not published):
 
-- \`.claude/\` — \`settings.json\` + \`hooks/\` + \`skills/\`. \`.claude/skills/\` holds the CONTRIBUTOR-only dev skills (generate-logo, pr-to-lint-rule, enforce-rules-format, audit-feedback-loop, audience-check, code-quality) + vendored deep-research + review-docs. (The old \`dev/\` second plugin was folded here 2026-07-14.)
+- \`.claude/\` — \`settings.json\` + \`hooks/\` + \`skills/\`. \`.claude/skills/\` holds the CONTRIBUTOR-only dev skills (add-a-linter, audience-check, audit-feedback-loop, code-quality, dogfood-cli, enforce-rules-format, generate-logo, landing-site, pr-to-lint-rule, screenshot, ship-a-feature, verify-docs-findable) + vendored deep-research + review-docs. (The old \`dev/\` second plugin was folded here 2026-07-14.)
 
 AUXILIARY PACKAGES (separate npm packages with their OWN \`package.json\`, NOT part of \`src/\`):
 

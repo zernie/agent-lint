@@ -483,9 +483,6 @@ export interface EmitTrackSchema {
 }
 
 // @public
-export function equivalentDisasters(events?: readonly DisasterEvent[]): readonly DisasterEvent[];
-
-// @public
 export interface EvalArm {
     readonly effort?: string | number;
     readonly files?: Record<string, string>;
@@ -612,6 +609,9 @@ export const experimental_dockerRuntime: ContainerRuntime;
 export function experimental_emitTool(contract: OutputContract, options?: {
     readonly name?: string;
 }): ExperimentalEmitTool;
+
+// @public
+export function experimental_equivalentDisasters(events?: readonly DisasterEvent[]): readonly DisasterEvent[];
 
 // @public
 export function experimental_makeDockerRuntime(deps?: {

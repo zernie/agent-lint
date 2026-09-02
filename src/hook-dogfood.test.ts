@@ -22,7 +22,7 @@ import {
   verifyGuardrail,
   unblockedDisasters,
   assertBlocksDisasters,
-  equivalentDisasters,
+  experimental_equivalentDisasters,
   type DisasterEvent,
   type DisasterCategory,
 } from "./guardrail-check.js";
@@ -179,7 +179,7 @@ test("a guard that only says continue:true still fails the battery", () => {
  * `/usr/bin/git push --force …` all exited 0 while the plain form exited 2.
  *
  * The cases are GENERATED, not listed. An earlier version of this block listed
- * nine rewrites by hand and passed — then `equivalentDisasters` produced 73 and
+ * nine rewrites by hand and passed — then `experimental_equivalentDisasters` produced 73 and
  * one of them, `git commit -n -m …`, still got through: the guard asks for the
  * literal `--no-verify` and `-n` is a different string. Nine hand-written rows
  * are the same bounded set that produced the original gap, which is the whole
@@ -190,7 +190,7 @@ test("a guard that only says continue:true still fails the battery", () => {
  * that check throws inside the generator rather than reaching this test.
  */
 test("every shell-equivalent rewrite of the battery is still blocked", () => {
-  const events = equivalentDisasters();
+  const events = experimental_equivalentDisasters();
   assert.ok(
     events.length > 30,
     `expected a real corpus, got ${String(events.length)}`,
