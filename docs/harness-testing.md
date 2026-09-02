@@ -141,6 +141,33 @@ runHook(vendoredHookCmd, event, { trusted: false, env: { GUARD: guardPath } });
 
 See [Sandboxing](sandboxing.md) for the confinement model and the `egress` option.
 
+## Prove a guard actually blocks (the disaster battery)
+
+A guard that looks like it blocks and silently does not is the single most
+expensive harness bug: nothing fails, so nothing tells you. `assertBlocksDisasters`
+feeds a curated battery of genuinely destructive commands — force-push (including
+the compound `cd x && git push -f`), `reset --hard`, `rm -rf /`, `--no-verify`,
+a private-key read, `curl | sh` — to your hook and throws if any of them is allowed.
+
+```ts
+import { assertBlocksDisasters } from "vigiles";
+
+// Your hook, exactly as it is registered. Deterministic, no model, no key.
+assertBlocksDisasters("bash hooks/safety-guard.sh");
+```
+
+It audits **any** hook — hand-written shell or a compiled one — because it drives
+the hook the way the harness does and reads only the block/allow decision.
+
+⚠️ **The battery is a set of seeds, and a seed is one spelling.** A guard can block
+`git push --force` and miss `git push "--force"`, `sudo git push --force` or
+`/usr/bin/git push --force` — measured on our own dogfood guard: all seven seeds
+blocked, **8 of 30** rewrites. `experimental_equivalentDisasters()` generates those
+rewrites so the battery tests the operation rather than the wording, and the guide
+below explains why generating them needs no one to label the new cases:
+
+[The disaster battery and its rewrites →](compiled-hooks.md#one-command-many-spellings--experimental_equivalentdisasters)
+
 ## Test the assembled machine (`runHarnessTest`)
 
 Right logic ≠ wired in correctly _and_ reaching the model. `runHarnessTest` spawns
