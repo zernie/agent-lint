@@ -660,17 +660,20 @@ export const LONG_TO_SHORT: Readonly<Record<string, string>> = {
 function normalizeParts(
   parts: readonly MvdanNode[] | undefined,
   inDoubleQuotes = false,
+  unescape = false,
 ): string | null {
   if (!parts) return null;
   let out = "";
   for (const p of parts) {
     const t = sh.syntax.NodeType(p);
     if (t === "Lit") {
-      out += unescapeLit(p.Value ?? "", inDoubleQuotes);
+      out += unescape
+        ? unescapeLit(p.Value ?? "", inDoubleQuotes)
+        : (p.Value ?? "");
     } else if (t === "SglQuoted") {
       out += p.Value ?? "";
     } else if (t === "DblQuoted") {
-      const inner = normalizeParts((p as MvdanWord).Parts, true);
+      const inner = normalizeParts((p as MvdanWord).Parts, true, unescape);
       if (inner === null) return null;
       out += inner;
     } else if (t === "ParamExp") {
@@ -1265,11 +1268,22 @@ function normalizeCallExpr(
 ): NormalizedLeaf | null {
   if (sh.syntax.NodeType(node) !== "CallExpr" || !node.Args?.length)
     return null;
-  const headRaw = normalizeParts(node.Args[0]?.Parts);
+  const headRaw = normalizeParts(node.Args[0]?.Parts, false, true);
   if (headRaw === null) return null; // dynamic head → not normalizable
   const rawHead = normalizeHead(headRaw);
+  // Backslash resolution answers "what OPERATION is this" — the head and its
+  // FLAGS — and must not touch a PATH operand. The two need opposite answers for
+  // the SAME bytes: `sh` reads `--fo\rce` as `--force` (so a `{force:true}` guard
+  // that missed it was open), while `\\SERVER\SHARE\repo\SECRETS\x` is a real
+  // Windows UNC path whose backslashes a denylist must keep, or the write it
+  // names stops matching `secrets` and the guard allows it. A word starting `-`
+  // is never a path, so the split is decidable per word rather than guessed.
   const rawArgs = node.Args.slice(1)
-    .map((w) => normalizeParts(w.Parts))
+    .map((w) => {
+      const raw = normalizeParts(w.Parts);
+      if (raw === null || !raw.startsWith("-")) return raw;
+      return normalizeParts(w.Parts, false, true) ?? raw;
+    })
     .filter((w): w is string => w !== null);
 
   // Resolve through any command-wrapper (`env`/`command`/`sudo`/`timeout`/…) so
