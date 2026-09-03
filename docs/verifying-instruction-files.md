@@ -167,12 +167,14 @@ The per-family tables below give each rule's default severity and what it checks
 
 ### Spec &amp; integrity
 
-| Rule                                                              | Default  | What it checks                                                                                   |
-| ----------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------ |
-| [`require-instructions-spec`](rules/require-instructions-spec.md) | `"warn"` | Every CLAUDE.md / AGENTS.md has a `.spec.ts` behind it (narrow — inline/frontmatter don't count) |
-| [`integrity`](rules/integrity.md)                                 | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                                             |
-| [`coverage`](rules/coverage.md)                                   | `false`  | The spec covers enough of the project surface                                                    |
-| [`require-skill-spec`](rules/require-skill-spec.md)               | `false`  | Every SKILL.md has a `.spec.ts` (the consistent parallel; off by default)                        |
+| Rule                                                              | Default   | What it checks                                                                                   |
+| ----------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------ |
+| [`require-instructions-spec`](rules/require-instructions-spec.md) | `"warn"`  | Every CLAUDE.md / AGENTS.md has a `.spec.ts` behind it (narrow — inline/frontmatter don't count) |
+| [`integrity`](rules/integrity.md)                                 | `"warn"`  | Compiled markdown wasn't hand-edited (SHA-256 check)                                             |
+| [`coverage`](rules/coverage.md)                                   | `false`   | The spec covers enough of the project surface                                                    |
+| [`spec-refs`](rules/spec-refs.md)                                 | `"error"` | A compiled instruction file whose spec references a file, script or symbol that no longer exists |
+| [`duplicate-rules`](rules/duplicate-rules.md)                     | `"warn"`  | Two rules **within one spec** saying the same thing (deterministic NCD similarity, no model)     |
+| [`require-skill-spec`](rules/require-skill-spec.md)               | `false`   | Every SKILL.md has a `.spec.ts` (the consistent parallel; off by default)                        |
 
 ### Test coverage
 
