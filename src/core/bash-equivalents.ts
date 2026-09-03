@@ -163,6 +163,21 @@ const FAMILIES: readonly Family[] = [
     name: "whitespace between words",
     rewrite: (c) => [joinWords(c, "   "), joinWords(c, "\t")],
   },
+  {
+    // A leading `NAME=value` is an ENVIRONMENT ASSIGNMENT scoped to this one
+    // command, not an argument to it: the shell strips the assignments and runs
+    // what follows, so `FOO=1 git push --force` IS `git push --force`. Named by
+    // an adopter (2026-08-28) as a form their own guard's tests did not cover.
+    //
+    // Our compiled guard already blocked it — `runs()` reads the parsed leaf, so
+    // the assignments were never in its way. A guard that greps the command
+    // STRING has no such luck, and that is who the battery exists for.
+    name: "env assignment prefix",
+    rewrite: (c) => {
+      const cmd = c.trimStart();
+      return [`FOO=1 ${cmd}`, `GIT_TERMINAL_PROMPT=0 LC_ALL=C ${cmd}`];
+    },
+  },
 ];
 
 /** The first word of a command and everything after it, leading blanks dropped. */

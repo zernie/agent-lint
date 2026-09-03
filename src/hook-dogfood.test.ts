@@ -190,6 +190,11 @@ test("a guard that only says continue:true still fails the battery", () => {
  * labelled, `same command` is decided by the normalizer, and a rewrite failing
  * that check throws inside the generator rather than reaching this test.
  */
+// COST, stated because it grows with every family: each spelling spawns the
+// real CLI once, so this is O(spellings) process launches — measured 85s for
+// 143 events (7 seeds + 136 rewrites) against the default 60s limit. Raise the
+// timeout deliberately; if it ever needs raising again, that is the signal to
+// batch the runs rather than to keep buying time.
 test("every shell-equivalent rewrite of the battery is still blocked", () => {
   const events = experimental_alternateSpellings(DISASTER_CATALOG);
   assert.ok(
@@ -207,7 +212,7 @@ test("every shell-equivalent rewrite of the battery is still blocked", () => {
     [],
     "a rewrite the shell reads identically must not change the verdict",
   );
-});
+}, 240_000);
 
 test("g\\it push --force is blocked (a spelling the battery could not have found)", () => {
   // `sh -c 'g\it --version'` runs git: a backslash before an ordinary character is
