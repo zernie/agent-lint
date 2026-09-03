@@ -43,7 +43,9 @@
  * harness's DELIVERY. The delivery floor MOVED — #34692 (a subagent's tool calls
  * never reaching PreToolUse) is FIXED as of Claude Code 2.1.241, measured against
  * a stock registry install and pinned by src/subagent-delivery.test.ts, which goes
- * red if it regresses. What has NOT changed: a model can still route around a tool
+ * red if it regresses. SCOPE of that measurement: headless `claude -p` only —
+ * interactive is unmeasured, and depth-2 subagent nesting does not occur there at
+ * all. What has NOT changed: a model can still route around a tool
  * entirely (#45427 / #32376 — a Bash heredoc instead of `Write`), so a gate is a
  * strong default and is NEVER an unbypassable wall. See `docs/compiled-hooks.md`.
  */

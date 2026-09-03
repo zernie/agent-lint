@@ -16,7 +16,7 @@
  * verifies the hook's decision LOGIC, so it sidesteps CC's runtime delivery bugs
  * (the model routing around a tool entirely, #45427 / #32376) which it deliberately
  * does NOT claim to fix. (#34692, the old subagent-delivery gap, is fixed as of CC
- * 2.1.241 — see src/subagent-delivery.test.ts.)
+ * 2.1.241, measured headless — see src/subagent-delivery.test.ts for the scope.)
  *
  * Pure-ish (wraps the existing runHook tier). The catalog is harness-neutral data;
  * the scaffold-test generator emits a test that calls these, and the same engine
