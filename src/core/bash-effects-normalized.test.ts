@@ -4,8 +4,10 @@
  * Each case encodes a semantics-preserving obfuscation that a Lit-only matcher
  * (built on `leafCommands`) is defeated by, and asserts the normalized form
  * exposes the underlying OPERATION (basename head, unwrapped args, canonical
- * flags, $HOME→~). This is the primitive the hardened guard
- * (examples/harness/safe-bash-guard-v2.mjs) matches over.
+ * flags, $HOME→~). This is the primitive the closed vocabulary's `runs()`,
+ * `touches()` and `pipesToShell()` match over — which is why the shipped
+ * guard (examples/harness/safe-bash-guard.mjs) is robust to these forms
+ * without naming any of them.
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";

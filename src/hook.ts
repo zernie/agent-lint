@@ -184,7 +184,19 @@ export type {
   ProviderRegistry,
 } from "./core/hook-providers.js";
 
-// Operation-normalized leaf extraction — the robust matching primitive a
-// hardened guard is built on (see examples/harness/safe-bash-guard-v2.mjs).
+// Operation-normalized leaf extraction — the primitive `runs()`, `touches()`
+// and `pipesToShell()` match over, so a guard written against the closed
+// vocabulary sees the OPERATION rather than the literal tokens.
+//
+// It is exported because `examples/harness/safe-bash-guard-v2.mjs` needs it —
+// and that need is the finding, not the feature. v2 is an UNRUN experiment (no
+// test executes it) covering three things the vocabulary cannot yet express: a
+// flag with a value (`--index-url`), an env-assignment prefix, and a
+// cross-leaf pipeline fact (`env | curl`). Reaching for this export is how a
+// guard author escapes the closed vocabulary — the thing `checkHookImports`
+// exists to prevent — so treat a new consumer as a request for vocabulary,
+// not as the intended path. Measured 2026-09-03: on the 7 seeds plus every
+// generated spelling (143 cases) v1 and v2 both block 143/143, so v2 is no
+// longer the "hardened" one; see zernie/vigiles#193.
 export { leafCommandsNormalized } from "./core/bash-effects.js";
 export type { NormalizedLeaf, LeafRedirect } from "./core/bash-effects.js";
