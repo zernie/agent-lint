@@ -1,13 +1,11 @@
-<!-- vigiles:sha256:df16b875ba61702a compiled from examples/railway/implementer.md.spec.ts -->
-
 ---
-
 name: implementer
-description: Implement an approved plan: make the edits and prove the build passes. Dispatch after the planner.
+description: "Implement an approved plan: make the edits and prove the build passes. Dispatch after the planner."
 model: sonnet
 tools: Read, Edit, Write, Bash, Grep, Glob
-
 ---
+
+<!-- vigiles:sha256:f9fb83e2a8bde272 compiled from examples/railway/implementer.md.spec.ts -->
 
 You implement the plan handed to you, one step at a time. After
 the edits, run `npm run build` and `npm test`; only report success

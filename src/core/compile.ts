@@ -906,7 +906,6 @@ function renderSkillFrontmatter(
 ): string {
   const fm = [
     "---",
-    "",
     `name: ${yamlScalar(spec.name)}`,
     `description: ${yamlScalar(spec.description)}`,
   ];
@@ -941,7 +940,7 @@ function renderSkillFrontmatter(
       fm.push(`disallowed-tools: [${spec.disallowedTools.join(", ")}]`);
     }
   }
-  fm.push("", "---");
+  fm.push("---");
   return fm.join("\n");
 }
 
@@ -1134,7 +1133,15 @@ export function compileSkill(
   const marker = purityMarker(spec.purity);
   const content =
     renderSkillFrontmatter(spec, profile) +
-    "\n\n" +
+    // ONE newline, not two: `placeIntegrityHeader` puts the stamp AFTER the
+    // frontmatter and supplies its own blank line on each side, so a second one
+    // here becomes two blank lines in the artifact — which `prettier --check`
+    // rejects, and a freshly compiled artifact then cannot pass `npm run check`.
+    // Fixed HERE rather than in the stamper: the hash is computed over this
+    // content (compile.ts `seal`), so trimming inside `placeIntegrityHeader`
+    // would hash one string and write another — measured, it broke integrity on
+    // all three frontmatter-bearing artifacts.
+    "\n" +
     (marker ? marker + "\n\n" : "") +
     sections.trim() +
     "\n";
@@ -1183,7 +1190,6 @@ function renderAgentFrontmatter(spec: AgentSpec): string {
   // {@link yamlScalar}.
   const fm = [
     "---",
-    "",
     `name: ${yamlScalar(spec.name)}`,
     `description: ${yamlScalar(spec.description)}`,
   ];
@@ -1195,7 +1201,7 @@ function renderAgentFrontmatter(spec: AgentSpec): string {
   if (spec.disallowedTools && spec.disallowedTools.length > 0) {
     fm.push(`disallowedTools: ${spec.disallowedTools.join(", ")}`);
   }
-  fm.push("", "---");
+  fm.push("---");
   return fm.join("\n");
 }
 
@@ -1374,7 +1380,15 @@ export function compileAgent(
   const marker = purityMarker(spec.purity);
   const content =
     renderAgentFrontmatter(spec) +
-    "\n\n" +
+    // ONE newline, not two: `placeIntegrityHeader` puts the stamp AFTER the
+    // frontmatter and supplies its own blank line on each side, so a second one
+    // here becomes two blank lines in the artifact — which `prettier --check`
+    // rejects, and a freshly compiled artifact then cannot pass `npm run check`.
+    // Fixed HERE rather than in the stamper: the hash is computed over this
+    // content (compile.ts `seal`), so trimming inside `placeIntegrityHeader`
+    // would hash one string and write another — measured, it broke integrity on
+    // all three frontmatter-bearing artifacts.
+    "\n" +
     (marker ? marker + "\n\n" : "") +
     body.trim() +
     "\n";

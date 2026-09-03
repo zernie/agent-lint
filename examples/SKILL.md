@@ -1,13 +1,11 @@
-<!-- vigiles:sha256:da271d5e41e8e90e compiled from examples/SKILL.md.spec.ts -->
-
 ---
-
 name: pr-to-lint-rule
 description: Convert a recurring PR review comment into an automated lint rule with tests and CLAUDE.md annotation
 disable-model-invocation: true
 argument-hint: <description of recurring PR feedback>
-
 ---
+
+<!-- vigiles:sha256:49b12ebc0cf20852 compiled from examples/SKILL.md.spec.ts -->
 
 Convert a recurring PR review comment into an automated lint rule.
 
@@ -43,7 +41,7 @@ For JavaScript/TypeScript, generate an ESLint rule using the AST visitor pattern
 
 ### Step 3: Update `CLAUDE.md`
 
-Add the annotation block. See [enforce-rules-format](skills/enforce-rules-format/SKILL.md) for the correct format.
+Add the annotation block. See `docs/spec-format.md` for the correct format.
 
 ### Step 4: Verify
 

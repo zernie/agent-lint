@@ -1,13 +1,11 @@
-<!-- vigiles:sha256:de5543be89358df1 compiled from examples/harness/dogfood/reviewer-ab/spec/agents/code-reviewer.md.spec.ts -->
-
 ---
-
 name: code-reviewer
 description: Review a file for correctness defects and report them.
 model: sonnet
 tools: Read, Grep
-
 ---
+
+<!-- vigiles:sha256:272d5a98801ff4dc compiled from examples/harness/dogfood/reviewer-ab/spec/agents/code-reviewer.md.spec.ts -->
 
 <!-- vigiles:purity:pure -->
 

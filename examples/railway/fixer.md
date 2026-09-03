@@ -1,13 +1,11 @@
-<!-- vigiles:sha256:4e15c156920f8c31 compiled from examples/railway/fixer.md.spec.ts -->
-
 ---
-
 name: fixer
 description: Address a failing step's findings, then re-verify. Dispatched by the railway's bounded recovery.
 model: sonnet
 tools: Read, Edit, Bash, Grep
-
 ---
+
+<!-- vigiles:sha256:d0939b7f32bf79ef compiled from examples/railway/fixer.md.spec.ts -->
 
 You receive a failing step's error payload (findings or logs)
 and fix the underlying issue. Re-run `npm test` before reporting success.
