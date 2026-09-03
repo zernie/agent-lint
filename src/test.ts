@@ -167,6 +167,7 @@ export {
   unblockedDisasters,
   assertBlocksDisasters,
   formatGuardrailReport,
+  experimental_alternateSpellings,
 } from "./guardrail-check.js";
 export type {
   DisasterEvent,

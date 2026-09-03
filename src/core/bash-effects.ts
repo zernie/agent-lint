@@ -636,13 +636,15 @@ export interface NormalizedLeaf {
  * a caller always gates on the head (e.g. only treats `index-url` as supply-chain
  * when the head is `pip`), so recording both forms unconditionally is safe.
  */
-const SHORT_TO_LONG: Readonly<Record<string, string>> = {
+/** @internal — read by `bash-equivalents.ts` to generate shell-equivalent variants. */
+export const SHORT_TO_LONG: Readonly<Record<string, string>> = {
   f: "force",
   n: "no-verify",
   r: "recursive",
   i: "index-url",
 };
-const LONG_TO_SHORT: Readonly<Record<string, string>> = {
+/** @internal — read by `bash-equivalents.ts` to generate shell-equivalent variants. */
+export const LONG_TO_SHORT: Readonly<Record<string, string>> = {
   force: "f",
   "no-verify": "n",
   recursive: "r",
@@ -657,15 +659,21 @@ const LONG_TO_SHORT: Readonly<Record<string, string>> = {
  */
 function normalizeParts(
   parts: readonly MvdanNode[] | undefined,
+  inDoubleQuotes = false,
+  unescape = false,
 ): string | null {
   if (!parts) return null;
   let out = "";
   for (const p of parts) {
     const t = sh.syntax.NodeType(p);
-    if (t === "Lit" || t === "SglQuoted") {
+    if (t === "Lit") {
+      out += unescape
+        ? unescapeLit(p.Value ?? "", inDoubleQuotes)
+        : (p.Value ?? "");
+    } else if (t === "SglQuoted") {
       out += p.Value ?? "";
     } else if (t === "DblQuoted") {
-      const inner = normalizeParts((p as MvdanWord).Parts);
+      const inner = normalizeParts((p as MvdanWord).Parts, true, unescape);
       if (inner === null) return null;
       out += inner;
     } else if (t === "ParamExp") {
@@ -677,6 +685,25 @@ function normalizeParts(
     }
   }
   return out;
+}
+
+/**
+ * Resolve the backslashes a shell removes before it runs a word. mvdan-sh keeps
+ * them as written (`g\it` parses as `Lit("g\\it")`), yet `sh -c 'g\it --version'`
+ * runs git: outside quotes a backslash makes the next character literal and is
+ * itself dropped; inside double quotes it does so only before `$`, `` ` ``, `"`, `\\`
+ * and a newline. Without this, `g\it push --force` normalized to head `g\it` — a
+ * spelling the shell reads as the dangerous command and a `runs("git push")` guard
+ * did not (found 2026-09-02 by a reader, not by the battery, which shares this
+ * normalizer and so could not). Deliberately NOT expansion: `$VAR`, `eval`, `$(…)`
+ * and friends still return null one level up.
+ */
+function unescapeLit(raw: string, inDoubleQuotes: boolean): string {
+  if (!raw.includes("\\")) return raw;
+  const joined = raw.replace(/\\\n/g, ""); // `\<newline>` is a continuation: both go
+  return inDoubleQuotes
+    ? joined.replace(/\\([$`"\\])/g, "$1")
+    : joined.replace(/\\(.)/g, "$1");
 }
 
 /** Normalize a command head to its basename, stripping one leading backslash. */
@@ -724,7 +751,8 @@ function buildFlags(args: readonly string[]): Set<string> {
 // (bare `env`, `env -i`) is preserved as-is, so the env-dump predicate still fires.
 // ---------------------------------------------------------------------------
 
-const WRAPPER_HEADS = new Set([
+/** @internal — read by `bash-equivalents.ts` to generate shell-equivalent variants. */
+export const WRAPPER_HEADS = new Set([
   "env",
   "command",
   "nice",
@@ -1240,11 +1268,22 @@ function normalizeCallExpr(
 ): NormalizedLeaf | null {
   if (sh.syntax.NodeType(node) !== "CallExpr" || !node.Args?.length)
     return null;
-  const headRaw = normalizeParts(node.Args[0]?.Parts);
+  const headRaw = normalizeParts(node.Args[0]?.Parts, false, true);
   if (headRaw === null) return null; // dynamic head → not normalizable
   const rawHead = normalizeHead(headRaw);
+  // Backslash resolution answers "what OPERATION is this" — the head and its
+  // FLAGS — and must not touch a PATH operand. The two need opposite answers for
+  // the SAME bytes: `sh` reads `--fo\rce` as `--force` (so a `{force:true}` guard
+  // that missed it was open), while `\\SERVER\SHARE\repo\SECRETS\x` is a real
+  // Windows UNC path whose backslashes a denylist must keep, or the write it
+  // names stops matching `secrets` and the guard allows it. A word starting `-`
+  // is never a path, so the split is decidable per word rather than guessed.
   const rawArgs = node.Args.slice(1)
-    .map((w) => normalizeParts(w.Parts))
+    .map((w) => {
+      const raw = normalizeParts(w.Parts);
+      if (raw === null || !raw.startsWith("-")) return raw;
+      return normalizeParts(w.Parts, false, true) ?? raw;
+    })
     .filter((w): w is string => w !== null);
 
   // Resolve through any command-wrapper (`env`/`command`/`sudo`/`timeout`/…) so

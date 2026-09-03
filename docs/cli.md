@@ -488,6 +488,43 @@ npx vigiles audit ./marketplace-repo --single  # ...or audit that root as ONE ha
 npx vigiles audit ./repo --harness=codex # override harness detection
 ```
 
+### `exclude` — what the repo's own tooling does not police
+
+A repo often carries markdown, specs, skills or test scripts that are **not its
+own**: a vendored plugin corpus, a third-party `CLAUDE.md` kept as benchmark data,
+a frozen reproduction written against an older vigiles. List those paths once,
+tsconfig-style, in `.vigilesrc.json`:
+
+```json
+{ "exclude": ["bench", "test/dogfood/**", "research/frozen-2025"] }
+```
+
+A bare directory name excludes its subtree (`"bench"`, `"bench/"` and `"bench/**"`
+mean the same thing); `node_modules`, `dist`, `.git` and `.vigiles` are always
+excluded. **One filter, every command:**
+
+| command         | what `exclude` drops                                                         |
+| --------------- | ---------------------------------------------------------------------------- |
+| `compile`       | an excluded `*.spec.ts` is not loaded — a frozen spec cannot fail the build  |
+| `lint`          | instruction files, nested bundles, docs, skills/subagents/hooks, spec refs   |
+| `audit`         | an excluded `CLAUDE.md`/`AGENTS.md` is not read into the rule map            |
+| `test` / `eval` | an excluded `*.harness.*` / `*.eval.*` is not discovered, so it does not run |
+
+It filters **discovery only**. A path you name on the command line is still
+processed, and one line says why:
+
+```
+$ npx vigiles compile bench/old/SKILL.md.spec.ts
+note: bench/old/SKILL.md.spec.ts matches exclude "bench" — compiling because you named it
+```
+
+(ripgrep and tsc do the same silently; ESLint skips the file with a warning;
+prettier skips it and reports it clean. vigiles processes it and says so.)
+
+The rule-level lists — `orphans.exclude` and the `untested-*` rules' `exclude` —
+**narrow their own rule further**. They never re-admit a path excluded here: both
+set means the union.
+
 ### `lint` in a monorepo, and getting both artefacts from one run
 
 **Nested bundles.** `lint` scores the root bundle. If the repo holds more

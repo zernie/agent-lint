@@ -193,12 +193,16 @@ export function interpreterArgs(
  * Expand the given path/glob patterns into concrete script files. A pattern
  * that is an existing file passes through unchanged; anything else is treated
  * as a glob. Falls back to `defaultGlob` when no patterns are given. Results
- * are deduped and sorted; `node_modules` and `dist` are always ignored.
+ * are deduped and sorted. `ignore` is the repo's ExcludeSet string face
+ * (src/exclude.ts — the floor plus `.vigilesrc.json#exclude`), REQUIRED so a
+ * vendored corpus's own `*.harness.mjs` cannot be discovered and run as ours
+ * (#192). A path given explicitly in `patterns` is still run.
  */
 export function discoverScripts(
   patterns: readonly string[],
   defaultGlob: string,
   cwd: string,
+  ignore: readonly string[],
 ): string[] {
   const globs = patterns.length > 0 ? patterns : [defaultGlob];
   const found = new Set<string>();
@@ -220,7 +224,7 @@ export function discoverScripts(
     // looked untested". Coverage learned it; the runner did not.
     for (const m of globSync(p, {
       cwd,
-      ignore: ["node_modules/**", "dist/**"],
+      ignore: [...ignore],
       dot: true,
     })) {
       found.add(m);

@@ -173,7 +173,7 @@ Every path, script, symbol, and rule verified against reality — plus tool cont
 ### 🧪 Test — does the harness actually do its job?
 
 A hook that blocks nothing, a skill that hijacks unrelated prompts, context that never reaches the model — each passes a naive "did it run?" check. That gap is **false confidence**: a guard that looks like it works and silently doesn't. vigiles tests the real thing — hooks block, skills fire, subagents finish what they promised, a stray `git push` is caught before it happens. It drives a scripted stand-in for the model, not a live call, so it needs no key and runs on every commit.
-**[How testing works →](docs/harness-testing.md)**
+**[How testing works →](docs/harness-testing.md)** · Got a safety hook? **[Prove it blocks `rm -rf` and force-push →](docs/harness-testing.md#prove-a-guard-actually-blocks-the-disaster-battery)**
 
 **Nothing you scan leaves your machine.** `lint`, `audit` and the deterministic test tiers make no network call at all — no telemetry, no analytics, no HTTP client in the package. Evals drive your own `claude` CLI on your own subscription, so no third party is introduced. **[What is and isn't transmitted →](docs/safety.md#does-vigiles-send-my-code-anywhere)**
 

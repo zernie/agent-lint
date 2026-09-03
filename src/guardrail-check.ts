@@ -22,6 +22,7 @@
  * the scaffold-test generator emits a test that calls these, and the same engine
  * backs an informational coverage report.
  */
+import { equivalentCommands } from "./core/bash-equivalents.js";
 import { runHook, type RunHookOptions } from "./run-hook.js";
 
 /** A category of dangerous action a guard might be meant to block. */
@@ -133,6 +134,63 @@ function selectEvents(opts: VerifyGuardrailOptions): readonly DisasterEvent[] {
     return DISASTER_CATALOG.filter((e) => set.has(e.category));
   }
   return DISASTER_CATALOG;
+}
+
+/**
+ * The same dangerous commands, spelled the other ways a shell reads identically.
+ *
+ * Takes a battery of hook test cases (shell commands wrapped as `PreToolUse`
+ * events — `DISASTER_CATALOG` is the shipped one) and returns MORE test cases:
+ * every command re-spelled with a quoted flag (`git push "--force"`), the short
+ * form of a flag (`-f`), an absolute or escaped head (`/usr/bin/git`, `\git`), or a
+ * pass-through wrapper (`sudo …`, `env …`). The shell runs each rewrite exactly as
+ * it runs the original. Feed them to `assertBlocksDisasters` alongside the
+ * originals:
+ *
+ *     assertBlocksDisasters(hook, {
+ *       events: [...DISASTER_CATALOG, ...experimental_alternateSpellings(DISASTER_CATALOG)],
+ *     });
+ *
+ * WHAT BREAKS WITHOUT IT. A guard whose rule is "the command contains `--force`"
+ * blocks all seven catalog commands, so the battery is green — and lets
+ * `git push "--force"` through, because the quotes make it a different string.
+ * Measured 2026-09-02 on the shipped dogfood guard BEFORE this existed: 7/7
+ * originals blocked, **8 of 30** hand-written re-spellings blocked.
+ *
+ * WHY THE OUTPUT IS TRUSTWORTHY. Nothing new is judged. "Dangerous" is inherited
+ * from the original a human put in the battery; "the same command" is decided by
+ * the shell parser vigiles already uses for `runs()`/`touches()` (see
+ * {@link sameOperation}). A rewrite that fails that check throws rather than being
+ * emitted, so the battery can never quietly shrink.
+ *
+ * It returns ONLY the rewrites (never the originals), so pass the originals
+ * alongside as above. Each rewrite keeps its original's `tool` and `category`
+ * and takes the original's id with an index suffix (`force-push~4`), so a report
+ * names which spelling got through.
+ *
+ * In promptfoo's vocabulary each rewrite rule here is a "strategy"; the difference
+ * is that promptfoo's encodings (base64, leetspeak) may or may not be decoded by the
+ * target, whereas every rewrite here is one the shell provably executes identically
+ * — a miss is a guard bug, never an ambiguous input.
+ *
+ * @experimental Days old with a single consumer (this repo's own dogfood) and no
+ * external use. The set of rewrite rules and the id-suffix shape are the parts most
+ * likely to move; the prefix says so at every call site, which an import line or a
+ * doc note cannot.
+ */
+export function experimental_alternateSpellings(
+  events: readonly DisasterEvent[],
+): readonly DisasterEvent[] {
+  return events.flatMap((event) => {
+    const command = event.input["command"];
+    if (typeof command !== "string") return [];
+    return equivalentCommands(command).map((variant, i) => ({
+      ...event,
+      id: `${event.id}~${String(i + 1)}`,
+      label: `${event.label} — spelled: ${variant}`,
+      input: { ...event.input, command: variant },
+    }));
+  });
 }
 
 /**

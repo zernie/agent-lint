@@ -442,12 +442,20 @@ export interface VigilesConfig {
   bundles?: "root" | "all";
   orphans?: OrphansConfig;
   /**
-   * Glob patterns of instruction/skill files to EXCLUDE from `lint` discovery
-   * (tsconfig-style, relative to the repo root). Use it for vendored or
-   * benchmark fixtures the repo's own lint shouldn't police — e.g.
-   * `["bench/**"]` so a third-party `CLAUDE.md` injected verbatim as a benchmark
-   * arm isn't held to `require-instructions-spec`. `node_modules`/`dist` are always
-   * excluded.
+   * Paths and globs the repo's own tooling does NOT police — vendored corpora,
+   * benchmark fixtures, frozen reproductions (tsconfig-style, relative to the
+   * repo root; a bare directory name such as `"bench"` excludes its subtree, as
+   * do `"bench/"` and `"bench/**"`). `node_modules`/`dist`/`.git`/`.vigiles` are
+   * always excluded.
+   *
+   * ONE filter, every pass (#192): `compile` does not load an excluded spec,
+   * `lint` does not discover an excluded instruction file, nested bundle, doc, or
+   * surface, `audit` does not read an excluded instruction file, and
+   * `test`/`eval` do not discover an excluded script. It filters DISCOVERY only:
+   * a path you name on the command line is still processed, and one line says
+   * which pattern it matched. The rule-level `orphans.exclude` and
+   * `untested-*` `exclude` NARROW their own rule further and never re-admit a
+   * path excluded here (union, not override). Parsed once in `src/exclude.ts`.
    */
   exclude?: readonly string[];
   /**

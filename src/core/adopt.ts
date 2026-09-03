@@ -40,6 +40,12 @@ export interface AdoptResult {
   /** Generated `.spec.ts` source (compiles back to ~the original file). */
   source: string;
   /**
+   * Backticked paths that RESOLVED at adoption time and were emitted as verified
+   * `file()` refs. Empty when no `exists` predicate was supplied (the faithful,
+   * extract-nothing behaviour) or when nothing resolved.
+   */
+  adoptedRefs?: readonly string[];
+  /**
    * `structured` = a clean `##`-headed file mapped 1:1 to sections (the diff is
    * just the canonical h1 + whitespace). `raw` = a heading-less or
    * intro-bearing file we wrapped under a synthesized `Overview` section —
@@ -157,7 +163,93 @@ function tsTemplate(s: string): string {
   return "`" + esc + "`";
 }
 
-function renderSpecSource(spec: AdoptedSpec): string {
+/**
+ * A backticked token that looks like a repo-relative path: contains a slash and
+ * no whitespace. Deliberately loose — the DECIDING filter is not the shape, it is
+ * whether the path RESOLVES (see {@link refInterpolatedTemplate}).
+ */
+const PATH_LIKE = /`([^`\s]+)`/g;
+
+/** Whether a backticked token may be adopted as a verified `file()` reference. */
+function adoptableRef(token: string, exists: (p: string) => boolean): boolean {
+  // A path claim, not a symbol or a command: it has a separator.
+  if (!token.includes("/")) return false;
+  // Someone else's world — a URL, an absolute path, a home path, an escape.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(token)) return false;
+  if (token.startsWith("/") || token.startsWith("~")) return false;
+  if (token.includes("..")) return false;
+  // 🔴 THE WHOLE DESIGN IS THIS LINE. Adoption emits a ref ONLY for a path that
+  // resolves in THIS repo right now.
+  return exists(token);
+}
+
+/**
+ * Render a section as a template, turning every backticked path that RESOLVES
+ * TODAY into a verified `${file("…")}` reference.
+ *
+ * WHY THIS EXISTS. Adoption used to transcribe faithfully and extract NOTHING —
+ * `rules: {}`, every reference left as inert prose — on the stated grounds that
+ * cross-referencing is `strengthen`'s later job. An adopter measured what that
+ * trade actually costs (2026-08-28, a 51-skill monorepo): running
+ * `vigiles init --target=CLAUDE.md` turned the file into one opaque template with
+ * zero refs extracted, so "the price is paid immediately — the file becomes a
+ * build artifact, hand edits are blocked by a hook, every backtick is escaped —
+ * while the benefit is deferred until a human rewrites every reference by hand."
+ * The checker was never the problem: he hand-wrote two `file()` calls and compile
+ * correctly reported `[stale-file]`, exit 1. The ADOPTION PATH did not populate it,
+ * so nobody reached the value and the second step never happened.
+ *
+ * WHY RESOLVE-NOW IS THE RIGHT FILTER, and not a heuristic. The undecidable
+ * question is "is this OUR path or a path inside the third-party repo this
+ * document DESCRIBES?" — the same wall that made `doc-refs` default to off after
+ * scoring 0 true positives, and that the adopter hit independently (1560
+ * path-shaped strings in his corpus, 907 unresolvable, single-digit true
+ * positives after filtering; almost all the rest were paths in repos his skills
+ * merely describe). Asking instead "does it resolve HERE, right now?" sidesteps
+ * it: a described repo's path does not exist locally, so it is never emitted.
+ *
+ * The consequences are the ones adoption needs:
+ *  - ZERO new failures at adoption time — only already-green refs are emitted, so
+ *    `compile` cannot start red on a file that was fine a second earlier;
+ *  - value from the FIRST compile rather than after a manual pass — the ref goes
+ *    red exactly when the file moves, which is the entire point of marking it;
+ *  - a false emit is benign (an extra verified ref), while a false SKIP costs
+ *    only what the old behaviour already cost.
+ *
+ * Fence-awareness goes through the shared `fencedLineFlags` oracle, never a
+ * private toggle: a path inside a fenced block is example code, and hand-rolled
+ * fence state is the exact defect that oracle exists to make unrepresentable.
+ */
+export function refInterpolatedTemplate(
+  content: string,
+  exists: (p: string) => boolean,
+): { template: string; refs: string[] } {
+  const fenced = fencedLineFlags(content);
+  const refs: string[] = [];
+  const rendered = content
+    .split("\n")
+    .map((line, i) => {
+      if (fenced[i]) return tsTemplate(line).slice(1, -1);
+      let out = "";
+      let last = 0;
+      for (const m of line.matchAll(PATH_LIKE)) {
+        const token = m[1];
+        if (!adoptableRef(token, exists)) continue;
+        out += tsTemplate(line.slice(last, m.index)).slice(1, -1);
+        out += "${file(" + JSON.stringify(token) + ")}";
+        refs.push(token);
+        last = m.index + m[0].length;
+      }
+      return out + tsTemplate(line.slice(last)).slice(1, -1);
+    })
+    .join("\n");
+  return { template: "`" + rendered + "`", refs };
+}
+
+function renderSpecSource(
+  spec: AdoptedSpec,
+  exists?: (p: string) => boolean,
+): { source: string; refs: string[] } {
   const targetLine =
     spec.target !== "CLAUDE.md"
       ? `\n  target: ${JSON.stringify(spec.target)},`
@@ -166,23 +258,28 @@ function renderSpecSource(spec: AdoptedSpec): string {
     spec.maxSectionLines !== undefined
       ? `\n  maxSectionLines: ${String(spec.maxSectionLines)},`
       : "";
+  const adopted: string[] = [];
   const entries = Object.entries(spec.sections)
-    .map(
-      ([key, content]) => `    ${JSON.stringify(key)}: ${tsTemplate(content)},`,
-    )
+    .map(([key, content]) => {
+      if (!exists) return `    ${JSON.stringify(key)}: ${tsTemplate(content)},`;
+      const { template, refs } = refInterpolatedTemplate(content, exists);
+      adopted.push(...refs);
+      return `    ${JSON.stringify(key)}: ${template},`;
+    })
     .join("\n");
   const sectionsBlock = entries
     ? `\n  sections: {\n${entries}\n  },`
     : `\n  sections: {},`;
-  return `// Adopted from ${spec.target} by \`vigiles init\` — faithful by default.
+  const source = `// Adopted from ${spec.target} by \`vigiles init\` — faithful by default.
 // Each heading became a prose section; no rules were inferred. Run the
 // \`/strengthen\` skill to upgrade prose to verified enforce()/guard() rules.
-import { instructionFile } from "vigiles/spec";
+import { instructionFile${adopted.length ? ", file" : ""} } from "vigiles/spec";
 
 export default instructionFile({${targetLine}${maxLine}${sectionsBlock}
   rules: {},
 });
 `;
+  return { source, refs: adopted };
 }
 
 /**
@@ -256,12 +353,18 @@ export function adoptToSpec(markdown: string, target: string): AdoptedSpec {
  * Convert an instruction file's markdown into a faithful `instructionFile()` spec source
  * (the deliverable `init` writes).
  */
-export function adoptMarkdown(markdown: string, target: string): AdoptResult {
+export function adoptMarkdown(
+  markdown: string,
+  target: string,
+  opts: { readonly exists?: (p: string) => boolean } = {},
+): AdoptResult {
   const spec = adoptToSpec(markdown, target);
+  const { source, refs } = renderSpecSource(spec, opts.exists);
   return {
-    source: renderSpecSource(spec),
+    source,
     tier: spec.tier,
     sectionCount: Object.keys(spec.sections).length,
+    adoptedRefs: refs,
   };
 }
 

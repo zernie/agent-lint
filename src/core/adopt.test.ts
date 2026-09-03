@@ -268,3 +268,65 @@ Use the structured logger, not console.log.
     expect(out.markdown).toContain("Do the thing.");
   });
 });
+
+/* ── adoption extracts refs that RESOLVE (2026-09-02) ──────────────────────── */
+/*
+ * The measured problem: adoption transcribed faithfully and extracted NOTHING, so
+ * the price (build artifact, blocked hand edits, escaped backticks) was paid at
+ * once while the payoff waited on a manual pass nobody ran. The filter is not a
+ * heuristic about what LOOKS like our path — it is whether the path RESOLVES here
+ * and now, which is exactly what makes a described third-party repo's path
+ * unemittable rather than a false positive.
+ */
+describe("adoption emits verified refs for paths that resolve", () => {
+  const here = new Set(["docs/guide.md", "scripts/lint.sh"]);
+  const exists = (p: string) => here.has(p);
+
+  it("emits file() for a backticked path that resolves today", () => {
+    const r = adoptMarkdown(
+      "## Setup\n\nRead `docs/guide.md` first.\n",
+      "CLAUDE.md",
+      { exists },
+    );
+    expect(r.source).toMatch(/\$\{file\("docs\/guide\.md"\)\}/);
+    expect(r.adoptedRefs).toEqual(["docs/guide.md"]);
+    expect(r.source).toMatch(/import \{ instructionFile, file \}/);
+  });
+
+  it("leaves a path that does NOT resolve as inert prose", () => {
+    // The 907-unresolvable half of the adopter's corpus: paths inside the repo a
+    // skill DESCRIBES. Emitting these is what would make compile start red.
+    const r = adoptMarkdown(
+      "## X\n\nSee `internal/checkout/service.go`.\n",
+      "CLAUDE.md",
+      { exists },
+    );
+    expect(r.source).not.toMatch(/\$\{file\(/);
+    expect(r.adoptedRefs).toEqual([]);
+    expect(r.source).toMatch(/import \{ instructionFile \}/);
+  });
+
+  it("never emits a URL, an absolute path, a home path or an escape", () => {
+    const md =
+      "## X\n\n`https://ex.com/a/b` `/etc/passwd` `~/.ssh/id_rsa` `../../etc/x`\n";
+    const r = adoptMarkdown(md, "CLAUDE.md", { exists: () => true });
+    expect(r.adoptedRefs).toEqual([]);
+  });
+
+  it("ignores a path inside a fenced block — it is example code, not a claim", () => {
+    // The path inside the fence is BACKTICKED — a markdown example. Without that
+    // the matcher never reaches it and the fence guard is not exercised at all
+    // (measured: a mutation removing the guard stayed green on the earlier fixture).
+    const md =
+      "## X\n\n````md\nSee `docs/guide.md` in the guide\n````\n\nAnd `docs/guide.md` in prose.\n";
+    const r = adoptMarkdown(md, "CLAUDE.md", { exists });
+    // Exactly one: the prose mention, never the fenced one.
+    expect(r.adoptedRefs).toEqual(["docs/guide.md"]);
+  });
+
+  it("without an exists predicate the behaviour is unchanged (extract nothing)", () => {
+    const r = adoptMarkdown("## X\n\nRead `docs/guide.md`.\n", "CLAUDE.md");
+    expect(r.source).not.toMatch(/\$\{file\(/);
+    expect(r.source).toMatch(/import \{ instructionFile \}/);
+  });
+});

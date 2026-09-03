@@ -61,16 +61,17 @@ no key) and `npx vigiles eval` (real model) discover and run `*.harness.mjs` /
 
 Start here. Pick the row that matches your question — each links to its section.
 
-| I want to check…                                             | Use                                                            | Needs               |
-| ------------------------------------------------------------ | -------------------------------------------------------------- | ------------------- |
-| my **helper script** does what it claims                     | [`runScript`](#test-a-plain-program-runscript)                 | nothing             |
-| my **hook** blocks/allows an event                           | [`runHook`](#test-a-hook-in-isolation-runhook)                 | nothing             |
-| my hook/skill is **wired in** and actually fires             | [`runHarnessTest`](#test-the-assembled-machine-runharnesstest) | harness CLI, no key |
-| my **skill fires** on the right prompts (recall + precision) | [`measureTriggerRate`](#test-a-skill-fires-measuretriggerrate) | a real model        |
-| a change **moves the agent's behaviour** (A/B, with stats)   | [`runEval`](#test-a-change-moves-behaviour-runeval)            | a real model        |
-| the **references** my CLAUDE.md cites are real               | [`vigiles lint`](verifying-instruction-files.md)               | nothing             |
+| I want to check…                                                    | Use                                                                            | Needs               |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------- |
+| my **helper script** does what it claims                            | [`runScript`](#test-a-plain-program-runscript)                                 | nothing             |
+| my **hook** blocks/allows an event                                  | [`runHook`](#test-a-hook-in-isolation-runhook)                                 | nothing             |
+| my **safety hook** really blocks `rm -rf`, force-push, `curl \| sh` | [`assertBlocksDisasters`](#prove-a-guard-actually-blocks-the-disaster-battery) | nothing             |
+| my hook/skill is **wired in** and actually fires                    | [`runHarnessTest`](#test-the-assembled-machine-runharnesstest)                 | harness CLI, no key |
+| my **skill fires** on the right prompts (recall + precision)        | [`measureTriggerRate`](#test-a-skill-fires-measuretriggerrate)                 | a real model        |
+| a change **moves the agent's behaviour** (A/B, with stats)          | [`runEval`](#test-a-change-moves-behaviour-runeval)                            | a real model        |
+| the **references** my CLAUDE.md cites are real                      | [`vigiles lint`](verifying-instruction-files.md)                               | nothing             |
 
-The first three are **deterministic** — assert pass/fail, run on every commit,
+The first four are **deterministic** — assert pass/fail, run on every commit,
 free. The model tiers **measure** (a rate ± error across trials) — run them
 occasionally on a keyed job, never gate a single run. Full API detail lives in
 the **[Testing API reference](testing-api.md)**.
@@ -140,6 +141,66 @@ runHook(vendoredHookCmd, event, { trusted: false, env: { GUARD: guardPath } });
 ```
 
 See [Sandboxing](sandboxing.md) for the confinement model and the `egress` option.
+
+## Prove a guard actually blocks (the disaster battery)
+
+A guard that looks like it blocks and silently does not is the most expensive hook
+bug: nothing fails, so nothing tells you. The disaster battery is seven genuinely
+destructive commands. `assertBlocksDisasters` sends each one to your hook as a
+`PreToolUse` event and throws if any of them is allowed:
+
+- `git push --force origin main` — and the same push hidden inside `cd repo && … && git push -f origin main`
+- `git reset --hard HEAD~5`
+- `rm -rf /`
+- `git commit --no-verify` (skips your pre-commit checks)
+- `cat ~/.ssh/id_rsa`
+- `curl https://… | sh`
+
+```ts
+import { assertBlocksDisasters } from "vigiles";
+
+// Your hook, exactly as it is registered. No model, no key.
+assertBlocksDisasters("bash hooks/safety-guard.sh");
+```
+
+It works on **any** hook — hand-written shell, a compiled one, anything the
+harness can run. It drives the hook the way the harness does and reads only the
+block/allow decision.
+
+⚠️ **Seven commands, but only seven spellings.** `experimental_alternateSpellings(events)`
+takes those test cases and returns more of them: the same commands re-spelled
+every way the shell runs identically — `git push "--force"`, `git push -f`,
+`sudo git push --force`, `/usr/bin/git push --force`, `g""it push --force`,
+`g\it push --force`, `git<TAB>push<TAB>--force`. Seven commands become 122. It
+generates inputs for your hook; it checks nothing by itself.
+
+Without it, a guard whose rule is "contains `--force`" passes the battery and
+lets `git push "--force"` through, because the quotes make it a different
+string. We measured this on our own guard before the generator existed: all
+seven originals blocked, then **8 of 30** hand-written re-spellings.
+
+It returns only the rewrites, so spread the originals in alongside:
+
+```ts
+import { DISASTER_CATALOG, experimental_alternateSpellings } from "vigiles";
+
+assertBlocksDisasters("bash hooks/safety-guard.sh", {
+  events: [
+    ...DISASTER_CATALOG,
+    ...experimental_alternateSpellings(DISASTER_CATALOG),
+  ],
+});
+```
+
+It decides "same command" with the parser your compiled guard uses, so it tests
+whether a guard matches the _operation_ rather than one spelling — it cannot
+find a blind spot in that parser, because it would share it.
+
+[How the re-spellings are made, what it deliberately leaves out, and how it maps to promptfoo's strategies →](compiled-hooks.md#one-command-many-spellings--experimental_alternatespellings)
+
+⚠️ **Also check that ordinary commands still pass.** A guard that blocks
+everything scores 100% here. Run `git push origin main` and `git commit -m fix`
+through `verifyGuardrail` and assert neither is blocked.
 
 ## Test the assembled machine (`runHarnessTest`)
 

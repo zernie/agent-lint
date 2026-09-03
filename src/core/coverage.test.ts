@@ -68,7 +68,7 @@ describe("collectDocumentedCommands", () => {
         },
       }),
     ];
-    const commands = collectDocumentedCommands(".", specs);
+    const commands = collectDocumentedCommands(".", specs, []);
     assert.ok(commands.has("npm run build"));
     assert.ok(commands.has("npm test"));
     assert.ok(commands.has("npm run fmt"));
@@ -79,20 +79,20 @@ describe("collectDocumentedCommands", () => {
       makeSpec({ commands: { "npm test": "Test" } }),
       makeSpec({ commands: { "npm run build": "Build" } }),
     ];
-    const commands = collectDocumentedCommands(".", specs);
+    const commands = collectDocumentedCommands(".", specs, []);
     assert.ok(commands.has("npm test"));
     assert.ok(commands.has("npm run build"));
   });
 
   it("returns empty set for specs without commands", () => {
     const specs: ClaudeSpec[] = [makeSpec()];
-    const commands = collectDocumentedCommands(".", specs);
+    const commands = collectDocumentedCommands(".", specs, []);
     assert.equal(commands.size, 0);
   });
 
   it("returns empty set when no specs provided and no compiled files", () => {
     const emptyDir = makeTmpDir();
-    const commands = collectDocumentedCommands(emptyDir);
+    const commands = collectDocumentedCommands(emptyDir, undefined, []);
     assert.equal(commands.size, 0);
     cleanupTmpDir(emptyDir);
   });
@@ -136,30 +136,30 @@ describe("computeScriptCoverage", () => {
   });
 
   it("computes correct coverage", () => {
-    const metric = computeScriptCoverage(tmpDir, undefined, specs);
+    const metric = computeScriptCoverage(tmpDir, undefined, specs, []);
     assert.equal(metric.total, 5);
     assert.equal(metric.covered, 3); // build, test, fmt
     assert.equal(metric.percent, 60);
   });
 
   it("reports uncovered scripts", () => {
-    const metric = computeScriptCoverage(tmpDir, undefined, specs);
+    const metric = computeScriptCoverage(tmpDir, undefined, specs, []);
     assert.ok(metric.uncoveredItems.includes("lint"));
     assert.ok(metric.uncoveredItems.includes("deploy"));
   });
 
   it("passes when no threshold set", () => {
-    const metric = computeScriptCoverage(tmpDir, undefined, specs);
+    const metric = computeScriptCoverage(tmpDir, undefined, specs, []);
     assert.equal(metric.passing, true);
   });
 
   it("passes when above threshold", () => {
-    const metric = computeScriptCoverage(tmpDir, 50, specs);
+    const metric = computeScriptCoverage(tmpDir, 50, specs, []);
     assert.equal(metric.passing, true);
   });
 
   it("fails when below threshold", () => {
-    const metric = computeScriptCoverage(tmpDir, 80, specs);
+    const metric = computeScriptCoverage(tmpDir, 80, specs, []);
     assert.equal(metric.passing, false);
   });
 });
@@ -224,6 +224,7 @@ describe("checkCoverage", () => {
       10,
       5,
       checkSpecs,
+      [],
     );
     assert.equal(report.passing, true);
   });
@@ -235,12 +236,13 @@ describe("checkCoverage", () => {
       10,
       5,
       checkSpecs,
+      [],
     );
     assert.equal(report.passing, false);
   });
 
   it("passes with no thresholds", () => {
-    const report = checkCoverage(tmpDir, {}, 10, 5, checkSpecs);
+    const report = checkCoverage(tmpDir, {}, 10, 5, checkSpecs, []);
     assert.equal(report.passing, true);
   });
 });

@@ -19,9 +19,13 @@ import { writeFileSync, chmodSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
+  DISASTER_CATALOG,
   verifyGuardrail,
   unblockedDisasters,
   assertBlocksDisasters,
+  experimental_alternateSpellings,
+  type DisasterEvent,
+  type DisasterCategory,
 } from "./guardrail-check.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
@@ -165,4 +169,98 @@ test("a guard that only says continue:true still fails the battery", () => {
   } finally {
     cleanupTmpDir(dir);
   }
+});
+
+// ---------------------------------------------------------------------------
+// The same seed, rewritten so the SHELL sees the same thing (2026-09-02)
+// ---------------------------------------------------------------------------
+/**
+ * The 7/7 headline was measured on the seven seeds AS WRITTEN, and three ordinary
+ * rewrites walked past the guard: `git push "--force" …`, `sudo git push --force …`,
+ * `/usr/bin/git push --force …` all exited 0 while the plain form exited 2.
+ *
+ * The cases are GENERATED, not listed. An earlier version of this block listed
+ * nine rewrites by hand and passed — then `experimental_alternateSpellings` produced 73 and
+ * one of them, `git commit -n -m …`, still got through: the guard asks for the
+ * literal `--no-verify` and `-n` is a different string. Nine hand-written rows
+ * are the same bounded set that produced the original gap, which is the whole
+ * argument for generating them.
+ *
+ * Nothing new is judged: `dangerous` is inherited from the catalog seed a human
+ * labelled, `same command` is decided by the normalizer, and a rewrite failing
+ * that check throws inside the generator rather than reaching this test.
+ */
+// COST, stated because it grows with every family: each spelling spawns the
+// real CLI once, so this is O(spellings) process launches — measured 85s for
+// 143 events (7 seeds + 136 rewrites) against the default 60s limit. Raise the
+// timeout deliberately; if it ever needs raising again, that is the signal to
+// batch the runs rather than to keep buying time.
+test("every shell-equivalent rewrite of the battery is still blocked", () => {
+  const events = experimental_alternateSpellings(DISASTER_CATALOG);
+  assert.ok(
+    events.length > 30,
+    `expected a real corpus, got ${String(events.length)}`,
+  );
+  const missed = unblockedDisasters(
+    verifyGuardrail(`node ${CLI} hook-runtime run-program ${COMPILED_GUARD}`, {
+      cwd: REPO_ROOT,
+      events,
+    }),
+  ).map((m) => String(m.event.input["command"]));
+  assert.deepEqual(
+    missed,
+    [],
+    "a rewrite the shell reads identically must not change the verdict",
+  );
+}, 240_000);
+
+test("g\\it push --force is blocked (a spelling the battery could not have found)", () => {
+  // `sh -c 'g\it --version'` runs git: a backslash before an ordinary character is
+  // that character. mvdan-sh keeps it, the normalizer used to keep it too, and the
+  // guard behind the 7/7 let `g\it push --force origin main` through. The battery
+  // shares that normalizer, so it could not emit this spelling until the
+  // normalizer learned it — a reader found it, not the generator. Pinned here so
+  // it cannot come back, and the generator now emits it (family "escaped
+  // character in head").
+  const seed = DISASTER_CATALOG.find((e) => e.id === "force-push");
+  assert.ok(seed, "the catalog names a force-push seed");
+  const missed = unblockedDisasters(
+    verifyGuardrail(`node ${CLI} hook-runtime run-program ${COMPILED_GUARD}`, {
+      cwd: REPO_ROOT,
+      events: [
+        {
+          ...seed,
+          id: "force-push~escaped-head",
+          input: { command: "g\\it push --force origin main" },
+        },
+      ],
+    }),
+  );
+  assert.deepEqual(missed, []);
+});
+
+test("the guard did not become a blunt blocker", () => {
+  // PRECISION. Over-blocking is what gets a guard switched off. These are the
+  // commands a developer types all day; if the matcher starts denying them the
+  // battery number above is worthless.
+  const benign: DisasterEvent[] = [
+    "git push origin main",
+    "git commit -m fix",
+    "git reset --soft HEAD~1",
+    "echo git push --force",
+    "cat README.md",
+  ].map((command, i) => ({
+    id: `benign-${String(i)}`,
+    label: command,
+    category: "destructive-git" as DisasterCategory,
+    tool: "Bash",
+    input: { command },
+  }));
+  const blocked = verifyGuardrail(
+    `node ${CLI} hook-runtime run-program ${COMPILED_GUARD}`,
+    { cwd: REPO_ROOT, events: benign },
+  )
+    .filter((r) => r.blocked)
+    .map((r) => r.event.label);
+  assert.deepEqual(blocked, [], "a benign command must still pass");
 });

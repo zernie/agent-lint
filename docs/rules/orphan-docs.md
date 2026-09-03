@@ -35,11 +35,11 @@ signal is a proxy, not a decidable fact.
 }
 ```
 
-| Key       | Default            | Meaning                                                                                                                                     |
-| --------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| (block)   | absent → **off**   | The block's **presence** opts the repo in — no block, no scan.                                                                              |
-| `include` | `["docs/**/*.md"]` | Dirs to hold to the rule. `docs/` is the convention; add others (e.g. a `research/` notes tree) explicitly. `[]` = opted in, scans nothing. |
-| `exclude` | `[]`               | Globs to drop from the candidate set.                                                                                                       |
+| Key       | Default            | Meaning                                                                                                                                                                           |
+| --------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| (block)   | absent → **off**   | The block's **presence** opts the repo in — no block, no scan.                                                                                                                    |
+| `include` | `["docs/**/*.md"]` | Dirs to hold to the rule. `docs/` is the convention; add others (e.g. a `research/` notes tree) explicitly. `[]` = opted in, scans nothing.                                       |
+| `exclude` | `[]`               | Globs to drop from the candidate set. The repo-wide top-level `exclude` is the floor under it: an excluded corpus is neither a candidate nor a referencer that keeps a doc alive. |
 
 `docs/` is the near-universal convention, so it's the default when you opt in
 without naming dirs. A vigiles-specific dir like `research/` is **not** in the

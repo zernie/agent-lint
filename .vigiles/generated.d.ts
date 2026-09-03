@@ -101,7 +101,7 @@ declare module "vigiles/generated" {
     | "internal:check"
     | "docs:api";
 
-  /** 406 project files. */
+  /** 411 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -219,6 +219,8 @@ declare module "vigiles/generated" {
     | "src/core/bash-effects-normalized.test.ts"
     | "src/core/bash-effects.test.ts"
     | "src/core/bash-effects.ts"
+    | "src/core/bash-equivalents.test.ts"
+    | "src/core/bash-equivalents.ts"
     | "src/core/capability-diff.test.ts"
     | "src/core/capability-diff.ts"
     | "src/core/cedar.test.ts"
@@ -383,6 +385,9 @@ declare module "vigiles/generated" {
     | "src/eval.ts"
     | "src/example-imports.test.ts"
     | "src/examples-syntax.test.ts"
+    | "src/exclude-cli.test.ts"
+    | "src/exclude.test.ts"
+    | "src/exclude.ts"
     | "src/experimental-emit.test.ts"
     | "src/experimental-emit.ts"
     | "src/fs-walk.test.ts"
@@ -697,6 +702,8 @@ declare module "vigiles/spec" {
       | "src/core/bash-effects-normalized.test.ts"
       | "src/core/bash-effects.test.ts"
       | "src/core/bash-effects.ts"
+      | "src/core/bash-equivalents.test.ts"
+      | "src/core/bash-equivalents.ts"
       | "src/core/capability-diff.test.ts"
       | "src/core/capability-diff.ts"
       | "src/core/cedar.test.ts"
@@ -861,6 +868,9 @@ declare module "vigiles/spec" {
       | "src/eval.ts"
       | "src/example-imports.test.ts"
       | "src/examples-syntax.test.ts"
+      | "src/exclude-cli.test.ts"
+      | "src/exclude.test.ts"
+      | "src/exclude.ts"
       | "src/experimental-emit.test.ts"
       | "src/experimental-emit.ts"
       | "src/fs-walk.test.ts"

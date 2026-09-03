@@ -22,7 +22,7 @@ The docs are grouped by what you're trying to do:
 
 ### Test & measure your harness (the Test + Eval layers)
 
-- [`harness-testing.md`](harness-testing.md) — task-first how-to: pick what you want to test (hook / wiring / skill firing / behaviour) and the tier that answers it, with a copy-paste first test and CI.
+- [`harness-testing.md`](harness-testing.md) — task-first how-to: pick what you want to test (hook / safety-hook battery / wiring / skill firing / behaviour) and the tier that answers it, with a copy-paste first test and CI.
   - [`harness-testing-claude-code.md`](harness-testing-claude-code.md) — Claude Code specifics: `scriptModel`, `${CLAUDE_PLUGIN_ROOT}` / `pluginDir` / the `Skill` tool, the bubblewrap sandbox.
   - [`harness-testing-codex.md`](harness-testing-codex.md) — Codex specifics: `runHarnessTest({ adapter: codexAdapter })` against real `codex exec`, the Responses mock, what maps and what doesn't.
 - [`measuring-skills.md`](measuring-skills.md) — A/B a skill, plugin, model, or rule change on real coding tasks: the metric triple (bill / target / blast-radius), the worked example, and why it's affordable on your subscription.
@@ -69,4 +69,5 @@ The docs are grouped by what you're trying to do:
 - [`comparison.md`](comparison.md) — before/after tables, the determinism breakdown, the flow diagram, and what vigiles composes with rather than replaces.
 - [`sandboxing.md`](sandboxing.md) — what the sandbox isolates vs records (honestly): IO / `rm -rf`, the three network modes, tiers and limits.
 - [`emit-channel.md`](emit-channel.md) — `experimental_emitTool`: a skill returns a typed result by calling a tool instead of ending its turn, which is how an INLINE skill can carry an output contract at all. Includes the measurements, and when to prefer the stable `output:` instead.
+- [`experimental.md`](experimental.md) — what an `experimental_` name promises (nothing), what is experimental today, and what has to be true before the prefix comes off.
 - [`faq.md`](faq.md) — the front-door FAQ across all four layers.

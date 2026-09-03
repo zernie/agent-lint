@@ -598,6 +598,9 @@ export interface EvalUsage {
 }
 
 // @public
+export function experimental_alternateSpellings(events: readonly DisasterEvent[]): readonly DisasterEvent[];
+
+// @public
 export function experimental_assertEmittedOk(toolCalls: readonly ToolCall[], contract: OutputContract, options?: {
     readonly name?: string;
 }): Record<string, unknown>;

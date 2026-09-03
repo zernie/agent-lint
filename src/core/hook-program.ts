@@ -687,9 +687,52 @@ export function commandView(raw: string, root?: string): CommandView {
     raw,
     runs(program, opts) {
       const tokens = program.split(/\s+/).filter(Boolean);
-      return leaves.some(
+      // 🔴 READS RAW **AND** NORMALIZED ARGV — the same union `touches` already
+      // uses, and for the same reason. This matcher read only `leaves` (raw), so
+      // three ordinary rewrites walked past a guard that blocks the plain form.
+      // MEASURED 2026-09-02 on the shipped dogfood artifact behind the public
+      // 7/7 claim (`examples/harness/safe-bash-guard.mjs`):
+      //   git push --force origin main            exit 2  blocked
+      //   git push "--force" origin main          exit 0  ALLOWED
+      //   sudo git push --force origin main       exit 0  ALLOWED
+      //   /usr/bin/git push --force origin main   exit 0  ALLOWED
+      // Across 30 shell-equivalent variants of the seven catalog seeds the guard
+      // blocked 8. The seeds were 7/7 — the number was true and measured on the
+      // only forms anyone had written down.
+      //
+      // The quoting case is the sharpest: `getLiteral` (bash-effects) returns
+      // null for a quoted word, and `leafCommands` FILTERS nulls, so
+      // `git push "--force" origin main` arrives as [git, push, origin, main] —
+      // a NON-force push. The force check was answering correctly about an argv
+      // that had already lost the flag.
+      //
+      // Force is asked of the NORMALIZED leaf via `hasFlag`, not by re-scanning
+      // strings: short clusters are already split (`-rf`→r,f) and each flag is
+      // recorded in both short and long form, so `-f` and `--force` are one
+      // question. The raw half stays because it is what an exact-literal match
+      // is for; neither half alone is enough, which is exactly what the comment
+      // on `touches` says about its own union.
+      const rawHit = leaves.some(
         (argv) =>
           runsSeq(argv, tokens) && (opts?.force ? hasForce(argv) : true),
+      );
+      if (rawHit) return true;
+      // A FLAG named in the pattern is asked of `hasFlag`, not matched as a
+      // literal token. The normalized leaf already records every flag in BOTH
+      // short and long form, so `runs("git commit --no-verify")` also catches
+      // `git commit -n` — which the literal path cannot, because `-n` is simply
+      // a different string. Found by the generated battery on its first real
+      // run: 72/73, and the one miss was exactly this
+      // (`git commit -n -m 'skip hooks'`). The `{force:true}` option exists
+      // because force needed this for `-f`; every other flag needed it too and
+      // nobody noticed, since nobody wrote the short form down by hand.
+      const flagTokens = tokens.filter((t) => t.startsWith("-"));
+      const plainTokens = tokens.filter((t) => !t.startsWith("-"));
+      return normalized.some(
+        (leaf) =>
+          runsSeq(leaf.argv, plainTokens) &&
+          flagTokens.every((t) => leaf.hasFlag(t.replace(/^-+/, ""))) &&
+          (opts?.force ? leaf.hasFlag("force", "f") : true),
       );
     },
     isSideEffecting: () => classifyBashCommand(raw) === "side-effecting",
@@ -739,7 +782,13 @@ export function commandView(raw: string, root?: string): CommandView {
     // normalized ones, and a gate built on both had a silent hole).
     writesTo: (prefixes) => matchedWriteTargets(prefixes).length > 0,
     writeTargets: matchedWriteTargets,
-    pipesToShell: () => leaves.some(isBareShellLeaf),
+    // Same union, same reason: `curl … | /bin/sh` and `curl … | sudo sh` are a
+    // pipe-to-shell, and a raw-only check misses both (`isBareShellLeaf` tests
+    // the head literally, and the normalizer is what reduces `/bin/sh`→`sh` and
+    // strips the wrapper).
+    pipesToShell: () =>
+      leaves.some(isBareShellLeaf) ||
+      normalized.some((leaf) => isBareShellLeaf(leaf.argv)),
   };
 }
 

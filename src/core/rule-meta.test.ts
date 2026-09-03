@@ -1,10 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { RULE_META, allRuleMeta, type RuleName } from "./rule-meta.js";
 import { DEFAULT_RULES } from "./validate.js";
 
 const RULES_DOC_DIR = join(__dirname, "..", "..", "docs", "rules");
+const RULES_MATRIX = join(
+  __dirname,
+  "..",
+  "..",
+  "docs",
+  "verifying-instruction-files.md",
+);
 
 function docRuleNames(): string[] {
   return readdirSync(RULES_DOC_DIR)
@@ -18,6 +25,35 @@ describe("RULE_META registry", () => {
     const metas = Object.keys(RULE_META).sort();
     // Every doc has a meta AND every meta has a doc — the rule SET is one thing.
     expect(metas).toEqual(docs);
+  });
+
+  // 🔴 The registry was already bound to `docs/rules/*.md`, and that pair still
+  // let TWO rules (`spec-refs`, `duplicate-rules`) sit outside the canonical
+  // matrix for as long as they have existed: each had a meta AND a doc, so the
+  // set-equality above passed, while the ONE list a reader consults never named
+  // them. Their only symptom was an orphan-doc warning — the doc was unreachable
+  // BECAUSE the matrix did not link it — which is a symptom of the wrong thing
+  // and reads as docs housekeeping rather than a missing rule.
+  //
+  // Matched on a TABLE ROW (`| [` … `](rules/<name>.md)`), not on "appears in the
+  // file": a rule name dropped into the prose of that page would otherwise count
+  // as documented. That keeps this a within-line token match, so it needs no
+  // fence/heading state and cannot carry the toggle bug the shared markdown
+  // helper exists to prevent.
+  it("every rule has a ROW in the canonical matrix (docs/verifying-instruction-files.md)", () => {
+    const matrix = readFileSync(RULES_MATRIX, "utf8");
+    const linked = new Set(
+      [
+        ...matrix.matchAll(/^\|\s*\[`[^`]+`\]\(rules\/([a-z0-9-]+)\.md\)/gm),
+      ].map((m) => m[1]),
+    );
+    const missing = Object.keys(RULE_META)
+      .filter((name) => !linked.has(name))
+      .sort();
+    expect(
+      missing,
+      `rule(s) with no row in the matrix — a reader looking up the rule set will not find them: ${missing.join(", ")}`,
+    ).toEqual([]);
   });
 
   it("each meta's defaultSeverity matches the real DEFAULT_RULES", () => {
