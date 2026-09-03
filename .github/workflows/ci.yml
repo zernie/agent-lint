@@ -206,7 +206,15 @@ jobs:
           CC=$(grep -oP -m1 'VALIDATED_CC_VERSION = "\K[0-9.]+' src/dialect-drift.ts)
           [ -n "$CC" ] || { echo "could not read VALIDATED_CC_VERSION"; exit 1; }
           echo "Pinning @anthropic-ai/claude-code@$CC"
-          npm i -g "@anthropic-ai/claude-code@$CC" @openai/codex
+          # Codex is pinned for the SAME reason, and the reason stopped being
+          # hypothetical on 2026-09-03: `latest` was 0.153.1, whose TARBALL
+          # 404s while its registry metadata still resolves, so `npm i -g
+          # @openai/codex` failed for every job on every branch — a red CI
+          # nobody's diff caused. Reproduced: metadata `npm view` returns
+          # 0.153.1, GET .../codex-0.153.1.tgz is 404; 0.153.0 and older are
+          # 200. Leaving this unpinned beside a deliberately pinned
+          # claude-code let one upstream publish take the build down.
+          npm i -g "@anthropic-ai/claude-code@$CC" "@openai/codex@0.153.0"
           sudo apt-get update && sudo apt-get install -y bubblewrap
 
       - name: Allow unprivileged user namespaces (Ubuntu 24.04 AppArmor restriction)
