@@ -43,8 +43,15 @@ export interface FindOrphansOptions {
    * or to your project's doc globs (e.g. `["wiki/**\/*.md"]`) to override.
    */
   readonly include?: readonly string[];
-  /** Glob patterns to exclude within the include scope. */
+  /** Glob patterns to exclude within the include scope (orphan CANDIDACY only). */
   readonly exclude?: readonly string[];
+  /**
+   * The repo-wide `.vigilesrc.json#exclude` (the ExcludeSet string face,
+   * src/exclude.ts). Applied to BOTH walks — candidates AND the reference scan —
+   * so an excluded corpus can neither be an orphan nor keep one alive (#192).
+   * The CLI always passes it; a direct library caller may omit it.
+   */
+  readonly repoExclude?: readonly string[];
   /**
    * Harnesses whose surface files (instruction file, `SKILL.md`, subagents,
    * commands) are load-bearing by location and thus never orphan CANDIDATES
@@ -205,14 +212,20 @@ export function findOrphanDocs(options: FindOrphansOptions = {}): OrphanReport {
   const basePath = options.basePath ?? process.cwd();
   const include = options.include ?? DEFAULT_INCLUDE;
   const userExclude = options.exclude ?? [];
-  const ignore = [...DEFAULT_IGNORE, ...userExclude];
+  // Two exclusions with two jobs (#192). `repoExclude` is the repo-wide
+  // `.vigilesrc.json#exclude` — a vendored corpus is neither an orphan
+  // CANDIDATE nor a SOURCE of references (a link from inside it must not keep a
+  // doc alive). The rule's own `exclude` only narrows candidacy: a doc kept out
+  // of the orphan list can still reference others. Union, never override.
+  const repoExclude = options.repoExclude ?? [];
+  const ignore = [...DEFAULT_IGNORE, ...repoExclude, ...userExclude];
   const layouts = options.layouts ?? [];
 
   const allDocs = collectDocs(basePath, include, ignore, layouts);
 
   const allMarkdown = globSync("**/*.md", {
     cwd: basePath,
-    ignore: [...DEFAULT_IGNORE],
+    ignore: [...DEFAULT_IGNORE, ...repoExclude],
   });
   const referencedBy = new Map<string, Set<string>>();
 

@@ -92,6 +92,7 @@ export default defineConfig({
         "src/core/rule-catalog.ts",
         "src/instruction-sources.ts",
         "src/share-link.ts",
+        "src/exclude.ts",
       ],
       // 100% lines/functions/statements. Branches floor at 90: the remainder
       // are defensive fallbacks that can't be hit deterministically — `?? ""` on

@@ -191,6 +191,64 @@ describe("findOrphanDocs()", () => {
     }
   });
 
+  it("repoExclude drops an excluded corpus from BOTH walks: not a candidate, not a referencer (#192)", () => {
+    const dir = makeTmpDir("orphans-repo-exclude");
+    try {
+      mkdirSync(join(dir, "docs"), { recursive: true });
+      mkdirSync(join(dir, "vendored/docs"), { recursive: true });
+      // kept.md is referenced ONLY from inside the vendored corpus.
+      writeFileSync(join(dir, "docs/kept.md"), "# kept");
+      writeFileSync(
+        join(dir, "vendored/docs/theirs.md"),
+        "see [kept](../../docs/kept.md)",
+      );
+      writeFileSync(join(dir, "README.md"), "hello");
+      const include = ["docs/**/*.md", "vendored/docs/**/*.md"];
+
+      // Control (no repoExclude): the vendored link keeps kept.md alive, and the
+      // vendored doc itself is an orphan candidate — so the exclusion below is
+      // observable in both directions, not a no-op on an empty scan.
+      const control = findOrphanDocs({ basePath: dir, include });
+      assert.equal(control.totalDocs, 2);
+      assert.deepEqual([...control.orphans], ["vendored/docs/theirs.md"]);
+
+      // Bare directory name, no `/**` — the spelling the string-glob dialect
+      // silently ignored (measured 2026-09-03); passed here the way the CLI
+      // passes it, as the ExcludeSet string face (name + name/**).
+      const excluded = findOrphanDocs({
+        basePath: dir,
+        include,
+        repoExclude: ["vendored", "vendored/**"],
+      });
+      assert.equal(
+        excluded.totalDocs,
+        1,
+        "the vendored doc is no longer a candidate",
+      );
+      assert.deepEqual(
+        [...excluded.orphans],
+        ["docs/kept.md"],
+        "a link from an excluded corpus no longer keeps a doc alive",
+      );
+
+      // The rule-level `exclude` narrows CANDIDACY only: with it (and no
+      // repoExclude) the vendored doc still counts as a referencer.
+      const narrowed = findOrphanDocs({
+        basePath: dir,
+        include,
+        exclude: ["vendored/**"],
+      });
+      assert.equal(narrowed.totalDocs, 1);
+      assert.deepEqual(
+        [...narrowed.orphans],
+        [],
+        "kept.md is still referenced by the vendored doc",
+      );
+    } finally {
+      cleanupTmpDir(dir);
+    }
+  });
+
   it("empty include disables scanning (no orphans reported)", () => {
     const dir = makeTmpDir("orphans-empty-include");
     try {

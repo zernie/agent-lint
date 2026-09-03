@@ -66,6 +66,25 @@ const CC_LITERAL_MSG =
   "layout.manifestPath. CC literals belong only in src/adapters/claude-code/ " +
   "(or the CC-specific eval transport). See research/code-adapter-architecture.md.";
 
+/** The discovery-boundary selectors (see the block that uses them, below). */
+const DISCOVERY_SELECTORS = [
+  {
+    selector:
+      'CallExpression[callee.name="globSync"]:not(:has(Property[key.name="ignore"]))',
+    message:
+      "globSync without an `ignore` walks the user's repo with no exclusion at all. " +
+      "Pass the ExcludeSet from src/exclude.ts (`ignore: excludes.globIgnore` for a " +
+      "glob that may be rooted below the repo, `excludes.ignore` for one rooted at it).",
+  },
+  {
+    selector:
+      'CallExpression[callee.name="globSync"] Property[key.name="ignore"] > ArrayExpression > Literal',
+    message:
+      "A hard-coded ignore list is the #192 bug shape — it silently drops " +
+      ".vigilesrc.json#exclude. Build the list from the ExcludeSet (src/exclude.ts).",
+  },
+];
+
 export default [
   {
     // `src/*.md.spec.ts` (nested instruction-file specs) are excluded from
@@ -248,6 +267,65 @@ export default [
                 "No barrel imports: import the leaf module that defines this symbol (e.g. ./core/spec.js, ./run-hook.js), not the public barrel entry point (vigiles/<x>). Barrels pull their whole re-export graph and re-leak internal seams. The barrels themselves and tests are exempt.",
             },
           ],
+        },
+      ],
+    },
+  },
+  // Discovery boundary (#192): every walk that polices the USER'S repo must
+  // consume the parsed `.vigilesrc.json#exclude` (src/exclude.ts), never a
+  // private ignore list. `findSpecs` hard-coded its own for a year while the
+  // config's `exclude` never reached it, and the two walks that DID honour it
+  // used two dialects that disagreed on a bare directory name. Three shapes are
+  // refused in the files that hold these walks:
+  //   S1  `globSync(p, {...})` with no `ignore` at all;
+  //   S2  an `ignore` array holding a string LITERAL (`[...X, "dist/**"]` — the
+  //       original bug shape; `[...ignore]`, a spread of an injected list, is fine);
+  //   S3  (cli.ts only) a raw `readdirSync` — the walks that legitimately keep
+  //       one (init's shallow sweep, lint-config collection, eject's safety
+  //       check, the nested-bundle walk that already consumes the ExcludeSet)
+  //       carry an eslint-disable with the exception row from exclude.ts.
+  // Flat config REPLACES a rule's options rather than merging, so the files that
+  // are also harness-agnostic detectors restate the CC-literal selectors here.
+  {
+    files: [
+      "src/core/doc-refs.ts",
+      "src/core/orphans.ts",
+      "src/core/coverage.ts",
+      "src/test-coverage.ts",
+    ],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: `Literal[value=/${CC_LITERAL_RE}/]`,
+          message: CC_LITERAL_MSG,
+        },
+        {
+          selector: `TemplateElement[value.raw=/${CC_LITERAL_RE}/]`,
+          message: CC_LITERAL_MSG,
+        },
+        ...DISCOVERY_SELECTORS,
+      ],
+    },
+  },
+  {
+    files: ["src/cli.ts", "src/adapters/claude-code/run-scripts.ts"],
+    rules: {
+      "no-restricted-syntax": ["error", ...DISCOVERY_SELECTORS],
+    },
+  },
+  {
+    files: ["src/cli.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...DISCOVERY_SELECTORS,
+        {
+          selector: 'CallExpression[callee.name="readdirSync"]',
+          message:
+            "A raw readdirSync walk in cli.ts bypasses the ExcludeSet (src/exclude.ts). " +
+            "Route discovery through it, or — if this walk is one of the named exceptions " +
+            "in exclude.ts's header — add an eslint-disable naming that exception.",
         },
       ],
     },

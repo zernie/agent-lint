@@ -59,7 +59,8 @@ export function readNpmScripts(basePath: string): string[] {
  */
 export function collectDocumentedCommands(
   basePath: string,
-  specs?: ClaudeSpec[],
+  specs: ClaudeSpec[] | undefined,
+  ignore: readonly string[],
 ): Set<string> {
   const commands = new Set<string>();
 
@@ -75,8 +76,12 @@ export function collectDocumentedCommands(
   // Fallback: scan compiled markdown for spec file references, then
   // load the compiled JS spec from dist/. If that fails, try to
   // extract commands from the compiled output (last resort).
+  // `ignore` is the repo's ExcludeSet string face (src/exclude.ts): the floor
+  // plus `.vigilesrc.json#exclude`, required so this fallback cannot walk a
+  // vendored corpus the repo excluded (#192). The CLI always passes `specs`,
+  // so this branch is reached by the library path and tests only.
   const mdFiles = globSync("**/*.md", {
-    ignore: ["node_modules/**", "dist/**", ".vigiles/**"],
+    ignore: [...ignore],
     cwd: basePath,
   });
 
@@ -126,11 +131,12 @@ export function collectDocumentedCommands(
  */
 export function computeScriptCoverage(
   basePath: string,
-  threshold?: number,
-  specs?: ClaudeSpec[],
+  threshold: number | undefined,
+  specs: ClaudeSpec[] | undefined,
+  ignore: readonly string[],
 ): CoverageMetric {
   const allScripts = readNpmScripts(basePath);
-  const documented = collectDocumentedCommands(basePath, specs);
+  const documented = collectDocumentedCommands(basePath, specs, ignore);
 
   const covered: string[] = [];
   const uncovered: string[] = [];
@@ -197,7 +203,8 @@ export function checkCoverage(
   thresholds: CoverageThresholds,
   linterEnabled: number,
   linterDocumented: number,
-  specs?: ClaudeSpec[],
+  specs: ClaudeSpec[] | undefined,
+  ignore: readonly string[],
 ): CoverageReport {
   const metrics: CoverageMetric[] = [];
 
@@ -214,6 +221,7 @@ export function checkCoverage(
     basePath,
     thresholds.scripts,
     specs,
+    ignore,
   );
   metrics.push(scriptMetric);
 

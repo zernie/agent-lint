@@ -33,10 +33,10 @@ import {
   sep as pathSep,
   join,
 } from "node:path";
-import { minimatch } from "minimatch";
 import { repoRelative, type RepoRelativePath } from "./core/repo-path.js";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { globSync } from "glob";
+import { excludeSet, type ExcludeSet } from "./exclude.js";
 import { generateTypes } from "./core/generate-types.js";
 import {
   loadHarnessModel,
@@ -355,20 +355,31 @@ import { loadHook } from "./load-hook.js";
 // Constants
 // ---------------------------------------------------------------------------
 
-const IGNORE_NODE_MODULES = ["node_modules/**"];
+// The always-excluded floor (node_modules/dist/.git/.vigiles) lives in
+// src/exclude.ts, folded into every ExcludeSet — no walk carries a private copy.
 
 // ---------------------------------------------------------------------------
 // Spec loading
 // ---------------------------------------------------------------------------
 
-function findSpecs(pattern?: string): string[] {
+/**
+ * Every `*.md.spec.ts` under cwd that `.vigilesrc.json#exclude` does not drop.
+ *
+ * 🔴 `excludes` IS REQUIRED, NOT DEFAULTED (#192). This function hard-coded its
+ * own ignore list for a year while the loaded config's `exclude` never reached
+ * it — so a repo that excluded a directory of frozen, un-loadable fixtures got
+ * "Compilation complete with errors" on every recompile hook. Eight call sites
+ * each had the config in scope; none passed it. An optional parameter is how
+ * that happens again; a required one makes the ninth call site a tsc error.
+ */
+function findSpecs(excludes: ExcludeSet, pattern?: string): string[] {
   const glob = pattern ?? "**/*.md.spec.ts";
   return globSync(glob, {
     // `dot: true` so specs that live in a sync tool's source slot (e.g.
     // `.ruler/AGENTS.md.spec.ts`, the redirect target) are discovered by
     // compile/lint/the recompile hook — not just root-level specs.
     dot: true,
-    ignore: [...IGNORE_NODE_MODULES, "dist/**", ".git/**"],
+    ignore: excludes.globIgnore,
     cwd: process.cwd(),
   });
 }
@@ -811,9 +822,9 @@ function compileRailwayToFile(
 }
 
 /** Names of every compiled agent spec in the project — resolves delegate() targets. */
-async function collectAgentNames(): Promise<string[]> {
+async function collectAgentNames(excludes: ExcludeSet): Promise<string[]> {
   const names: string[] = [];
-  for (const p of findSpecs()) {
+  for (const p of findSpecs(excludes)) {
     const s = await loadSpec(p);
     if (s && s._specType === "agent") names.push(s.name);
   }
@@ -823,6 +834,7 @@ async function collectAgentNames(): Promise<string[]> {
 async function compile(
   specPaths: string[],
   config: VigilesConfig,
+  excludes: ExcludeSet,
   opts: { harnessFlag?: string } = {},
 ): Promise<boolean> {
   let allValid = true;
@@ -888,7 +900,7 @@ async function compile(
     } else if (spec._specType === "agent") {
       if (!compileAgentToFile(spec, specPath, dialect)) allValid = false;
     } else if (spec._specType === "railway") {
-      knownAgents ??= await collectAgentNames();
+      knownAgents ??= await collectAgentNames(excludes);
       if (!compileRailwayToFile(spec, specPath, knownAgents)) allValid = false;
     }
   }
@@ -1052,6 +1064,7 @@ interface DuplicateResult {
  * Uses information-theoretic distance (gzip-based) — no LLM, fully deterministic.
  */
 async function findDuplicateRules(
+  excludes: ExcludeSet,
   threshold: number = 0.3,
   silent = false,
   scopeFiles?: string[],
@@ -1059,7 +1072,7 @@ async function findDuplicateRules(
   const log = (msg: string): void => {
     if (!silent) console.log(msg);
   };
-  const allSpecs = findSpecs();
+  const allSpecs = findSpecs(excludes);
   // If lint was invoked with explicit file arguments, only scan the specs
   // for those files — otherwise an unrelated duplicate elsewhere in the
   // repo would fail a targeted CI check (e.g. `vigiles lint path/foo.md`).
@@ -1743,7 +1756,7 @@ function sharedDirsRootFor(scanTarget: string): string {
  */
 export function discoverNestedBundles(
   root: string,
-  exclude: readonly string[] = [],
+  excludes: ExcludeSet,
 ): string[] {
   const out: string[] = [];
   const skip = new Set([
@@ -1756,17 +1769,14 @@ export function discoverNestedBundles(
   const isBundle = (dir: string): boolean =>
     existsSync(join(dir, ".claude-plugin", "plugin.json")) ||
     existsSync(join(dir, "skills"));
-  const excluded = (rel: string): boolean =>
-    exclude.some(
-      (pattern) =>
-        rel === pattern ||
-        rel.startsWith(`${pattern}/`) ||
-        minimatch(rel, pattern) ||
-        minimatch(rel, `${pattern}/**`),
-    );
+  // Root-relative to the REPO (excludes.root), not to `root`: `lint some/dir`
+  // still honours a repo-root `exclude`. One predicate for every walk (#192).
+  const excluded = (dir: string): boolean =>
+    excludes.matches(relative(excludes.root, dir));
 
   let entries: string[];
   try {
+    // eslint-disable-next-line no-restricted-syntax -- the nested-bundle walk: every entry is filtered by excludes.matches() below
     entries = readdirSync(root, { withFileTypes: true })
       .filter(
         (e) => e.isDirectory() && !skip.has(e.name) && !e.name.startsWith("."),
@@ -1777,7 +1787,7 @@ export function discoverNestedBundles(
   }
   for (const name of entries) {
     const dir = join(root, name);
-    if (excluded(name)) continue;
+    if (excluded(dir)) continue;
     // A container (`plugins/`) holds bundles; a bundle may also sit directly.
     if (isBundle(dir)) {
       out.push(dir);
@@ -1785,6 +1795,7 @@ export function discoverNestedBundles(
     }
     let inner: string[];
     try {
+      // eslint-disable-next-line no-restricted-syntax -- the nested-bundle walk: every entry is filtered by excludes.matches() below
       inner = readdirSync(dir, { withFileTypes: true })
         .filter((e) => e.isDirectory() && !e.name.startsWith("."))
         .map((e) => e.name);
@@ -1793,7 +1804,7 @@ export function discoverNestedBundles(
     }
     for (const child of inner) {
       const sub = join(dir, child);
-      if (excluded(`${name}/${child}`)) continue;
+      if (excluded(sub)) continue;
       if (isBundle(sub)) out.push(sub);
     }
   }
@@ -1854,6 +1865,7 @@ function overBundles<T extends Record<string, number>>(
  * so a repo with no specs does no extra work at all.
  */
 async function checkSpecRefs(
+  excludes: ExcludeSet,
   config: VigilesConfig | undefined,
   silent: boolean,
   dialect: HarnessDialect,
@@ -1861,7 +1873,7 @@ async function checkSpecRefs(
   const sev = ruleSeverity(config?.rules?.["spec-refs"]) ?? "error";
   if (!sev) return { issues: 0, errors: 0 };
   const found: string[] = [];
-  for (const specPath of findSpecs()) {
+  for (const specPath of findSpecs(excludes)) {
     const target = specPath.replace(/\.spec\.ts$/, "");
     if (!existsSync(target)) continue; // never compiled — `compile` reports it
     const spec = await loadSpec(specPath);
@@ -1911,6 +1923,7 @@ function writeArtifact(outputPath: string, artifact: StampedMarkdown): void {
 async function runLint(
   restArgs: string[],
   flags: string[],
+  excludes: ExcludeSet,
   config?: VigilesConfig,
 ): Promise<LintReport> {
   const summary = flags.includes("--summary");
@@ -1961,7 +1974,7 @@ async function runLint(
   // is the false positive that gets a gate turned off. So the DEFAULT fixes the
   // SILENCE, and `bundles: "all"` fixes the COVERAGE — one exit code over the
   // whole repo, which is what a CI gate needs.
-  const nestedBundles = discoverNestedBundles(scanRoot, config?.exclude ?? []);
+  const nestedBundles = discoverNestedBundles(scanRoot, excludes);
   const scoreAll = flags.includes("--bundles=all") || config?.bundles === "all";
   const lintRoots = scoreAll ? [scanRoot, ...nestedBundles] : [scanRoot];
   if (!silent && nestedBundles.length > 0) {
@@ -1983,7 +1996,7 @@ async function runLint(
   // scoped to CLAUDE/AGENTS so agents are never falsely flagged as spec-less.
   const files = findInstructionFiles(
     restArgs,
-    config?.exclude,
+    excludes,
     adapter.layout.agentDir,
   );
 
@@ -2007,20 +2020,21 @@ async function runLint(
 
   // 2. Coverage gaps (discover)
   if (!silent) console.log("\nLinter rule coverage:\n");
-  const coverage = discover(silent);
+  const coverage = discover(excludes, silent);
 
   // 3. Duplicate rule detection (NCD). Scope to the requested files when
   // lint was invoked with explicit paths, so targeted CI checks don't
   // fail on unrelated duplicates elsewhere in the repo.
   if (!silent) console.log("\nDuplicate rule detection:\n");
   const dups = await findDuplicateRules(
+    excludes,
     0.3,
     silent,
     restArgs.length > 0 ? files : undefined,
   );
 
   // 4. Guidance rule count (strengthen suggestions moved to /strengthen skill)
-  const guidanceCount = await countGuidanceRules(silent);
+  const guidanceCount = await countGuidanceRules(excludes, silent);
 
   // 5. Integrity check (hand-edit detection via SHA-256 hash)
   const integritySeverity = config?.rules.integrity ?? "warn";
@@ -2032,6 +2046,7 @@ async function runLint(
 
   // 6. Coverage thresholds (gates CI when severity is "error")
   const coverageErrors = await checkCoverageThresholds(
+    excludes,
     coverage,
     config,
     silent,
@@ -2065,6 +2080,10 @@ async function runLint(
       basePath: process.cwd(),
       include: orphansCfg.include,
       exclude: orphansCfg.exclude,
+      // The repo-wide `exclude` is the FLOOR under the rule's own `exclude`
+      // (union, never override): an excluded corpus is neither an orphan
+      // candidate nor a source of references that keep a doc alive (#192).
+      repoExclude: excludes.ignore,
       // Exempt every registered harness's surface files (instruction file,
       // SKILL.md, subagents, commands) as orphan candidates — layout-driven so
       // core carries no harness literal (see src/core/orphans.ts).
@@ -2086,10 +2105,15 @@ async function runLint(
   // hook} to "error" to gate CI. See src/test-coverage.ts and docs/rules/.
   // A compiled artifact's refs, re-derived from its spec — the hash says the file
   // is unchanged, not that what it names still exists (#173).
-  const specRefs = await checkSpecRefs(config, silent, adapter.dialect);
+  const specRefs = await checkSpecRefs(
+    excludes,
+    config,
+    silent,
+    adapter.dialect,
+  );
 
   const untested = overBundles(
-    checkUntestedSurfaces,
+    (c, s, a, r) => checkUntestedSurfaces(excludes, c, s, a, r),
     config,
     silent,
     adapter,
@@ -2337,7 +2361,7 @@ async function runLint(
   // whose exit code is discarded gates nothing — after which hand-written CI steps
   // grew to do the gating instead. One unpassed argument, that whole chain.
   const docRefReport: DocRefReport = docRefSeverity
-    ? findDocRefs({ basePath: process.cwd(), ignore: config?.exclude })
+    ? findDocRefs({ basePath: process.cwd(), ignore: excludes.ignore })
     : {
         filesScanned: 0,
         filesIgnored: 0,
@@ -2528,10 +2552,10 @@ function printLintSummary(report: LintReport): void {
   }
 }
 
-function collectDocumentedRules(): Set<string> {
+function collectDocumentedRules(excludes: ExcludeSet): Set<string> {
   const documented = new Set<string>();
   const mdFiles = globSync("**/CLAUDE.md", {
-    ignore: IGNORE_NODE_MODULES,
+    ignore: excludes.globIgnore,
     cwd: process.cwd(),
   });
   for (const mdFile of mdFiles) {
@@ -2594,14 +2618,14 @@ function printLinterCoverage(
   return { enabled: linter.rules.length, documented: documented.length };
 }
 
-function discover(silent = false): CoverageTotals {
+function discover(excludes: ExcludeSet, silent = false): CoverageTotals {
   const log = (msg: string): void => {
     if (!silent) console.log(msg);
   };
   log("Scanning project for linter rules...\n");
 
   const result = generateTypes({ basePath: process.cwd() });
-  const documentedRules = collectDocumentedRules();
+  const documentedRules = collectDocumentedRules(excludes);
 
   log("Detected linters:\n");
 
@@ -2718,6 +2742,7 @@ function discoverAdoptableSurfaces(cwd: string): string[] {
   for (const root of ["skills", ".claude/skills"]) {
     const abs = resolve(cwd, root);
     if (!existsSync(abs)) continue;
+    // eslint-disable-next-line no-restricted-syntax -- init's shallow adoptable-surface sweep, top level only (exclude.ts exceptions)
     for (const e of readdirSync(abs, { withFileTypes: true })) {
       const rel = `${root}/${e.name}/SKILL.md`;
       if (e.isDirectory() && unspecced(rel)) out.push(rel);
@@ -2726,6 +2751,7 @@ function discoverAdoptableSurfaces(cwd: string): string[] {
   for (const root of ["agents", ".claude/agents"]) {
     const abs = resolve(cwd, root);
     if (!existsSync(abs)) continue;
+    // eslint-disable-next-line no-restricted-syntax -- init's shallow adoptable-surface sweep, top level only (exclude.ts exceptions)
     for (const e of readdirSync(abs, { withFileTypes: true })) {
       const rel = `${root}/${e.name}`;
       if (e.isFile() && e.name.endsWith(".md") && unspecced(rel)) out.push(rel);
@@ -2805,6 +2831,7 @@ const RULE_INVENTORY_SKIP_DIRS = new Set([
 /** readdir that returns [] instead of throwing (perms, races). */
 function safeReaddir(dir: string) {
   try {
+    // eslint-disable-next-line no-restricted-syntax -- lint-config collection for the linter catalog, not repo policing (exclude.ts exceptions)
     return readdirSync(dir, { withFileTypes: true });
   } catch {
     return [];
@@ -2849,11 +2876,16 @@ function collectLintConfigText(root: string): string {
 function computeRuleInventory(
   root: string,
   instructionFile: string,
+  excludes: ExcludeSet,
 ): RuleInventoryItem[] {
   try {
     // The inventory maps intents → rules; it has no per-file line provenance, so
     // the concatenated text is fine here (unlike the routing preview below).
-    const instructionText = gatherInstructionFiles(root, instructionFile)
+    const instructionText = gatherInstructionFiles(
+      root,
+      instructionFile,
+      excludes,
+    )
       .map((f) => f.text)
       .join("\n");
     if (!instructionText.trim()) return [];
@@ -2874,6 +2906,7 @@ function computeRuleInventory(
 function gatherInstructionFiles(
   root: string,
   instructionFile: string,
+  excludes: ExcludeSet,
 ): { path: string; text: string }[] {
   const raw: RawInstructionFile[] = [];
   const collect = (rel: string): void => {
@@ -2888,11 +2921,14 @@ function gatherInstructionFiles(
   // Root instruction files first (stable, deterministic order).
   for (const name of new Set([instructionFile, "CLAUDE.md", "AGENTS.md"]))
     collect(name);
-  // Nested subdirectory memory, minus fixture/demo/build/test noise.
+  // Nested subdirectory memory, minus fixture/demo/build/test noise. Two
+  // filters, deliberately: `isFixturePath` is the zero-config floor (audit
+  // reads any repo with no .vigilesrc.json), and the configured `exclude` is
+  // unioned ON TOP for the dirs the heuristic cannot guess (#192).
   try {
     const nested = globSync(["**/CLAUDE.md", "**/AGENTS.md"], {
       cwd: root,
-      ignore: [...IGNORE_NODE_MODULES, "dist/**", ".git/**"],
+      ignore: excludes.globIgnore,
     })
       .filter((rel) => !isFixturePath(rel))
       .sort();
@@ -2951,9 +2987,10 @@ function hasPythonSurface(root: string): boolean {
 function computeRuleRouting(
   root: string,
   instructionFile: string,
+  excludes: ExcludeSet,
 ): RuleRouting | undefined {
   try {
-    const files = gatherInstructionFiles(root, instructionFile);
+    const files = gatherInstructionFiles(root, instructionFile, excludes);
     if (files.every((f) => !f.text.trim())) return undefined;
     // Own-repo + consented → enumerate the live rule catalog of whichever
     // linter(s) the repo has: ESLint (JS/TS) and/or Pylint (Python), merged so a
@@ -3285,6 +3322,7 @@ function specReferencedElsewhere(
     const dir = stack.pop() as string;
     let entries: Dirent[];
     try {
+      // eslint-disable-next-line no-restricted-syntax -- eject's is-this-spec-compiled-elsewhere safety check; wider is safer (exclude.ts exceptions)
       entries = readdirSync(dir, { withFileTypes: true });
     } catch {
       continue;
@@ -3862,15 +3900,17 @@ async function setupPillar1(
   // run `npm install` yet, so compiling would just error; defer it with a clear
   // next step instead of a scary stack-traceless "failed to load".
   const canCompile = canResolveVigiles(cwd);
+  const initConfig = loadConfig();
+  const excludes = excludeSet(cwd, initConfig.exclude);
   const specs = canCompile
-    ? findSpecs().filter((s) => {
+    ? findSpecs(excludes).filter((s) => {
         const tf = resolve(cwd, s.replace(/\.spec\.ts$/, ""));
         return !existsSync(tf) || targetHasHash(tf);
       })
     : [];
   if (specs.length > 0) {
     console.log("\nCompiling specs...");
-    await compile(specs, loadConfig());
+    await compile(specs, initConfig, excludes);
   } else if (!canCompile) {
     // Honest, project-type-aware guidance. A JS repo just needs `npm install`
     // (init already added the devDep). A repo with NO package.json (Python, Rust,
@@ -4556,6 +4596,7 @@ function untestedRules(config: VigilesConfig | undefined): {
  * untested count plus the severity-gated error count.
  */
 function checkUntestedSurfaces(
+  excludes: ExcludeSet,
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
@@ -4567,6 +4608,10 @@ function checkUntestedSurfaces(
     ...options,
     basePath: scanRoot,
     layout: adapter.layout,
+    // The rule's own `exclude` NARROWS; the repo-wide one is the floor under
+    // it. Union, never override — a rule option must not re-admit a vendored
+    // corpus the repo excluded (#192).
+    exclude: [...(options.exclude ?? []), ...excludes.ignore],
   });
 
   if (!silent) {
@@ -5479,6 +5524,7 @@ function checkMcpToolResolves(
  * CI step doesn't guarantee.
  */
 async function checkCoverageThresholds(
+  excludes: ExcludeSet,
   coverage: { enabled: number; documented: number },
   config: VigilesConfig | undefined,
   silent: boolean,
@@ -5511,7 +5557,7 @@ async function checkCoverageThresholds(
 
   if (opts.scripts !== undefined) {
     // Load all claude specs so coverage doesn't depend on a built dist/.
-    const loaded = await Promise.all(findSpecs().map(loadSpec));
+    const loaded = await Promise.all(findSpecs(excludes).map(loadSpec));
     const claudeSpecs = loaded.filter(
       (s): s is ClaudeSpec => s?._specType === "claude",
     );
@@ -5519,6 +5565,7 @@ async function checkCoverageThresholds(
       process.cwd(),
       opts.scripts,
       claudeSpecs,
+      excludes.ignore,
     );
     const ok = metric.passing;
     if (!ok) failing++;
@@ -5531,8 +5578,11 @@ async function checkCoverageThresholds(
   return severity === "error" ? failing : 0;
 }
 
-async function countGuidanceRules(silent = false): Promise<number> {
-  const specs = findSpecs();
+async function countGuidanceRules(
+  excludes: ExcludeSet,
+  silent = false,
+): Promise<number> {
+  const specs = findSpecs(excludes);
   if (specs.length === 0) return 0;
 
   let count = 0;
@@ -5556,9 +5606,31 @@ async function countGuidanceRules(silent = false): Promise<number> {
 // Command handlers for main()
 // ---------------------------------------------------------------------------
 
+/**
+ * An explicitly named path is processed even when `exclude` matches it, and ONE
+ * line says so. `exclude` filters DISCOVERY; an argument is an instruction.
+ * Measured 2026-09-03: ripgrep and tsc do this silently, ESLint skips the file
+ * with a warning, prettier skips it and reports "all files use Prettier code
+ * style" — the silent no-op. We take rg/tsc's semantics with ESLint's loudness.
+ * Returns the path unchanged so it composes inside a `.map`.
+ */
+function noteExplicitOverride(
+  excludes: ExcludeSet,
+  path: string,
+  verb: string,
+): string {
+  const pattern = excludes.explain(relative(excludes.root, resolve(path)));
+  if (pattern !== null) {
+    console.log(
+      `note: ${path} matches exclude "${pattern}" — ${verb} because you named it`,
+    );
+  }
+  return path;
+}
+
 function findInstructionFiles(
   restArgs: string[],
-  exclude: readonly string[] = [],
+  excludes: ExcludeSet,
   agentDir = "",
 ): string[] {
   const patterns = ["**/CLAUDE.md", "**/AGENTS.md", "**/SKILL.md"];
@@ -5567,13 +5639,20 @@ function findInstructionFiles(
   // harness without subagents (Codex agentDir === ""), so nothing is added there.
   if (agentDir !== "") patterns.push(`**/${agentDir}/*.md`);
   // `exclude` (from .vigilesrc.json) drops vendored/benchmark fixtures the repo's
-  // own lint shouldn't police — a third-party CLAUDE.md isn't held to require-instructions-spec.
-  // node_modules/dist/.git stay always-excluded.
-  const ignore = [...IGNORE_NODE_MODULES, "dist/**", ".git/**", ...exclude];
+  // own lint shouldn't police — a third-party CLAUDE.md isn't held to
+  // require-instructions-spec. The FUNCTION face of the ExcludeSet, not the
+  // string list: `discoverIn` may glob from a subdirectory (`vigiles lint
+  // some/dir`), where a root-relative string pattern would match nothing.
   // Discover instruction files under one directory, as paths relative to cwd.
   const discoverIn = (dirAbs: string): string[] =>
     patterns
-      .flatMap((p) => globSync(p, { ignore, cwd: dirAbs, absolute: true }))
+      .flatMap((p) =>
+        globSync(p, {
+          ignore: excludes.globIgnore,
+          cwd: dirAbs,
+          absolute: true,
+        }),
+      )
       .map((abs) => relative(process.cwd(), abs));
   if (restArgs.length === 0) return discoverIn(process.cwd());
   // Explicit args: expand a DIRECTORY to the instruction files inside it (so
@@ -5582,6 +5661,7 @@ function findInstructionFiles(
   const out: string[] = [];
   for (const arg of restArgs) {
     const abs = resolve(process.cwd(), arg);
+    noteExplicitOverride(excludes, arg, "linting");
     if (existsSync(abs) && lstatSync(abs).isDirectory()) {
       out.push(...discoverIn(abs));
     } else {
@@ -6119,9 +6199,14 @@ function resolveRecords(
     return [...names];
   }
 
+  const recordsConfig = loadConfig();
   const scan = findUntestedSurfaces({
     basePath: cwd,
-    layout: harnessLayoutFor(cwd, loadConfig(), harnessFlag),
+    layout: harnessLayoutFor(cwd, recordsConfig, harnessFlag),
+    // The repo-wide `exclude` only — the per-rule severities/testGlobs stay out
+    // of record resolution on purpose (a run's probes must map to a surface
+    // whether or not the untested-* rule for its kind is on).
+    exclude: excludeSet(cwd, recordsConfig.exclude).ignore,
   });
   return recordsFrom({
     runs,
@@ -6210,6 +6295,7 @@ async function handleRunScripts(
   kind: "test" | "eval",
   args: string[],
   restArgs: string[],
+  excludes: ExcludeSet,
 ): Promise<void> {
   const cwd = process.cwd();
   // Harness/eval scripts may be authored in JS or TS (see run-scripts.ts).
@@ -6225,7 +6311,14 @@ async function handleRunScripts(
     lockEnv = r;
   }
 
-  const files = discoverScripts(restArgs, defaultGlob, cwd);
+  // A script under an excluded path is not DISCOVERED (a vendored corpus's own
+  // harness must not run as ours), but a script you NAME still runs (#192).
+  const files = discoverScripts(
+    restArgs.map((p) => noteExplicitOverride(excludes, p, "running")),
+    defaultGlob,
+    cwd,
+    excludes.ignore,
+  );
 
   // `--min=N`: a CI gate asserts at least N scripts actually RAN — so a bad path,
   // a renamed file, or a glob that matched nothing fails LOUD instead of passing
@@ -7042,8 +7135,18 @@ function evalLockNudgeHookCommand(): void {
   // backwards, and `untested-skill` already stated the missing half correctly;
   // it just lived in `vigiles lint`, which someone has to run by hand.
   const msg =
-    skillTestNudge(target, { ...options, basePath: cwd, layout }) ??
-    evalLockNudge(target, resolve(cwd, DEFAULT_LOCK_DIR));
+    skillTestNudge(target, {
+      ...options,
+      basePath: cwd,
+      layout,
+      // Same union `vigiles lint` applies: the rule's exclude narrows, the
+      // repo-wide exclude is the floor (#192) — the nudge must not report a
+      // vendored skill the linter would never list.
+      exclude: [
+        ...(options.exclude ?? []),
+        ...excludeSet(cwd, config.exclude).ignore,
+      ],
+    }) ?? evalLockNudge(target, resolve(cwd, DEFAULT_LOCK_DIR));
   if (!msg) return;
   process.stdout.write(
     JSON.stringify({
@@ -8417,6 +8520,10 @@ async function main(): Promise<void> {
   // Shared flags (--max-rules, --catalog-only) override the loaded config so
   // every GitHub Action input maps to a real CLI flag. See src/cli-flags.ts.
   const config = applyConfigFlags(loadConfig(), args);
+  // `.vigilesrc.json#exclude`, parsed ONCE here and threaded to every walk that
+  // polices the repo (src/exclude.ts). Built where the config is loaded so a
+  // command cannot re-derive it differently — the drift #192 measured.
+  const excludes = excludeSet(process.cwd(), config.exclude);
 
   switch (command) {
     // --- Primary commands ---
@@ -8442,8 +8549,10 @@ async function main(): Promise<void> {
       // explicit args, partition by extension; bare, discover both.
       const specs =
         restArgs.length > 0
-          ? restArgs.filter((f) => f.endsWith(".spec.ts"))
-          : findSpecs();
+          ? restArgs
+              .filter((f) => f.endsWith(".spec.ts"))
+              .map((f) => noteExplicitOverride(excludes, f, "compiling"))
+          : findSpecs(excludes);
       const hooks =
         restArgs.length > 0
           ? restArgs.filter((f) => !f.endsWith(".spec.ts"))
@@ -8455,7 +8564,8 @@ async function main(): Promise<void> {
       }
       let valid = true;
       if (specs.length > 0)
-        valid = (await compile(specs, config, { harnessFlag })) && valid;
+        valid =
+          (await compile(specs, config, excludes, { harnessFlag })) && valid;
       valid = (await installHooks(hooks, harnessFlag, config.harness)) && valid;
       // Keep an existing whole-harness registry in sync (cheap, opt-in) so the
       // user never hand-runs `generate-harness`. Skipped when no harness.gen.ts.
@@ -8480,7 +8590,7 @@ async function main(): Promise<void> {
     case "lint": {
       // lint = verify references + discover + guidance count
       const flags = args.slice(1).filter((a) => a.startsWith("--"));
-      const report = await runLint(restArgs, flags, config);
+      const report = await runLint(restArgs, flags, excludes, config);
       annotateLintForGitHub(report, flags);
       const exitCode = lintExitCode(report);
       if (exitCode !== 0) {
@@ -8490,11 +8600,11 @@ async function main(): Promise<void> {
     }
 
     case "test":
-      await handleRunScripts("test", args, restArgs);
+      await handleRunScripts("test", args, restArgs, excludes);
       break;
 
     case "eval":
-      await handleRunScripts("eval", args, restArgs);
+      await handleRunScripts("eval", args, restArgs, excludes);
       break;
 
     case "audit": {
@@ -8506,7 +8616,10 @@ async function main(): Promise<void> {
       // in `.vigilesrc.json`), headless it stays a read + a one-line nudge. There
       // is NO execution flag — automation tests the harness via the vigiles testing
       // API + skills, not the report verb. See the `audit-side-effect-free` rule.
-      const dirs = restArgs.length > 0 ? restArgs : ["."];
+      const dirs =
+        restArgs.length > 0
+          ? restArgs.map((d) => noteExplicitOverride(excludes, d, "auditing"))
+          : ["."];
       const json = args.includes("--json");
       // A single dir that's a marketplace (e.g. wshobson/agents' 80+ plugins
       // under one marketplace.json) expands into its members and ranks them.
@@ -8697,6 +8810,7 @@ async function main(): Promise<void> {
           rulesInventory: computeRuleInventory(
             root,
             adapter.layout.instructionFile,
+            excludes,
           ),
           firingMeasured,
         });
@@ -8800,6 +8914,7 @@ async function main(): Promise<void> {
         const ruleRouting = computeRuleRouting(
           root,
           adapter.layout.instructionFile,
+          excludes,
         );
         const auditReport: AuditReport = ruleRouting
           ? { ...auditReportBase, ruleRouting }

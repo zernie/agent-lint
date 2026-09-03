@@ -22,6 +22,7 @@ import {
   statusFor,
   SKIP_EXIT_CODE,
 } from "./run-scripts.js";
+import { EXCLUDE_FLOOR, excludeSet } from "../../exclude.js";
 import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 
 test("discoverScripts expands the default glob, deduped and sorted", () => {
@@ -33,7 +34,7 @@ test("discoverScripts expands the default glob, deduped and sorted", () => {
     mkdirSync(join(dir, "node_modules", "pkg"), { recursive: true });
     writeFileSync(join(dir, "node_modules", "pkg", "x.harness.mjs"), "");
 
-    const found = discoverScripts([], "**/*.harness.mjs", dir);
+    const found = discoverScripts([], "**/*.harness.mjs", dir, EXCLUDE_FLOOR);
     assert.deepEqual(found, ["a.harness.mjs", "b.harness.mjs"]);
   } finally {
     cleanupTmpDir(dir);
@@ -57,7 +58,7 @@ test("discoverScripts finds harnesses inside dot-directories", () => {
     mkdirSync(join(dir, "node_modules", ".bin"), { recursive: true });
     writeFileSync(join(dir, "node_modules", ".bin", "dep.harness.mjs"), "");
 
-    const found = discoverScripts([], "**/*.harness.mjs", dir);
+    const found = discoverScripts([], "**/*.harness.mjs", dir, EXCLUDE_FLOOR);
     assert.deepEqual(found, [
       ".claude/hooks/hooks.harness.mjs",
       ".claude/pipeline/gates.harness.mjs",
@@ -73,8 +74,48 @@ test("discoverScripts passes an explicit file path through", () => {
   try {
     writeFileSync(join(dir, "only.eval.mjs"), "");
     writeFileSync(join(dir, "other.eval.mjs"), "");
-    const found = discoverScripts(["only.eval.mjs"], "**/*.eval.mjs", dir);
+    const found = discoverScripts(
+      ["only.eval.mjs"],
+      "**/*.eval.mjs",
+      dir,
+      EXCLUDE_FLOOR,
+    );
     assert.deepEqual(found, ["only.eval.mjs"]);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("discoverScripts: an excluded path is not discovered, but is still run when named (#192)", () => {
+  const dir = makeTmpDir("run-scripts");
+  try {
+    mkdirSync(join(dir, "vendored", "corpus"), { recursive: true });
+    writeFileSync(join(dir, "vendored", "corpus", "theirs.harness.mjs"), "");
+    writeFileSync(join(dir, "ours.harness.mjs"), "");
+    // A bare directory name, no `/**` — the spelling glob's own string ignore
+    // silently matched nothing (measured 2026-09-03), so it is the one to pin.
+    const excludes = excludeSet(dir, ["vendored"]);
+    // Discovery: fires on the clean side (ours found) AND drops the excluded one.
+    assert.deepEqual(
+      discoverScripts([], "**/*.harness.mjs", dir, excludes.ignore),
+      ["ours.harness.mjs"],
+    );
+    // Control: the same tree with an empty exclude finds both, so the assertion
+    // above cannot pass by finding nothing.
+    assert.deepEqual(
+      discoverScripts([], "**/*.harness.mjs", dir, excludeSet(dir, []).ignore),
+      ["ours.harness.mjs", "vendored/corpus/theirs.harness.mjs"],
+    );
+    // An explicit path wins: exclude filters discovery, not an argument.
+    assert.deepEqual(
+      discoverScripts(
+        ["vendored/corpus/theirs.harness.mjs"],
+        "**/*.harness.mjs",
+        dir,
+        excludes.ignore,
+      ),
+      ["vendored/corpus/theirs.harness.mjs"],
+    );
   } finally {
     cleanupTmpDir(dir);
   }
@@ -114,7 +155,12 @@ test("discoverScripts finds TS scripts alongside JS via the default glob", () =>
     writeFileSync(join(dir, "a.harness.mjs"), "");
     writeFileSync(join(dir, "b.harness.ts"), "");
     writeFileSync(join(dir, "c.harness.mts"), "");
-    const found = discoverScripts([], scriptGlob("harness"), dir);
+    const found = discoverScripts(
+      [],
+      scriptGlob("harness"),
+      dir,
+      EXCLUDE_FLOOR,
+    );
     assert.deepEqual(found, ["a.harness.mjs", "b.harness.ts", "c.harness.mts"]);
   } finally {
     cleanupTmpDir(dir);
