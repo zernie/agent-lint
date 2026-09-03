@@ -1873,22 +1873,24 @@ async function checkSpecRefs(
   const sev = ruleSeverity(config?.rules?.["spec-refs"]) ?? "error";
   if (!sev) return { issues: 0, errors: 0 };
   const found: string[] = [];
+  let knownAgents: readonly string[] | undefined;
   for (const specPath of findSpecs(excludes)) {
     const target = specPath.replace(/\.spec\.ts$/, "");
     if (!existsSync(target)) continue; // never compiled — `compile` reports it
     const spec = await loadSpec(specPath);
-    if (!spec || spec._specType !== "claude") continue;
+    if (!spec) continue;
     try {
-      const { errors } = compileClaude(spec, {
-        basePath: process.cwd(),
-        specFile: specPath,
+      // Railway is the one type whose validation needs the sibling agent names;
+      // collected lazily so a repo with no railway spec never pays for the walk.
+      if (spec._specType === "railway")
+        knownAgents ??= await collectAgentNames(excludes);
+      const errors = specCompileErrors(
+        spec,
+        specPath,
         dialect,
-        maxRules: config?.maxRules,
-        maxTokens: config?.maxTokens,
-        maxSectionLines: config?.maxSectionLines,
-        catalogOnly: config?.catalogOnly,
-        linters: config?.linters,
-      });
+        config,
+        knownAgents ?? [],
+      );
       for (const e of errors)
         found.push(`${target}: ${e.message} (from ${specPath})`);
     } catch {
@@ -1905,6 +1907,60 @@ async function checkSpecRefs(
     }
   }
   return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * The ONE spec-type dispatcher, in the only shape both directions can share:
+ * errors, no writing. `compile` reaches its compilers through the
+ * `compile*ToFile` wrappers (which write and print); `checkSpecRefs` reaches the
+ * SAME compilers through this, because a read must never write.
+ *
+ * Why it exists (#190): `checkSpecRefs` used to call `compileClaude` directly and
+ * skip every other spec type, so a SKILL.md / subagent / railway artifact
+ * committed with a since-deleted reference hashed cleanly against its own header
+ * forever — `lint` green, `compile` red. Measured on this repo:
+ * `examples/SKILL.md.spec.ts` names `skills/enforce-rules-format/SKILL.md`, which
+ * does not exist (the skill lives under `.claude/skills/`), and `lint` reported
+ * `hash valid`.
+ *
+ * A switch rather than a per-type "ref accessor": all four compilers already
+ * return the same `errors: CompileError[]`, so there is nothing to normalize —
+ * only the options differ. Exhaustive over `_specType`, so a FIFTH spec type is
+ * a tsc error here instead of a silent skip, which is the failure this closes.
+ */
+function specCompileErrors(
+  spec: AnySpec,
+  specPath: string,
+  dialect: HarnessDialect,
+  config: VigilesConfig | undefined,
+  knownAgents: readonly string[],
+): readonly CompileError[] {
+  const basePath = process.cwd();
+  switch (spec._specType) {
+    case "claude":
+      return compileClaude(spec, {
+        basePath,
+        specFile: specPath,
+        dialect,
+        maxRules: config?.maxRules,
+        maxTokens: config?.maxTokens,
+        maxSectionLines: config?.maxSectionLines,
+        catalogOnly: config?.catalogOnly,
+        linters: config?.linters,
+      }).errors;
+    case "skill":
+      return compileSkill(spec, { basePath, specFile: specPath, dialect })
+        .errors;
+    case "agent":
+      return compileAgent(spec, { basePath, specFile: specPath, dialect })
+        .errors;
+    case "railway":
+      return compileRailway(spec, { specFile: specPath, knownAgents }).errors;
+    default:
+      // A `pipeline` spec compiles through its underlying railway, so it has no
+      // artifact of its own to re-derive refs for.
+      return [];
+  }
 }
 
 /**

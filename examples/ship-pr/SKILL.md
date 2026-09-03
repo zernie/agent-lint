@@ -1,12 +1,10 @@
-<!-- vigiles:sha256:4c614a2e08f000bb compiled from examples/ship-pr/SKILL.md.spec.ts -->
-
 ---
-
 name: ship-pr
 description: Run the project checks and open a pull request once they pass
 argument-hint: <branch> [<title>]
-
 ---
+
+<!-- vigiles:sha256:149214b0d9c16174 compiled from examples/ship-pr/SKILL.md.spec.ts -->
 
 ## Arguments
 

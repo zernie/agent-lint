@@ -36,6 +36,52 @@
 import { spawn } from "node:child_process";
 import { cpus } from "node:os";
 
+/**
+ * The CI jobs this file does NOT run, and the command that does.
+ *
+ * 🔴 THE NAME OVERPROMISES, AND THAT COST A CYCLE (2026-09-03). This file's own
+ * header says it exists so nobody runs a remembered subset — and it covers ONE
+ * of the workflow's jobs. Reading `18/18 passed` as "CI would pass" is exactly
+ * the mistake it was written to prevent, one level up: a green `check` says
+ * nothing about `test`, which is where a UNC-denylist regression was caught
+ * after a push made on this file's word alone.
+ *
+ * `npm run coverage` is NOT folded in: it is ~200s against this file's ~70s, and
+ * a pre-push gate people stop running is worse than a fast one that says what it
+ * skipped. So the gap is declared and PRINTED instead of silently held.
+ *
+ * `scripts/check-covers-ci.test.ts` asserts this list plus `check` accounts for
+ * every job in ci.yml, so a NEW job is a failing test rather than a silent
+ * seventh thing nobody runs locally.
+ */
+export const CI_JOBS_NOT_COVERED = [
+  {
+    job: "test",
+    cmd: "npm run coverage",
+    why: "vitest + the 100% coverage gate — the job a green `check` says nothing about",
+  },
+  {
+    job: "e2e",
+    cmd: "npm run test:e2e",
+    why: "the e2e vitest project (real built CLI over fixture repos)",
+  },
+  {
+    job: "harness",
+    cmd: "npm run test:harness",
+    why: "the deterministic harness tier — needs the claude binary",
+  },
+  {
+    job: "site",
+    cmd: "npm --prefix site run test:browser && npm --prefix site run test:e2e",
+    why: "the site's browser + Playwright tests — needs a Chromium download",
+  },
+  {
+    job: "changes",
+    cmd: "",
+    why: "the path-filter classifier — decides which jobs run; nothing to run locally",
+  },
+];
+
 /** Stage 1 — everything downstream reads `dist/`. */
 const BUILD = { name: "build", cmd: "npm run build" };
 
@@ -155,6 +201,14 @@ for (const w of WRITERS) {
 
 console.log(
   `\n${ALL.length - failures.length}/${ALL.length} passed in ${((Date.now() - t0) / 1000).toFixed(0)}s`,
+);
+
+// Say what this run did NOT cover. A green `check` is not a green CI, and the
+// difference is invisible unless it is printed.
+const runnable = CI_JOBS_NOT_COVERED.filter((j) => j.cmd);
+console.log(
+  `\nNOT covered here — ${runnable.length} more CI job(s):\n` +
+    runnable.map((j) => `  ${j.job.padEnd(8)} ${j.cmd}`).join("\n"),
 );
 
 if (failures.length) {

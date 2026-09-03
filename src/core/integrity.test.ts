@@ -12,8 +12,9 @@ import {
   REQUIRE_INSTRUCTIONS_SPEC_DISABLE,
 } from "./integrity.js";
 import { sha256short } from "./hash.js";
-import { addHash } from "./compile.js";
+import { addHash, compileSkill } from "./compile.js";
 import { experimental_skill } from "./spec.js";
+import { claudeCodeDialect as dialect } from "../adapters/claude-code/dialect.js";
 const { input } = experimental_skill;
 
 /** Build a compiled-file string with a VALID header for `body`. */
@@ -210,5 +211,50 @@ describe("input() refuses a non-string call", () => {
       hint: "regex to search for",
       required: undefined,
     });
+  });
+});
+
+/**
+ * A COMPILED artifact must be prettier-clean, or the tool cannot pass its own
+ * `npm run check` after a recompile — measured 2026-09-03 on all seven
+ * `examples/` artifacts, which is why the seven sat un-recompiled with an
+ * out-of-date marker position instead of being regenerated.
+ *
+ * Two separate defects produced it, and both are asserted here because each one
+ * alone is enough to fail `prettier --check`:
+ *
+ *   1. the frontmatter renderers padded the INSIDE of the `---` fence
+ *   2. the frontmatter/body join added a blank line that `placeIntegrityHeader`
+ *      then added again
+ *
+ * Fixed at the JOIN, not in the stamper: the hash is computed over the content
+ * `seal` receives, so trimming inside `placeIntegrityHeader` hashes one string
+ * and writes another — that attempt broke integrity on all three
+ * frontmatter-bearing artifacts before it was reverted.
+ */
+describe("a compiled artifact is prettier-clean by construction", () => {
+  const compiled = compileSkill(
+    experimental_skill({
+      name: "fixture",
+      description: "One line, no surprises",
+      body: "Body line.",
+    }),
+    { basePath: process.cwd(), specFile: "SKILL.md.spec.ts", dialect },
+  );
+
+  it("compiles", () => {
+    expect(compiled.errors).toEqual([]);
+    expect(compiled.artifact).not.toBeNull();
+  });
+
+  it("has no blank line INSIDE the frontmatter fence", () => {
+    const md = compiled.artifact ?? "";
+    const fence = /^---\r?\n([\s\S]*?)\r?\n---/.exec(md);
+    expect(fence, "no frontmatter found").not.toBeNull();
+    expect(fence?.[1]).not.toMatch(/^\s*$/m);
+  });
+
+  it("never emits two consecutive blank lines", () => {
+    expect(compiled.artifact ?? "").not.toMatch(/\n[ \t]*\n[ \t]*\n/);
   });
 });
