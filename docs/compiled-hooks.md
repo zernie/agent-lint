@@ -488,7 +488,7 @@ Beyond the headline number, the **structural** wins over hand-written guards are
 - **Precision** — no `grep` false-positive on a benign `echo`.
 - **Protocol** — a mis-wired `exit 1` is false confidence; the compiled exit code can't be wrong.
 
-The honest other side: stateful guards, broad I/O, and delivery (#34692) are NOT compiled-hook wins.
+The honest other side: stateful guards, broad I/O, and delivery are NOT compiled-hook wins. (The delivery floor is not what it was — see [Limitations](#limitations--trade-offs-the-cons) for what moved and what did not.)
 
 ## Limitations & trade-offs (the cons)
 

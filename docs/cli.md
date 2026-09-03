@@ -331,7 +331,8 @@ The merged block points at the `hook-runtime run-program` entrypoint (below).
 Honest scope: this fixes the hook's authoring + logic, not the harness's
 delivery. The delivery floor moved —
 [#34692](https://github.com/anthropics/claude-code/issues/34692) (a subagent's
-tool calls bypassing `PreToolUse`) is fixed as of Claude Code 2.1.241. A gate is
+tool calls bypassing `PreToolUse`) is fixed as of Claude Code 2.1.241, measured
+headless (`claude -p`); interactive sessions are unmeasured. A gate is
 still a strong default rather than an unbypassable wall, because a model can
 route around a tool entirely.
 

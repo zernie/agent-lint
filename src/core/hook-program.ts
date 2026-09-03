@@ -26,7 +26,9 @@
  * Pure core, harness-neutral. HONEST SCOPE (kept in every doc): compile/verify fix
  * the hook's AUTHORING + LOGIC, not the harness's DELIVERY. #34692 (a subagent's
  * calls never reaching PreToolUse) is FIXED as of CC 2.1.241 — measured on a stock
- * install, pinned by src/subagent-delivery.test.ts. A gate is STILL a strong default
+ * install, pinned by src/subagent-delivery.test.ts. SCOPE of that measurement:
+ * headless `claude -p` only — interactive is unmeasured, and depth-2 subagent
+ * nesting does not occur there at all. A gate is STILL a strong default
  * rather than an unbypassable wall, because a model can route around a tool
  * entirely (#45427 / #32376). Limits (buy-in, node-startup latency) +
  * full record in research/hook-pain-points.md.

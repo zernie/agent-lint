@@ -50,7 +50,8 @@ A breaking change to any of the above is signalled with a Conventional-Commit
   frozen**. Its long-standing delivery caveat
   ([#34692](https://github.com/anthropics/claude-code/issues/34692) — a subagent's
   tool calls never reaching `PreToolUse`) is **fixed** as of Claude Code 2.1.241,
-  measured on a stock install and pinned by a test that goes red if it regresses.
+  measured on a stock install — headless `claude -p`, so interactive sessions are
+  unmeasured — and pinned by a test that goes red if it regresses.
   A gate is still a strong default rather than an unbypassable wall, because a
   model can route around a tool entirely.
 
