@@ -4,7 +4,7 @@
  * This is the source of truth. SKILL.md is a compiled build artifact.
  * Run `vigiles compile` to generate SKILL.md from this spec.
  */
-import { experimental_skill, file, cmd, ref, prose } from "../src/core/spec.js";
+import { experimental_skill, file, cmd, prose } from "../src/core/spec.js";
 
 export default experimental_skill({
   name: "pr-to-lint-rule",
@@ -48,7 +48,7 @@ For JavaScript/TypeScript, generate an ESLint rule using the AST visitor pattern
 
 ### Step 3: Update ${file("CLAUDE.md")}
 
-Add the annotation block. See ${ref("skills/enforce-rules-format/SKILL.md")} for the correct format.
+Add the annotation block. See ${file("docs/spec-format.md")} for the correct format.
 
 ### Step 4: Verify
 
