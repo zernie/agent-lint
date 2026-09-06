@@ -171,7 +171,7 @@ block/allow decision.
 takes those test cases and returns more of them: the same commands re-spelled
 every way the shell runs identically — `git push "--force"`, `git push -f`,
 `sudo git push --force`, `/usr/bin/git push --force`, `g""it push --force`,
-`g\it push --force`, `git<TAB>push<TAB>--force`. Seven commands become 122. It
+`g\it push --force`, `git<TAB>push<TAB>--force`. Seven commands become 136. It
 generates inputs for your hook; it checks nothing by itself.
 
 Without it, a guard whose rule is "contains `--force`" passes the battery and
