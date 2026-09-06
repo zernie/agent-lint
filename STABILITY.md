@@ -1,10 +1,11 @@
 # Stability
 
-> vigiles is at **v21** — but read that as _"still moving fast,"_ not
-> _"battle-hardened."_ `semantic-release` cuts a **new major on every breaking
-> API change**, and there have been a lot of them. The number is an artifact of
-> how it ships, not a claim of maturity. This page says what I try hardest not
-> to break, and what's still in motion.
+> vigiles's **major version is high and still climbing** — read that as _"still
+> moving fast,"_ not _"battle-hardened."_ `semantic-release` cuts a **new major on
+> every breaking API change**, and there have been a lot of them. The number is an
+> artifact of how it ships, not a claim of maturity, so this page names no version:
+> the badge on the README is always the current one. What follows is what I try
+> hardest not to break, and what's still in motion.
 
 The steadiest contract is the **CLI** — the commands you run, their flags, and
 their exit codes. Most of the churn is in the library API underneath it.
