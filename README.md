@@ -183,7 +183,7 @@ _"Caveman Mode cuts 65% of your tokens." Says who?_ vigiles A/Bs the claim on re
 
 ```text
 caveman vs baseline · sonnet · 7 tasks × 5 trials · $0 on your subscription
-  output tokens   6% lower on average   (the claim was 65%)
+  output tokens   6% lower on average   (the claim was 65% — and it GREW on 2 of 7 tasks)
   bill            $0.5396 → $0.5334     (flat — output is only ~20% of the cost)
   correctness     1.0 → 1.0             (nothing broke)
 ```
