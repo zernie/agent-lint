@@ -103,9 +103,10 @@ export interface HarnessRuntime {
     };
 }
 
-// @public
+// @public (undocumented)
 export interface HookProtocol {
     readonly blockExitCode: number;
+    readonly condition?: HookConditionSupport;
     readonly denyDecisionValues: readonly string[];
     readonly eventEnvVars: readonly string[];
     readonly haltsTurnField?: string;

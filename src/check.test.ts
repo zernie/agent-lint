@@ -76,6 +76,8 @@ function hookResult(over: Partial<HookRunResult> = {}): HookRunResult {
     egress: [],
     filesWritten: [],
     decision: undefined,
+    ran: true,
+    conditionReason: "no condition declared",
     ...over,
   };
 }

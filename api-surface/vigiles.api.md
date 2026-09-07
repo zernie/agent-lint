@@ -682,6 +682,8 @@ export interface GuardrailResult {
     // (undocumented)
     readonly event: DisasterEvent;
     readonly exitCode: number;
+    readonly ran: boolean;
+    readonly reason: string;
 }
 
 // @public
@@ -787,9 +789,11 @@ export interface HookPropertyResult<E> {
 export interface HookRunResult extends ScriptRunResult {
     readonly blocked: boolean;
     readonly blockedBy: readonly BlockMechanism[];
+    readonly conditionReason: string;
     readonly decision: HookOutput["decision"] | "allow" | "deny" | "ask" | undefined;
     readonly haltsTurn: boolean;
     readonly json: HookOutput | null;
+    readonly ran: boolean;
 }
 
 // @public
@@ -1035,7 +1039,10 @@ export interface RunHarnessTestOptions {
 export function runHook(command: string, input: HookInput, opts?: RunHookOptions): HookRunResult;
 
 // @public
-export type RunHookOptions = Omit<RunScriptOptions, "stdin">;
+export type RunHookOptions = Omit<RunScriptOptions, "stdin"> & {
+    readonly condition?: string;
+    readonly protocol?: HookProtocol;
+};
 
 // @public
 export interface RunOut {

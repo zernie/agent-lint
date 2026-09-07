@@ -6,6 +6,7 @@
  * decision model), adding its own `eventEnvVars` (session_id/PLUGIN_ROOT/…).
  */
 import type { HookProtocol } from "../../core/hook-protocol.js";
+import { claudeCodeHookCondition } from "./hook-condition.js";
 
 export const claudeCodeHookProtocol: HookProtocol = {
   name: "claude-code",
@@ -19,4 +20,8 @@ export const claudeCodeHookProtocol: HookProtocol = {
   // injection). Covers vigiles's shipped inject hooks: the SessionStart lint
   // summary and the PostToolUse refs / eval-lock nudges.
   injectableEvents: ["SessionStart", "UserPromptSubmit", "PostToolUse"],
+  // The `if` field: a permission-rule pattern deciding whether the hook is spawned
+  // at all. See ./hook-condition.ts — without it a conditional guard was reported
+  // as blocking every disaster in the battery.
+  condition: claudeCodeHookCondition,
 };

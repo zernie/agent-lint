@@ -12,8 +12,18 @@ describe("normalizeHooks", () => {
       ],
     };
     expect(normalizeHooks(raw)).toEqual([
-      { event: "PreToolUse", matcher: "Bash", command: "guard.sh" },
-      { event: "PreToolUse", matcher: "Bash", command: "audit.sh" },
+      {
+        event: "PreToolUse",
+        matcher: "Bash",
+        command: "guard.sh",
+        condition: null,
+      },
+      {
+        event: "PreToolUse",
+        matcher: "Bash",
+        command: "audit.sh",
+        condition: null,
+      },
     ]);
   });
 
@@ -21,14 +31,19 @@ describe("normalizeHooks", () => {
     // Codex TOML `[[hooks.SessionStart]] command="setup.sh"` loads flat.
     const raw = { SessionStart: [{ command: "setup.sh" }] };
     expect(normalizeHooks(raw)).toEqual([
-      { event: "SessionStart", matcher: null, command: "setup.sh" },
+      {
+        event: "SessionStart",
+        matcher: null,
+        command: "setup.sh",
+        condition: null,
+      },
     ]);
   });
 
   it("carries the matcher as null when the entry declares none", () => {
     const raw = { Stop: [{ hooks: [{ command: "x.sh" }] }] };
     expect(normalizeHooks(raw)).toEqual([
-      { event: "Stop", matcher: null, command: "x.sh" },
+      { event: "Stop", matcher: null, command: "x.sh", condition: null },
     ]);
   });
 
@@ -41,7 +56,7 @@ describe("normalizeHooks", () => {
       ],
     };
     expect(normalizeHooks(raw)).toEqual([
-      { event: "PreToolUse", matcher: null, command: "ok.sh" },
+      { event: "PreToolUse", matcher: null, command: "ok.sh", condition: null },
     ]);
   });
 

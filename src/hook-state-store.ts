@@ -49,6 +49,7 @@
 import {
   mkdirSync,
   readFileSync,
+  readdirSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -161,6 +162,59 @@ export function writeHookState(
   renameSync(tmp, target);
 }
 
+/**
+ * Forget the facts THIS hook recorded, leaving a co-located hook's alone.
+ *
+ * The store is keyed by DIRECTORY, not by file, and deliberately so: that
+ * sharing is what lets one hook declare `state("calendar.synced")` and read a
+ * fact another hook in the same folder recorded. So "delete the directory" and
+ * "forget this hook's facts" are different operations, and the recursive
+ * delete this replaced was the wrong one — a test following the documented
+ * `st.clear()` opener reset every co-located hook, and two tests seeding
+ * different hooks in one directory erased each other.
+ *
+ * Ownership is {@link StateEntry.by}, which {@link writeHookState} stamps from
+ * the hook's own path. It is the SAME derivation {@link hookStateDir} uses
+ * (`resolve` then `relative`), so a handle built with a relative spelling and a
+ * runtime invoked with an absolute one agree — verified against the live
+ * runtime in both directions in the colocated test, because a scope that only
+ * matched the writer a test happens to use would fail silently and green.
+ *
+ * An entry we cannot READ, or one carrying no `by` at all, is left in place:
+ * every write this module performs stamps an owner, so an unattributed entry
+ * was written by something else, and deleting it is exactly the collateral
+ * damage being removed here. It reads back as another owner's fact — seed over
+ * it, or point `cwd` at a throwaway root when a completely empty store is what
+ * the test wants.
+ *
+ * The directory itself is left behind, possibly empty. Removing it would race
+ * a concurrent test writing into the same shared directory, which is the class
+ * of interference this function exists to stop.
+ */
+function clearOwnState(file: string, cwd: string): void {
+  const dir = hookStateDir(file, cwd);
+  const mine = normalizeHookRef(file, cwd);
+  let entries: readonly string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    // Nothing was ever recorded here — the documented no-op.
+    return;
+  }
+  for (const name of entries) {
+    // A torn `<key>.json.<pid>.tmp` from an interrupted write is not an entry.
+    if (!name.endsWith(".json")) continue;
+    const path = resolve(dir, name);
+    let owner: string | undefined;
+    try {
+      owner = (JSON.parse(readFileSync(path, "utf-8")) as StateEntry).by;
+    } catch {
+      continue;
+    }
+    if (owner === mine) rmSync(path, { force: true });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // The test seam.
 // ---------------------------------------------------------------------------
@@ -231,7 +285,15 @@ export interface HookStateHandle {
    * `StateFact`, which is what `runHookProgram(hook, event, ctx)` wants in `ctx`.
    */
   read(key: string): StateFact;
-  /** Forget every fact for this hook. Test isolation; a no-op when nothing was recorded. */
+  /**
+   * Forget the facts THIS hook recorded. A no-op when it recorded none.
+   *
+   * Scoped to this hook's own writes, because the store is shared per DIRECTORY
+   * — that sharing is what lets one hook read a fact another recorded — so a
+   * co-located hook's facts (and any entry with no recorded owner) are left
+   * untouched. When a test wants the whole store empty rather than this hook's
+   * share of it, give it a throwaway `cwd`: the store hangs off that root.
+   */
   clear(): void;
 }
 
@@ -281,7 +343,7 @@ export function experimental_hookState(
       return read(key);
     },
     clear() {
-      rmSync(dir, { recursive: true, force: true });
+      clearOwnState(hookFile, cwd);
     },
   };
 }

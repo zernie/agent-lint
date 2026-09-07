@@ -114,6 +114,20 @@ export interface GuardrailResult {
   readonly blocked: boolean;
   /** The hook process exit code (1 ≠ block — the classic false-confidence bug). */
   readonly exitCode: number;
+  /**
+   * Whether the hook was RUN for this event at all — false when its declared
+   * condition ({@link VerifyGuardrailOptions.condition}) does not match, so the
+   * harness would never spawn it here.
+   *
+   * 🔴 A NOT-RUN EVENT IS A MISS, and separating it out is the point. Before this
+   * existed the battery could only ask "did it block?", so a real guard whose body
+   * is an unconditional deny but whose `if` only fires on a force push scored
+   * 7/7 — certified as stopping `rm -rf /` and `cat ~/.ssh/id_rsa`. It still
+   * counts as unblocked; what changed is that the report can now say WHY.
+   */
+  readonly ran: boolean;
+  /** Why the hook ran or did not — the condition verdict, always present. */
+  readonly reason: string;
 }
 
 export interface VerifyGuardrailOptions extends RunHookOptions {
@@ -124,6 +138,9 @@ export interface VerifyGuardrailOptions extends RunHookOptions {
   /** The PreToolUse event name to wrap each disaster in (default "PreToolUse"). */
   readonly event?: string;
 }
+// `condition` + `protocol` are inherited from RunHookOptions — pass the hook's
+// declared `if` here and the battery measures the guard the harness would
+// actually run, not an unconditional stand-in for it.
 
 const HOOK_EVENT = "PreToolUse";
 
@@ -214,7 +231,13 @@ export function verifyGuardrail(
       },
       opts,
     );
-    return { event, blocked: r.blocked, exitCode: r.exitCode };
+    return {
+      event,
+      blocked: r.blocked,
+      exitCode: r.exitCode,
+      ran: r.ran,
+      reason: r.conditionReason,
+    };
   });
 }
 
@@ -236,7 +259,14 @@ export function assertBlocksDisasters(
 ): void {
   const misses = unblockedDisasters(verifyGuardrail(hookCommand, opts));
   if (misses.length === 0) return;
-  const lines = misses.map((m) => `  ✗ ${m.event.label} (exit ${m.exitCode})`);
+  // A never-run event names the CONDITION rather than an exit code: "exit 0" on a
+  // hook that was never spawned reads as "the guard looked and allowed it", which
+  // is exactly the confusion this whole change removes.
+  const lines = misses.map((m) =>
+    m.ran
+      ? `  ✗ ${m.event.label} (exit ${m.exitCode})`
+      : `  ⊘ ${m.event.label} — NOT RUN: ${m.reason}`,
+  );
   throw new Error(
     `Guardrail \`${hookCommand}\` did NOT block ${misses.length} dangerous action(s):\n${lines.join(
       "\n",
@@ -256,14 +286,23 @@ export function formatGuardrailReport(
   results: readonly GuardrailResult[],
 ): string {
   const blocked = results.filter((r) => r.blocked).length;
+  const skipped = results.filter((r) => !r.ran).length;
   const head = `Guardrail coverage for \`${hookCommand}\` — blocks ${blocked}/${results.length} of the dangerous battery`;
   const rows = results.map((r) => {
-    const mark = r.blocked ? "✅ blocks" : "·  allows";
-    return `  ${mark}  ${r.event.label}`;
+    // THREE outcomes, not two. "never run" is not a weaker "allows": the harness
+    // would not invoke this hook for that call at all, so the guard has no opinion
+    // to report. Printing it as `allows` is what made a conditional guard look
+    // like it had considered — and permitted — commands it can never see.
+    if (!r.ran) return `  ⊘ not run  ${r.event.label} — ${r.reason}`;
+    return `  ${r.blocked ? "✅ blocks" : "·  allows"}  ${r.event.label}`;
   });
-  const foot =
+  const foot = [
     blocked < results.length
       ? "\nAllows ≠ a bug unless this guard is MEANT to block them — gate intent with\nassertBlocksDisasters(cmd, { categories: [...] })."
-      : "";
+      : "",
+    skipped > 0
+      ? `\n⊘ ${skipped} event(s) never reached this hook: its condition does not match them,\nso it cannot protect you there however its body is written.`
+      : "",
+  ].join("");
   return [head, ...rows].join("\n") + foot;
 }

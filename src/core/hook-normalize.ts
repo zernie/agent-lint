@@ -33,7 +33,36 @@ export interface HookRegistration {
   readonly matcher: string | null;
   /** The shell command the hook runs (non-empty). */
   readonly command: string;
+  /**
+   * The hook's CONDITION as written — Claude Code's `if`, a permission-rule
+   * pattern like `"Bash(git push *--force*)"` — or `null` when unconditional.
+   *
+   * 🔴 THIS FIELD WAS SILENTLY DROPPED, and that was half a real defect. Everything
+   * downstream reads registrations, so a key this boundary discards is a key the
+   * whole tool is blind to: a published guard whose body denies unconditionally
+   * but whose `if` only ever fires on a force push was reported by
+   * `verifyGuardrail` as blocking `rm -rf /` and `cat ~/.ssh/id_rsa` too. Carrying
+   * it is parse-don't-validate doing its job — read once, here, not re-walked (or
+   * forgotten) per detector. See `core/hook-condition.ts`.
+   *
+   * The KEY is read tolerantly like `matcher`/`command`, per this module's
+   * documented no-port stance; the harness that spells it and the semantics that
+   * evaluate it live on `HookProtocol.condition`, and a test binds the two so the
+   * spelling cannot drift.
+   */
+  readonly condition: string | null;
 }
+
+/**
+ * The config key a hook's condition is written under. Read here rather than from
+ * the port for the same reason `matcher` and `command` are: this reader is
+ * harness-agnostic BY TOLERANCE (see the module header), and one shared spelling
+ * is cheaper than threading a port through every caller. `hook-condition.test.ts`
+ * asserts it equals `claudeCodeHookCondition.field`, so a rename fails a test
+ * instead of quietly reading nothing. The day a harness spells it differently,
+ * this constant is the single seam to lift behind the port.
+ */
+const CONDITION_KEY = "if";
 
 /** True for a non-null, non-array object. */
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -61,7 +90,13 @@ function flattenEntry(event: string, entry: unknown): HookRegistration[] {
     if (!isRecord(h)) continue;
     const command = h.command;
     if (typeof command !== "string" || command.length === 0) continue;
-    out.push({ event, matcher, command });
+    // The condition may sit on the ACTION (Claude Code's nested shape) or, for a
+    // flat entry, on the entry itself — which is the same object, so one read
+    // covers both without a second branch.
+    const raw = h[CONDITION_KEY];
+    const condition =
+      typeof raw === "string" && raw.trim().length > 0 ? raw : null;
+    out.push({ event, matcher, command, condition });
   }
   return out;
 }

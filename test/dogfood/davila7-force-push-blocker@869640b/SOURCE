@@ -1,0 +1,38 @@
+Vendored snapshot — DO NOT EDIT BY HAND.
+
+Upstream:  https://github.com/davila7/claude-code-templates
+Path:      cli-tool/components/hooks/security/force-push-blocker.json
+Commit:    869640b
+Fetched:   2026-09-07
+License:   MIT (see ./LICENSE) — © 2025 Daniel (San) Ávila
+
+Why this is here:
+  A TRUE-POSITIVE fixture for hook CONDITIONS, and the artifact that proved the
+  defect was real rather than hypothetical. Both of its actions carry Claude
+  Code's per-action `if` field:
+
+      "if": "Bash(git push *--force*)"
+      "if": "Bash(git push *-f*)"
+
+  while each `command` is an UNCONDITIONAL `echo` of a deny decision. The guard is
+  correct — CC only spawns it on a matching force push — but vigiles knew nothing
+  about `if`, so `verifyGuardrail` fed the whole disaster battery to that bare
+  echo and reported it as blocking 7/7, including `rm -rf /`, `git reset --hard`,
+  `cat ~/.ssh/id_rsa` and `curl | sh`. Measured 2026-09-07 against the built CLI
+  before the fix.
+
+  src/hook-condition.test.ts drives THIS file end-to-end in both directions: with
+  the condition honoured only the force-push events are reached (and blocked), and
+  a deliberately dropped condition reproduces the original 7/7 false green. The
+  regression it locks is not "a hook misbehaves" but "vigiles certifies a guard it
+  never actually ran" — the false-confidence class this product exists to remove,
+  found inside the product.
+
+Included — the minimal SLICE only: the upstream hook config, vendored as
+.claude/settings.json so the loader sees a coherent plugin. Nothing else from the
+upstream repo is vendored. (Its sibling test/dogfood/davila7-perf-guard@869640b
+is a DIFFERENT fixture from the same upstream + commit: a false-positive guard for
+the hook-block-ineffective detector. Kept separate because a slice's SOURCE has to
+state one reason it exists.)
+
+Refresh: tools/refresh-vendor.sh (human-run; bumps the pinned commit).

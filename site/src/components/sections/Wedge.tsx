@@ -67,11 +67,24 @@ export function Wedge() {
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
             Valid config. Broken agent.
           </h2>
+          {/* This read "Every other tool checks your config is well-formed" until
+              2026-09-07 — a universal that is simply false: `claude plugin validate`
+              flags a subagent with no description and a manifest whose hook block
+              cannot load, and `checks.ts` already says out loud that vigiles MATCHES
+              it on the frontmatter check. So the lede names the overlap instead of
+              denying it, and claims nothing exclusive about the four cards below;
+              the one exclusive claim on this page is the linter cross-reference in
+              the resolution, which is where it belongs. */}
           <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
-            Every other tool checks your config is well-formed. But the failures
-            that actually bite parse perfectly and point at nothing — a hook on
-            an event that doesn&apos;t exist, a tool the harness silently drops,
-            a script that was never committed.
+            Config validators — Anthropic&apos;s own{" "}
+            <code className="rounded bg-muted/60 px-1 py-0.5 font-mono text-base">
+              claude plugin validate
+            </code>{" "}
+            included — catch a malformed manifest or a subagent missing its
+            description, and vigiles agrees with them there. The failures that
+            bite hardest are the ones that parse perfectly and point at nothing:
+            a hook on an event that doesn&apos;t exist, a tool the harness
+            silently drops, a script that was never committed.
           </p>
         </div>
 
@@ -107,11 +120,11 @@ export function Wedge() {
               vigiles grades all of it
             </span>{" "}
             — one deterministic, model-free score across six categories (see the
-            report above). The deepest check: every rule your instructions name
-            is resolved against your real linter — eleven of them, from JS to
-            Rust to Go to Kotlin. The rule has to{" "}
-            <span className="text-foreground">exist</span>, and wherever that
-            linter has an on/off switch, be{" "}
+            report above). The deepest check, and the one no other tool does:
+            every rule your instructions name is resolved against your real
+            linter — eleven of them, from JS to Rust to Go to Kotlin. The rule
+            has to <span className="text-foreground">exist</span>, and wherever
+            that linter has an on/off switch, be{" "}
             <span className="text-foreground">enabled</span> in your config:
           </p>
           <ul className="mt-6 flex flex-wrap items-center justify-center gap-2">
