@@ -146,23 +146,27 @@ Set `capability-diff: true` to answer one question on every PR: **did this chang
 is a thin composite that runs the published `npx vigiles@<version>` CLI, so:
 
 - **Action ref** (`uses: zernie/vigiles@v1`) — pin the **floating major tag**
-  `@v1` for automatic patch/minor updates to the _Action wrapper_ (the release
-  pipeline keeps `v1` pointed at the latest `1.x` of the action). Pin a full tag
-  (`@v1.2.3`) or a commit SHA for byte-for-byte reproducibility. `@main` tracks
-  unreleased `HEAD`.
+  `@v1`. `1` is the major of the _wrapper's own interface_ — its inputs and
+  outputs — which has only ever grown, so it is still 1 while the npm package is
+  on a far higher number. The release pipeline re-points `v1` at each new
+  release, so you get wrapper fixes automatically. For byte-for-byte
+  reproducibility pin a full release tag (e.g. `@v26.0.1`) or a commit SHA;
+  `@main` tracks unreleased `HEAD`. Do **not** pin one of the bare `v2`…`v26`
+  tags: a bug in the release pipeline (fixed 2026-09-07) derived those from the
+  package version, and they are now frozen where they stopped.
 - **CLI version** (`version:` input, default `latest`) — selects which published
-  `vigiles` npm release the Action runs (currently `3.x`). Leave it `latest`, or
-  pin `version: '3'` / `version: '3.0.0'` to lock the CLI independently of the
-  Action tag.
+  `vigiles` npm release the Action runs. Leave it `latest`, or pin a major
+  (`version: '26'`) or an exact release (`version: '26.0.1'`) to lock the CLI
+  independently of the Action tag.
 
 So `uses: zernie/vigiles@v1` with the default `version: latest` runs the newest
-`vigiles` CLI (3.x today) through the v1 action wrapper. The `@v1` does **not**
-mean "vigiles 1.x". To lock both: `uses: zernie/vigiles@v1` + `with: { version: '3' }`.
+published `vigiles` CLI through the v1 Action wrapper. The `@v1` does **not**
+mean "vigiles 1.x". To lock both: `uses: zernie/vigiles@v1` + `with: { version: '26' }`.
 
 ```yaml
 - uses: zernie/vigiles@v1
   with:
-    version: "3" # pin the CLI major; @v1 pins the action wrapper
+    version: "26" # pin the CLI major; @v1 pins the Action wrapper
 ```
 
 To verify generated types are fresh in CI:

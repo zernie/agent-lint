@@ -101,12 +101,13 @@ declare module "vigiles/generated" {
     | "internal:check"
     | "docs:api";
 
-  /** 415 project files. */
+  /** 416 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
     | "src/action-gate.test.ts"
     | "src/action-gate.ts"
+    | "src/action-major-tag.test.ts"
     | "src/action-yml.test.ts"
     | "src/adapter-conformance.ts"
     | "src/adapter-contract.test.ts"
@@ -594,6 +595,7 @@ declare module "vigiles/spec" {
       | "src/CLAUDE.md.spec.ts"
       | "src/action-gate.test.ts"
       | "src/action-gate.ts"
+      | "src/action-major-tag.test.ts"
       | "src/action-yml.test.ts"
       | "src/adapter-conformance.ts"
       | "src/adapter-contract.test.ts"

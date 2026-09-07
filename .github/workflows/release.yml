@@ -58,25 +58,56 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npx semantic-release
 
-      - name: Update floating major-version tag for the Action
-        # Marketplace consumers pin `uses: zernie/vigiles@v1`. Point that
-        # floating tag at the newest released vX.Y.Z so @v1 always tracks the
-        # latest compatible release. Idempotent: a no-op when already current.
+      - name: Update the Action's floating major-version tag
+        # ── WHY THIS IS NOT DERIVED FROM THE PACKAGE VERSION ────────────────────
+        # The GitHub Action and the npm package are versioned on DIFFERENT AXES.
+        # The Action is a thin composite wrapper over `npx vigiles`; its own
+        # interface is its inputs and outputs, every input is optional with a
+        # default, and no input or output has ever been removed — so its major is
+        # still 1, while the package is on 26.
+        #
+        # Until 2026-09-07 this step computed `major="${latest%%.*}"` from the
+        # newest PACKAGE tag, so it moved `v26` and could NEVER move `v1`. But
+        # `vigiles init` emits `uses: zernie/vigiles@v1` (src/cli.ts) and
+        # docs/github-action.md tells users to pin that — and no `v1` ref exists,
+        # so the first PR a new user opened after `init` failed with
+        # "Unable to resolve action zernie/vigiles@v1". CI never noticed because
+        # this repo dogfoods the Action as `uses: ./`, which resolves no ref at
+        # all. The contract the docs describe is the right one; this step now
+        # implements it. Kept honest by src/action-major-tag.test.ts, which reads
+        # ACTION_MAJOR_TAG below and the ref `init` emits and fails if they differ.
+        #
+        # The v2…v26 floating tags left behind by the old logic are NOT deleted —
+        # someone may have copied a pinned example. They are simply frozen at
+        # whatever release last moved them, which is a valid immutable pin. Only
+        # ACTION_MAJOR_TAG moves from here on.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The ACTION's major version — bump this only on a breaking change to
+          # action.yml's inputs/outputs, never because the npm package majored.
+          ACTION_MAJOR_TAG: v1
         run: |
           set -euo pipefail
+          case "$ACTION_MAJOR_TAG" in
+            v[0-9]*) ;;
+            *) echo "::error::ACTION_MAJOR_TAG must look like vN, got '$ACTION_MAJOR_TAG'"; exit 1 ;;
+          esac
           git fetch --tags --force
           latest="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)"
           if [ -z "$latest" ]; then
             echo "No version tags yet — skipping major-tag update."
             exit 0
           fi
-          major="${latest%%.*}"   # v1.2.3 -> v1
-          if [ "$(git rev-parse -q --verify "refs/tags/$major" || true)" = "$(git rev-parse "$latest")" ]; then
-            echo "$major already points at $latest — nothing to do."
+          # Peel both sides to a COMMIT so the comparison and the write agree even
+          # if semantic-release ever starts producing annotated tags (today's are
+          # lightweight, so this is a no-op — and that is the point: it stays a
+          # no-op instead of re-pushing the same tag forever).
+          target="$(git rev-parse "$latest^{commit}")"
+          current="$(git rev-parse -q --verify "refs/tags/$ACTION_MAJOR_TAG^{commit}" || true)"
+          if [ "$current" = "$target" ]; then
+            echo "$ACTION_MAJOR_TAG already points at $latest ($target) — nothing to do."
             exit 0
           fi
-          echo "Pointing $major at $latest"
-          git tag -f "$major" "$latest"
-          git push origin -f "refs/tags/$major"
+          echo "Pointing $ACTION_MAJOR_TAG at $latest ($target)"
+          git tag -f "$ACTION_MAJOR_TAG" "$target"
+          git push origin -f "refs/tags/$ACTION_MAJOR_TAG"
