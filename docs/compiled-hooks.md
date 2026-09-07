@@ -26,6 +26,7 @@ vigiles lets you author a hook as a **pure typed function** `(event) => Decision
 - [The bug classes it eliminates](#the-bug-classes-it-eliminates)
 - [The roles](#the-roles)
 - [The vocabulary](#the-vocabulary)
+- [Testing a hook that remembers](#testing-a-hook-that-remembers)
 - [Observe mode (shadow rollout)](#observe-mode-shadow-rollout)
 - [Deciding on external state (context providers)](#deciding-on-external-state-context-providers)
 - [Compile and wire](#compile-and-wire)
@@ -118,15 +119,17 @@ A hook that should speak _at most once an hour_, or only _after something else a
 So the hook does not write. It **declares** a fact, and the runtime writes it:
 
 ```ts
-export default experimental_defineHook({
+export default experimental_defineReact({
   on: "Stop",
-  needs: { sync: state("calendar.synced") },
+  needs: [state("calendar.synced")],
   react: (e) =>
-    e.ctx.sync.olderThan("1h")
+    e.ctx["calendar.synced"].olderThan("1h")
       ? run("./bin/remind.sh") // meanwhile whoever DID the sync returns
       : nothing(), //   record("calendar.synced")
 });
 ```
+
+> ⚠️ Two shapes worth pinning: the role is **`experimental_defineReact`** (a `react` is what returns `run()`/`nothing()`), and **`needs` is an array**. The fact lands on `e.ctx` under the key you named — `e.ctx["calendar.synced"]` — not under a label of your choosing.
 
 A key is a **name, not a path** — the runtime decides where it lives, so two hooks cannot disagree about a file. Reading one gives a `StateFact`:
 
@@ -141,6 +144,42 @@ A key is a **name, not a path** — the runtime decides where it lives, so two h
 > 🔴 **`Infinity` rather than `null` is a safety property, not a style choice.** The natural throttle is `if (ageSeconds < LIMIT) return nothing()`. In JavaScript `null < 3600` is `true`, so a key that was **never** recorded would read as _fresh_, and a newly installed hook would go silent forever — quietest exactly when it was just added. With `Infinity` every "younger than X" test is false on a missing key, so the hook fires. An unparseable timestamp is treated the same way, as never-recorded: that fails toward **noise** instead of toward a silence nobody can notice.
 
 Throttling is not a separate feature — it is this one, read as "when did I last speak". And `record` is a **declaration in the return value**, not a call the hook makes, so a hook cannot record that something happened while doing nothing: the two cannot drift apart.
+
+### Testing a hook that remembers
+
+A throttle only does anything interesting against an **old** fact — and "old" is not something a test can produce by waiting. So the store is seedable, through one handle on the `vigiles` test surface:
+
+```js
+import { experimental_hookState, runHook } from "vigiles";
+
+const st = experimental_hookState(hookFile, { cwd: projectRoot });
+st.clear(); // start from "never recorded"
+
+st.seed("retro.nagged", { ago: "4d" }); //  → the hook speaks
+st.seed("retro.nagged", { ago: "10m" }); // → the hook stays quiet
+st.seed("retro.nagged", { value: "main", at: someDate }); // exact instant
+
+st.read("retro.nagged"); // the same StateFact the hook's e.ctx[key] gets
+
+// …then run the hook for real and assert what it did with that fact.
+const r = runHook(`npx vigiles hook-runtime run-program ${hookFile}`, event, {
+  cwd: projectRoot,
+});
+```
+
+| on the handle                   | what it does                                                                            |
+| ------------------------------- | --------------------------------------------------------------------------------------- |
+| `seed(key, { ago, at, value })` | write a fact as if the hook had recorded it, then read it back; `ago` **backdates**     |
+| `read(key)`                     | the fact exactly as `e.ctx[key]` will see it — `Infinity` when never recorded, no throw |
+| `clear()`                       | forget this hook's facts (test isolation)                                               |
+| `dir`                           | where they live — for a failure message, **not** a path to build on                     |
+
+Two things to know:
+
+- **Pass the same `cwd` the hook will run under.** The store's location is derived from the hook's path and the project root, so a handle built with a different root points at a different (empty) store.
+- **It writes through the runtime's own writer**, so a seeded fact and a recorded one are the same file. That is the point: a seeder with its own copy of the path rule agrees with the runtime only until someone edits the derivation, and then fails green.
+
+It is on `vigiles`, **not** on `vigiles/hook`. `vigiles/hook` is the only import a compiled hook may have, and its guarantee is that it hands out no writer — so the seeding handle lives where a test can reach it and a hook cannot.
 
 A prompt gate and a stop gate read like any other gate — they just decide over a different event:
 
@@ -535,20 +574,30 @@ the thirty-first from shipping unmarked. Same reasoning as
   every one of them both read and wrote a stamp file, and throttling was
   inexpressible. An API that gained a dimension that recently has not been
   pressure-tested by anyone but its author.
-- 🔴 **Testing a hook that uses named state is archaeology today.** The runtime
-  derives the store's path from the hook's own location and validates the key
-  charset, so a test that wants to seed "this fact was recorded four days ago"
-  must reconstruct a private path. The dogfood repo does exactly that, hard-coded,
-  and it broke when the facts were renamed. There is no supported seeding API
-  beside `runHook`. Until there is, a consumer testing a throttle is depending on
-  internals.
 - Two consumers total, both belonging to the author — and neither is this
   repository's own harness, which still wires its hooks as plain shell. A
   vocabulary nobody has had to live with is a vocabulary whose sharp edges are
   unknown.
 
-**What would have to be true to drop the prefix:** a supported way to seed and
-read named state in a test, and at least one consumer who did not write the API.
+**What would have to be true to drop the prefix:** ~~a supported way to seed and
+read named state in a test~~ (closed — see below), and at least one consumer who
+did not write the API.
+
+The state-seeding item is **closed as of 2026-09-07**. It read: _"Testing a hook
+that uses named state is archaeology today. The runtime derives the store's path
+from the hook's own location and validates the key charset, so a test that wants
+to seed 'this fact was recorded four days ago' must reconstruct a private path.
+The dogfood repo does exactly that, hard-coded, and it broke when the facts were
+renamed."_ `experimental_hookState` on the `vigiles` test surface is that API —
+[Testing a hook that remembers](#testing-a-hook-that-remembers). It is a thin
+handle over the store functions the live runtime calls, not a second copy of the
+path rule, and both directions are pinned end to end against the real runtime: a
+gate that FIRES on a four-day-old seeded fact and STAYS QUIET on a ten-minute-old
+one, plus the reverse direction — a fact the RUNTIME recorded, read back through
+the handle.
+
+What that leaves is the second half: consumers. One consumer who did not write
+the API, living with a stateful hook long enough to find its edges.
 
 An earlier version of this list also demanded an idempotent `compile`. That was
 already false when it was written: the merge is keyed by the hook's canonicalized

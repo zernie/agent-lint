@@ -101,7 +101,7 @@ declare module "vigiles/generated" {
     | "internal:check"
     | "docs:api";
 
-  /** 416 project files. */
+  /** 418 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -409,6 +409,8 @@ declare module "vigiles/generated" {
     | "src/hook-load-wedge.test.ts"
     | "src/hook-oss-comparison.test.ts"
     | "src/hook-state-runtime.test.ts"
+    | "src/hook-state-store.test.ts"
+    | "src/hook-state-store.ts"
     | "src/hook.test.ts"
     | "src/hook.ts"
     | "src/instruction-sources.test.ts"
@@ -897,6 +899,8 @@ declare module "vigiles/spec" {
       | "src/hook-load-wedge.test.ts"
       | "src/hook-oss-comparison.test.ts"
       | "src/hook-state-runtime.test.ts"
+      | "src/hook-state-store.test.ts"
+      | "src/hook-state-store.ts"
       | "src/hook.test.ts"
       | "src/hook.ts"
       | "src/instruction-sources.test.ts"

@@ -81,6 +81,7 @@ export default defineConfig({
         "src/eval-lock.ts",
         "src/stats.ts",
         "src/run-hook.ts",
+        "src/hook-state-store.ts",
         "src/run-script.ts",
         "src/mock-model.ts",
         "src/plugin-loader.ts",

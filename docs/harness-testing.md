@@ -142,6 +142,24 @@ runHook(vendoredHookCmd, event, { trusted: false, env: { GUARD: guardPath } });
 
 See [Sandboxing](sandboxing.md) for the confinement model and the `egress` option.
 
+**Testing a hook that REMEMBERS something?** A throttled hook ("nag at most once a
+day") only behaves interestingly against an **old** recorded fact, and "old" is not
+something a test can produce by waiting. `experimental_hookState` seeds one — through
+the same store the runtime writes, so a seeded fact and a recorded one are the same
+file:
+
+```ts
+import { experimental_hookState, runHook } from "vigiles";
+
+const st = experimental_hookState(hookFile, { cwd });
+st.clear();
+st.seed("retro.nagged", { ago: "4d" }); // → the hook speaks
+st.seed("retro.nagged", { ago: "10m" }); // → it stays quiet
+runHook(hookCmd, event, { cwd });
+```
+
+[The handle, and why it is not on `vigiles/hook` →](compiled-hooks.md#testing-a-hook-that-remembers)
+
 ## Prove a guard actually blocks (the disaster battery)
 
 A guard that looks like it blocks and silently does not is the most expensive hook

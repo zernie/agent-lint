@@ -19,7 +19,6 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
-  renameSync,
   lstatSync,
   realpathSync,
   type Dirent,
@@ -272,12 +271,13 @@ import {
   type RegisteredProvider,
 } from "./core/hook-providers.js";
 import { parse as parseToml } from "@iarna/toml";
-import { sha256short, type SHA256Hash } from "./core/hash.js";
-import {
-  type StateEntry,
-  type StateFact,
-  type StateWrite,
-} from "./core/hook-state.js";
+import { type SHA256Hash } from "./core/hash.js";
+import { type StateFact } from "./core/hook-state.js";
+// The named-state STORE. Lifted out of this file so a TEST can seed a fact
+// through the SAME writer the runtime uses (`experimental_hookState`) — the
+// private path a stateful hook's test used to hard-code is what kept the hook
+// vocabulary experimental. Same move as `loadHook`, for the same reason.
+import { readHookState, writeHookState } from "./hook-state-store.js";
 import {
   evaluatePreToolUse,
   readActiveAgent,
@@ -7311,73 +7311,6 @@ async function compileProviders(): Promise<string[]> {
 /** Path of the tamper-evident stamp sidecar for a hook file. */
 function hookStampPath(file: string): string {
   return resolve(process.cwd(), ".vigiles/hooks", basename(file) + ".json");
-}
-
-/**
- * The directory a hook's recorded facts live in — the SCOPE of `state()`/`record()`.
- *
- * Derived from the hook's own location and never from anything the hook said, so
- * a key cannot address another owner's store: hooks shipped in the same directory
- * share their facts (the requirement — one hook records, another reads), a
- * vendored plugin's hooks get their own. The layout MIRRORS the hook's directory
- * rather than slugging it, which keeps it injective and lets a human debugging a
- * hook find the fact by walking the path they already know:
- *
- *   .claude/hooks/calendar-sync-record.hook.ts
- *     → .vigiles/state/.claude/hooks/calendar.synced.json
- *
- * A hook outside the project (an absolute path elsewhere) falls back to a hash of
- * its directory: still stable and still isolated, just not readable — which is the
- * right trade for a case that should not happen in a project's own harness.
- */
-function hookStateDir(file: string): string {
-  const dir = dirname(resolve(process.cwd(), file));
-  const rel = relative(process.cwd(), dir);
-  const inside = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
-  return resolve(
-    process.cwd(),
-    ".vigiles/state",
-    inside ? rel : `external-${sha256short(dir)}`,
-  );
-}
-
-/** Read one recorded fact for a hook, or `null` if it was never recorded. */
-function readHookState(file: string, key: string): StateEntry | null {
-  try {
-    const raw = readFileSync(
-      resolve(hookStateDir(file), key + ".json"),
-      "utf-8",
-    );
-    const parsed = JSON.parse(raw) as StateEntry;
-    return typeof parsed.value === "string" && typeof parsed.at === "string"
-      ? parsed
-      : null;
-  } catch {
-    // Never recorded, unreadable, or corrupt — all "no fact", which `stateFact`
-    // turns into an infinite age, so the reading hook SPEAKS. Failing toward
-    // noise is the whole point; a store problem must never look like freshness.
-    return null;
-  }
-}
-
-/**
- * Record one fact. Atomic: written to a temp file in the same directory and
- * `rename()`d over, so a concurrent reader sees the whole old entry or the whole
- * new one — never one write's value with another's timestamp. Distinct keys are
- * distinct files and never interact at all.
- */
-function writeHookState(file: string, w: StateWrite): void {
-  const dir = hookStateDir(file);
-  const target = resolve(dir, w.name + ".json");
-  const entry: StateEntry = {
-    value: w.value,
-    at: new Date().toISOString(),
-    by: normalizeHookRef(file),
-  };
-  mkdirSync(dir, { recursive: true });
-  const tmp = `${target}.${String(process.pid)}.tmp`;
-  writeFileSync(tmp, JSON.stringify(entry, null, 2) + "\n");
-  renameSync(tmp, target);
 }
 
 /**
