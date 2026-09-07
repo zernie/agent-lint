@@ -37,6 +37,7 @@
  * logic here, then assert it fires in the assembled machine there.
  */
 import type { HookProtocol } from "./core/hook-protocol.js";
+import { decideHookCondition } from "./core/hook-condition.js";
 import { claudeCodeHookProtocol } from "./adapters/claude-code/hook-protocol.js";
 import { propertyTest } from "./core/proofs.js";
 import { trimTrailingSeparators } from "./core/hook-program.js";
@@ -64,7 +65,25 @@ export type {
  * Options for {@link runHook} — every {@link RunScriptOptions} knob except
  * `stdin`, which the hook layer owns (it serializes the event there).
  */
-export type RunHookOptions = Omit<RunScriptOptions, "stdin">;
+export type RunHookOptions = Omit<RunScriptOptions, "stdin"> & {
+  /**
+   * The hook's CONDITION as the harness config writes it — Claude Code's `if`,
+   * e.g. `"Bash(git push *--force*)"`. When the condition does not match the
+   * event, the harness never spawns the hook, so neither do we: the result comes
+   * back `ran: false`, `blocked: false`.
+   *
+   * 🔴 PASS IT WHENEVER THE HOOK YOU ARE TESTING DECLARES ONE. A conditional hook
+   * tested without its condition is tested as an unconditional one, and since the
+   * bodies of real conditional guards are unconditional denies, that reports the
+   * guard as blocking everything you feed it. See `core/hook-condition.ts`.
+   */
+  readonly condition?: string;
+  /**
+   * The harness whose wire protocol + condition grammar to use. Defaults to
+   * Claude Code, so every existing caller is unaffected.
+   */
+  readonly protocol?: HookProtocol;
+};
 
 // ---------------------------------------------------------------------------
 // propertyHook — invariant testing for a hook's (event) → decision (Phase 5 of
@@ -313,6 +332,20 @@ export interface HookRunResult extends ScriptRunResult {
     | "deny"
     | "ask"
     | undefined;
+  /**
+   * Whether the hook process was actually SPAWNED. False only when a declared
+   * condition (`RunHookOptions.condition`) did not match, meaning the harness
+   * would not have run it either.
+   *
+   * 🔴 READ THIS BEFORE READING `blocked`. `ran: false` and a hook that ran and
+   * allowed both arrive as `blocked: false`, and they are completely different
+   * facts — "the harness would never invoke this guard here" versus "the guard
+   * looked and let it through". Collapsing them is what let a conditional guard
+   * be reported as blocking a battery it cannot see.
+   */
+  readonly ran: boolean;
+  /** Why the hook ran or did not — the condition verdict, always present. */
+  readonly conditionReason: string;
 }
 
 /** Parse stdout as a hook JSON decision (pure, testable without a process). */
@@ -416,13 +449,63 @@ export function runHookWith(
   opts: RunHookOptions,
   deps: RunScriptDeps,
 ): HookRunResult {
+  const protocol = opts.protocol ?? claudeCodeHookProtocol;
+  // The condition is decided BEFORE the spawn, because that is what the harness
+  // does — a non-matching `if` means the process never starts. Deciding it after
+  // would still report the right verdict but would run the user's hook for an
+  // event the harness would never have handed it.
+  const verdict = decideHookCondition(
+    opts.condition,
+    {
+      event: input.hook_event_name ?? "",
+      tool: input.tool_name ?? "",
+      input: (input.tool_input ?? {}) as Record<string, unknown>,
+    },
+    protocol.condition,
+  );
+  if (!verdict.runs)
+    return {
+      ...skippedScriptResult(),
+      json: null,
+      blocked: false,
+      decision: undefined,
+      haltsTurn: false,
+      blockedBy: [],
+      ran: false,
+      conditionReason: verdict.why,
+    };
+
   const res = runScriptWith(command, JSON.stringify(input), opts, deps);
   const json = parseHookOutput(res.stdout);
   const { blocked, decision, haltsTurn, blockedBy } = decideHook(
     res.exitCode,
     json,
+    protocol,
   );
-  return { ...res, json, blocked, decision, haltsTurn, blockedBy };
+  return {
+    ...res,
+    json,
+    blocked,
+    decision,
+    haltsTurn,
+    blockedBy,
+    ran: true,
+    conditionReason: verdict.why,
+  };
+}
+
+/**
+ * The `ScriptRunResult` shape for a hook that was never spawned. Exit code 0 and
+ * empty streams describe reality: no process existed, so the tool call proceeded.
+ * The fact that distinguishes this from a hook that ran and allowed is `ran`.
+ *
+ * `egressDropped` and `filesWritten` stay UNDEFINED on purpose — they mean
+ * "recorded nothing", and nothing was recorded because nothing ran. Filling them
+ * with zeroes would claim an observation that never happened, which is the same
+ * class of lie this whole change removes.
+ */
+function skippedScriptResult(): ScriptRunResult {
+  return { exitCode: 0, stdout: "", stderr: "", egress: [] };
 }
 
 /**

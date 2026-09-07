@@ -87,6 +87,8 @@ function fakeHook(blocked: boolean): HookRunResult {
     egress: [],
     filesWritten: [],
     decision: blocked ? "deny" : undefined,
+    ran: true,
+    conditionReason: "no condition declared",
   };
 }
 
