@@ -191,6 +191,20 @@ export type {
   VerifyGuardrailOptions,
 } from "./guardrail-check.js";
 
+// The same battery, pointed at a DIRECTORY instead of one command string. It
+// reads each hook's event, matcher, command and condition off the same
+// registration, so the pairing mistake `verifyGuardrail`'s own comment has to ask
+// callers to avoid ("pass the hook's declared `if` here") cannot be made. It
+// belongs on THIS barrel and beside the battery for the same reason the battery
+// does: nothing here calls a model.
+export { experimental_verifyPluginGuards } from "./verify-plugin-guards.js";
+export type {
+  PluginGuardReport,
+  SweptHook,
+  SweptHookOutcome,
+  VerifyPluginGuardsOptions,
+} from "./verify-plugin-guards.js";
+
 // Tool stubs on PATH (rung R2): shadow a CLI tool with a recorded canned result.
 export * from "./tool-stub.js";
 

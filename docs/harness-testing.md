@@ -220,6 +220,58 @@ find a blind spot in that parser, because it would share it.
 everything scores 100% here. Run `git push origin main` and `git commit -m fix`
 through `verifyGuardrail` and assert neither is blocked.
 
+### Sweep every hook a repo declares (`experimental_verifyPluginGuards`)
+
+`assertBlocksDisasters` takes ONE hook command. Point
+`experimental_verifyPluginGuards` at a **directory** instead and it runs the same
+battery against every hook the repo actually registers — using each hook's own
+event, matcher and `if` condition, read from the config:
+
+```ts
+import { experimental_verifyPluginGuards } from "vigiles";
+
+const report = experimental_verifyPluginGuards(".");
+
+for (const h of report.hooks) {
+  if (h.status === "measured")
+    console.log(`${h.blocked.length}/${h.results.length}  ${h.hook.command}`);
+  else console.log(`⊘ ${h.status}  ${h.hook.command} — ${h.reason}`);
+}
+for (const note of report.notes) console.log(note);
+```
+
+**Why a directory rather than a command.** A Claude Code hook can carry an `if`
+condition — a permission-rule pattern like `"Bash(git commit *--no-verify*)"` —
+and the harness only spawns the hook when a call matches it. Many real guards are
+written that way: an unconditional deny in the body, with the `if` doing the
+selecting. Hand that body to `verifyGuardrail` without its condition and it blocks
+all seven disasters, so a narrow guard is certified as stopping `rm -rf /`.
+Reading the condition off the same registration as the command means the two
+cannot be paired wrongly.
+
+**Three things that are NOT a score.** Each hook comes back as one of three
+statuses, so a hook the battery never reached can never be read as `0/7`:
+
+| status           | what it means                                                     | what to do                            |
+| ---------------- | ----------------------------------------------------------------- | ------------------------------------- |
+| `measured`       | the battery reached it; `results` holds one entry per event       | read `blocked` / `allowed` / `notRun` |
+| `not-applicable` | another event, or a matcher selecting none of the battery's tools | nothing — it is not a Bash guard      |
+| `unresolved`     | the command names a variable nothing has set                      | pass `env` so the real program runs   |
+
+A repo with no hooks reports zero of everything **and says so in `notes`** — "this
+is not a clean bill of health, it is an absence of guards."
+
+**It reports, it does not judge.** There is no throwing version, because a repo's
+config never says which of its hooks is meant to be a safety guard. Once _you_ know
+which hook must block what, `assertBlocksDisasters` is still the gate.
+
+⚠️ **It runs each reachable hook.** Point it at a repo whose hooks you are willing
+to execute, or pass `trusted: false` / `sandbox: "auto"` to confine them.
+
+Works on any harness with shell hooks — Claude Code by default, Codex via
+`{ adapter: codexAdapter }`. A harness whose hooks are not shell processes reports
+n/a in `notes` rather than an empty pass.
+
 ## Test the assembled machine (`runHarnessTest`)
 
 Right logic ≠ wired in correctly _and_ reaching the model. `runHarnessTest` spawns

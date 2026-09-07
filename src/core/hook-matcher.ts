@@ -444,3 +444,36 @@ export function hookMatcherIssues(
   }
   return findings;
 }
+
+/**
+ * Would this matcher select a call to `tool` — i.e. does the harness spawn the
+ * hook at all?
+ *
+ * The same two MEASURED facts the module header pins, asked as a question rather
+ * than as a defect: a matcher with no regex metacharacter is compared by string
+ * EQUALITY, one with metacharacters is an UNANCHORED regex. It lives here and
+ * not in the caller so those semantics have one home (one-detector-no-drift) —
+ * `hookMatcherIssues` judges a matcher, this one applies it.
+ *
+ * 🔴 FAIL-OPEN, in exactly the direction `decideHookCondition`
+ * (`core/hook-condition.ts`) is. Every
+ * uncertain input answers `true`: an absent matcher, a match-all (`*`, `.*`), a
+ * pattern the regex engine rejects. A wrong answer here can therefore only ever
+ * make a report say "the hook ran and did not block" — a fact about the hook —
+ * never "the hook was skipped", which would be an alarm we invented. A matcher
+ * that cannot compile is a real defect, and it already has an owner: the
+ * `hook-matcher` rule's `invalid-regex` finding. Deciding it a second time here
+ * would put two verdicts on one fact.
+ *
+ * @param matcher - the registration's matcher, or `null` when it declares none.
+ * @param tool - the tool named by the call, e.g. `"Bash"`.
+ */
+export function hookMatcherSelects(
+  matcher: string | null,
+  tool: string,
+): boolean {
+  if (matcher === null || MATCH_ALL.has(matcher)) return true;
+  if (isLiteralMatcher(matcher)) return matcher === tool;
+  const re = compileMatcher(matcher);
+  return re === null || re.test(tool);
+}

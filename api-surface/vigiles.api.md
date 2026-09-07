@@ -638,6 +638,9 @@ export function experimental_parseEmitted(toolCalls: readonly ToolCall[], contra
 export function experimental_startServices(services: Readonly<Record<string, ServiceSpec>>, runtime: ContainerRuntime): Promise<ServiceSession>;
 
 // @public
+export function experimental_verifyPluginGuards(dir: string, opts?: VerifyPluginGuardsOptions): PluginGuardReport;
+
+// @public
 export function experimental_withServices<T>(services: Readonly<Record<string, ServiceSpec>>, runtime: ContainerRuntime, fn: (session: ServiceSession) => Promise<T>): Promise<T>;
 
 // @public
@@ -962,6 +965,16 @@ export function parseSubagents(streamJson: string): SubagentTrace[];
 // @public
 export function parseToolCalls(streamJson: string): ToolCall[];
 
+// @public
+export interface PluginGuardReport {
+    readonly dir: string;
+    readonly event: string;
+    readonly events: readonly DisasterEvent[];
+    readonly harness: string;
+    readonly hooks: readonly SweptHookOutcome[];
+    readonly notes: readonly string[];
+}
+
 // @public (undocumented)
 export interface PromptDiversityIssue {
     // (undocumented)
@@ -1229,6 +1242,33 @@ export interface SubagentTrace {
 }
 
 // @public
+export interface SweptHook {
+    readonly command: string;
+    readonly condition: string | null;
+    readonly event: string;
+    readonly index: number;
+    readonly matcher: string | null;
+}
+
+// @public
+export type SweptHookOutcome = {
+    readonly status: "measured";
+    readonly hook: SweptHook;
+    readonly results: readonly GuardrailResult[];
+    readonly blocked: readonly string[];
+    readonly allowed: readonly string[];
+    readonly notRun: readonly string[];
+} | {
+    readonly status: "not-applicable";
+    readonly hook: SweptHook;
+    readonly reason: string;
+} | {
+    readonly status: "unresolved";
+    readonly hook: SweptHook;
+    readonly reason: string;
+};
+
+// @public
 export function toBaselineFile(reports: readonly EvalReport[], recordedAt?: string): BaselineFile;
 
 // @public
@@ -1334,6 +1374,14 @@ export function verifyGuardrail(hookCommand: string, opts?: VerifyGuardrailOptio
 
 // @public (undocumented)
 export interface VerifyGuardrailOptions extends RunHookOptions {
+    readonly categories?: readonly DisasterCategory[];
+    readonly event?: string;
+    readonly events?: readonly DisasterEvent[];
+}
+
+// @public
+export interface VerifyPluginGuardsOptions extends Omit<RunHookOptions, "condition" | "protocol"> {
+    readonly adapter?: HarnessAdapter;
     readonly categories?: readonly DisasterCategory[];
     readonly event?: string;
     readonly events?: readonly DisasterEvent[];

@@ -101,7 +101,7 @@ declare module "vigiles/generated" {
     | "internal:check"
     | "docs:api";
 
-  /** 422 project files. */
+  /** 424 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -524,6 +524,8 @@ declare module "vigiles/generated" {
     | "src/trigger-containment.test.ts"
     | "src/trigger-containment.ts"
     | "src/ts-runner-caps.ts"
+    | "src/verify-plugin-guards.test.ts"
+    | "src/verify-plugin-guards.ts"
     | "src/vitest.mts";
 }
 
@@ -1018,6 +1020,8 @@ declare module "vigiles/spec" {
       | "src/trigger-containment.test.ts"
       | "src/trigger-containment.ts"
       | "src/ts-runner-caps.ts"
+      | "src/verify-plugin-guards.test.ts"
+      | "src/verify-plugin-guards.ts"
       | "src/vitest.mts";
   }
   interface KnownNpmScripts {
