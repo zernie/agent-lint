@@ -26,6 +26,7 @@ vigiles lets you author a hook as a **pure typed function** `(event) => Decision
 - [The bug classes it eliminates](#the-bug-classes-it-eliminates)
 - [The roles](#the-roles)
 - [The vocabulary](#the-vocabulary)
+- [Testing a hook that remembers](#testing-a-hook-that-remembers)
 - [Observe mode (shadow rollout)](#observe-mode-shadow-rollout)
 - [Deciding on external state (context providers)](#deciding-on-external-state-context-providers)
 - [Compile and wire](#compile-and-wire)
@@ -56,7 +57,7 @@ The unifying idea: a hook is a tiny program, and a closed, typed vocabulary shri
 - **`experimental_definePromptGate`** — a **prompt gate** (`UserPromptSubmit`). Sees the prompt **text** (`e.prompt`) and returns a `Decision`. `deny` blocks/erases the prompt — useful as a security filter that refuses a prompt leaking a secret or carrying an injection.
 - **`experimental_defineStopGate`** — a **stop gate** (`Stop` / `SubagentStop`). Returns a `Decision`. `deny` keeps the agent **going** (gate-until-tests-pass; the reason is fed back to the model). Honour `e.stopHookActive` (the loop guard): `allow` when it's set, or you can wedge the agent in a stop→continue loop.
 - **`experimental_defineInject`** — an **inject** (`SessionStart` / `UserPromptSubmit`). Returns an `Injection` (`inject(text)`) — context added to the model. It has **no `deny`**: a no-decision event can't block.
-- **`experimental_defineReact`** — a **react** (`PostToolUse`). Returns a `Reaction` — `run(cmd)`, `notice(msg)`, or `nothing()`. The tool already ran, so it **can't block**. It sees the tool's **response** (`e.response`, e.g. react only on a failure), and `run(cmd)`'s effect is **classified at construction** (read-only / side-effecting), so every reaction is auditable without running it.
+- **`experimental_defineReact`** — a **react** (`PostToolUse`). Returns a `Reaction` — `run(cmd)`, `notice(msg)`, or `nothing()`. The tool already ran, so it **can't block**. It sees the tool's **response** (`e.response`, e.g. react only on a failure), and `run(cmd)`'s effect is **classified at construction** (read-only / side-effecting), so every reaction is auditable without running it. A `notice(msg)` reaches the agent as injected context — see [Where a notice arrives](#where-a-notice-arrives).
 
 Every **gate** (tool / prompt / stop) takes an optional `mode` — see [Observe mode](#observe-mode-shadow-rollout).
 
@@ -118,15 +119,17 @@ A hook that should speak _at most once an hour_, or only _after something else a
 So the hook does not write. It **declares** a fact, and the runtime writes it:
 
 ```ts
-export default experimental_defineHook({
+export default experimental_defineReact({
   on: "Stop",
-  needs: { sync: state("calendar.synced") },
+  needs: [state("calendar.synced")],
   react: (e) =>
-    e.ctx.sync.olderThan("1h")
+    e.ctx["calendar.synced"].olderThan("1h")
       ? run("./bin/remind.sh") // meanwhile whoever DID the sync returns
       : nothing(), //   record("calendar.synced")
 });
 ```
+
+> ⚠️ Two shapes worth pinning: the role is **`experimental_defineReact`** (a `react` is what returns `run()`/`nothing()`), and **`needs` is an array**. The fact lands on `e.ctx` under the key you named — `e.ctx["calendar.synced"]` — not under a label of your choosing.
 
 A key is a **name, not a path** — the runtime decides where it lives, so two hooks cannot disagree about a file. Reading one gives a `StateFact`:
 
@@ -141,6 +144,42 @@ A key is a **name, not a path** — the runtime decides where it lives, so two h
 > 🔴 **`Infinity` rather than `null` is a safety property, not a style choice.** The natural throttle is `if (ageSeconds < LIMIT) return nothing()`. In JavaScript `null < 3600` is `true`, so a key that was **never** recorded would read as _fresh_, and a newly installed hook would go silent forever — quietest exactly when it was just added. With `Infinity` every "younger than X" test is false on a missing key, so the hook fires. An unparseable timestamp is treated the same way, as never-recorded: that fails toward **noise** instead of toward a silence nobody can notice.
 
 Throttling is not a separate feature — it is this one, read as "when did I last speak". And `record` is a **declaration in the return value**, not a call the hook makes, so a hook cannot record that something happened while doing nothing: the two cannot drift apart.
+
+### Testing a hook that remembers
+
+A throttle only does anything interesting against an **old** fact — and "old" is not something a test can produce by waiting. So the store is seedable, through one handle on the `vigiles` test surface:
+
+```js
+import { experimental_hookState, runHook } from "vigiles";
+
+const st = experimental_hookState(hookFile, { cwd: projectRoot });
+st.clear(); // start from "never recorded"
+
+st.seed("retro.nagged", { ago: "4d" }); //  → the hook speaks
+st.seed("retro.nagged", { ago: "10m" }); // → the hook stays quiet
+st.seed("retro.nagged", { value: "main", at: someDate }); // exact instant
+
+st.read("retro.nagged"); // the same StateFact the hook's e.ctx[key] gets
+
+// …then run the hook for real and assert what it did with that fact.
+const r = runHook(`npx vigiles hook-runtime run-program ${hookFile}`, event, {
+  cwd: projectRoot,
+});
+```
+
+| on the handle                   | what it does                                                                            |
+| ------------------------------- | --------------------------------------------------------------------------------------- |
+| `seed(key, { ago, at, value })` | write a fact as if the hook had recorded it, then read it back; `ago` **backdates**     |
+| `read(key)`                     | the fact exactly as `e.ctx[key]` will see it — `Infinity` when never recorded, no throw |
+| `clear()`                       | forget this hook's facts (test isolation)                                               |
+| `dir`                           | where they live — for a failure message, **not** a path to build on                     |
+
+Two things to know:
+
+- **Pass the same `cwd` the hook will run under.** The store's location is derived from the hook's path and the project root, so a handle built with a different root points at a different (empty) store.
+- **It writes through the runtime's own writer**, so a seeded fact and a recorded one are the same file. That is the point: a seeder with its own copy of the path rule agrees with the runtime only until someone edits the derivation, and then fails green.
+
+It is on `vigiles`, **not** on `vigiles/hook`. `vigiles/hook` is the only import a compiled hook may have, and its guarantee is that it hands out no writer — so the seeding handle lives where a test can reach it and a hook cannot.
 
 A prompt gate and a stop gate read like any other gate — they just decide over a different event:
 
@@ -389,7 +428,22 @@ assertHookNotices(warn, after(true), /read the error/);
 assertHookSilent(warn, after(false));
 ```
 
-> ⚠️ **Don't test a react hook by reading stdout.** `notice(…)` writes to **stderr**, so a probe built on `execFileSync` (which returns stdout only) sees nothing and reports a perfectly healthy react hook as **dead**. These assertions read the reaction itself, so the stream never enters into it.
+### Where a notice arrives
+
+A `notice(msg)` is delivered as `hookSpecificOutput.additionalContext` on stdout — the same mechanism vigiles's own shipped nudges use — so **the agent reads it**. It is still not a block: a react has no `deny`, and it always exits 0.
+
+Delivery is **per event and per harness**, and vigiles will not pretend otherwise:
+
+|                                                |                                                                                                                  |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| event the harness injects (e.g. `PostToolUse`) | the notice is delivered as `additionalContext`                                                                   |
+| event it does not (e.g. `Stop`)                | nothing is emitted on stdout, and `vigiles compile` **warns at install time**, naming the events that would work |
+
+The event set is the adapter's `injectableEvents`, not a hard-coded list, so a Codex hook is gated on Codex's answer.
+
+> 🔴 **This was a real defect, found by dogfooding.** Until 2026-09-07 a notice went to **stderr and nowhere else**. Per Claude Code's hook documentation, stderr from a hook that exits 0 goes to the debug log only — "Claude never sees it" — and a react always exits 0. So a notice reached **nobody**: not the model, not the user, not the transcript. The docs stated the mechanic ("writes to stderr") and never the consequence, which is exactly the false-confidence shape compiled hooks exist to remove. It was caught when this repo wired up its own first compiled hook.
+
+> ⚠️ **Don't test a react hook by reading a stream.** A `notice(…)` goes to **stderr** (the debug log) _and_ — on an event this harness injects — to **stdout** as `hookSpecificOutput.additionalContext`. So a stream probe gets a different answer depending on the event, and a probe built on `execFileSync` once reported a perfectly healthy react hook as **dead**. These assertions read the reaction itself, so no stream enters into it.
 
 Runnable end to end: [`examples/harness/compiled-hook-inprocess.harness.mjs`](../examples/harness/compiled-hook-inprocess.harness.mjs) (with its two hook files) is exactly this pattern, and runs in CI.
 
@@ -535,20 +589,50 @@ the thirty-first from shipping unmarked. Same reasoning as
   every one of them both read and wrote a stamp file, and throttling was
   inexpressible. An API that gained a dimension that recently has not been
   pressure-tested by anyone but its author.
-- 🔴 **Testing a hook that uses named state is archaeology today.** The runtime
-  derives the store's path from the hook's own location and validates the key
-  charset, so a test that wants to seed "this fact was recorded four days ago"
-  must reconstruct a private path. The dogfood repo does exactly that, hard-coded,
-  and it broke when the facts were renamed. There is no supported seeding API
-  beside `runHook`. Until there is, a consumer testing a throttle is depending on
-  internals.
-- `vigiles compile` is not idempotent — it appends a duplicate wiring block that
-  has to be removed by hand.
-- Two consumers total, both belonging to the author.
+- Consumers are still few, and all of them belong to the author. A vocabulary
+  nobody else has had to live with is a vocabulary whose sharp edges are unknown.
 
-**What would have to be true to drop the prefix:** a supported way to seed and
-read named state in a test; an idempotent `compile`; and at least one consumer
-who did not write the API.
+  What this bullet said until 2026-09-07 — _"neither is this repository's own
+  harness, which still wires its hooks as plain shell"_ — is no longer true.
+  `.vigiles/hooks/test-tier-nudge.hook.mjs` is this repo's own first compiled
+  hook: a `react` that reminds a contributor which **test tier** a file they just
+  edited belongs to, throttled with `record`/`state` so it speaks at most hourly
+  and again whenever the tier changes. It was written to use the _least_-used
+  corner of the vocabulary on purpose. Its tests are `src/test-tier-nudge.test.ts`
+  (pure classification in-process, then both throttle directions against the real
+  runtime via [`experimental_hookState`](#testing-a-hook-that-remembers)).
+
+**What would have to be true to drop the prefix:** ~~a supported way to seed and
+read named state in a test~~ (closed — see below), and at least one consumer who
+did not write the API.
+
+The state-seeding item is **closed as of 2026-09-07**. It read: _"Testing a hook
+that uses named state is archaeology today. The runtime derives the store's path
+from the hook's own location and validates the key charset, so a test that wants
+to seed 'this fact was recorded four days ago' must reconstruct a private path.
+The dogfood repo does exactly that, hard-coded, and it broke when the facts were
+renamed."_ `experimental_hookState` on the `vigiles` test surface is that API —
+[Testing a hook that remembers](#testing-a-hook-that-remembers). It is a thin
+handle over the store functions the live runtime calls, not a second copy of the
+path rule, and both directions are pinned end to end against the real runtime: a
+gate that FIRES on a four-day-old seeded fact and STAYS QUIET on a ten-minute-old
+one, plus the reverse direction — a fact the RUNTIME recorded, read back through
+the handle.
+
+What that leaves is the second half: consumers. One consumer who did not write
+the API, living with a stateful hook long enough to find its edges. vigiles's own
+harness now counts as a stateful consumer (above), which closes the narrower
+"the product does not use the feature it ships" version of this — but the author
+grading his own API is not the evidence the prefix is waiting on.
+
+An earlier version of this list also demanded an idempotent `compile`. That was
+already false when it was written: the merge is keyed by the hook's canonicalized
+path (`mergeHooksJson`, `src/hook-install.ts`), so recompiling replaces the entry
+in place — across five spellings of the same path, and beside a hand-wired block
+that used `$CLAUDE_PROJECT_DIR` and quotes. Fixed in #168 and pinned by two
+regression tests in `src/hook-install.test.ts`; this page kept saying otherwise
+for two weeks. Re-measured 2026-09-07: five consecutive compiles, byte-identical
+`settings.json`, one entry.
 
 **Stable alternative:** a hand-written shell hook wired in `settings.json`. The
 events and the protocol are the harness's, not ours — nothing about them is

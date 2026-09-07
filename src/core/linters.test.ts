@@ -10,10 +10,16 @@
  *     skip, never a silent green and never a failure.
  */
 
-import { describe, it } from "vitest";
+import { describe, it, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  rmSync,
+  writeFileSync,
+  existsSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -573,6 +579,171 @@ describe("missing-binary behavior", () => {
       const result = checkLinterRule("checkstyle/MagicNumber", process.cwd());
       assert.equal(result.exists, false);
       assert.ok(result.error?.includes('CLI tool "checkstyle" not found'));
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// ruff config-state on a REAL repository layout
+//
+// Regression cover for the defect where all three ruff probes shelled out to
+// `ruff check --show-settings <basePath>/dummy.py`. `ruff check` walks the path
+// it is handed, so a filename that does not exist made it exit 2 ("No files
+// found under the given path") on every repository that did not happen to
+// contain a file called `dummy.py` — i.e. every real repository. The whole
+// point of enforce("ruff/...") — "the rule exists AND is enabled" — silently
+// degraded to enabled:"unknown", and since only "disabled" is ever surfaced as
+// a finding, a genuinely disabled rule passed as clean.
+//
+// These fixtures deliberately contain NO dummy.py; assertNoDummy() states that
+// out loud, because a fixture that grew one would make the test pass for the
+// exact reason the bug existed.
+// ---------------------------------------------------------------------------
+
+describe("ruff config-state (real repo layout, no dummy.py)", () => {
+  const dirs: string[] = [];
+
+  function ruffRepo(files: Record<string, string>): string {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-ruff-"));
+    dirs.push(dir);
+    for (const [name, body] of Object.entries(files)) {
+      writeFileSync(join(dir, name), body);
+    }
+    return dir;
+  }
+
+  function assertNoDummy(dir: string): void {
+    assert.equal(
+      existsSync(join(dir, "dummy.py")),
+      false,
+      "fixture must NOT contain dummy.py — its absence is the whole point",
+    );
+  }
+
+  // `select = ["E","F"]` puts E501 in and D100 (pydocstyle) out.
+  const SELECTED = '[tool.ruff.lint]\nselect = ["E", "F"]\n';
+
+  afterAll(() => {
+    for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  });
+
+  it.skipIf(!hasBinary("ruff"))(
+    "reads enabled-state in a repo that has Python files but no dummy.py",
+    () => {
+      const dir = ruffRepo({
+        "pyproject.toml": SELECTED,
+        "app.py": 'def main():\n    print("hi")\n',
+      });
+      assertNoDummy(dir);
+
+      // FIRES: under the dummy.py probe this was "unknown".
+      assert.equal(checkLinterRule("ruff/E501", dir).enabled, "enabled");
+    },
+  );
+
+  it.skipIf(!hasBinary("ruff"))(
+    "reads enabled-state in a repo with NO Python files at all",
+    () => {
+      // The case a synthesized filename was presumably invented for. A
+      // directory resolves settings here too, so no fabricated file is needed.
+      const dir = ruffRepo({
+        "pyproject.toml": SELECTED,
+        "README.md": "no python here\n",
+      });
+      assertNoDummy(dir);
+
+      assert.equal(checkLinterRule("ruff/E501", dir).enabled, "enabled");
+    },
+  );
+
+  it.skipIf(!hasBinary("ruff"))(
+    "a rule OUTSIDE select reports disabled — the finding the defect suppressed",
+    () => {
+      const dir = ruffRepo({
+        "pyproject.toml": SELECTED,
+        "app.py": 'def main():\n    print("hi")\n',
+      });
+      assertNoDummy(dir);
+
+      // This is the assertion the whole feature exists for: "disabled" is the
+      // only status compile/lint ever report, so losing it lost the check.
+      // It also proves we are READING the config rather than rubber-stamping
+      // every rule as enabled.
+      assert.equal(checkLinterRule("ruff/D100", dir).enabled, "disabled");
+    },
+  );
+
+  it.skipIf(!hasBinary("ruff"))(
+    "generateTypes discovers the ruff catalog without a fabricated file",
+    () => {
+      const dir = ruffRepo({
+        "pyproject.toml": SELECTED,
+        "app.py": "x = 1\n",
+      });
+      assertNoDummy(dir);
+
+      const ruff = generateTypes({ basePath: dir }).linters.find(
+        (l) => l.linter === "ruff",
+      );
+      // Under the dummy.py probe this whole entry was missing (linters: []).
+      assert.ok(ruff, "ruff should be discovered");
+      assert.ok(
+        ruff.rules.length > 0,
+        "ruff catalog should be non-empty (was [] under the dummy.py probe)",
+      );
+    },
+  );
+
+  it.skipIf(!hasBinary("ruff"))(
+    "config actually drives the catalog: a narrower select yields fewer rules",
+    () => {
+      // Guards against a fix that returns some fixed set regardless of config.
+      const narrow = ruffRepo({
+        "pyproject.toml": '[tool.ruff.lint]\nselect = ["E"]\n',
+      });
+      const wide = ruffRepo({
+        "pyproject.toml": '[tool.ruff.lint]\nselect = ["E", "F", "B"]\n',
+      });
+      const count = (d: string): number =>
+        generateTypes({ basePath: d }).linters.find((l) => l.linter === "ruff")
+          ?.rules.length ?? 0;
+
+      assert.ok(count(narrow) > 0 && count(wide) > 0);
+      assert.ok(
+        count(narrow) < count(wide),
+        `narrower select must yield fewer rules (got ${count(narrow)} vs ${count(wide)})`,
+      );
+    },
+  );
+
+  it.skipIf(!hasBinary("ruff"))(
+    "ruff RAN and REFUSED → status stays unknown AND says so out loud",
+    () => {
+      // The residual case a directory argument cannot rescue: the config
+      // excludes everything, so ruff exits 2 with nothing to resolve. That is
+      // a legitimate "unknown" — but it must not be a SILENT one, which is how
+      // the original defect stayed invisible for so long.
+      const dir = ruffRepo({
+        "pyproject.toml":
+          '[tool.ruff]\nexclude = ["*"]\n[tool.ruff.lint]\nselect = ["E", "F"]\n',
+        "app.py": "x = 1\n",
+      });
+
+      const warnings: string[] = [];
+      const origWarn = console.warn;
+      console.warn = (m?: unknown) => warnings.push(String(m));
+      let status;
+      try {
+        status = checkLinterRule("ruff/E501", dir).enabled;
+      } finally {
+        console.warn = origWarn;
+      }
+
+      assert.equal(status, "unknown");
+      assert.ok(
+        warnings.some((w) => w.includes("ruff could not report its settings")),
+        `an unreadable ruff must warn, not fail silently (warnings: ${JSON.stringify(warnings)})`,
+      );
     },
   );
 });

@@ -15,10 +15,12 @@ through `npx vigiles`.
 Everything below runs with **only `npx`** (Node is fetched on demand) — no
 `package.json`, no install step, identical output on every OS:
 
-| Command             | Works? | What it checks                                                                                                                                                                                                                                                                                                     |
-| ------------------- | :----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `npx vigiles audit` |   ✅   | The four deterministic rings — Truthfulness (references resolve), Triggering (skills fire / don't collide), Structure (tool contracts, MCP, frontmatter), Safety — plus the advisory Tested (deterministic harnesses) and Evaluated (real-model evals, or `not measured`) counts. A local report, like Lighthouse. |
-| `npx vigiles lint`  |   ✅   | The CI gate — reference integrity, subagent tool contracts, hook events/scripts, MCP resolution, skill triggers, lethal-trifecta. Exit codes 0/1/2.                                                                                                                                                                |
+| Command               | Works? | What it checks                                                                                                                                                                                                                                                                                                     |
+| --------------------- | :----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npx vigiles audit`   |   ✅   | The four deterministic rings — Truthfulness (references resolve), Triggering (skills fire / don't collide), Structure (tool contracts, MCP, frontmatter), Safety — plus the advisory Tested (deterministic harnesses) and Evaluated (real-model evals, or `not measured`) counts. A local report, like Lighthouse. |
+| `npx vigiles lint`    |   ✅   | The CI gate — reference integrity, subagent tool contracts, hook events/scripts, MCP resolution, skill triggers, lethal-trifecta. Exit codes 0/1/2.                                                                                                                                                                |
+| `npx vigiles compile` |   ✅   | The typed-spec path. A spec's `import … from "vigiles/spec"` is resolved from the CLI's own install, so it needs no `node_modules/vigiles` in your repo — and no `package.json` to install one into.                                                                                                               |
+| `npx vigiles test`    |   ✅   | The deterministic harness tier (`*.harness.mjs`) — same resolution, so `import { runHook } from "vigiles"` works uninstalled. You still author the test file in JS (see below).                                                                                                                                    |
 
 None of these read your repo's source language — they read the **harness**
 (`CLAUDE.md`/`AGENTS.md`, `skills/`, `agents/`, hooks, MCP config), which is
@@ -43,7 +45,8 @@ jobs:
 
 `vigiles init` detects this: on a repo with no `package.json` it scaffolds the
 workflow **without** an `npm install` step (which would otherwise fail), and it
-skips adding vigiles to `devDependencies` — you invoke it via `npx`.
+skips adding vigiles to `devDependencies` — you invoke it via `npx`. It still
+scaffolds and compiles specs; that path does not need the install.
 
 ## Linter cross-referencing for JVM / Go
 

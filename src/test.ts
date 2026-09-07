@@ -119,6 +119,21 @@ export {
 // the CLI runtime uses, so a hook that loads in a test loads identically in prod.
 export { loadHook } from "./load-hook.js";
 
+// Seed + read a compiled hook's NAMED STATE from a test. A throttled hook only
+// does anything interesting against an OLD fact, and "old" is not something a
+// test can produce by waiting — so without this a consumer testing a throttle
+// had to reconstruct the store's private path by hand (the dogfood repo did,
+// and it broke when the facts were renamed). It is on THIS barrel and not on
+// `vigiles/hook` on purpose: `vigiles/hook` is the only import a compiled hook
+// may have, and its guarantee is that it hands out no writer.
+export { experimental_hookState } from "./hook-state-store.js";
+export type { HookStateHandle, SeedStateOptions } from "./hook-state-store.js";
+// Named in those signatures, so a consumer must be able to import them too — a
+// type you can read in a signature but not name is a surface you cannot write
+// against. (`StateFact` is what `read`/`seed` return; `Duration` is what `ago`
+// takes.) They are the SAME declarations `vigiles/hook` exports.
+export type { StateFact, Duration } from "./core/hook-state.js";
+
 // --- the declarative check vocabulary ---
 // Enumerated rather than `export *` ON PURPOSE: `judged` also lives in check.ts
 // and its default judge is a real model call, so it is the one member of this

@@ -224,11 +224,14 @@ export function assertHookAllows(hook: AnyHook, event: RawHookEvent): void {
  * matching its message — the react-tier twin of {@link assertHookDenies}.
  *
  * A react hook can't block, so the gate assertions don't apply to it, and there
- * was no assertion that did. That left `notice()` a live trap: its message goes
- * to **stderr**, so a probe built on `execFileSync` (which returns stdout only)
- * sees nothing and reports a perfectly healthy react hook as DEAD — measured
- * against three real hooks on 2026-08-03. Reading the reaction in-process means
- * stdout-vs-stderr never enters into it.
+ * was no assertion that did. That left `notice()` a live trap: a probe built on
+ * `execFileSync` (which returns stdout only) reported a perfectly healthy react
+ * hook as DEAD — measured against three real hooks on 2026-08-03. Reading the
+ * reaction in-process means no stream enters into it, which is why this
+ * assertion did not change when delivery did: since 2026-09-07 a notice also
+ * goes to stdout as `additionalContext` on an event the harness injects (see
+ * `noticeDelivery`), so WHICH stream carries it now depends on the event — a
+ * stream probe is even less answerable than before, and this one is unaffected.
  */
 export function assertHookNotices(
   hook: AnyHook,

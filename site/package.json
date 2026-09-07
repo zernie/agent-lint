@@ -13,7 +13,10 @@
     "preview": "vite preview",
     "test:browser": "vitest run --config vitest.config.ts",
     "test:e2e": "playwright test",
-    "gen:parity": "node scripts/gen-parity-expected.mjs"
+    "gen:parity": "node scripts/gen-parity-expected.mjs",
+    "gen:og": "node scripts/gen-og.mjs",
+    "gen:battery": "node scripts/gen-battery-expected.mjs",
+    "pretest:browser": "node scripts/gen-battery-expected.mjs"
   },
   "dependencies": {
     "@vigiles/report-view": "*",

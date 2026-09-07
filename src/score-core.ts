@@ -372,7 +372,27 @@ export function reportDeductions(r: ScanReport): Deduction[] {
   ];
 }
 
-/** True when a report has no loadable plugin surface at all (the empty machine). */
+/**
+ * True when a report has no loadable plugin surface at all (the empty machine).
+ *
+ * 🔴 THE ONE PLACE the surface set is enumerated, and every scorer must ask it
+ * rather than write the list again. `scoreReport` used to keep its own copy and
+ * that copy had dropped `inlineHooks` — so a plugin whose entire contribution is
+ * hooks declared inline in `plugin.json` scored 0 / F with "no loadable plugin
+ * surface" while the same report printed `inlineHooks: 2` (#199). Measured on a
+ * two-inline-hook fixture: this predicate said `false` and `scoreReport` said
+ * `0`, against `auditScore`'s `100` — a 100-point disagreement between two
+ * numbers documented to be equal.
+ *
+ * A hooks-only plugin is a legitimate shape, the same way a command-only or
+ * MCP-only one is: a repo can ship gates and nothing else. Zero has to mean "no
+ * surface of any kind", because it reads as "this plugin is broken" — a
+ * different statement from "this plugin has no skills or subagents".
+ *
+ * Hooks count in BOTH forms: `hooks[]` is the script-backed ones, `inlineHooks`
+ * the shell one-liners that carry no script file to path-check. The second is
+ * still a gate that runs.
+ */
 export function isEmptyMachine(r: ScanReport): boolean {
   const surfaces =
     r.skills.length +
@@ -415,12 +435,15 @@ export function scoreReport(r: ScanReport): {
   issues: string[];
 } {
   // An empty/unloadable machine isn't healthy — it's a non-plugin or a broken
-  // load. A command-only or MCP-only plugin (commands/*.md or .mcp.json with no
-  // skills/agents/hooks) IS a legitimate plugin, though — Anthropic ships
-  // command-only plugins in its own marketplace — so it must NOT score 0.
-  const surfaces =
-    r.skills.length + r.agents.length + r.hooks.length + r.commands;
-  if (surfaces === 0 && !r.mcp) {
+  // load. A command-only, MCP-only or HOOKS-only plugin IS a legitimate plugin,
+  // though — Anthropic ships command-only plugins in its own marketplace, and a
+  // repo can reasonably ship gates and nothing else — so none of them scores 0.
+  //
+  // 🔴 Asked of `isEmptyMachine`, never re-enumerated here. The hand-written copy
+  // that used to sit on this line had dropped `inlineHooks`, so a hooks-only
+  // plugin scored 0 while `auditScore` — which does ask the predicate — scored the
+  // same report 100 (#199). Two lists mean two answers.
+  if (isEmptyMachine(r)) {
     return { score: 0, issues: ["no loadable plugin surface"] };
   }
 

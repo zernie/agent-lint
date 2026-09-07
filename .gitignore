@@ -14,6 +14,12 @@ logo-v*.png
 .vigiles/runs.jsonl
 # eval record/replay cache (recorded model runs)
 .vigiles/eval-cache/
+# runtime-owned named state for compiled hooks (`record()`/`state()`). Local to
+# THIS checkout: it records when a hook last spoke here, so committing it would
+# silence a teammate's hook for a window they never saw. Absent = every fact
+# reads as never-recorded, so a throttled hook SPEAKS — the safe direction, by
+# construction (see the `Infinity` note in src/core/hook-state.ts).
+.vigiles/state/
 # what a LOCAL run exercised (the execution tier of test coverage). Never
 # committed: it describes THIS checkout at THIS moment, and a committed one would
 # credit coverage on a machine where nothing ran — the substitution it exists to

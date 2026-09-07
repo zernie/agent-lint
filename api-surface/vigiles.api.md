@@ -427,6 +427,9 @@ export type DockerExec = (args: readonly string[]) => {
 };
 
 // @public
+export type Duration = `${number}${"s" | "m" | "h" | "d"}`;
+
+// @public
 export function egressHosts(r: HasEgress): string[];
 
 // @public (undocumented)
@@ -614,6 +617,11 @@ export function experimental_emitTool(contract: OutputContract, options?: {
 }): ExperimentalEmitTool;
 
 // @public
+export function experimental_hookState(hookFile: string, opts?: {
+    readonly cwd?: string;
+}): HookStateHandle;
+
+// @public
 export function experimental_makeDockerRuntime(deps?: {
     exec?: DockerExec;
     netProbe?: NetProbe;
@@ -782,6 +790,14 @@ export interface HookRunResult extends ScriptRunResult {
     readonly decision: HookOutput["decision"] | "allow" | "deny" | "ask" | undefined;
     readonly haltsTurn: boolean;
     readonly json: HookOutput | null;
+}
+
+// @public
+export interface HookStateHandle {
+    clear(): void;
+    readonly dir: string;
+    read(key: string): StateFact;
+    seed(key: string, opts?: SeedStateOptions): StateFact;
 }
 
 // @public
@@ -1068,6 +1084,27 @@ export interface ScriptRunResult {
 }
 
 // @public
+export type SeedStateOptions =
+/** Recorded that long ago — the reason this exists (a throttle needs an OLD fact). */
+    {
+    readonly value?: string;
+    readonly ago: Duration;
+    readonly at?: never;
+}
+/** Recorded at exactly this instant. */
+| {
+    readonly value?: string;
+    readonly at: Date;
+    readonly ago?: never;
+}
+/** Recorded just now. */
+| {
+    readonly value?: string;
+    readonly ago?: never;
+    readonly at?: never;
+};
+
+// @public
 export interface SelectionMatrixSpec extends SelectionMatrixOptions {
     readonly pluginDir: string;
 }
@@ -1157,6 +1194,16 @@ export function specTrusted(spec: {
     plugin?: string;
     pluginDir?: string;
 }): boolean;
+
+// @public
+export interface StateFact {
+    readonly ageSeconds: number;
+    readonly at: string;
+    fresherThan(within: Duration): boolean;
+    olderThan(within: Duration): boolean;
+    readonly recorded: boolean;
+    readonly value: string;
+}
 
 // @public
 export function stubBinDir(stubs: readonly ToolStub[], parentDir: string): string;

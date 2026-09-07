@@ -592,9 +592,10 @@ no usable description −10 (can't trigger), a broken intra-plugin reference −
 (partial-vendor / dead path), an agent with no `tools:` contract −5 (inherits
 everything), an untested surface −3. Scoring deliberately ignores the loader's
 free-text warnings (they include doc-mention false positives), so the ranking
-stays defensible. A **command-only** plugin (`commands/*.md`, no skills/agents/hooks)
-or an **MCP-only** plugin (`.mcp.json`) is a real, valid surface and scores on its
-own health — only a directory with _no_ surface at all scores 0. Add **`--md`** to
+stays defensible. A **command-only** plugin (`commands/*.md`), a **hooks-only** one
+(gates and nothing else — script-backed or inline in `plugin.json`) and an
+**MCP-only** one (`.mcp.json`) are each a real, valid surface and score on their own
+health — only a directory with _no_ surface at all scores 0. Add **`--md`** to
 emit the ranking as a **Markdown table** (the publishable form for a README/gist/site;
 `--json` gives the full per-plugin breakdown). A worked at-scale run over real public
 plugins lives in `bench/leaderboard/` (`run.mjs` + the generated `RESULTS.md`).

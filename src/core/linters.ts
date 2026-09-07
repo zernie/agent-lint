@@ -771,37 +771,108 @@ const stylelintConfigEnabled = createCachedChecker(
   },
 );
 
+/**
+ * Ask ruff which rule codes are enabled for `basePath`, or null when it could
+ * not be asked. THE ONE place any ruff settings probe is spelled — the three
+ * call sites (config-state, catalog enumeration, discovery) used to each carry
+ * their own copy of the command and the parse, and each copy carried the same
+ * bug.
+ *
+ * WHY the argument is a DIRECTORY and never a filename: all three call sites
+ * passed a synthesized `<basePath>/dummy.py`. `ruff check` walks the path it is
+ * given, so a filename that does not exist makes it exit 2 with "No files found
+ * under the given path" — on every repository that does not happen to contain a
+ * file called `dummy.py`, which is every real repository. Measured 2026-09-06:
+ * with the synthesized path the enabled set came back empty and every
+ * `enforce("ruff/...")` reported `enabled: "unknown"`; `touch dummy.py` in the
+ * same repo flipped the identical rule to "enabled" and an out-of-select rule
+ * to "disabled". The failure was SILENT because only "disabled" is ever
+ * surfaced as a finding (src/core/compile.ts, src/cli.ts) — "unknown" reads as
+ * clean, so a genuinely disabled rule passed its check.
+ *
+ * A directory works where a synthesized filename does not, including the case
+ * the filename was invented for: a project with NO Python files at all still
+ * resolves its settings (measured: a directory holding only a ruff config
+ * reports its full enabled set).
+ */
+function ruffEnabledCodes(
+  basePath: string,
+  timeoutMs?: number,
+): Set<string> | null {
+  let output: string;
+  try {
+    output = execSync("ruff check --show-settings .", {
+      encoding: "utf-8",
+      cwd: basePath,
+      stdio: ["pipe", "pipe", "pipe"],
+      ...(timeoutMs === undefined ? {} : { timeout: timeoutMs }),
+    });
+  } catch (e) {
+    // Two failures wear the same catch, and only ONE of them is legitimate
+    // silence. ruff not being installed (127 / ENOENT) means this project has
+    // no ruff to consult — nothing to report. Anything else means ruff RAN and
+    // REFUSED, and a caller that turns that into "unknown" is reporting a
+    // verified-clean result it never verified. That one gets said out loud.
+    const err = e as { status?: number; code?: string; stderr?: unknown };
+    if (err.status !== 127 && err.code !== "ENOENT") {
+      warnRuffUnreadable(basePath, firstLines(err.stderr));
+    }
+    return null;
+  }
+  const enabledMatch = output.match(
+    /linter\.rules\.enabled\s*=\s*\[([\s\S]*?)\]/,
+  );
+  if (!enabledMatch?.[1]) {
+    // ruff succeeded but its output does not carry the block we parse (a
+    // format change upstream). Same reasoning as above: unreadable is not clean.
+    warnRuffUnreadable(basePath, "no linter.rules.enabled block in output");
+    return null;
+  }
+  const codes = new Set<string>();
+  const codeRe = /\(([A-Z]+\d*)\)/g;
+  let m: RegExpExecArray | null;
+  while ((m = codeRe.exec(enabledMatch[1])) !== null) {
+    codes.add(m[1]);
+  }
+  return codes;
+}
+
+function firstLines(stderr: unknown): string {
+  // execSync hands stderr back as a string or a Buffer depending on `encoding`.
+  // Anything else is stringified as "[object Object]", which would put noise
+  // into a message whose whole job is to name the cause — so it becomes "".
+  let text = "";
+  if (typeof stderr === "string") text = stderr;
+  else if (Buffer.isBuffer(stderr)) text = stderr.toString("utf-8");
+  return text.trim().split("\n").slice(0, 2).join(" — ").trim();
+}
+
+/**
+ * Loud, but once per basePath. A warning that repeats per rule would be noise,
+ * and noise is how a real signal gets muted.
+ */
+const ruffWarned = new Set<string>();
+function warnRuffUnreadable(basePath: string, detail: string): void {
+  if (ruffWarned.has(basePath)) return;
+  ruffWarned.add(basePath);
+  console.warn(
+    `⚠ ruff could not report its settings in ${basePath}` +
+      (detail ? `: ${detail}` : "") +
+      `. Every ruff/* rule is UNKNOWN here — not verified, and not clean.`,
+  );
+}
+
 const ruffConfigEnabled = createCachedChecker(
   (basePath: string): ConfigLoader | null => {
-    try {
-      const dummyPath = resolve(basePath, "dummy.py");
-      const output = execSync(`ruff check --show-settings ${dummyPath}`, {
-        encoding: "utf-8",
-        cwd: basePath,
-        stdio: ["pipe", "pipe", "pipe"],
-        timeout: 10000,
-      });
-      const enabledMatch = output.match(
-        /linter\.rules\.enabled\s*=\s*\[([\s\S]*?)\]/,
-      );
-      const enabledCodes = new Set<string>();
-      if (enabledMatch?.[1]) {
-        const codeRe = /\(([A-Z]+\d*)\)/g;
-        let m: RegExpExecArray | null;
-        while ((m = codeRe.exec(enabledMatch[1])) !== null) {
-          enabledCodes.add(m[1]);
-        }
+    const enabledCodes = ruffEnabledCodes(basePath, 10000);
+    if (!enabledCodes) return null;
+    return (ruleName: string): ConfigEnabledStatus => {
+      if (enabledCodes.has(ruleName)) return "enabled";
+      for (const code of enabledCodes) {
+        if (code.startsWith(ruleName)) return "enabled";
       }
-      return (ruleName: string): ConfigEnabledStatus => {
-        if (enabledCodes.has(ruleName)) return "enabled";
-        for (const code of enabledCodes) {
-          if (code.startsWith(ruleName)) return "enabled";
-        }
-        return "disabled";
-      };
-    } catch {
-      return null;
-    }
+      return "disabled";
+    };
   },
 );
 
@@ -1068,28 +1139,12 @@ function cachedByBasePath(
   };
 }
 
-const enumerateRuffRules = cachedByBasePath((basePath: string): Set<string> => {
-  const rules = new Set<string>();
-  try {
-    const output = execSync(
-      `ruff check --show-settings ${resolve(basePath, "dummy.py")}`,
-      { encoding: "utf-8", cwd: basePath, stdio: ["pipe", "pipe", "pipe"] },
-    );
-    const enabledMatch = output.match(
-      /linter\.rules\.enabled\s*=\s*\[([\s\S]*?)\]/,
-    );
-    if (enabledMatch?.[1]) {
-      const codeRe = /\(([A-Z]+\d*)\)/g;
-      let m: RegExpExecArray | null;
-      while ((m = codeRe.exec(enabledMatch[1])) !== null) {
-        rules.add(m[1]);
-      }
-    }
-  } catch {
-    // CLI failed — return empty set, caller will just skip suggestions
-  }
-  return rules;
-});
+const enumerateRuffRules = cachedByBasePath(
+  // An unreadable settings probe yields an EMPTY suggestion catalog, which is
+  // the same shape as "ruff enables nothing" — so the reason is reported by
+  // ruffEnabledCodes rather than swallowed here.
+  (basePath: string): Set<string> => ruffEnabledCodes(basePath) ?? new Set(),
+);
 
 const enumeratePylintRules = cachedByBasePath(
   (basePath: string): Set<string> => {
@@ -1536,26 +1591,9 @@ function discoverRuffRules(basePath: string): DiscoveredRules | null {
   try {
     if (!hasRuffConfig(basePath)) return null;
     execSync("which ruff", { stdio: "ignore" });
-    const dummyPath = resolve(basePath, "dummy.py");
-    const output = execSync(`ruff check --show-settings ${dummyPath}`, {
-      encoding: "utf-8",
-      cwd: basePath,
-      stdio: ["pipe", "pipe", "pipe"],
-      timeout: 10000,
-    });
-    const enabledMatch = output.match(
-      /linter\.rules\.enabled\s*=\s*\[([\s\S]*?)\]/,
-    );
-    const rules: string[] = [];
-    if (enabledMatch?.[1]) {
-      const codeRe = /\(([A-Z]+\d*)\)/g;
-      let m: RegExpExecArray | null;
-      while ((m = codeRe.exec(enabledMatch[1])) !== null) {
-        rules.push(m[1]);
-      }
-    }
-    if (rules.length === 0) return null;
-    return { linter: "ruff", rules, via: "CLI" };
+    const codes = ruffEnabledCodes(basePath, 10000);
+    if (!codes || codes.size === 0) return null;
+    return { linter: "ruff", rules: [...codes], via: "CLI" };
   } catch {
     return null;
   }

@@ -1462,9 +1462,11 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
   });
 
   it("gives honest guidance on a non-JS repo (no package.json)", () => {
-    // A Python/Rust repo with a CLAUDE.md but no package.json can't resolve the
-    // npm package — init must point at `npx vigiles lint` (no install), NOT a
-    // bare "npm install" that wouldn't help.
+    // A Python/Rust repo with a CLAUDE.md but no package.json gets the SAME
+    // next step as a JS repo — `npx vigiles compile` — because the spec host
+    // resolves `vigiles/spec` from the CLI's own install (src/self-resolve.mts).
+    // It must NOT be told to create a package.json or run an install: init
+    // creates neither, and neither is needed.
     const dir = mkdtempSync(join(tmpdir(), "vigiles-nonjs-"));
     try {
       writeFileSync(
@@ -1476,13 +1478,109 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
         !existsSync(join(dir, "package.json")),
         "no package.json created",
       );
-      assert.match(stdout, /No package\.json/);
-      assert.match(stdout, /npx vigiles lint/);
-      // Must NOT tell a non-JS user to run a bare `npm install` (won't help).
+      assert.match(stdout, /npx vigiles compile/);
+      // Must NOT tell a non-JS user to bootstrap npm or install anything —
+      // both were advice for a limitation that no longer exists.
+      assert.ok(
+        !/npm init -y/.test(stdout),
+        "no npm-bootstrap advice on a non-JS repo",
+      );
       assert.ok(
         !/Run `npm install`/.test(stdout),
         "no misleading npm install step",
       );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("e2e on a repo with NO package.json: init → compile → lint → audit", () => {
+    // The END-TO-END proof that the typed-spec path needs no install. Every
+    // step is asserted, because the failure this pins was one step deep: `init`
+    // and `lint` were already fine on such a repo while `compile` exited 1 with
+    // ERR_MODULE_NOT_FOUND, so a test that stopped at `init` saw nothing wrong.
+    //
+    // Deliberately a PYTHON repo (pyproject.toml, a .py file) and deliberately
+    // WITHOUT a package.json — adding one to make the fixture work would erase
+    // the very condition under test.
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-nopkg-e2e-"));
+    try {
+      writeFileSync(
+        join(dir, "pyproject.toml"),
+        '[project]\nname = "demo"\nversion = "0.1.0"\n\n[tool.ruff.lint]\nselect = ["E", "F", "B"]\n',
+      );
+      writeFileSync(
+        join(dir, "app.py"),
+        'def main() -> None:\n    print("hi")\n',
+      );
+      writeFileSync(
+        join(dir, "AGENTS.md"),
+        "# AGENTS.md\n\n## Overview\n\nA tiny Python project.\n",
+      );
+      mkdirSync(join(dir, "skills", "greeter"), { recursive: true });
+      writeFileSync(
+        join(dir, "skills", "greeter", "SKILL.md"),
+        "---\nname: greeter\ndescription: Greet the user warmly when they say hello.\n---\n\nSay hello back.\n",
+      );
+
+      const init = run("init --lint --no-plugin --no-gha", dir);
+      assert.equal(init.exitCode, 0, `init: ${init.stdout}${init.stderr}`);
+      assert.ok(
+        !existsSync(join(dir, "package.json")),
+        "init must not create a package.json",
+      );
+      assert.ok(
+        existsSync(join(dir, "AGENTS.md.spec.ts")),
+        "init adopted the instruction file",
+      );
+      assert.ok(
+        existsSync(join(dir, "skills", "greeter", "SKILL.md.spec.ts")),
+        "init adopted the skill",
+      );
+
+      // THE STEP THAT USED TO FAIL. With no node_modules/vigiles and no
+      // package.json, the spec's `import … from "vigiles/spec"` is served by
+      // the CLI's own install; without that rescue this exits 1.
+      const compiled = run("compile", dir);
+      assert.equal(
+        compiled.exitCode,
+        0,
+        `compile: ${compiled.stdout}${compiled.stderr}`,
+      );
+      assert.doesNotMatch(compiled.stdout, /failed to load/);
+      assert.doesNotMatch(
+        compiled.stdout + compiled.stderr,
+        /ERR_MODULE_NOT_FOUND/,
+      );
+      assert.match(
+        readFileSync(join(dir, "AGENTS.md"), "utf-8"),
+        /vigiles:sha256:/,
+        "compile stamped the integrity header",
+      );
+      assert.match(
+        readFileSync(join(dir, "skills", "greeter", "SKILL.md"), "utf-8"),
+        /vigiles:sha256:/,
+        "the skill compiled too (a subpath import, not the bare root)",
+      );
+
+      // lint must then VERIFY what compile wrote. No assertion touches a ruff
+      // rule, so the test does not need ruff on PATH to be meaningful.
+      const linted = run("lint", dir);
+      assert.equal(
+        linted.exitCode,
+        0,
+        `lint: ${linted.stdout}${linted.stderr}`,
+      );
+      assert.match(linted.stdout, /All compiled files intact/);
+      assert.doesNotMatch(linted.stdout, /hash MISMATCH/);
+
+      const audited = run("audit", dir);
+      assert.equal(
+        audited.exitCode,
+        0,
+        `audit: ${audited.stdout}${audited.stderr}`,
+      );
+      assert.match(audited.stdout, /AGENTS\.md \(spec-managed\)/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -1502,8 +1600,10 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
       const md = readFileSync(join(dir, "CLAUDE.md"), "utf-8");
       assert.equal(md, "# CLAUDE.md\n\n## Notes\n\nMine.\n", "file untouched");
       assert.ok(!md.includes("vigiles:sha256"), "not compiled over");
-      // Fresh repo (no node_modules/vigiles) → compile is deferred, not errored.
-      assert.match(stdout, /Skipping compile|npm install/);
+      // The next step points at the compile the user runs themselves — there is
+      // no "install first" caveat any more (the CLI resolves the spec import
+      // from its own install), so the only thing gating the compile is consent.
+      assert.match(stdout, /npx vigiles compile/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

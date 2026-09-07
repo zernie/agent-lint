@@ -182,9 +182,10 @@ A hook that blocks nothing, a skill that hijacks unrelated prompts, context that
 _"Caveman Mode cuts 65% of your tokens." Says who?_ vigiles A/Bs the claim on real coding tasks and hands you three numbers: the **token bill**, whether it hit its **target**, and whether your code still **works**.
 
 ```text
-caveman vs verbose · haiku · $0 on your subscription
-  output tokens   762 → 842   (+11% — the "saving" reversed)
-  correctness     1.0 → 1.0   (the fact survived)
+caveman vs baseline · sonnet · 7 tasks × 5 trials · $0 on your subscription
+  output tokens   6% lower on average   (the claim was 65% — and it GREW on 2 of 7 tasks)
+  bill            $0.5396 → $0.5334     (flat — output is only ~20% of the cost)
+  correctness     1.0 → 1.0             (nothing broke)
 ```
 
 Point it at any harness change that claims a number — does a compression skill pay for itself, is a subagent worth its cost, which model is cheapest here. promptfoo and DeepEval bill **per token, every run**; vigiles runs on your own Claude Pro/Max subscription, so you measure on every change, not once. A committed lock file (like `package-lock`) keeps CI honest without re-calling the model. (Claude Code today; Codex landing.)
@@ -268,7 +269,7 @@ Targets Claude Code and Codex out of the box, or [your own harness](docs/authori
 > signal you need to look for, since it is on every call site rather than on an
 > import line you scrolled past. See [Stability](STABILITY.md).
 
-**Project** — [Stability](STABILITY.md) · [Related tools](docs/comparison.md#what-vigiles-composes-with) · ships as an [Agent Plugins](https://agent-plugins.org) 1.0.0 plugin ([how to do the same](docs/for-plugin-authors.md#6-ship-it-in-the-portable-agent-plugins-format))
+**Project** — [Stability](STABILITY.md) · [Contributing](CONTRIBUTING.md) · [Related tools](docs/comparison.md#what-vigiles-composes-with) · ships as an [Agent Plugins](https://agent-plugins.org) 1.0.0 plugin ([how to do the same](docs/for-plugin-authors.md#6-ship-it-in-the-portable-agent-plugins-format))
 
 <!-- The "companion to [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need)"
      link is temporarily removed while AgenticDev paper #1 is under blind review: repo → blog is a

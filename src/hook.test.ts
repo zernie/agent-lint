@@ -530,6 +530,115 @@ test("compile (hook): a repo targeting BOTH harnesses installs the SAME hook int
   }
 });
 
+// A react's notice must REACH someone. Found 2026-09-07 by this repo's own first
+// compiled hook: `notice()` wrote to stderr and nothing else, and per the host's
+// hooks docs stderr from a hook that exits 0 goes to the debug log only — "Claude
+// never sees it". A react ALWAYS exits 0 (its type has no `deny`), so a notice
+// reached NOBODY: not the model, not the user, not the transcript. Both
+// directions are pinned here because the failure was invisible in one.
+test("hook-runtime run-program: a react's notice REACHES the agent as additionalContext", () => {
+  const dir = makeTmpDir();
+  try {
+    const hook = fixture(
+      dir,
+      "reach.mjs",
+      `import { experimental_defineReact, tools, notice } from "__HOOK__";
+export default experimental_defineReact({
+  on: "PostToolUse",
+  match: tools("Write"),
+  react: () => notice("vigiles: REACHES-THE-MODEL"),
+});`,
+    );
+    const r = runHook(
+      `node ${CLI} hook-runtime run-program ${hook}`,
+      {
+        hook_event_name: "PostToolUse",
+        tool_name: "Write",
+        tool_input: { file_path: "src/x.ts" },
+      },
+      { cwd: dir },
+    );
+    // The delivery that matters: the same shape the shipped refs nudge uses.
+    const out = r.json as {
+      hookSpecificOutput?: {
+        hookEventName?: string;
+        additionalContext?: string;
+      };
+    } | null;
+    assert.ok(out, "a notice on an injectable event must emit JSON on stdout");
+    assert.equal(out?.hookSpecificOutput?.hookEventName, "PostToolUse");
+    assert.match(
+      String(out?.hookSpecificOutput?.additionalContext),
+      /REACHES-THE-MODEL/,
+    );
+    // …and it still can't block, which is the react guarantee.
+    assert.equal(r.blocked, false);
+    assert.equal(r.exitCode, 0);
+    // The stderr copy is kept on purpose (debug log + existing probes).
+    assert.match(r.stderr, /REACHES-THE-MODEL/);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("hook-runtime run-program: on a NON-injectable event the notice is NOT faked onto stdout", () => {
+  const dir = makeTmpDir();
+  try {
+    // `Stop` carries no context on either harness. The honest behaviour is to
+    // emit nothing rather than a shape the harness will ignore — the loud part
+    // is a compile-time warning (below), not a silent runtime pretence.
+    const hook = fixture(
+      dir,
+      "stop-notice.mjs",
+      `import { experimental_defineReact, notice } from "__HOOK__";
+export default experimental_defineReact({
+  on: "Stop",
+  react: () => notice("vigiles: UNDELIVERABLE-HERE"),
+});`,
+    );
+    const r = runHook(
+      `node ${CLI} hook-runtime run-program ${hook}`,
+      { hook_event_name: "Stop" },
+      { cwd: dir },
+    );
+    assert.equal(r.stdout.trim(), "", "no additionalContext on a Stop event");
+    assert.equal(r.json, null);
+    assert.match(r.stderr, /UNDELIVERABLE-HERE/);
+    assert.equal(r.exitCode, 0);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("compile WARNS LOUDLY when a react's notice could never be delivered", () => {
+  const dir = makeTmpDir();
+  try {
+    linkVigiles(dir);
+    mkdirSync(resolve(dir, ".vigiles/hooks"), { recursive: true });
+    writeFileSync(
+      resolve(dir, ".vigiles/hooks/stop-notice.mjs"),
+      `import { experimental_defineReact, notice } from "vigiles/hook";
+export default experimental_defineReact({
+  on: "Stop",
+  react: () => notice("nobody hears this"),
+});
+`,
+    );
+    const r = spawnSync("node", [CLI, "compile"], {
+      cwd: dir,
+      encoding: "utf-8",
+    });
+    const out = r.stdout + r.stderr;
+    // Loud, named, and it says WHERE the text would go instead — never a
+    // silent no-op, which would be the same defect one level up.
+    assert.match(out, /reach NOBODY/);
+    assert.match(out, /debug log/);
+    assert.match(out, /Injectable here/);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
 // OSS merge dogfood: compile a vigiles hook INTO a real plugin's existing
 // settings — proving the merge is non-destructive on a real-world config, not
 // just the synthetic unit fixtures in hook-install.test.ts. The seed is the

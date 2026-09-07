@@ -74,11 +74,11 @@ The only thing that needs a model is a real-model **eval**. That runs on **your 
 
 ✅ **Yes for Lint** — `npx vigiles lint` verifies your `CLAUDE.md` against your repo and linters (Ruff, Clippy, Pylint, RuboCop, golangci-lint, detekt, … alongside ESLint — 11 in all, covering Python, Rust, Go, Kotlin, Java, Ruby, and CSS) with **no install**.
 
-The typed-spec / `compile` path needs `vigiles` installed locally (it's an npm package). On a repo without a `package.json`, either add one (`npm init -y && npm i -D vigiles`) or stay in inline-comment mode — both are fully supported.
+✅ **Yes for the typed spec too** — `npx vigiles compile` needs no `package.json` and no `npm install`. The CLI resolves a spec's `vigiles/spec` import from its own install, so `init` → `compile` → `lint` works end to end on a repo that has no Node toolchain. Prefer no TypeScript at all? Inline-comment mode is equally supported.
 
 ## Is it safe to run `init`? What if I change my mind?
 
-Safe. `init` never overwrites instruction files (see above), and in a fresh repo it **defers** the compile with a clear next step instead of erroring.
+Safe. `init` never overwrites instruction files (see above) — an adopted file is left byte-for-byte alone until you run `compile` yourself and review the diff.
 
 To back out: `vigiles eject <file>` returns the file to plain markdown and removes the spec. Uninstalling the dev dependency leaves your repo as plain markdown plus CI you can delete. Nothing is locked in.
 
