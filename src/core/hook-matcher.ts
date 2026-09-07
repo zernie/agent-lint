@@ -446,34 +446,67 @@ export function hookMatcherIssues(
 }
 
 /**
+ * How a matcher relates to one tool call — the answer a boolean could not carry.
+ *
+ * - `"selects"` — the harness spawns the hook for this call.
+ * - `"misses"` — it does not, because the matcher names something else.
+ * - `"uncompilable"` — it does not, because the harness cannot BUILD the matcher.
+ *
+ * The last two both mean "the hook does not run", and a caller that only asks
+ * `=== "selects"` still lands on the safe answer; they are separate because only
+ * the third is a DEFECT worth naming in a report.
+ */
+export type MatcherReach = "selects" | "misses" | "uncompilable";
+
+/**
  * Would this matcher select a call to `tool` — i.e. does the harness spawn the
  * hook at all?
  *
  * The same two MEASURED facts the module header pins, asked as a question rather
- * than as a defect: a matcher with no regex metacharacter is compared by string
- * EQUALITY, one with metacharacters is an UNANCHORED regex. It lives here and
- * not in the caller so those semantics have one home (one-detector-no-drift) —
+ * than as a defect: on a harness whose matchers are tool names (Claude Code), a
+ * matcher with no regex metacharacter is compared by string EQUALITY and one
+ * with metacharacters is an UNANCHORED regex. It lives here and not in the
+ * caller so those semantics have one home (one-detector-no-drift) —
  * `hookMatcherIssues` judges a matcher, this one applies it.
  *
- * 🔴 FAIL-OPEN, in exactly the direction `decideHookCondition`
- * (`core/hook-condition.ts`) is. Every
- * uncertain input answers `true`: an absent matcher, a match-all (`*`, `.*`), a
- * pattern the regex engine rejects. A wrong answer here can therefore only ever
- * make a report say "the hook ran and did not block" — a fact about the hook —
- * never "the hook was skipped", which would be an alarm we invented. A matcher
- * that cannot compile is a real defect, and it already has an owner: the
- * `hook-matcher` rule's `invalid-regex` finding. Deciding it a second time here
- * would put two verdicts on one fact.
+ * FAIL-OPEN WHERE THE HARNESS IS, AND NOT ONE STEP FURTHER. An absent matcher or
+ * a match-all really does select every tool, so answering `"selects"` there
+ * states a fact — the same direction `decideHookCondition`
+ * (`core/hook-condition.ts`) fails open, and for the same reason it gives: where
+ * Claude Code cannot tell, it RUNS the hook, so mirroring it can only ever add a
+ * run, never invent a skip.
+ *
+ * 🔴 THAT REASONING DOES NOT REACH AN UNCOMPILABLE MATCHER, and this function
+ * used to apply it there anyway. `Bash(` is what the `invalid-regex` finding
+ * above already reports as "the harness can't compile it, so the hook never
+ * fires" — the harness fails CLOSED. Answering `"selects"` therefore does not
+ * add a run the harness makes, it MANUFACTURES one: a caller feeds the hook a
+ * battery it would never have been handed, and an unconditional-deny body scores
+ * a full pass for a hook that cannot run. That is the false-confidence class
+ * this module exists to remove, so an uncompilable matcher gets its own answer
+ * and the caller declines to score it.
  *
  * @param matcher - the registration's matcher, or `null` when it declares none.
  * @param tool - the tool named by the call, e.g. `"Bash"`.
+ * @param style - the active harness's `HookProtocol.matcherStyle`. `"exact"`
+ *   (the default, Claude Code) applies the literal-equality rule above;
+ *   `"regex"` (Codex) compiles EVERY matcher, so `ash` matches `Bash` and the
+ *   glob spellings `*` / `**` — which are Claude Code's documented match-all,
+ *   not regexes — come back `"uncompilable"` rather than being assumed to be
+ *   special-cased by a harness nobody measured.
  */
-export function hookMatcherSelects(
+export function hookMatcherReach(
   matcher: string | null,
   tool: string,
-): boolean {
-  if (matcher === null || MATCH_ALL.has(matcher)) return true;
-  if (isLiteralMatcher(matcher)) return matcher === tool;
+  style: "exact" | "regex" = "exact",
+): MatcherReach {
+  if (matcher === null || matcher === "") return "selects";
+  if (style === "exact") {
+    if (MATCH_ALL.has(matcher)) return "selects";
+    if (isLiteralMatcher(matcher))
+      return matcher === tool ? "selects" : "misses";
+  }
   const re = compileMatcher(matcher);
-  return re === null || re.test(tool);
+  if (re === null) return "uncompilable";
+  return re.test(tool) ? "selects" : "misses";
 }

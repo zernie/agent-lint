@@ -33,7 +33,7 @@ import {
   type PluginGuardReport,
 } from "./verify-plugin-guards.js";
 import { DISASTER_CATALOG } from "./guardrail-check.js";
-import { hookMatcherSelects } from "./core/hook-matcher.js";
+import { hookMatcherReach } from "./core/hook-matcher.js";
 import { codexAdapter } from "./adapters/codex/adapter.js";
 import { opencodeAdapter } from "./adapters/opencode/adapter.js";
 
@@ -304,28 +304,212 @@ describe("the sweep is harness-agnostic", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The matcher predicate it leans on — fail-open in exactly one direction.
+// The matcher predicate it leans on. Fail-open is right where the HARNESS is
+// fail-open too, and wrong where the harness fails CLOSED — see the uncompilable
+// case below and the full semantics table in core/hook-matcher.test.ts.
 // ---------------------------------------------------------------------------
 
-describe("hookMatcherSelects", () => {
+describe("hookMatcherReach", () => {
   it("compares a literal matcher by equality (the measured rule)", () => {
-    expect(hookMatcherSelects("Bash", "Bash")).toBe(true);
-    expect(hookMatcherSelects("Edit", "Bash")).toBe(false);
+    expect(hookMatcherReach("Bash", "Bash")).toBe("selects");
+    expect(hookMatcherReach("Edit", "Bash")).toBe("misses");
   });
 
   it("treats a metacharacter matcher as an unanchored regex", () => {
-    expect(hookMatcherSelects("Edit|Write", "Write")).toBe(true);
-    expect(hookMatcherSelects("Edit|Write", "Bash")).toBe(false);
-    expect(hookMatcherSelects("Ba.h", "Bash")).toBe(true);
+    expect(hookMatcherReach("Edit|Write", "Write")).toBe("selects");
+    expect(hookMatcherReach("Edit|Write", "Bash")).toBe("misses");
+    expect(hookMatcherReach("Ba.h", "Bash")).toBe("selects");
   });
 
-  it("FAILS OPEN on everything uncertain", () => {
-    // A wrong answer here may only ever say "ran and did not block", never
-    // invent a skip — so absent / match-all / uncompilable all select.
-    expect(hookMatcherSelects(null, "Bash")).toBe(true);
+  it("FAILS OPEN on an absent or match-all matcher", () => {
+    // Those really do select every tool, so answering "selects" states a fact.
+    expect(hookMatcherReach(null, "Bash")).toBe("selects");
     for (const all of ["", "*", "**", ".*"])
-      expect(hookMatcherSelects(all, "Bash")).toBe(true);
-    expect(hookMatcherSelects("Bash(", "Bash")).toBe(true);
+      expect(hookMatcherReach(all, "Bash")).toBe("selects");
+  });
+
+  it("REFUSES on a matcher the engine rejects", () => {
+    // Not fail-open: the harness cannot compile it either, so it never spawns
+    // the hook. Calling that "selects" invents the run the score is read off.
+    expect(hookMatcherReach("Bash(", "Bash")).toBe("uncompilable");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The four defects the Codex reviewer found on #212. Each fixture is the
+// smallest repo that produces one, and each assertion is the one that failed
+// before the fix.
+// ---------------------------------------------------------------------------
+
+/** A throwaway repo carrying one settings.json, cleaned up by the caller. */
+function ccRepo(hooks: unknown): string {
+  const at = mkdtempSync(join(tmpdir(), "vigiles-sweep-finding-"));
+  mkdirSync(join(at, ".claude"), { recursive: true });
+  writeFileSync(
+    join(at, ".claude", "settings.json"),
+    JSON.stringify({ hooks }),
+  );
+  return at;
+}
+
+/** A throwaway Codex repo: flat TOML `[[hooks.<event>]]` entries. */
+function codexRepo(lines: readonly string[]): string {
+  const at = mkdtempSync(join(tmpdir(), "vigiles-sweep-codex-finding-"));
+  mkdirSync(join(at, ".codex"), { recursive: true });
+  writeFileSync(join(at, "AGENTS.md"), "# codex repo\n");
+  writeFileSync(join(at, ".codex", "config.toml"), lines.join("\n"));
+  return at;
+}
+
+describe("an UNCOMPILABLE matcher gets no score (the false 7/7, second door)", () => {
+  it("reports not-applicable naming the matcher, never a measured count", () => {
+    // The hook body denies everything. Believe the matcher and it scores 7/7 —
+    // the exact number #211 removed — while the harness, which cannot build
+    // `Bash(` either, never spawns it once.
+    const at = ccRepo({
+      PreToolUse: [
+        { matcher: "Bash(", hooks: [{ type: "command", command: DENY_ALL }] },
+      ],
+    });
+    try {
+      const report = experimental_verifyPluginGuards(at);
+      const [only] = report.hooks;
+      if (only?.status === "measured")
+        throw new Error("an uncompilable matcher must not be measured");
+      expect(only?.status).toBe("not-applicable");
+      if (only?.status !== "not-applicable") throw new Error("unreachable");
+      expect(only.reason).toContain("Bash(");
+      expect(only.reason).toContain("compile");
+      // And the renderer carries no number for it either.
+      const out = experimental_formatPluginGuardReport(report).replaceAll(
+        report.dir,
+        "<dir>",
+      );
+      expect(out).not.toMatch(SCORE_SHAPED);
+      expect(out).toContain("Nothing was measured");
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("a Codex matcher is read with Codex's semantics", () => {
+  it("measures `ash`, which regex-matches Bash on a regex-matcher harness", () => {
+    const at = codexRepo([
+      "[[hooks.PreToolUse]]",
+      'matcher = "ash"',
+      `command = ${JSON.stringify(DENY_ALL)}`,
+      "",
+    ]);
+    try {
+      const [only] = experimental_verifyPluginGuards(at, {
+        adapter: codexAdapter,
+      }).hooks;
+      if (only?.status !== "measured")
+        throw new Error(`expected measured, got ${only?.status ?? "none"}`);
+      expect(only.blocked).toHaveLength(DISASTER_CATALOG.length);
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
+  });
+
+  it("still applies Claude Code's equality rule on Claude Code", () => {
+    const at = ccRepo({
+      PreToolUse: [
+        { matcher: "ash", hooks: [{ type: "command", command: DENY_ALL }] },
+      ],
+    });
+    try {
+      const [only] = experimental_verifyPluginGuards(at).hooks;
+      expect(only?.status).toBe("not-applicable");
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("a variable the command itself sets is not a missing variable", () => {
+  it("measures a self-contained command and a single-quoted `$`", () => {
+    const at = ccRepo({
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          // The shell assigns GUARD before expanding it; the second names a
+          // variable inside single quotes, where no expansion happens at all.
+          hooks: [
+            { type: "command", command: 'GUARD=echo; "$GUARD" ran' },
+            { type: "command", command: "echo '$NOT_A_DEPENDENCY'" },
+          ],
+        },
+      ],
+    });
+    try {
+      const statuses = experimental_verifyPluginGuards(at).hooks.map(
+        (h) => h.status,
+      );
+      expect(statuses).toEqual(["measured", "measured"]);
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
+  });
+
+  it("a genuinely unset variable is STILL unresolved", () => {
+    const at = ccRepo({
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [{ type: "command", command: '"$NO_SUCH_GUARD_HOME"/g.sh' }],
+        },
+      ],
+    });
+    try {
+      const [only] = experimental_verifyPluginGuards(at).hooks;
+      expect(only?.status).toBe("unresolved");
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("the harness's own event variables are supplied", () => {
+  it("resolves the ones the sweep synthesizes (`$hook_event_name`, `$cwd`)", () => {
+    const at = codexRepo([
+      "[[hooks.PreToolUse]]",
+      'matcher = "Bash"',
+      `command = ${JSON.stringify('echo "$hook_event_name $cwd"')}`,
+      "",
+    ]);
+    try {
+      const [only] = experimental_verifyPluginGuards(at, {
+        adapter: codexAdapter,
+      }).hooks;
+      if (only?.status !== "measured")
+        throw new Error(`expected measured, got ${only?.status ?? "none"}`);
+      expect(only.allowed).toHaveLength(DISASTER_CATALOG.length);
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
+  });
+
+  it("does NOT invent a value it cannot derive (`$permission_mode`)", () => {
+    // Declared by the adapter, but the sweep synthesizes no permission mode —
+    // and a hook may branch on it, so a made-up value would be a made-up run.
+    const at = codexRepo([
+      "[[hooks.PreToolUse]]",
+      'matcher = "Bash"',
+      `command = ${JSON.stringify('echo "$permission_mode"')}`,
+      "",
+    ]);
+    try {
+      const [only] = experimental_verifyPluginGuards(at, {
+        adapter: codexAdapter,
+      }).hooks;
+      expect(only?.status).toBe("unresolved");
+      if (only?.status !== "unresolved") throw new Error("unreachable");
+      expect(only.reason).toContain("permission_mode");
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
   });
 });
 

@@ -51,7 +51,8 @@ import {
   normalizeHooks,
   type HookRegistration,
 } from "./core/hook-normalize.js";
-import { hookMatcherSelects } from "./core/hook-matcher.js";
+import { hookMatcherReach } from "./core/hook-matcher.js";
+import { shellVarReads } from "./core/shell-vars.js";
 import { claudeCodeAdapter } from "./adapters/claude-code/adapter.js";
 import type { HarnessAdapter } from "./core/adapter.js";
 import {
@@ -173,26 +174,23 @@ export interface VerifyPluginGuardsOptions extends Omit<
 
 const DEFAULT_EVENT = "PreToolUse";
 
-/** A `$NAME` / `${NAME}` reference — not `$(…)`, `$1` or `$@`. */
-const VAR_REF = /\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?/g;
-
 /**
- * Variables the command names that nothing would set at run time.
+ * Variables the command DEPENDS ON that nothing would set at run time.
  *
- * Checked against the environment the hook would ACTUALLY get (the caller's `env`
- * layered over `process.env`) rather than against the mere presence of a `$`.
- * A repo whose hooks reference `$CLAUDE_PROJECT_DIR` is ordinary, and a caller
- * who passes that variable has resolved it — flagging them anyway would be the
- * cry-wolf shape, and the reader would stop reading the field.
+ * Two filters, and both exist because a false `unresolved` costs a real guard
+ * its measurement. The first is the shell's own reading of the command
+ * (`shellVarReads`, a real parse): a name the command ASSIGNS for itself, or one
+ * written inside single quotes, is not a dependency however much it looks like
+ * `$NAME`. The second is the environment the hook would ACTUALLY get — the
+ * caller's `env` layered over `process.env` — rather than the mere presence of a
+ * `$`, so a repo whose hooks reference `$CLAUDE_PROJECT_DIR` and a caller who
+ * passes it are both left alone.
  */
 function unsetVariables(
   command: string,
   env: Readonly<Record<string, string | undefined>>,
 ): string[] {
-  const missing = new Set<string>();
-  for (const [, name] of command.matchAll(VAR_REF))
-    if (env[name] === undefined) missing.add(name);
-  return [...missing];
+  return shellVarReads(command).reads.filter((name) => env[name] === undefined);
 }
 
 /** The battery, after `categories` / `events` narrowing. */
@@ -224,28 +222,62 @@ function sweptHook(reg: HookRegistration, index: number): SweptHook {
 }
 
 /**
+ * The event variables the sweep can answer from the event it is SYNTHESIZING,
+ * keyed by the lowercased name a harness declares in `eventEnvVars`.
+ *
+ * 🔴 THE TABLE IS SHORT ON PURPOSE, and the short list is the whole policy: the
+ * sweep sets a declared variable only when it KNOWS the value. Codex also
+ * declares `session_id`, `turn_id`, `model` and `permission_mode`; the sweep
+ * synthesizes none of those, and a hook may branch on `permission_mode`, so
+ * inventing a value would not resolve the run — it would measure a program
+ * configured by a number we made up. Those stay unset, the hook reads
+ * `unresolved`, and its reason names them so a caller can supply the value they
+ * actually mean via `env`.
+ */
+const DERIVABLE_EVENT_VARS: Readonly<
+  Record<string, (f: { root: string; event: string }) => string>
+> = {
+  hook_event_name: (f) => f.event,
+  cwd: (f) => f.root,
+  plugin_root: (f) => f.root,
+};
+
+/**
  * The environment each hook is run with: the harness's plugin-root variable set
- * to the real root, with the caller's `env` layered on top so they can override
- * it or add anything else.
+ * to the real root, plus every variable the ADAPTER declares that the sweep can
+ * honestly derive, with the caller's `env` layered on top so they can override
+ * any of it or add anything else.
  *
- * 🔴 WITHOUT THIS, THE COMMONEST HOOK SHAPE IN THE WILD READS AS `unresolved`.
- * `loadPlugin` expands the BRACED token (`${PLUGIN_ROOT}`) textually, but real
- * hooks are shell and are written unbraced (`node "$CLAUDE_PLUGIN_ROOT"/x.cjs` —
- * the vendored oh-my-claudecode shape). Setting the variable rather than doing a
- * second string substitution covers BOTH spellings with one mechanism, and it is
- * what the harness itself does: the shell in a real session resolves that name
- * because the harness put it in the environment.
+ * 🔴 WITHOUT THE PLUGIN-ROOT HALF, THE COMMONEST HOOK SHAPE IN THE WILD READS AS
+ * `unresolved`. `loadPlugin` expands the BRACED token (`${PLUGIN_ROOT}`)
+ * textually, but real hooks are shell and are written unbraced
+ * (`node "$CLAUDE_PLUGIN_ROOT"/x.cjs` — the vendored oh-my-claudecode shape).
+ * Setting the variable rather than doing a second string substitution covers
+ * BOTH spellings with one mechanism, and it is what the harness itself does: the
+ * shell in a real session resolves that name because the harness put it in the
+ * environment. The NAME is derived from `layout.pluginRootToken`, never written
+ * out, so this stays correct for a harness that spells its root differently.
  *
- * The NAME is derived from `layout.pluginRootToken`, never written out, so this
- * stays correct for a harness that spells its root differently.
+ * The DECLARED half is the same argument one layer up. `HookProtocol.eventEnvVars`
+ * exists to say "a synthesized hook event carries these", and this function is
+ * synthesizing one — so a Codex hook reading `$hook_event_name` or `$cwd` is an
+ * ordinary hook, not an unresolvable one, and reading the declaration rather
+ * than a literal keeps that true for the next adapter. Claude Code declares an
+ * empty list, so nothing changes there.
  */
 function hookEnvironment(
-  layout: HarnessAdapter["layout"],
+  adapter: HarnessAdapter,
   root: string,
+  event: string,
   callerEnv: Record<string, string> | undefined,
 ): Record<string, string> {
-  const name = /^\$\{(.+)\}$/.exec(layout.pluginRootToken)?.[1];
-  return { ...(name ? { [name]: root } : {}), ...callerEnv };
+  const rootVar = /^\$\{(.+)\}$/.exec(adapter.layout.pluginRootToken)?.[1];
+  const derived: Record<string, string> = rootVar ? { [rootVar]: root } : {};
+  for (const name of adapter.hookProtocol?.eventEnvVars ?? []) {
+    const value = DERIVABLE_EVENT_VARS[name.toLowerCase()]?.({ root, event });
+    if (value !== undefined) derived[name] = value;
+  }
+  return { ...derived, ...callerEnv };
 }
 
 /** Everything a per-hook sweep needs beyond the registration itself. */
@@ -280,8 +312,26 @@ function sweepHook(
       reason: `registered on ${reg.event}; this battery is delivered as ${eventName}, so the hook is never asked about these calls`,
     };
 
-  const reachable = battery.filter((e) =>
-    hookMatcherSelects(reg.matcher, e.tool),
+  const style = ctx.protocol.matcherStyle;
+  // 🔴 UNCOMPILABLE FIRST, AND IT IS NOT A NARROWER "misses". A matcher the
+  // regex engine rejects is one the HARNESS cannot build either, so it spawns
+  // the hook for nothing — running the battery anyway would hand an
+  // unconditional-deny body a full score for a hook that never runs, which is
+  // the false 7/7 this whole function exists to prevent, arriving through the
+  // matcher instead of the condition.
+  if (
+    battery.some(
+      (e) => hookMatcherReach(reg.matcher, e.tool, style) === "uncompilable",
+    )
+  )
+    return {
+      status: "not-applicable",
+      hook,
+      reason: `matcher \`${reg.matcher ?? ""}\` is not a valid regular expression — the harness cannot compile it either, so it never spawns this hook and there is nothing to measure (the \`hook-matcher\` rule reports the same matcher as invalid-regex)`,
+    };
+
+  const reachable = battery.filter(
+    (e) => hookMatcherReach(reg.matcher, e.tool, style) === "selects",
   );
   if (reachable.length === 0)
     return {
@@ -418,7 +468,7 @@ export function experimental_verifyPluginGuards(
     eventName,
     opts,
     protocol: adapter.hookProtocol,
-    env: hookEnvironment(adapter.layout, root, opts.env),
+    env: hookEnvironment(adapter, root, eventName, opts.env),
   };
   const hooks = regs.map((reg, i) => sweepHook(reg, i, ctx));
   return { ...base, hooks, notes: sweepNotes(root, regs, hooks, eventName) };

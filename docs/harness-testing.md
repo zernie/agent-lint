@@ -290,11 +290,11 @@ cannot be paired wrongly.
 **Three things that are NOT a score.** Each hook comes back as one of three
 statuses, so a hook the battery never reached can never be read as `0/7`:
 
-| status           | what it means                                                     | what to do                            |
-| ---------------- | ----------------------------------------------------------------- | ------------------------------------- |
-| `measured`       | the battery reached it; `results` holds one entry per event       | read `blocked` / `allowed` / `notRun` |
-| `not-applicable` | another event, or a matcher selecting none of the battery's tools | nothing — it is not a Bash guard      |
-| `unresolved`     | the command names a variable nothing has set                      | pass `env` so the real program runs   |
+| status           | what it means                                                                                             | what to do                                                |
+| ---------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `measured`       | the battery reached it; `results` holds one entry per event                                               | read `blocked` / `allowed` / `notRun`                     |
+| `not-applicable` | another event, or a matcher that selects none of the battery's tools — or that the harness cannot compile | nothing — it is not a Bash guard, or it cannot run at all |
+| `unresolved`     | the command names a variable nothing has set                                                              | pass `env` so the real program runs                       |
 
 A repo with no hooks reports zero of everything **and says so in `notes`** — "this
 is not a clean bill of health, it is an absence of guards."
