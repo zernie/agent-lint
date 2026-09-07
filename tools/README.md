@@ -29,6 +29,20 @@ repo root. (The BUILD pipeline — `api-extractor.mjs`, `build-report.mjs` — l
 
 ## Occasional — pre-launch
 
+- **`smoke-published.sh`** — run the PUBLISHED package from the registry against a
+  throwaway Python repo (pyproject.toml + ruff, **no package.json**) and assert the
+  OUTPUT of `audit` / `lint` / `init` / `compile`, not just their exit codes. **Run
+  when:** before announcing a release, on the exact version you are about to point
+  people at. Every gate in `ci.yml` runs the CLI out of `dist/` (`version: local`),
+  so the suite can be green while the artifact users download is broken — a file
+  missing from `files[]`, a subpath not exported, a resolve hook that only works
+  when vigiles is a local dependency. Usage: `bash tools/smoke-published.sh [version]`
+  (default `latest`); exits 77 and says so when `ruff` is absent, since the linter
+  check is the point. Measured 2026-09-07 against `vigiles@latest`: it FAILED,
+  naming both live launch blockers — `lint` printing "No linters detected" on a
+  configured ruff repo, and `compile` exiting 1 with a raw Node module-resolution
+  stack.
+
 - **`fp-sweep.sh`** — launch-readiness "don't cry wolf" sweep: clone popular
   plugins/marketplaces, run `vigiles audit`, surface any high-precision rule flag
   as a false-positive candidate to triage. **Run when:** pre-launch FP triage.
