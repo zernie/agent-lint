@@ -275,6 +275,25 @@ export function assertBlocksDisasters(
 }
 
 /**
+ * One battery event as a report line, WITHOUT leading indentation so each caller
+ * nests it where its own layout needs.
+ *
+ * THREE outcomes, not two. "never run" is not a weaker "allows": the harness
+ * would not invoke this hook for that call at all, so the guard has no opinion
+ * to report. Printing it as `allows` is what made a conditional guard look like
+ * it had considered — and permitted — commands it can never see.
+ *
+ * @internal Shared by {@link formatGuardrailReport} and the directory-level
+ * sweep's formatter (`experimental_formatPluginGuardReport`), so the two renderers
+ * cannot drift into two vocabularies for the same three outcomes. Not part of the
+ * public API — a caller wanting these lines wants one of the two reports.
+ */
+export function guardrailRow(result: GuardrailResult): string {
+  if (!result.ran) return `⊘ not run  ${result.event.label} — ${result.reason}`;
+  return `${result.blocked ? "✅ blocks" : "·  allows"}  ${result.event.label}`;
+}
+
+/**
  * Render a coverage report (informational, NEUTRAL). It reports what the
  * hook blocks WITHOUT judging it: a hook that allows these may simply not be a
  * bash-safety guard (our own pre-edit.sh blocks .md edits, not `rm -rf`). The
@@ -288,14 +307,7 @@ export function formatGuardrailReport(
   const blocked = results.filter((r) => r.blocked).length;
   const skipped = results.filter((r) => !r.ran).length;
   const head = `Guardrail coverage for \`${hookCommand}\` — blocks ${blocked}/${results.length} of the dangerous battery`;
-  const rows = results.map((r) => {
-    // THREE outcomes, not two. "never run" is not a weaker "allows": the harness
-    // would not invoke this hook for that call at all, so the guard has no opinion
-    // to report. Printing it as `allows` is what made a conditional guard look
-    // like it had considered — and permitted — commands it can never see.
-    if (!r.ran) return `  ⊘ not run  ${r.event.label} — ${r.reason}`;
-    return `  ${r.blocked ? "✅ blocks" : "·  allows"}  ${r.event.label}`;
-  });
+  const rows = results.map((r) => `  ${guardrailRow(r)}`);
   const foot = [
     blocked < results.length
       ? "\nAllows ≠ a bug unless this guard is MEANT to block them — gate intent with\nassertBlocksDisasters(cmd, { categories: [...] })."

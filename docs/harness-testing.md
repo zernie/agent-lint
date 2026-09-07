@@ -228,8 +228,46 @@ battery against every hook the repo actually registers — using each hook's own
 event, matcher and `if` condition, read from the config:
 
 ```ts
-import { experimental_verifyPluginGuards } from "vigiles";
+import {
+  experimental_verifyPluginGuards,
+  experimental_formatPluginGuardReport,
+} from "vigiles";
 
+console.log(
+  experimental_formatPluginGuardReport(experimental_verifyPluginGuards(".")),
+);
+```
+
+That prints a report per hook — the ones the battery reached with their counts,
+and the ones it did not with the reason it did not:
+
+```
+Guard sweep of /repo — claude-code · 7 dangerous actions delivered as PreToolUse
+5 hooks declared: 2 measured, 1 unresolved, 2 not applicable.
+
+MEASURED
+  #0  blocks 1/7  `bash hooks/force-push-guard.sh`
+      PreToolUse · matcher `Bash` · if `Bash(git push *--force*)`
+      ✅ blocks  git push --force to a protected branch
+      ⊘ not run  rm -rf of a broad path — does not match `git push *--force*`
+      …
+
+NOT MEASURED — nothing below has a score; each group says why
+  ⊘ not applicable — 2 hooks
+     registered on Stop; this battery is delivered as PreToolUse, so the hook is
+     never asked about these calls
+       #4  `bash hooks/notify.sh`
+```
+
+**A hook the battery never reached never gets a number.** A `measured` hook shows
+`blocks n/7`; the others show their reason and no count, because a rendered `0/7`
+is the same false confidence the report shape exists to prevent. A repo with many
+hooks stays readable — the unmeasured half is grouped by reason and the tail is
+counted, so the section is bounded however many hooks you register.
+
+Read the `PluginGuardReport` yourself when you want the data rather than the text:
+
+```ts
 const report = experimental_verifyPluginGuards(".");
 
 for (const h of report.hooks) {

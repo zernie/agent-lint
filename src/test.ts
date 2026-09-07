@@ -197,7 +197,13 @@ export type {
 // callers to avoid ("pass the hook's declared `if` here") cannot be made. It
 // belongs on THIS barrel and beside the battery for the same reason the battery
 // does: nothing here calls a model.
-export { experimental_verifyPluginGuards } from "./verify-plugin-guards.js";
+// The report + its renderer ship together: the sweep's one motivating use is
+// "point the battery at YOUR hooks", and without the formatter that is a
+// hand-written fold over a discriminated union at every call site.
+export {
+  experimental_verifyPluginGuards,
+  experimental_formatPluginGuardReport,
+} from "./verify-plugin-guards.js";
 export type {
   PluginGuardReport,
   SweptHook,

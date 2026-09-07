@@ -617,6 +617,9 @@ export function experimental_emitTool(contract: OutputContract, options?: {
 }): ExperimentalEmitTool;
 
 // @public
+export function experimental_formatPluginGuardReport(report: PluginGuardReport): string;
+
+// @public
 export function experimental_hookState(hookFile: string, opts?: {
     readonly cwd?: string;
 }): HookStateHandle;
