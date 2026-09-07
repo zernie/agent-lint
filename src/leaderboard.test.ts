@@ -312,6 +312,44 @@ test("score clamps at 0 and an empty machine is not healthy", () => {
   assert.equal(scoreReport(r).score, 0);
 });
 
+// ─── a hooks-only plugin is a plugin (#199) ───────────────────────────────────
+//
+// 🔴 `scoreReport` kept its OWN copy of the surface list and that copy had
+// dropped `inlineHooks`, so a plugin whose entire contribution is hooks declared
+// inline in `plugin.json` graded 0 / F with "no loadable plugin surface" while
+// the same report printed `inlineHooks: 2`. Measured on that shape before the
+// fix: `scoreReport` 0 against `auditScore` 100 — two numbers the docs say are
+// equal, disagreeing by the whole scale. The fix is that there is now ONE list
+// (`isEmptyMachine`), not a corrected second one.
+test("a hooks-only plugin is a real surface, not score 0", () => {
+  // inline hooks (shell one-liners, no script file) — the shape from #199.
+  const inlineOnly = scoreReport(report({ inlineHooks: 2 }));
+  assert.equal(inlineOnly.score, 100);
+  assert.deepEqual(inlineOnly.issues, []);
+
+  // script-backed hooks, the other half of the same surface.
+  const scriptOnly = scoreReport(
+    report({
+      hooks: [{ command: "bash g.sh", script: "g.sh", status: "ok" as const }],
+    }),
+  );
+  assert.equal(scriptOnly.score, 100);
+
+  // and the headline the audit prints for the same report must not disagree —
+  // the invariant a second surface list is exactly what breaks.
+  assert.equal(
+    auditScore(report({ inlineHooks: 2 })).overall,
+    inlineOnly.score,
+  );
+
+  // the negative half: no surface of ANY kind is still 0. Without this the fix
+  // is indistinguishable from deleting the empty-machine check.
+  assert.equal(scoreReport(report()).score, 0);
+  assert.deepEqual(scoreReport(report()).issues, [
+    "no loadable plugin surface",
+  ]);
+});
+
 test("a command-only or MCP-only plugin is a real surface, not score 0", () => {
   // commands/*.md with no skills/agents/hooks — Anthropic ships these.
   const cmdOnly = scoreReport(report({ commands: 3 }));
@@ -325,6 +363,46 @@ test("a command-only or MCP-only plugin is a real surface, not score 0", () => {
 
   // truly empty (no surface at all) is still 0.
   assert.equal(scoreReport(report()).score, 0);
+});
+
+// The end-to-end half of #199: the defect was found by grading a REAL plugin, not
+// by reading the code, so one test drives the whole path — a plugin.json on disk
+// through `scanPlugin` into the score — rather than a hand-built report only.
+test("a real hooks-only plugin dir grades on its hooks, not as empty", () => {
+  const dir = makeTmpDir("lb-hooks-only");
+  const abs = join(dir, ".claude-plugin", "plugin.json");
+  mkdirSync(join(abs, ".."), { recursive: true });
+  writeFileSync(
+    abs,
+    JSON.stringify({
+      name: "gates-only",
+      version: "1.0.0",
+      description: "A plugin whose entire contribution is hooks",
+      hooks: {
+        PreToolUse: [
+          { matcher: "Bash", hooks: [{ type: "command", command: "echo no" }] },
+        ],
+        Stop: [{ hooks: [{ type: "command", command: "echo done" }] }],
+      },
+    }),
+  );
+  const r = scanPlugin(dir);
+  // The loader SEES them — that is what made the 0 read as a contradiction.
+  assert.equal(r.inlineHooks, 2, "the hooks are detected");
+  assert.equal(r.skills.length + r.agents.length + r.commands, 0);
+
+  const scored = scoreReport(r);
+  assert.notEqual(
+    scored.score,
+    0,
+    "a hooks-only plugin is not the empty machine",
+  );
+  assert.ok(
+    !scored.issues.includes("no loadable plugin surface"),
+    "and is not reported as having no surface",
+  );
+  assert.equal(auditScore(r).overall, scored.score, "audit agrees with health");
+  cleanupTmpDir(dir);
 });
 
 test("rankPlugins orders healthy above broken, with grades", () => {
