@@ -4,7 +4,8 @@
  * loading steps → report; instant baked chip; unparseable-input hint; and the
  * four in-frame edge states (no-harness / private-404 / rate-limit / error).
  * The `ok` path uses the REAL engine (`runAudit`) over the sample map, so it's a
- * true integration, not a mocked render.
+ * true integration, not a mocked render. Plus one honesty guard: the model-gated
+ * row shows an empty recall/precision pair and no percentage digit at all.
  */
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { render, screen, cleanup, waitFor } from "@testing-library/react";
@@ -119,6 +120,32 @@ describe("DemoAudit — chips stay instant", () => {
     await screen.findByText("example");
     expect(mockFetch).not.toHaveBeenCalled();
     expect(screen.queryByText(/fetching repo tree/)).toBeNull();
+  });
+});
+
+/**
+ * The model-gated row is the ONE place in the report that shows numbers nobody
+ * measured — so it shows none. This asserts BOTH halves, because only the pair is
+ * load-bearing: the honest placeholder is PRESENT, and no percentage digit appears
+ * anywhere in that row. Until 2026-09-07 it rendered a blurred "recall 92% ·
+ * precision 100%" tagged "preview" — invented digits, in a SHARED component that
+ * also renders the HTML report a user shares as their own result. A test that only
+ * checked for the em-dash would pass with the fake numbers sitting beside it.
+ */
+describe("DemoAudit — the model-gated row invents no numbers", () => {
+  it("shows an empty recall/precision pair and no percentage anywhere in the row", async () => {
+    render(<DemoAudit />);
+    const heading = await screen.findByText("Do your skills actually fire?");
+    const row = heading.closest("div.rounded-xl");
+    expect(row).not.toBeNull();
+    const text = row?.textContent ?? "";
+
+    // The honest placeholder: the shape of the answer, with the digits absent.
+    expect(text).toMatch(/recall\s*—\s*·\s*precision\s*—/);
+    expect(text).toMatch(/run to fill/i);
+
+    // The regression guard: no measurement nobody took.
+    expect(text).not.toMatch(/\d\s*%/);
   });
 });
 

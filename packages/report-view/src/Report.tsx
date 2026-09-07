@@ -442,7 +442,15 @@ function CategoryRow({
  * veiled, with an EXPLICIT "Copy prompt →" button that says exactly what it copies
  * and where to paste it. The recall/precision numbers are honest em-dash
  * placeholders (not a blur that reads as a render failure) — you fill them by
- * running it locally. */
+ * running it locally.
+ *
+ * A blurred pair of invented digits sat here instead until 2026-09-07, arguing in
+ * its own comment that blur + a "preview" tag made them illustrative rather than
+ * claimed. It did not: the view is SHARED with the CLI's HTML report, so a number
+ * nobody measured was one variant away from a file a user shares as their own
+ * result — and on the marketing page it rendered above that page's own copy
+ * mocking "an unverified number in a README". If a stronger tease is ever wanted,
+ * use a REAL measured number with its source, never a fabricated or blurred one. */
 function LockedRow({ onUnlock }: { onUnlock?: () => void }) {
   const [copied, setCopied] = useState(false);
   const unlock = (): void => {
@@ -473,28 +481,26 @@ function LockedRow({ onUnlock }: { onUnlock?: () => void }) {
             Needs a real model, not a browser — recall (fires when it should) +
             precision (stays quiet otherwise).
           </p>
-          {/* A LOCKED PREVIEW (the gated-content pattern): representative numbers,
-              BLURRED and tagged "preview", so it teases the SHAPE of the result you'd
-              get without reading as this repo's real measured finding — you unlock the
-              real ones by running it. Blurred + labelled = clearly illustrative, not a
-              fabricated claim. Screen readers get the honest description, not digits.
-              ("preview", not "example", also disambiguates from the frame's example-chip
-              source tag.) */}
+          {/* The two numbers this row exists to produce, shown EMPTY — an em-dash
+              each, with "run to fill" beside them. There is nothing to blur and
+              nothing to unlock: the shape of the answer is the whole tease, and the
+              digits arrive only from a run on your own repo. A placeholder digit
+              here would be a measurement nobody took, sitting one line under five
+              categories that ARE measured, in a report about a repo the reader
+              chose — and this row lives in the SHARED report view, one variant flip
+              away from the HTML file the CLI writes and a user shares as their own
+              result. Screen readers get the same sentence, not a different one. */}
           <div className="mt-2 flex items-center gap-2 font-mono text-xs text-muted-foreground">
-            <span
-              className="select-none blur-[2.5px]"
-              aria-hidden
-              title="preview — run it to see your real numbers"
-            >
-              recall <span className="font-bold text-foreground">92%</span> ·
-              precision <span className="font-bold text-foreground">100%</span>
+            <span aria-hidden>
+              recall <span className="font-bold text-foreground">—</span> ·
+              precision <span className="font-bold text-foreground">—</span>
             </span>
             <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium uppercase not-italic tracking-wide text-muted-foreground/80">
-              preview
+              run to fill
             </span>
             <span className="sr-only">
-              Example preview only — run vigiles to measure your skills&apos;
-              real recall and precision.
+              Recall and precision are unmeasured here — run vigiles locally to
+              measure your skills&apos; real numbers.
             </span>
           </div>
         </div>
