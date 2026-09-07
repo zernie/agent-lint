@@ -1,4 +1,5 @@
 import { Star } from "lucide-react";
+import { BUILTIN_LINTERS } from "@engine/spec";
 import { DemoAudit } from "@/components/sections/DemoAudit";
 
 const REPO = "https://github.com/zernie/vigiles";
@@ -47,26 +48,54 @@ export function Hero() {
 
       {/* Hero content — headline + ONE primary action, then the real product shot. */}
       <div className="mx-auto flex w-full max-w-3xl flex-col items-center px-6 pb-10 pt-14 text-center sm:pt-20">
-        {/* The headline names all three instruments. It used to read "Lighthouse
-            for your agent harness", which promised only the grade — a reader (and
-            every link preview) learned vigiles SCORES a repo and never learned it
-            also RUNS the harness against a scripted stand-in model and MEASURES
-            whether a skill fires. The verb map below keeps the detail, and the
-            Lighthouse analogy still lives there and in the FAQ, where it is true
-            of `audit` specifically. Pain still leads in the paragraph — per the
-            README direction, breadth follows the felt problem, never replaces it. */}
+        {/* The headline names the FELT problem, not the tool's verbs. It used
+            to read "Audit, test and measure your agent harness" — accurate, and
+            a stranger could not tell from it whether this was about their
+            CLAUDE.md or about model evals. The pain sentence that used to open
+            the paragraph is the headline now; the verbs live one screen down in
+            the verb map, where a reader who has decided to care will read them. */}
         <h1 className="text-balance text-4xl font-bold leading-[1.05] tracking-tight sm:text-6xl">
-          Audit, test and measure
-          <br className="hidden sm:block" /> your agent harness.
+          {/* Two block spans, not a <br>: the setup and the punchline break at
+              EVERY width. A responsive <br> collapsed them onto one line on a
+              phone, where "…every PR. Nobody reviews…" reads as one run-on. */}
+          <span className="block text-muted-foreground">
+            You review every PR.
+          </span>
+          <span className="block">Nobody reviews your CLAUDE.md.</span>
         </h1>
 
+        {/* Three facts, one sentence each: what it checks, what it proved, and
+            how little work adopting it is. Every number here is measured — the
+            2-of-7 / 7-of-7 contrast is the disaster battery below. */}
         <p className="mt-5 max-w-2xl text-balance text-lg leading-relaxed text-muted-foreground sm:text-xl">
-          You review every PR. Nothing reviews your CLAUDE.md. The files, tools,
-          and rules your skills and hooks name — nothing checks they exist. One
-          command grades what&apos;s silently broken — then you can run the
-          harness against a scripted model and measure whether a skill actually
-          fires. Free, open-source — try any public repo right here.
+          Nothing checks that the tools, events, files and rules your skills and
+          hooks name actually exist. One command grades what&apos;s broken — and
+          proves your guard: a widely-copied safety hook blocks 2 of 7
+          disasters, the compiled rewrite blocks 7. Then say &ldquo;test my
+          skills&rdquo; and the agent writes the test.
         </p>
+
+        {/* The "is this for me?" strip. It answers the three questions a
+            stranger asks in the first ten seconds — which harness, which
+            language, what licence — and used to be the last sentence of the
+            SECOND section, where nobody deciding whether to keep reading ever
+            got to it. */}
+        <ul className="mt-7 flex flex-wrap items-center justify-center gap-2 text-sm text-muted-foreground">
+          {[
+            "Claude Code · Codex",
+            // Derived, never typed: the count is whatever the engine ships, so
+            // adding a linter can't leave a stale number on the first screen.
+            `Any language · ${String(BUILTIN_LINTERS.length)} linter catalogs`,
+            "MIT",
+          ].map((fact) => (
+            <li
+              key={fact}
+              className="rounded-full border border-border px-3 py-1"
+            >
+              {fact}
+            </li>
+          ))}
+        </ul>
       </div>
 
       {/* Product shot on the fold — the LIVE demo (combobox + real grading), not a

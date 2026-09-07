@@ -108,9 +108,11 @@ export function Wedge() {
             </span>{" "}
             — one deterministic, model-free score across six categories (see the
             report above). The deepest check: every rule your instructions name
-            is resolved against your real linter — it must exist{" "}
-            <span className="text-foreground">and</span> be enabled — across
-            eleven linters, from JS to Rust to Go to Kotlin:
+            is resolved against your real linter — eleven of them, from JS to
+            Rust to Go to Kotlin. The rule has to{" "}
+            <span className="text-foreground">exist</span>, and wherever that
+            linter has an on/off switch, be{" "}
+            <span className="text-foreground">enabled</span> in your config:
           </p>
           <ul className="mt-6 flex flex-wrap items-center justify-center gap-2">
             {LINTERS.map((name) => (
