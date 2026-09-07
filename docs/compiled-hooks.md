@@ -542,13 +542,22 @@ the thirty-first from shipping unmarked. Same reasoning as
   and it broke when the facts were renamed. There is no supported seeding API
   beside `runHook`. Until there is, a consumer testing a throttle is depending on
   internals.
-- `vigiles compile` is not idempotent — it appends a duplicate wiring block that
-  has to be removed by hand.
-- Two consumers total, both belonging to the author.
+- Two consumers total, both belonging to the author — and neither is this
+  repository's own harness, which still wires its hooks as plain shell. A
+  vocabulary nobody has had to live with is a vocabulary whose sharp edges are
+  unknown.
 
 **What would have to be true to drop the prefix:** a supported way to seed and
-read named state in a test; an idempotent `compile`; and at least one consumer
-who did not write the API.
+read named state in a test, and at least one consumer who did not write the API.
+
+An earlier version of this list also demanded an idempotent `compile`. That was
+already false when it was written: the merge is keyed by the hook's canonicalized
+path (`mergeHooksJson`, `src/hook-install.ts`), so recompiling replaces the entry
+in place — across five spellings of the same path, and beside a hand-wired block
+that used `$CLAUDE_PROJECT_DIR` and quotes. Fixed in #168 and pinned by two
+regression tests in `src/hook-install.test.ts`; this page kept saying otherwise
+for two weeks. Re-measured 2026-09-07: five consecutive compiles, byte-identical
+`settings.json`, one entry.
 
 **Stable alternative:** a hand-written shell hook wired in `settings.json`. The
 events and the protocol are the harness's, not ours — nothing about them is
