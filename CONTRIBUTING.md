@@ -45,14 +45,46 @@ npm run build        # Compile TypeScript → dist/
 
 ### Test
 
-```bash
-npm test             # Build + run all tests
-```
+This repo has **twelve** test tiers, not one. `npm test` (build + `vitest run`)
+is the vitest suite — the first three rows below — and the rest need a binary, a
+container, or money. Which tier a NEW check belongs in is decided by the
+`pick-the-test-tier` rule in `CLAUDE.md`; this table is where each one LIVES and
+who runs it.
 
-Tests run under **vitest** (`npm test` = build + `vitest run`), with assertions from
-`node:assert/strict`. Unit tests live beside their source as `src/**/*.test.ts`.
-Optional `vitest` / `jest` matcher adapters ship for CONSUMERS (`vigiles/vitest`,
-`vigiles/jest`); they are not what this repo's own suite uses.
+| Tier                   | Lives in                                        | Run it with                                     | Needs                                                                                                                           | In CI                                          |
+| ---------------------- | ----------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| **unit**               | `src/**/*.test.ts`, `scripts/`, `eslint-rules/` | `npm run test:unit`                             | nothing to start — individual suites gate on a binary (`ruff`, `pylint`, `rubocop`, `claude`, `codex`, `bwrap`) and skip loudly | yes, job `test` runs it via `npm run coverage` |
+| **integration**        | `src/**/*.integration.test.ts`                  | `npm run test:integration`                      | a reachable Docker daemon (the R3 disposable-service tier); skips loudly without one                                            | yes, inside `npm run coverage`                 |
+| **e2e (vitest)**       | `src/**/*.e2e.test.ts`                          | `npm run test:e2e`                              | real network; the egress half also wants bwrap + slirp4netns + nftables and a privileged container                              | yes, job `e2e` — where it actually routes      |
+| **cross-runner**       | `test/runners/*.vitest.mjs`, `*.jest.cjs`       | `npm run test:vitest` / `npm run test:jest`     | a built `dist/` (they load the published matcher entries)                                                                       | yes, but reached as `vitest run` + `npx jest`  |
+| **type-level**         | `test/types/`                                   | `npm run test:types`                            | `tsc` only                                                                                                                      | yes, inside `npm run check`                    |
+| **harness**            | `examples/harness/**/*.harness.mjs` (14)        | `npm run test:harness`                          | the real `claude` binary — **no API key, no model, no cost**                                                                    | yes, job `harness`, with `--min=14` as a floor |
+| **eval**               | `**/*.eval.mjs` (20)                            | `npm run test:eval`                             | a real model — real money                                                                                                       | **no, deliberately**                           |
+| **live CLI e2e**       | `test/e2e/run.sh`                               | `npm run test:cli-e2e`                          | the real `claude` binary + the bundled mock Anthropic endpoint                                                                  | 🔴 **nowhere** — see below                     |
+| **rule-enforcer gate** | `rule-enforcer/gate.js`                         | `npm run check`                                 | its own `node_modules` (`npm ci --prefix rule-enforcer`, which `check` does)                                                    | yes, inside `npm run check`                    |
+| **bench self-checks**  | `bench/corpus/verify*.mjs`                      | `npm run check`                                 | nothing                                                                                                                         | yes, inside `npm run check`                    |
+| **bench (paid)**       | `bench/**`                                      | by hand (`bench/run.sh` and friends)            | a real model — real money                                                                                                       | no                                             |
+| **dogfood corpus**     | `test/dogfood/<plugin>@<sha>/`                  | consumed by the unit tier, never run on its own | nothing, offline                                                                                                                | yes, through the unit tier                     |
+
+Unit tests live beside their source. Assertions come from `node:assert/strict`
+or vitest's `expect`; the optional `vitest` / `jest` matcher adapters
+(`vigiles/vitest`, `vigiles/jest`) ship for CONSUMERS and are exercised by the
+cross-runner row, not by this repo's own suites.
+
+Every `test:*` script above is checked into the map by
+`src/doc-test-script-coverage.test.ts` — add a script without a row here and
+that test fails, the same way a CLI verb without a doc home fails
+`src/doc-command-coverage.test.ts`.
+
+#### `npm run test:cli-e2e` is run by nothing
+
+It appears in `package.json` and in `docs/skills.md`, and nowhere else: not in
+`.github/workflows/ci.yml`, not in `scripts/check.mjs`, and not in that file's
+`CI_JOBS_NOT_COVERED` list — so nothing tells you it exists and nothing notices
+when it rots. `docs/skills.md` says the skill Stop-hook is "proven end-to-end
+against real Claude Code in `test/e2e`"; that proof is currently a claim no gate
+re-checks. Run it by hand when you touch the skill runtime or the Stop-hook
+path, and read the claim as manual until the script has a home.
 
 ### Format
 
@@ -145,9 +177,10 @@ step-by-step lives in the `add-a-linter` contributor skill
 ## Pull requests
 
 - Keep PRs focused — one feature or fix per PR.
-- All tests must pass (`npm test`).
-- Code must compile without errors (`npx tsc --noEmit`).
-- Code must be formatted (`npm run fmt:check`).
+- Run `npm run check` — ONE command for the whole gate list (build, both
+  type-checks, lint, format, the API surface, and the rest), so nobody retypes a
+  list that goes stale. It ends by PRINTING the CI jobs it does NOT cover; run
+  the ones your change touches (the tier map above says what each needs).
 - Update `CLAUDE.md` if you change exported APIs or add new rules.
 - Write descriptive commit messages explaining _why_, not just _what_.
 

@@ -9,6 +9,12 @@ the file that proves it. Two kinds of coverage:
   be a unit test. Covered by the canonical examples run in the `harness` CI job
   (deterministic tier, no API key) or by `bench/` + `examples` evals (real model).
 
+> **Not the same map as [`CONTRIBUTING.md`](../CONTRIBUTING.md).** This page is about
+> the harness-testing **API** — the use cases _you_ test in _your_ harness, and the
+> file in this repo that proves each one works. `CONTRIBUTING.md` is about how _this
+> repository_ is tested: its twelve tiers, the command that runs each, and which CI
+> job (if any) does.
+
 ## Coverage
 
 | Use case                                                                                                                                                                                                       | Tier                     | Where                                                                       |

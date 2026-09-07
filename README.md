@@ -269,7 +269,7 @@ Targets Claude Code and Codex out of the box, or [your own harness](docs/authori
 > signal you need to look for, since it is on every call site rather than on an
 > import line you scrolled past. See [Stability](STABILITY.md).
 
-**Project** — [Stability](STABILITY.md) · [Related tools](docs/comparison.md#what-vigiles-composes-with) · ships as an [Agent Plugins](https://agent-plugins.org) 1.0.0 plugin ([how to do the same](docs/for-plugin-authors.md#6-ship-it-in-the-portable-agent-plugins-format))
+**Project** — [Stability](STABILITY.md) · [Contributing](CONTRIBUTING.md) · [Related tools](docs/comparison.md#what-vigiles-composes-with) · ships as an [Agent Plugins](https://agent-plugins.org) 1.0.0 plugin ([how to do the same](docs/for-plugin-authors.md#6-ship-it-in-the-portable-agent-plugins-format))
 
 <!-- The "companion to [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need)"
      link is temporarily removed while AgenticDev paper #1 is under blind review: repo → blog is a

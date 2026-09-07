@@ -101,7 +101,7 @@ declare module "vigiles/generated" {
     | "internal:check"
     | "docs:api";
 
-  /** 412 project files. */
+  /** 415 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -359,6 +359,8 @@ declare module "vigiles/generated" {
     | "src/doc-commands.test.ts"
     | "src/doc-commands.ts"
     | "src/doc-refs-rule.test.ts"
+    | "src/doc-test-script-coverage.test.ts"
+    | "src/doc-test-script-coverage.ts"
     | "src/egress-entry.ts"
     | "src/egress-proxy.ts"
     | "src/egress.test.ts"
@@ -474,6 +476,7 @@ declare module "vigiles/generated" {
     | "src/segment.ts"
     | "src/self-command-refs.test.ts"
     | "src/self-command-refs.ts"
+    | "src/self-resolve.mts"
     | "src/services-docker.ts"
     | "src/services.integration.test.ts"
     | "src/services.test.ts"
@@ -843,6 +846,8 @@ declare module "vigiles/spec" {
       | "src/doc-commands.test.ts"
       | "src/doc-commands.ts"
       | "src/doc-refs-rule.test.ts"
+      | "src/doc-test-script-coverage.test.ts"
+      | "src/doc-test-script-coverage.ts"
       | "src/egress-entry.ts"
       | "src/egress-proxy.ts"
       | "src/egress.test.ts"
@@ -958,6 +963,7 @@ declare module "vigiles/spec" {
       | "src/segment.ts"
       | "src/self-command-refs.test.ts"
       | "src/self-command-refs.ts"
+      | "src/self-resolve.mts"
       | "src/services-docker.ts"
       | "src/services.integration.test.ts"
       | "src/services.test.ts"
