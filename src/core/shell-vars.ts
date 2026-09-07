@@ -20,6 +20,24 @@
  * QUOTED literal are nodes, so once the command is an AST the two mistakes above
  * are not expressible.
  *
+ * 🔴 AND THE PARSER REMOVED TWO WAYS TO BE WRONG WHILE ADDING A THIRD, in the
+ * worse direction. Subtracting every assigned name GLOBALLY excused a read the
+ * assignment never reached, so the sweep ran a differently-configured program
+ * and gave it a score. Measured against `/bin/sh` with the name exported first:
+ *
+ * ```
+ * export X=ambient;   echo "$X"; X=1           → ambient   (read comes FIRST)
+ * export FOO=ambient; FOO=1 sh -c "echo $FOO"  → ambient   (prefix assign does
+ *                                                           not reach its own
+ *                                                           command's words)
+ * (G=inner); printf '[%s]' "$G"                → []        (subshell-scoped)
+ * G=dominates; printf '[%s]' "$G"              → dominates (this one persists)
+ * ```
+ *
+ * So the rule is DOMINANCE, not membership: an assignment excuses only the reads
+ * it provably happens before, and a prefix / subshell / function-body assignment
+ * excuses nothing at all. Where dominance is not provable, the read stands.
+ *
  * It does NOT reach into `bash-effects.ts` for the parse: that module's `sh`
  * handle and node types are private to it, and its types model EFFECTS
  * (redirections, wrapper heads, flag tables) rather than expansions. The shared
@@ -58,6 +76,11 @@ interface ShNode {
   Name?: { Value?: string };
   /** `*ParamExp`: the parameter, a `*Lit` whose `.Value` is the name. */
   Param?: { Value?: string };
+  /** `*CallExpr`: the command's words, and its leading `NAME=value` prefixes. */
+  Args?: unknown[];
+  Assigns?: ShNode[];
+  /** Every node carries its source position; `Offset()` is the byte index. */
+  Pos: () => { Offset: () => number };
 }
 
 /** A `$NAME` / `${NAME}` reference — not `$(…)`, `$1` or `$@`. */
@@ -89,6 +112,58 @@ function scanRefs(command: string): string[] {
  *
  * @param command - the shell command, exactly as the hook registers it.
  */
+/** A node's byte offset in the source, or `null` when the binding withholds it. */
+function offsetOf(node: ShNode): number | null {
+  try {
+    return node.Pos().Offset();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Offsets of assignments that do NOT persist into the surrounding shell, so
+ * they excuse no read at all. Both kinds are MEASURED against `/bin/sh`, not
+ * inferred from the grammar:
+ *
+ * ```
+ * VP=prefix printf '[%s]' "$VP"   → []          a prefix assign does not reach
+ * VT=prefix true; printf '[%s]' "$VT" → []      …nor outlive its own command
+ * (G=inner); printf '[%s]' "$G"   → []          a subshell assign stays inside
+ * G=dominates; printf '[%s]' "$G" → [dominates] a plain one does persist
+ * ```
+ *
+ * A function body counts as non-persisting for the same conservative reason a
+ * subshell does — it runs only if something calls it, and this module errs
+ * toward reporting a dependency.
+ */
+function nonPersistingAssigns(file: ShNode): Set<number> {
+  const scoped = new Set<number>();
+  const markAssignsWithin = (root: ShNode): void => {
+    sh.syntax.Walk(root, (node) => {
+      if (node && sh.syntax.NodeType(node) === "Assign") {
+        const at = offsetOf(node);
+        if (at !== null) scoped.add(at);
+      }
+      return true;
+    });
+  };
+  sh.syntax.Walk(file, (node) => {
+    if (!node) return true;
+    const kind = sh.syntax.NodeType(node);
+    if (kind === "Subshell" || kind === "FuncDecl") markAssignsWithin(node);
+    // A `CallExpr` with WORDS carries prefix assignments (`FOO=1 cmd`); one with
+    // no words IS the assignment statement (`FOO=1`), which does persist.
+    else if (kind === "CallExpr" && (node.Args?.length ?? 0) > 0)
+      for (const assign of node.Assigns ?? []) {
+        const at = offsetOf(assign);
+        if (at !== null) scoped.add(at);
+      }
+    return true;
+  });
+  return scoped;
+}
+
 export function shellVarReads(command: string): ShellVarReads {
   let file: ShNode;
   try {
@@ -96,22 +171,37 @@ export function shellVarReads(command: string): ShellVarReads {
   } catch {
     return { reads: scanRefs(command), parsed: false };
   }
-  const assigned = new Set<string>();
-  const referenced = new Set<string>();
+  const scoped = nonPersistingAssigns(file);
+  const assignedAt = new Map<string, number>();
+  const reads: string[] = [];
+  const seen = new Set<string>();
   sh.syntax.Walk(file, (node) => {
     if (!node) return true;
     const kind = sh.syntax.NodeType(node);
+    const at = offsetOf(node);
     if (kind === "Assign") {
       const name = node.Name?.Value;
-      if (name !== undefined && name !== "") assigned.add(name);
+      // The FIRST persisting assignment is the only one that can dominate a
+      // read; a later one cannot reach backwards.
+      if (name !== undefined && name !== "" && at !== null && !scoped.has(at))
+        if (!assignedAt.has(name)) assignedAt.set(name, at);
     } else if (kind === "ParamExp") {
       const name = node.Param?.Value;
-      if (name !== undefined && VAR_NAME.test(name)) referenced.add(name);
+      if (name !== undefined && VAR_NAME.test(name) && !seen.has(name)) {
+        // 🔴 DOMINANCE, NOT MEMBERSHIP. Subtracting every assigned name globally
+        // excused `echo "$GUARD"; GUARD=hooks/g.sh` — where the expansion runs
+        // FIRST and really does read the environment — so the sweep ran a
+        // differently-configured program and scored it. An assignment excuses
+        // only the reads it provably happens before.
+        const assigned = assignedAt.get(name);
+        // `at === null` means the binding withheld the position: excuse nothing.
+        if (assigned === undefined || at === null || assigned > at) {
+          seen.add(name);
+          reads.push(name);
+        }
+      }
     }
     return true;
   });
-  return {
-    reads: [...referenced].filter((name) => !assigned.has(name)),
-    parsed: true,
-  };
+  return { reads, parsed: true };
 }

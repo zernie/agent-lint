@@ -418,8 +418,27 @@ test("hookMatcherReach: a metacharacter matcher is an unanchored regex", () => {
 
 test("hookMatcherReach: no matcher and a match-all select everything", () => {
   assert.equal(hookMatcherReach(null, "Bash"), "selects");
-  for (const all of ["", "*", "**", ".*"])
+  // MEASURED against claude 2.1.263, marker file as the oracle. `**` is
+  // deliberately absent — see the next test.
+  for (const all of ["", "*", ".*"])
     assert.equal(hookMatcherReach(all, "Bash"), "selects");
+});
+
+test("hookMatcherReach: `**` is NOT a match-all — the harness ignores it", () => {
+  // 🔴 It sat in MATCH_ALL on no evidence, and that direction MANUFACTURES AN
+  // ACCUSATION: a guard registered under `**` came back "measured, allows 0/7"
+  // — reported as letting seven disasters through — when claude 2.1.263 never
+  // spawns it at all (3 runs of 3, with `.*` as the in-run control). Pinned
+  // against the real binary in src/hook-matcher-delivery.test.ts.
+  assert.equal(hookMatcherReach("**", "Bash"), "uncompilable");
+  // …and the lint rule says the same thing about it, from the same set.
+  const [finding] = hookMatcherIssues(
+    [{ event: "PreToolUse", matcher: "**" }],
+    [],
+    d,
+  );
+  assert.equal(finding?.kind, "invalid-regex");
+  assert.match(finding?.message ?? "", /never fires/);
 });
 
 test("hookMatcherReach: an UNCOMPILABLE matcher is its own answer, not a select", () => {

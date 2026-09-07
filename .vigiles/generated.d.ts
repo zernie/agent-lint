@@ -101,7 +101,7 @@ declare module "vigiles/generated" {
     | "internal:check"
     | "docs:api";
 
-  /** 426 project files. */
+  /** 429 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -226,6 +226,8 @@ declare module "vigiles/generated" {
     | "src/core/capability-diff.test.ts"
     | "src/core/capability-diff.ts"
     | "src/core/cedar.test.ts"
+    | "src/core/command-files.test.ts"
+    | "src/core/command-files.ts"
     | "src/core/compile-generator.test.ts"
     | "src/core/compile-generator.ts"
     | "src/core/compile.ts"
@@ -412,6 +414,7 @@ declare module "vigiles/generated" {
     | "src/hook-install.test.ts"
     | "src/hook-install.ts"
     | "src/hook-load-wedge.test.ts"
+    | "src/hook-matcher-delivery.test.ts"
     | "src/hook-oss-comparison.test.ts"
     | "src/hook-state-runtime.test.ts"
     | "src/hook-state-store.test.ts"
@@ -724,6 +727,8 @@ declare module "vigiles/spec" {
       | "src/core/capability-diff.test.ts"
       | "src/core/capability-diff.ts"
       | "src/core/cedar.test.ts"
+      | "src/core/command-files.test.ts"
+      | "src/core/command-files.ts"
       | "src/core/compile-generator.test.ts"
       | "src/core/compile-generator.ts"
       | "src/core/compile.ts"
@@ -910,6 +915,7 @@ declare module "vigiles/spec" {
       | "src/hook-install.test.ts"
       | "src/hook-install.ts"
       | "src/hook-load-wedge.test.ts"
+      | "src/hook-matcher-delivery.test.ts"
       | "src/hook-oss-comparison.test.ts"
       | "src/hook-state-runtime.test.ts"
       | "src/hook-state-store.test.ts"

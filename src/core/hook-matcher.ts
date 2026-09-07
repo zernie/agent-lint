@@ -148,8 +148,31 @@ const REAL_SHAPE_PROBES = [
 /** The widest correct MCP matcher — what a too-narrow one should become. */
 const WIDE_MCP_MATCHER = "mcp__.*__.*";
 
-/** Match-all matchers the harness special-cases (and `*` isn't even a regex). */
-const MATCH_ALL = new Set(["", "*", "**", ".*"]);
+/**
+ * Match-all matchers the harness special-cases (and `*` isn't even a regex).
+ *
+ * 🔴 MEASURED, AND `**` IS NOT ONE OF THEM. It sat in this set on no evidence
+ * while the table at the top of this file — the measured one — never listed it.
+ * Against a real `claude` 2.1.263, one hook per run, marker file as the oracle,
+ * 3 runs of each:
+ *
+ * | matcher | a `Bash` call | fired |
+ * | ------- | ------------- | ----- |
+ * | `*`     | `Bash`        | yes   |
+ * | `.*`    | `Bash`        | yes   |
+ * | `""`    | `Bash`        | yes   |
+ * | `**`    | `Bash`        | NO    |
+ *
+ * The direction of that mistake is the expensive one: believing `**` selects
+ * everything makes a guard registered under it come back "measured, allows
+ * 0/7" — an ACCUSATION that a repo's guard let seven disasters through, when
+ * the harness never invoked it once. The mirror image of scoring a hook that
+ * could not start. `**` now falls through to the regex path, where it does not
+ * compile, and both the sweep and the `hook-matcher` rule report a hook that
+ * never fires. Pinned by `src/hook-matcher-delivery.test.ts` so the day Claude
+ * Code starts honouring it, the claim goes red instead of quietly rotting.
+ */
+const MATCH_ALL = new Set(["", "*", ".*"]);
 
 /** Cap on segments harvested from a matcher — bounds the probe corpus. */
 const MAX_DERIVED_SEGMENTS = 4;

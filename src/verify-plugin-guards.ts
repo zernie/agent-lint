@@ -45,7 +45,8 @@
  * shell processes (`capabilities.shellHooks === false`, e.g. OpenCode) reports
  * n/a in `notes` rather than an empty success.
  */
-import { resolve } from "node:path";
+import { resolve, isAbsolute } from "node:path";
+import { existsSync } from "node:fs";
 import { loadPlugin } from "./plugin-loader.js";
 import {
   normalizeHooks,
@@ -53,7 +54,10 @@ import {
 } from "./core/hook-normalize.js";
 import { hookMatcherReach } from "./core/hook-matcher.js";
 import { shellVarReads } from "./core/shell-vars.js";
+import { commandFileRefs } from "./core/command-files.js";
 import { claudeCodeAdapter } from "./adapters/claude-code/adapter.js";
+import { decideSandbox, sandboxAvailable } from "./sandbox.js";
+import { shellNeverLaunched } from "./run-script.js";
 import type { HarnessAdapter } from "./core/adapter.js";
 import {
   DISASTER_CATALOG,
@@ -179,18 +183,40 @@ const DEFAULT_EVENT = "PreToolUse";
  *
  * Two filters, and both exist because a false `unresolved` costs a real guard
  * its measurement. The first is the shell's own reading of the command
- * (`shellVarReads`, a real parse): a name the command ASSIGNS for itself, or one
- * written inside single quotes, is not a dependency however much it looks like
- * `$NAME`. The second is the environment the hook would ACTUALLY get — the
- * caller's `env` layered over `process.env` — rather than the mere presence of a
- * `$`, so a repo whose hooks reference `$CLAUDE_PROJECT_DIR` and a caller who
- * passes it are both left alone.
+ * (`shellVarReads`, a real parse): a name the command ASSIGNS for itself before
+ * reading it, or one written inside single quotes, is not a dependency however
+ * much it looks like `$NAME`. The second is the environment the hook would
+ * ACTUALLY get — see {@link hookEnvironment}, which is why the set is passed in
+ * rather than read from `process.env` here.
  */
-function unsetVariables(
+function unsetVariables(command: string, names: ReadonlySet<string>): string[] {
+  return shellVarReads(command).reads.filter((name) => !names.has(name));
+}
+
+/**
+ * Files the command hands to a program to run, that are not there.
+ *
+ * 🔴 THIS IS THE ONE THE EXIT CODE CANNOT ANSWER, and it was the sweep's loudest
+ * lie. `python3 <missing>.py` exits **2**, which is Claude Code's DENY code, so
+ * a hook whose script does not exist was reported as blocking every disaster in
+ * the battery — a perfect score for a guard that does not exist. Measured on the
+ * unfixed build: `blocks=7/7 exits=2,2,2,2,2,2,2`. Unlike the uncompilable
+ * matcher, no malformed config is needed to reach it: a relative script path is
+ * the commonest hook shape there is.
+ *
+ * Resolution is against the cwd the hook will actually run in, because that is
+ * the only directory a relative path means anything against. See
+ * `core/command-files.ts` for what counts as a file reference and the corpus
+ * measurement behind that narrowing.
+ */
+function missingFiles(
   command: string,
-  env: Readonly<Record<string, string | undefined>>,
+  cwd: string,
+  values: Readonly<Record<string, string>>,
 ): string[] {
-  return shellVarReads(command).reads.filter((name) => env[name] === undefined);
+  return commandFileRefs(command, values).refs.filter(
+    (ref) => !existsSync(isAbsolute(ref) ? ref : resolve(cwd, ref)),
+  );
 }
 
 /** The battery, after `categories` / `events` narrowing. */
@@ -265,19 +291,120 @@ const DERIVABLE_EVENT_VARS: Readonly<
  * than a literal keeps that true for the next adapter. Claude Code declares an
  * empty list, so nothing changes there.
  */
+/** The variable name inside a `${NAME}` token, or null when it is not one. */
+function tokenName(token: string): string | null {
+  return /^\$\{(.+)\}$/.exec(token)?.[1] ?? null;
+}
+
+/**
+ * The environment a swept hook is run with, and — separately — what the hook
+ * will FIND set and what we can RESOLVE. Three fields because they answer three
+ * different questions and conflating them is what produced two of these bugs.
+ */
+interface HookEnvironment {
+  /** Handed to `runHook` as `env`. */
+  readonly pass: Record<string, string>;
+  /**
+   * Names the hook will find set AT RUN TIME, under the execution mode actually
+   * chosen. Not the same as `keys(pass)`, and not `process.env` either.
+   */
+  readonly names: ReadonlySet<string>;
+  /**
+   * The subset whose VALUE is known here, for resolving a path the command
+   * names. A confined run sets `HOME`/`TMPDIR` to directories that do not exist
+   * yet, so they are `names` without being `values` — present, not resolvable.
+   */
+  readonly values: Readonly<Record<string, string>>;
+}
+
+/**
+ * Whether the run will be CONFINED, decided by the same policy the runner uses
+ * rather than a second copy of it (`decideSandbox`, plus the egress branch which
+ * confines unconditionally). A refusal counts as confined: the sweep's job is to
+ * describe the environment a run WOULD have, and the refusing path is the
+ * confined one.
+ */
+function willBeConfined(opts: VerifyPluginGuardsOptions): boolean {
+  if (opts.egress) return true;
+  const mode = opts.sandbox ?? (opts.trusted === false ? "auto" : false);
+  return (
+    decideSandbox({
+      trusted: false,
+      mode,
+      available: sandboxAvailable(),
+    }).action !== "direct"
+  );
+}
+
+/**
+ * 🔴 WITHOUT THE PLUGIN-ROOT HALF, THE COMMONEST HOOK SHAPE IN THE WILD READS AS
+ * `unresolved`. `loadPlugin` expands the BRACED token (`${PLUGIN_ROOT}`)
+ * textually, but real hooks are shell and are written unbraced
+ * (`node "$CLAUDE_PLUGIN_ROOT"/x.cjs` — the vendored oh-my-claudecode shape).
+ * Setting the variable rather than doing a second string substitution covers
+ * BOTH spellings with one mechanism, and it is what the harness itself does: the
+ * shell in a real session resolves that name because the harness put it in the
+ * environment. The NAMES are derived from `layout.pluginRootToken` and
+ * `layout.projectRootTokens`, never written out, so this stays correct for a
+ * harness that spells its roots differently.
+ *
+ * THE PROJECT-ROOT HALF IS THE SAME ARGUMENT AND WAS MISSING. `$CLAUDE_PROJECT_DIR`
+ * is what an ordinary project hook reads — including this repository's own — and
+ * the sweep is sweeping exactly that root, so calling it unresolvable made the
+ * function useless on the commonest shape it will ever meet.
+ *
+ * The DECLARED-EVENT half is the argument one layer up. `HookProtocol.eventEnvVars`
+ * exists to say "a synthesized hook event carries these", and this function is
+ * synthesizing one, so a Codex hook reading `$hook_event_name` or `$cwd` is an
+ * ordinary hook, not an unresolvable one. Claude Code declares an empty list, so
+ * nothing changes there.
+ *
+ * 🔴 AND THE AVAILABILITY SET FOLLOWS THE EXECUTION MODE, which is the half that
+ * cannot be derived before the mode is known. A confined run (`trusted: false`,
+ * `sandbox: "auto"|"strict"`, or any `egress` allowlist) starts from
+ * `--clearenv` and gets back only `HOME`, `TMPDIR`, `PATH` and the caller's
+ * `env`. Checking availability against `process.env` therefore cleared every
+ * ambient variable the hook will NOT find — so a foreign hook reading a CI or
+ * custom variable was `measured` while running with it missing, which is the
+ * same false score by a third door.
+ */
 function hookEnvironment(
   adapter: HarnessAdapter,
   root: string,
   event: string,
-  callerEnv: Record<string, string> | undefined,
-): Record<string, string> {
-  const rootVar = /^\$\{(.+)\}$/.exec(adapter.layout.pluginRootToken)?.[1];
-  const derived: Record<string, string> = rootVar ? { [rootVar]: root } : {};
+  opts: VerifyPluginGuardsOptions,
+): HookEnvironment {
+  const derived: Record<string, string> = {};
+  const rootVar = tokenName(adapter.layout.pluginRootToken);
+  if (rootVar !== null) derived[rootVar] = root;
+  for (const token of adapter.layout.projectRootTokens ?? []) {
+    const name = tokenName(token);
+    if (name !== null) derived[name] = root;
+  }
   for (const name of adapter.hookProtocol?.eventEnvVars ?? []) {
     const value = DERIVABLE_EVENT_VARS[name.toLowerCase()]?.({ root, event });
     if (value !== undefined) derived[name] = value;
   }
-  return { ...derived, ...callerEnv };
+  const pass = { ...derived, ...opts.env };
+  if (!willBeConfined(opts)) {
+    const values: Record<string, string> = {};
+    for (const [name, value] of Object.entries(process.env))
+      if (value !== undefined) values[name] = value;
+    return {
+      pass,
+      names: new Set([...Object.keys(process.env), ...Object.keys(pass)]),
+      values: { ...values, ...pass },
+    };
+  }
+  // Confined: exactly what `bwrapArgs` sets back after `--clearenv`, plus what
+  // `setenvArgs` restores. HOME and TMPDIR are set to sandbox-internal temp
+  // directories, so they are present without being resolvable HERE — a path
+  // built from them is left alone rather than tested against the host's copy.
+  return {
+    pass,
+    names: new Set(["HOME", "TMPDIR", "PATH", ...Object.keys(pass)]),
+    values: { PATH: process.env["PATH"] ?? "", ...pass },
+  };
 }
 
 /** Everything a per-hook sweep needs beyond the registration itself. */
@@ -286,8 +413,10 @@ interface SweepContext {
   readonly eventName: string;
   readonly opts: VerifyPluginGuardsOptions;
   readonly protocol: NonNullable<HarnessAdapter["hookProtocol"]>;
-  /** The env every hook is run with — the caller's, over the plugin root. */
-  readonly env: Record<string, string>;
+  /** What the run will pass, find set, and be able to resolve. */
+  readonly env: HookEnvironment;
+  /** The directory a relative path in a hook command resolves against. */
+  readonly cwd: string;
 }
 
 /**
@@ -340,22 +469,50 @@ function sweepHook(
       reason: `matcher \`${reg.matcher ?? ""}\` selects none of the tools this battery calls (${toolsOf(battery).join(", ")}) — the harness never spawns it here`,
     };
 
-  const missing = unsetVariables(reg.command, { ...process.env, ...env });
-  if (missing.length > 0)
+  const missingVars = unsetVariables(reg.command, env.names);
+  if (missingVars.length > 0)
     return {
       status: "unresolved",
       hook,
-      reason: `the command names ${missing.map((v) => `\`$${v}\``).join(", ")}, which nothing sets here — running it would measure a different program than the harness runs. Pass \`env\` to resolve it`,
+      reason: `the command names ${missingVars.map((v) => `\`$${v}\``).join(", ")}, which nothing sets here — running it would measure a different program than the harness runs. Pass \`env\` to resolve it`,
+    };
+
+  // The file half of the same question, and it has to be asked BEFORE the run:
+  // a missing script makes the interpreter exit 2, which is indistinguishable
+  // from a deny once it has happened.
+  const absent = missingFiles(reg.command, ctx.cwd, env.values);
+  if (absent.length > 0)
+    return {
+      status: "unresolved",
+      hook,
+      reason: `the command runs ${absent.map((f) => `\`${f}\``).join(", ")}, which ${absent.length === 1 ? "is" : "are"} not on disk here — the guard the config names does not exist, so there is nothing to measure (an interpreter that cannot open its script exits 2, which is this harness's DENY code, so running it anyway would report a perfect score for a guard that never ran)`,
     };
 
   const ran = verifyGuardrail(reg.command, {
     ...opts,
-    env,
+    env: env.pass,
     events: reachable,
     event: eventName,
     condition: reg.condition ?? undefined,
     protocol,
   });
+
+  // 🔴 AND AFTER THE RUN, THE HALF THE PRE-FLIGHT CANNOT SEE. A missing
+  // interpreter, a file without the execute bit, a bad shebang: the shell
+  // answers 127/126 and the program never had an opinion. That is a property of
+  // the COMMAND, not of one battery event — the same command runs for all of
+  // them — so one such result disqualifies the hook rather than one row. Erring
+  // toward refusal is deliberate: a hook that fails to launch on only some
+  // inputs is still a hook whose score would be part fiction.
+  const stillborn = ran.find(
+    (r) => !r.ran && shellNeverLaunched(r.exitCode) && !r.blocked,
+  );
+  if (stillborn !== undefined)
+    return {
+      status: "unresolved",
+      hook,
+      reason: `${stillborn.reason}. Nothing here is the guard's verdict, so it is not scored`,
+    };
   // The events the matcher excluded are folded back in as NOT-RUN entries, in
   // catalog order, so `results` always answers for the whole battery. Dropping
   // them would leave a hook reporting "1/1 blocked" for a battery of seven.
@@ -468,7 +625,12 @@ export function experimental_verifyPluginGuards(
     eventName,
     opts,
     protocol: adapter.hookProtocol,
-    env: hookEnvironment(adapter, root, eventName, opts.env),
+    env: hookEnvironment(adapter, root, eventName, opts),
+    // The hook runs where the caller says, and `runScript` defaults an absent
+    // `cwd` to this process's — so a relative script path must be resolved
+    // against the SAME directory, not against the swept root, or the check would
+    // answer for a file the run never looks at.
+    cwd: opts.cwd ?? process.cwd(),
   };
   const hooks = regs.map((reg, i) => sweepHook(reg, i, ctx));
   return { ...base, hooks, notes: sweepNotes(root, regs, hooks, eventName) };

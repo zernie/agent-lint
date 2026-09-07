@@ -23,17 +23,27 @@ test("both spellings are the same name, reported once", () => {
   assert.deepEqual(shellVarReads('echo "$FOO ${FOO}"').reads, ["FOO"]);
 });
 
-test("a variable the command ASSIGNS is not a dependency", () => {
+test("a variable the command ASSIGNS FIRST is not a dependency", () => {
   // The shell sets GUARD before expanding it — the command is self-contained.
   assert.deepEqual(shellVarReads('GUARD=hooks/g.sh; "$GUARD"').reads, []);
-  // Including the leading NAME=value prefix form.
-  assert.deepEqual(shellVarReads('FOO=1 sh -c "echo $FOO"').reads, []);
 });
 
-test("an assignment covers a read that appears before it", () => {
-  // Deliberately order-insensitive: a name the command sets ANYWHERE is one the
-  // caller cannot fix by passing `env`, so naming it would be noise.
-  assert.deepEqual(shellVarReads('echo "$X"; X=1').reads, []);
+// 🔴 THE TWO ASSERTIONS BELOW USED TO CLAIM THE OPPOSITE, and both were wrong —
+// not by argument, but against `/bin/sh` with the variable exported first:
+//
+//   export FOO=ambient; FOO=1 sh -c "echo $FOO"   → ambient
+//   export X=ambient;   echo "$X"; X=1            → ambient
+//
+// In both, the expansion really does read the ENVIRONMENT, so the sweep that
+// treated them as self-contained ran a differently-configured program and
+// scored it. The old tests were the defect, written down.
+
+test("a PREFIX assignment does not cover its own command's expansion", () => {
+  assert.deepEqual(shellVarReads('FOO=1 sh -c "echo $FOO"').reads, ["FOO"]);
+});
+
+test("an assignment does NOT cover a read that appears before it", () => {
+  assert.deepEqual(shellVarReads('echo "$X"; X=1').reads, ["X"]);
 });
 
 test("a `$NAME` in SINGLE quotes is not an expansion", () => {
@@ -62,4 +72,44 @@ test("no expansions at all", () => {
   const r = shellVarReads("echo hello");
   assert.deepEqual(r.reads, []);
   assert.equal(r.parsed, true);
+});
+
+// ---------------------------------------------------------------------------
+// EXECUTION ORDER. Subtracting every assigned name globally was the parser
+// rewrite's own new way to be wrong: it removed two regex mistakes and added a
+// third, in the direction that costs the guarantee rather than a measurement.
+// The rule is DOMINANCE — an assignment excuses only the reads it provably
+// happens before, in the same shell.
+// ---------------------------------------------------------------------------
+
+test("a read BEFORE the assignment is still a read", () => {
+  // The shell expands `$GUARD` from the environment here; the later assignment
+  // cannot reach backwards in time. Subtracting it ran a different program.
+  assert.deepEqual(shellVarReads('echo "$GUARD"; GUARD=hooks/g.sh').reads, [
+    "GUARD",
+  ]);
+});
+
+test("an assignment inside a SUBSHELL does not escape it", () => {
+  // `(GUARD=x)` sets it in a child; the parent's expansion still reads the
+  // environment, so the name is a genuine dependency.
+  assert.deepEqual(shellVarReads('(GUARD=x); "$GUARD"').reads, ["GUARD"]);
+});
+
+test("an assignment that DOES dominate the read still excuses it", () => {
+  // The half that must not regress: this is a self-contained command, and
+  // calling it unresolvable is what sent real guards unmeasured.
+  assert.deepEqual(shellVarReads('GUARD=hooks/g.sh; "$GUARD"').reads, []);
+});
+
+test("a PREFIX assignment excuses nothing — not even its own command", () => {
+  // Measured against /bin/sh, which is why the rule is not the obvious one:
+  //   VP=prefix printf '[%s]' "$VP"  → []      it does not reach its own words
+  //   VT=prefix true; printf "$VT"   → []      …nor outlive the command
+  assert.deepEqual(shellVarReads('GUARD=echo "$GUARD"').reads, ["GUARD"]);
+  assert.deepEqual(shellVarReads('GUARD=echo true; "$GUARD"').reads, ["GUARD"]);
+});
+
+test("`export NAME=value` DOES persist", () => {
+  assert.deepEqual(shellVarReads('export GUARD=echo; "$GUARD"').reads, []);
 });

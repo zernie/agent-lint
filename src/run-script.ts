@@ -247,8 +247,15 @@ export interface RunScriptDeps {
  *
  * A hook that deliberately exits 126/127 itself is missed the same way, and the
  * same direction.
+ *
+ * @internal Exported so the guard sweep asks the SAME question rather than
+ * re-deriving it (one-detector-no-drift). It reads these codes for the opposite
+ * purpose — not "may I credit this file with coverage?" but "may I score this
+ * guard at all?" — and the answer is the same fact: the shell never reached the
+ * program, so nothing the exit code says is the program's opinion. Not part of
+ * the public API.
  */
-function shellNeverLaunched(status: number | null | undefined): boolean {
+export function shellNeverLaunched(status: number | null | undefined): boolean {
   return status === 126 || status === 127;
 }
 

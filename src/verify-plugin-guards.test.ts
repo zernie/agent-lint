@@ -324,8 +324,15 @@ describe("hookMatcherReach", () => {
   it("FAILS OPEN on an absent or match-all matcher", () => {
     // Those really do select every tool, so answering "selects" states a fact.
     expect(hookMatcherReach(null, "Bash")).toBe("selects");
-    for (const all of ["", "*", "**", ".*"])
+    for (const all of ["", "*", ".*"])
       expect(hookMatcherReach(all, "Bash")).toBe("selects");
+  });
+
+  it("REFUSES on `**`, which the harness does not honour", () => {
+    // Measured: claude 2.1.263 spawns nothing for `**` while `.*` fires. Calling
+    // it a match-all was the mirror of the false 7/7 — a false ACCUSATION, since
+    // the guard would have been reported as allowing a battery it never saw.
+    expect(hookMatcherReach("**", "Bash")).toBe("uncompilable");
   });
 
   it("REFUSES on a matcher the engine rejects", () => {
@@ -674,5 +681,200 @@ describe("experimental_formatPluginGuardReport", () => {
     expect(out).toContain("…`");
     // No rendered command spills a newline into the layout.
     for (const line of out.split("\n")) expect(line).not.toContain(DENY_ALL);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The campaign's two findings + the reviewer's three: all one class — we would
+// run a DIFFERENT program than the harness runs, and score it anyway. Each
+// fixture is the smallest repo that produces one; each assertion failed first.
+// ---------------------------------------------------------------------------
+
+/**
+ * A hook script inside a throwaway repo — EXECUTABLE, because a file without
+ * the execute bit makes the shell exit 126 and the sweep (correctly) refuses to
+ * score it. That is how this helper was written the first time, and the new
+ * post-hoc check caught it.
+ */
+function writeHookScript(at: string, name: string, body: string): void {
+  mkdirSync(join(at, ".claude", "hooks"), { recursive: true });
+  writeFileSync(join(at, ".claude", "hooks", name), `#!/bin/sh\n${body}`, {
+    mode: 0o755,
+  });
+}
+
+describe("a hook whose SCRIPT is missing gets no score at all", () => {
+  it("is unresolved, not a perfect 7/7", () => {
+    // 🔴 THE LOUDEST LIE. `python3 <missing>` exits 2, and 2 is Claude Code's
+    // DENY code — so a guard that never existed was certified as stopping every
+    // disaster in the battery. Measured on the unfixed build:
+    //   MEASURED blocks=7/7 exits=2,2,2,2,2,2,2
+    // No malformed config is needed to reach it: a relative script path is the
+    // commonest hook shape there is.
+    const at = ccRepo({
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            { type: "command", command: "python3 .claude/hooks/guard.py" },
+          ],
+        },
+      ],
+    });
+    try {
+      const report = experimental_verifyPluginGuards(at, { cwd: at });
+      const [only] = report.hooks;
+      // The load-bearing assertion: NO SCORE EXISTS. Not a 0, not a 7 — the
+      // union must not even carry a `results` array for this hook.
+      if (only?.status === "measured")
+        throw new Error(
+          `a hook whose script is missing must not be measured (got ${only.blocked.length}/${only.results.length})`,
+        );
+      expect(only?.status).toBe("unresolved");
+      if (only?.status !== "unresolved") throw new Error("unreachable");
+      expect(only.reason).toContain(".claude/hooks/guard.py");
+      // And the renderer prints no number for it either.
+      const out = experimental_formatPluginGuardReport(report).replaceAll(
+        report.dir,
+        "<dir>",
+      );
+      expect(out).not.toMatch(SCORE_SHAPED);
+      expect(out).toContain("Nothing was measured");
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
+  });
+
+  it("MEASURES the same hook once the script is on disk", () => {
+    // The mirror half. Without it, "never score a script hook" would pass this
+    // suite while quietly measuring nothing at all.
+    const at = ccRepo({
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [{ type: "command", command: "sh .claude/hooks/guard.sh" }],
+        },
+      ],
+    });
+    try {
+      writeHookScript(at, "guard.sh", "exit 2\n");
+      const [only] = experimental_verifyPluginGuards(at, { cwd: at }).hooks;
+      if (only?.status !== "measured")
+        throw new Error(`expected measured, got ${only?.status ?? "none"}`);
+      expect(only.blocked).toHaveLength(DISASTER_CATALOG.length);
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses when the PROGRAM itself never launched (exit 127)", () => {
+    // The other half of the same question, and the one an exit code CAN answer:
+    // a missing interpreter, a non-executable file, a bad shebang. 126/127 are
+    // the shell's own codes for "I never got as far as the program", so they are
+    // not a language's exit convention and not a guess about stderr text.
+    const at = ccRepo({
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            { type: "command", command: "no_such_interpreter_xyz guard" },
+          ],
+        },
+      ],
+    });
+    try {
+      const [only] = experimental_verifyPluginGuards(at, { cwd: at }).hooks;
+      if (only?.status === "measured")
+        throw new Error("a program that never launched must not be measured");
+      expect(only?.status).toBe("unresolved");
+      if (only?.status !== "unresolved") throw new Error("unreachable");
+      expect(only.reason).toContain("127");
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("the variables checked are the ones the RUN will actually have", () => {
+  it("a confined run does not inherit the ambient environment", () => {
+    // 🔴 `trusted: false` confines with `--clearenv`, restoring only HOME /
+    // TMPDIR / PATH and the caller's `env`. Checking availability against
+    // `process.env` therefore clears a variable the hook will NOT find, so the
+    // sweep runs a differently-configured program — and scores it.
+    process.env["VIGILES_AMBIENT_PROBE"] = "set-on-the-host";
+    const at = ccRepo({
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            { type: "command", command: '"$VIGILES_AMBIENT_PROBE"/guard.sh' },
+          ],
+        },
+      ],
+    });
+    try {
+      const [only] = experimental_verifyPluginGuards(at, {
+        trusted: false,
+        cwd: at,
+      }).hooks;
+      expect(only?.status).toBe("unresolved");
+      if (only?.status !== "unresolved") throw new Error("unreachable");
+      expect(only.reason).toContain("VIGILES_AMBIENT_PROBE");
+    } finally {
+      delete process.env["VIGILES_AMBIENT_PROBE"];
+      rmSync(at, { recursive: true, force: true });
+    }
+  });
+
+  it("an UNCONFINED run still sees the ambient environment", () => {
+    // The mirror: the MODE decides, so the default direct run is unchanged.
+    process.env["VIGILES_AMBIENT_PROBE"] = "echo";
+    const at = ccRepo({
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            { type: "command", command: '"$VIGILES_AMBIENT_PROBE" watching' },
+          ],
+        },
+      ],
+    });
+    try {
+      const [only] = experimental_verifyPluginGuards(at, { cwd: at }).hooks;
+      expect(only?.status).toBe("measured");
+    } finally {
+      delete process.env["VIGILES_AMBIENT_PROBE"];
+      rmSync(at, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("the harness's own project-root variables are supplied", () => {
+  it("measures the commonest project-hook shape", () => {
+    // `layout.projectRootTokens` declares what the harness sets, and the sweep
+    // IS sweeping that root — so a hook reading `$CLAUDE_PROJECT_DIR` is an
+    // ordinary hook, not an unresolvable one.
+    const at = ccRepo({
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            {
+              type: "command",
+              command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/guard.sh',
+            },
+          ],
+        },
+      ],
+    });
+    try {
+      writeHookScript(at, "guard.sh", "exit 2\n");
+      const [only] = experimental_verifyPluginGuards(at, { cwd: at }).hooks;
+      if (only?.status !== "measured")
+        throw new Error(`expected measured, got ${only?.status ?? "none"}`);
+      expect(only.blocked).toHaveLength(DISASTER_CATALOG.length);
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
   });
 });
