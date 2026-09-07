@@ -305,9 +305,23 @@ function firstBodyParagraph(md: string): string | undefined {
   return para.join(" ").trim() || undefined;
 }
 
-/** The body of a SKILL.md with the leading `---` frontmatter block stripped. */
-function skillBody(md: string): string {
-  return md.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+/**
+ * The body of a SKILL.md with the leading `---` frontmatter block stripped, PLUS
+ * how many lines that block consumed.
+ *
+ * 🔴 The count is returned rather than discarded because a downstream detector
+ * emits LINE NUMBERS. `markdownRefs` counts from one over whatever string it is
+ * given, so a coordinate computed over the body is short by exactly the stripped
+ * frontmatter — on a 5-line block, the ref on file line 11 printed as 6 (#206).
+ * A struct instead of a bare string so the offset is in the caller's hand at the
+ * call site, not something to remember.
+ */
+function skillBody(md: string): { body: string; strippedLines: number } {
+  const body = md.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+  const consumed = md.slice(0, md.length - body.length);
+  // Newlines in the consumed prefix == lines before the body starts. Counts a
+  // CRLF file identically (the `\r` rides along inside the line).
+  return { body, strippedLines: consumed.split("\n").length - 1 };
 }
 
 /**
@@ -468,10 +482,14 @@ export function scanSkills(
     // a ref under one of those declared dirs against the repo root — OPT-IN, so a
     // repo that doesn't set it is byte-identical to before (no masking of a real
     // missing bundled resource). See feedback P1-4.
-    const resourceIssues = skillResourceIssues(skillBody(md), skillDir, {
+    const { body: bodyMd, strippedLines } = skillBody(md);
+    const resourceIssues = skillResourceIssues(bodyMd, skillDir, {
       repoRoot: sharedDirsRoot,
       sharedDirs,
       existsSync: ctx.existsSync,
+      // Findings carry a line number the author is meant to OPEN, so give the
+      // detector back the frontmatter it never saw (#206).
+      lineOffset: strippedLines,
     });
     // The lethal trifecta is a property of what a unit CAN do. For a SKILL that is
     // NOT its `allowed-tools:` — measured 2026-08-11, and documented by Claude Code

@@ -450,3 +450,26 @@ describe("skillResourceIssues — a link's TEXT is not a reference (dogfood 2026
     expect(run(body, existsOnly())).toEqual([]);
   });
 });
+
+describe("lineOffset (#206)", () => {
+  // `markdownRefs` counts from one over the string it is given. The scanner
+  // strips frontmatter before calling, so without an offset every coordinate is
+  // short by exactly that block.
+  const body = ["# demo", "", "Read [the API](references/api.md) now."].join(
+    "\n",
+  );
+
+  it("reports the body-relative line when no offset is given", () => {
+    const found = run(body, existsOnly());
+    expect(found[0]?.line).toBe(3);
+  });
+
+  it("adds the offset so the line names the real file", () => {
+    const found = skillResourceIssues(body, SKILL_DIR, {
+      existsSync: existsOnly(),
+      lineOffset: 5,
+    });
+    expect(found).toHaveLength(1);
+    expect(found[0]?.line).toBe(8);
+  });
+});

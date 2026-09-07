@@ -1971,6 +1971,53 @@ test("scanPlugin flags a SKILL.md body referencing a missing bundled resource", 
   cleanupTmpDir(dir);
 });
 
+// ─── the printed line must name a line of the FILE, not of the stripped body ──
+//
+// 🔴 `scanSkills` hands the detector a frontmatter-stripped body, and
+// `markdownRefs` counts from one over whatever it is given — so the coordinate
+// was short by exactly the frontmatter. Measured before the fix on this very
+// fixture: the ref sits on file line 11 and the finding printed 6 (#206). An
+// author who opens the printed line finds a blank line and concludes the finding
+// is false. The frontmatter here is 5 lines ON PURPOSE, so a dropped offset is a
+// 5-line miss, not an off-by-one that could pass unnoticed.
+test("skill-resource line number is FILE-relative, not body-relative", () => {
+  const dir = makeTmpDir("scan-skill-resource-line");
+  const md = [
+    "---", // 1
+    "name: demo", // 2
+    "description: A demo skill that reads a bundled reference before answering", // 3
+    "allowed-tools: Read", // 4
+    "---", // 5
+    "# demo", // 6
+    "", // 7
+    "Some prose that mentions nothing in particular.", // 8
+    "", // 9
+    "## Procedure", // 10
+    "Read [the API notes](references/api.md) before answering.", // 11
+    "",
+  ].join("\n");
+  write(dir, "skills/demo/SKILL.md", md);
+
+  // The fixture must actually put the ref where the assertion says it does,
+  // or the test would pass against a wrong constant.
+  assert.equal(
+    md.split("\n").findIndex((l) => l.includes("references/api.md")) + 1,
+    11,
+    "fixture self-check: the broken ref is on file line 11",
+  );
+
+  const r = scanPlugin(dir);
+  const found = r.skills.find((s) => s.name === "demo")?.resourceIssues ?? [];
+  assert.equal(found.length, 1, "the missing bundled resource is flagged");
+  assert.equal(found[0].ref, "references/api.md");
+  assert.equal(
+    found[0].line,
+    11,
+    "the coordinate names the line of the SKILL.md, not of the stripped body",
+  );
+  cleanupTmpDir(dir);
+});
+
 test("skill-resource is FP-safe: URLs and $VAR tokens are not flagged", () => {
   const dir = makeTmpDir("scan-skill-resource-fp");
   write(

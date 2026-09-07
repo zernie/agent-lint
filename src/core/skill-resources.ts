@@ -73,7 +73,12 @@ export interface SkillResourceFinding {
   readonly resolved: string;
   /** Whether the ref came from a markdown link `[..](..)` or an inline/path mention. */
   readonly kind: SkillResourceKind;
-  /** 1-based source line of the reference in the body. */
+  /**
+   * 1-based line of the reference in the SKILL.md FILE — not in the body string
+   * the detector was handed. The caller strips frontmatter before calling, so a
+   * body-relative number is short by exactly that block and points the author at
+   * the wrong line (#206); `lineOffset` is what closes the gap.
+   */
   readonly line: number;
 }
 
@@ -96,6 +101,22 @@ export interface SkillResourceOptions {
    * The controlled fix for feedback P1-4 (opt-in, never a default behavior change).
    */
   readonly sharedDirs?: readonly string[];
+  /**
+   * How many lines the caller stripped off the FRONT of the file before handing
+   * over `skillBody` — added to every finding's `line` so the coordinate names a
+   * line of the real SKILL.md.
+   *
+   * 🔴 Not cosmetic, and not the caller's to patch afterwards. `markdownRefs`
+   * counts from one over whatever string it gets, so a detector fed a
+   * frontmatter-stripped body emits coordinates short by exactly that block —
+   * measured on a 5-line frontmatter: the ref on file line 11 printed as 6
+   * (#206). An author who opens the printed line finds something else and either
+   * calls the finding false or edits the wrong line. Taking the offset as INPUT
+   * keeps the number right where it is produced, instead of relying on every
+   * consumer to remember; same shape as `doc-refs.ts`'s `firstLine + line`.
+   * Defaults to 0 — a caller passing a whole file needs nothing.
+   */
+  readonly lineOffset?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -379,6 +400,7 @@ export function skillResourceIssues(
 ): SkillResourceFinding[] {
   if (DISABLE_RE.test(skillBody)) return [];
   const exists = opts.existsSync;
+  const lineOffset = opts.lineOffset ?? 0;
   const sharedDirs = new Set(opts.sharedDirs ?? []);
   // A ref resolves if it exists under the skill's own dir. If (and only if) its
   // first segment is a DECLARED shared dir, it may also resolve against the repo
@@ -408,7 +430,7 @@ export function skillResourceIssues(
       ref: c.ref,
       resolved: c.resolved,
       kind: c.kind,
-      line: c.line,
+      line: c.line + lineOffset,
     });
   }
   return findings;
