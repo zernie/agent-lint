@@ -101,7 +101,7 @@ declare module "vigiles/generated" {
     | "internal:check"
     | "docs:api";
 
-  /** 419 project files. */
+  /** 422 project files. */
   export type ProjectFile = 
     | "src/CLAUDE.md"
     | "src/CLAUDE.md.spec.ts"
@@ -125,6 +125,7 @@ declare module "vigiles/generated" {
     | "src/adapters/claude-code/dialect.ts"
     | "src/adapters/claude-code/effect-region.test.ts"
     | "src/adapters/claude-code/effect-region.ts"
+    | "src/adapters/claude-code/hook-condition.ts"
     | "src/adapters/claude-code/hook-protocol.ts"
     | "src/adapters/claude-code/layout.test.ts"
     | "src/adapters/claude-code/layout.ts"
@@ -262,6 +263,7 @@ declare module "vigiles/generated" {
     | "src/core/hash.ts"
     | "src/core/hook-block-ineffective.test.ts"
     | "src/core/hook-block-ineffective.ts"
+    | "src/core/hook-condition.ts"
     | "src/core/hook-events.test.ts"
     | "src/core/hook-events.ts"
     | "src/core/hook-matcher.test.ts"
@@ -403,6 +405,7 @@ declare module "vigiles/generated" {
     | "src/harness-resolve.test.ts"
     | "src/harness-test.test.ts"
     | "src/harness-test.ts"
+    | "src/hook-condition.test.ts"
     | "src/hook-dogfood.test.ts"
     | "src/hook-install.test.ts"
     | "src/hook-install.ts"
@@ -616,6 +619,7 @@ declare module "vigiles/spec" {
       | "src/adapters/claude-code/dialect.ts"
       | "src/adapters/claude-code/effect-region.test.ts"
       | "src/adapters/claude-code/effect-region.ts"
+      | "src/adapters/claude-code/hook-condition.ts"
       | "src/adapters/claude-code/hook-protocol.ts"
       | "src/adapters/claude-code/layout.test.ts"
       | "src/adapters/claude-code/layout.ts"
@@ -753,6 +757,7 @@ declare module "vigiles/spec" {
       | "src/core/hash.ts"
       | "src/core/hook-block-ineffective.test.ts"
       | "src/core/hook-block-ineffective.ts"
+      | "src/core/hook-condition.ts"
       | "src/core/hook-events.test.ts"
       | "src/core/hook-events.ts"
       | "src/core/hook-matcher.test.ts"
@@ -894,6 +899,7 @@ declare module "vigiles/spec" {
       | "src/harness-resolve.test.ts"
       | "src/harness-test.test.ts"
       | "src/harness-test.ts"
+      | "src/hook-condition.test.ts"
       | "src/hook-dogfood.test.ts"
       | "src/hook-install.test.ts"
       | "src/hook-install.ts"

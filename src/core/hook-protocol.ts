@@ -12,6 +12,8 @@
  * The Claude Code implementation is `claudeCodeHookProtocol` in
  * `src/adapters/claude-code/hook-protocol.ts`.
  */
+import type { HookConditionSupport } from "./hook-condition.js";
+
 export interface HookProtocol {
   /** Stable identifier, e.g. "claude-code". */
   readonly name: string;
@@ -60,4 +62,19 @@ export interface HookProtocol {
    * by `decideHook`; absent ⇒ no field halts the turn on this harness.
    */
   readonly haltsTurnField?: string;
+  /**
+   * How this harness decides whether a hook that declares a CONDITION runs at all
+   * — Claude Code's per-action `if` field. Optional (additive, non-breaking);
+   * absent ⇒ the harness has no such feature and every hook is unconditional,
+   * which is what every consumer got before this existed.
+   *
+   * 🔴 IT IS A PORT FIELD BECAUSE THE SYNTAX IS THE HARNESS'S, NOT BECAUSE THE
+   * IDEA IS. "A hook may only run on matching calls" is neutral and modelled in
+   * `core/hook-condition.ts`; `"Bash(git push *--force*)"` is Claude Code's
+   * permission-rule grammar, so the matcher lives in its adapter. Reading it here
+   * is what stops `verifyGuardrail` reporting a conditional guard as blocking
+   * things its condition means it never sees — see `core/hook-condition.ts` for
+   * the measured false green that put this field on the port.
+   */
+  readonly condition?: HookConditionSupport;
 }
