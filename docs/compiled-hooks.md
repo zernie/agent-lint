@@ -171,13 +171,14 @@ const r = runHook(`npx vigiles hook-runtime run-program ${hookFile}`, event, {
 | ------------------------------- | --------------------------------------------------------------------------------------- |
 | `seed(key, { ago, at, value })` | write a fact as if the hook had recorded it, then read it back; `ago` **backdates**     |
 | `read(key)`                     | the fact exactly as `e.ctx[key]` will see it — `Infinity` when never recorded, no throw |
-| `clear()`                       | forget this hook's facts (test isolation)                                               |
+| `clear()`                       | forget the facts **this hook** recorded — a co-located hook's are left alone            |
 | `dir`                           | where they live — for a failure message, **not** a path to build on                     |
 
-Two things to know:
+Three things to know:
 
 - **Pass the same `cwd` the hook will run under.** The store's location is derived from the hook's path and the project root, so a handle built with a different root points at a different (empty) store.
 - **It writes through the runtime's own writer**, so a seeded fact and a recorded one are the same file. That is the point: a seeder with its own copy of the path rule agrees with the runtime only until someone edits the derivation, and then fails green.
+- **The store is shared per DIRECTORY, and `clear()` is scoped to this hook's own writes.** That sharing is the feature — it is how one hook reads a fact another recorded — so hooks shipped side by side keep their facts in one place. `clear()` therefore forgets only what _this_ hook wrote, and leaves a co-located hook's facts (and any entry with no recorded owner) in place. When a test wants the store completely empty rather than this hook's share of it, give it a **throwaway `cwd`**: the store hangs off that root, so a fresh root is a fresh store.
 
 It is on `vigiles`, **not** on `vigiles/hook`. `vigiles/hook` is the only import a compiled hook may have, and its guarantee is that it hands out no writer — so the seeding handle lives where a test can reach it and a hook cannot.
 

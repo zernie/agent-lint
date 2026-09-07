@@ -20,7 +20,7 @@
  * covers both rather than a redundant per-harness loop.
  */
 import { describe, test, expect } from "vitest";
-import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -220,6 +220,63 @@ describe("experimental_hookState", () => {
     }
   });
 
+  test("clear leaves a CO-LOCATED hook's facts alone — they share one store", () => {
+    // The store is keyed by directory on purpose (one hook reads another's
+    // fact), so hooks that ship side by side share it. A `clear()` that deleted
+    // the directory reset every one of them: the documented opener would wipe
+    // an unrelated hook, and two tests seeding different hooks in one folder
+    // would erase each other's seeded state.
+    const dir = makeTmpDir();
+    try {
+      const nag = experimental_hookState("hooks/nag.mjs", { cwd: dir });
+      const sibling = experimental_hookState("hooks/sibling.mjs", { cwd: dir });
+      expect(nag.dir).toBe(sibling.dir);
+
+      nag.seed("retro.nagged");
+      sibling.seed("calendar.synced");
+      // Same KEY from both, too: the surviving entry is the sibling's write.
+      nag.seed("shared.fact", { value: "from-nag" });
+      sibling.seed("shared.fact", { value: "from-sibling" });
+
+      nag.clear();
+
+      expect(nag.read("retro.nagged").recorded).toBe(false);
+      expect(sibling.read("calendar.synced").recorded).toBe(true);
+      expect(sibling.read("shared.fact").value).toBe("from-sibling");
+    } finally {
+      cleanupTmpDir(dir);
+    }
+  });
+
+  test("clear leaves an entry it cannot attribute, rather than claiming it", () => {
+    // Every write this module makes stamps an owner, so an entry without one
+    // came from somewhere else. Deleting it is the collateral damage the scope
+    // exists to remove; it reads back as another owner's fact instead.
+    const dir = makeTmpDir();
+    try {
+      const st = experimental_hookState("hooks/nag.mjs", { cwd: dir });
+      st.seed("mine");
+      writeFileSync(
+        resolve(st.dir, "unattributed.json"),
+        JSON.stringify({ value: "x", at: new Date().toISOString() }),
+      );
+      writeFileSync(resolve(st.dir, "torn.json"), "{ not json");
+
+      // A torn `<key>.json.<pid>.tmp` from an interrupted write is not an entry
+      // at all — clear must step over it rather than parse it.
+      writeFileSync(resolve(st.dir, "mine.json.1234.tmp"), "{}");
+
+      st.clear();
+
+      expect(st.read("mine").recorded).toBe(false);
+      expect(st.read("unattributed").recorded).toBe(true);
+      expect(existsSync(resolve(st.dir, "torn.json"))).toBe(true);
+      expect(existsSync(resolve(st.dir, "mine.json.1234.tmp"))).toBe(true);
+    } finally {
+      cleanupTmpDir(dir);
+    }
+  });
+
   test("exposes WHERE the facts live, for a message — the same dir the runtime derives", () => {
     const dir = makeTmpDir();
     try {
@@ -346,7 +403,7 @@ describe("a throttled gate, seeded through the handle and run by the real runtim
     }
   });
 
-  test("the handle reads back what the RUNTIME wrote — not just what a test wrote", () => {
+  test("the handle reads back — and clears — what the RUNTIME wrote", () => {
     const dir = makeTmpDir();
     try {
       // A react that RECORDS the fact, run by the runtime; the handle then reads
@@ -380,6 +437,12 @@ export default experimental_defineReact({
       expect(fact.recorded).toBe(true);
       expect(fact.value).toBe("by-the-runtime");
       expect(fact.fresherThan("1m")).toBe(true);
+
+      // And the owner the RUNTIME stamped is the one `clear()` scopes on. If
+      // the two derivations ever disagreed, clear() would quietly stop
+      // clearing anything — a green test over a store that never resets.
+      st.clear();
+      expect(st.read("retro.nagged").recorded).toBe(false);
     } finally {
       cleanupTmpDir(dir);
     }
