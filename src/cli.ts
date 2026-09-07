@@ -449,10 +449,22 @@ function hostEntry(): string {
   return resolve(__dirname, "spec-host.mjs");
 }
 
+/**
+ * This package's own root — `dist/`'s parent, since this file compiles to
+ * `dist/cli.js`. Handed to the host so its resolve hook can serve the spec's
+ * `vigiles/spec` import from OUR install (see `src/self-resolve.mts`), which is
+ * what lets a repo with no `node_modules/vigiles` — a Python or Rust repo has
+ * no `package.json` to install into at all — compile a spec.
+ */
+function selfRoot(): string {
+  return resolve(__dirname, "..");
+}
+
 function startHost(): Host {
   const child = spawn(process.execPath, [hostEntry()], {
     cwd: process.cwd(),
     stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env, VIGILES_SELF_ROOT: selfRoot() },
   });
   const h: Host = { child, pending: new Map(), started: null, buffered: "" };
 
@@ -3952,59 +3964,24 @@ async function setupPillar1(
   // user reviews the generated spec and runs `vigiles compile` themselves to
   // switch it to spec-managed (non-destructive by default; the compile is
   // byte-faithful, but it's the user's call to make, with a diff to review).
-  // And we only compile when `vigiles` actually resolves — a fresh repo hasn't
-  // run `npm install` yet, so compiling would just error; defer it with a clear
-  // next step instead of a scary stack-traceless "failed to load".
-  const canCompile = canResolveVigiles(cwd);
+  //
+  // There is no longer an "only if vigiles resolves" gate here. The spec host
+  // serves a spec's `vigiles/spec` import from the CLI's OWN install (the
+  // resolve hook in src/self-resolve.mts), so compiling needs no
+  // `node_modules/vigiles` in the user's repo — and a repo with no
+  // `package.json` at all (Python, Rust, Go) has no install to run.
   const initConfig = loadConfig();
   const excludes = excludeSet(cwd, initConfig.exclude);
-  const specs = canCompile
-    ? findSpecs(excludes).filter((s) => {
-        const tf = resolve(cwd, s.replace(/\.spec\.ts$/, ""));
-        return !existsSync(tf) || targetHasHash(tf);
-      })
-    : [];
+  const specs = findSpecs(excludes).filter((s) => {
+    const tf = resolve(cwd, s.replace(/\.spec\.ts$/, ""));
+    return !existsSync(tf) || targetHasHash(tf);
+  });
   if (specs.length > 0) {
     console.log("\nCompiling specs...");
     await compile(specs, initConfig, excludes);
-  } else if (!canCompile) {
-    // Honest, project-type-aware guidance. A JS repo just needs `npm install`
-    // (init already added the devDep). A repo with NO package.json (Python, Rust,
-    // …) can't resolve the npm package at all, so point at the no-install paths
-    // instead of a misleading `npm install`.
-    if (existsSync(resolve(cwd, "package.json"))) {
-      console.log(
-        "\n  Skipping compile — run `npm install` (to fetch the vigiles dep just added), then `npx vigiles compile`.",
-      );
-    } else {
-      console.log(
-        "\n  No package.json here, so the typed-spec compile isn't available yet.\n" +
-          "  • `npx vigiles lint` verifies your instruction files right now — no install needed.\n" +
-          "  • To spec-manage them, add a package.json first: `npm init -y && npm i -D vigiles`, then `npx vigiles compile`.",
-      );
-    }
   }
 
   return { specTargets: targets, written, adopted };
-}
-
-/**
- * Whether `vigiles/spec` will resolve for a spec compiled from `cwd` — true when
- * vigiles is installed locally (`node_modules/vigiles`) or `cwd` IS the vigiles
- * package itself (the in-repo dogfood / a monorepo workspace). A fresh user repo
- * that hasn't run `npm install` yet returns false, so `init` defers the compile
- * instead of emitting a resolution error.
- */
-function canResolveVigiles(cwd: string): boolean {
-  if (existsSync(resolve(cwd, "node_modules", "vigiles"))) return true;
-  try {
-    const pkg = JSON.parse(
-      readFileSync(resolve(cwd, "package.json"), "utf-8"),
-    ) as { name?: string };
-    return pkg.name === "vigiles";
-  } catch {
-    return false;
-  }
 }
 
 /** Whether a harness binary (`claude`, `codex`) is on PATH. */
@@ -4308,24 +4285,17 @@ function printSetupSummary(opts: {
 }): void {
   const { plan, strict, targets, adopted, written } = opts;
   const specPathsList = targets.map((t) => `${t}.spec.ts`);
-  // A repo with no package.json (Python/Rust/…) can't resolve the npm package,
-  // so the typed-spec compile path needs an install first — give honest steps.
-  const hasPkg = existsSync(resolve(process.cwd(), "package.json"));
   console.log("\n---\nSetup complete.\n");
 
-  // Next steps in DEPENDENCY order: install the dep first, then compile (which
-  // needs it), then the optional hardening / test / CI steps.
+  // Next steps in the order a reader should do them. `npm install` is NOT a
+  // prerequisite of `compile` any more (the spec host resolves `vigiles/spec`
+  // from the CLI's own install) — it is listed because we just declared the
+  // devDep, so installing it is what gives the editor the spec's types.
   const nextSteps: string[] = [];
   if (written.includes("package.json")) {
     nextSteps.push("Run `npm install` to fetch the vigiles dev dependency");
   }
-  if (adopted.length > 0 && !hasPkg) {
-    // Non-JS repo: compile needs a local install. Point at the no-install verify
-    // path + how to enable specs, instead of a compile that would fail.
-    nextSteps.push(
-      `Verify now with \`npx vigiles lint\` (no install). To spec-manage ${adopted.join(", ")}, add a package.json first (\`npm init -y && npm i -D vigiles\`), then \`npx vigiles compile\` and review the diff`,
-    );
-  } else if (adopted.length > 0) {
+  if (adopted.length > 0) {
     // Adoption is NON-DESTRUCTIVE: the file is untouched until you compile, so
     // the diff to review is what compile WOULD produce (byte-faithful).
     nextSteps.push(

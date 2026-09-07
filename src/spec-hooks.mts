@@ -18,10 +18,14 @@
  * `./x.js` → `./x.ts` specifier rewrite, and bare specifiers. NOT tsconfig
  * `paths`, JSX, or decorator configuration — specs are configuration modules,
  * not applications.
+ *
+ * The one bare specifier it does more than pass through is `vigiles` itself —
+ * see `./self-resolve.mjs`, shared with the harness hook.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import { resolveSelfSpecifier } from "./self-resolve.mjs";
 
 type ResolveContext = { parentURL?: string; conditions: string[] };
 type Resolved = { url: string; format?: string | null; shortCircuit?: boolean };
@@ -41,6 +45,8 @@ type NextLoad = (url: string, context: LoadContext) => Loaded | Promise<Loaded>;
 const TS_SOURCE = /\.m?ts$/;
 
 /**
+ * Two rescues, both attempted ONLY after normal resolution has failed.
+ *
  * `./x.js` → `./x.ts` when the sibling exists.
  *
  * This is the TypeScript ESM convention (`tsc` under `nodenext` requires the
@@ -49,6 +55,14 @@ const TS_SOURCE = /\.m?ts$/;
  * dogfood specs import `src/core/spec.js`, a file that does not exist on disk.
  * Attempted only AFTER normal resolution fails, so it can never shadow a real
  * `.js` file.
+ *
+ * Then `vigiles` / `vigiles/<subpath>` against the CLI's own install. Without
+ * it, a repo with no `node_modules/vigiles` — every Python, Rust or Go repo,
+ * where there is not even an install to run — could not compile a spec at all:
+ * `init` scaffolded `import { instructionFile } from "vigiles/spec"` and
+ * `compile` exited 1 with `ERR_MODULE_NOT_FOUND`. `vigiles test` had carried
+ * this rescue since #184; the spec host did not, which is the whole reason the
+ * branch now lives in one shared module rather than in each hook.
  */
 export async function resolve(
   specifier: string,
@@ -67,6 +81,8 @@ export async function resolve(
         return { url: candidate.href, format: "module", shortCircuit: true };
       }
     }
+    const rescued = resolveSelfSpecifier(specifier);
+    if (rescued) return rescued;
     throw err;
   }
 }
