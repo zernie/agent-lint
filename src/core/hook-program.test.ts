@@ -49,10 +49,12 @@ import {
   pathView,
   projectRootOf,
   undecidablePathWarning,
+  noticeDelivery,
 } from "./hook-program.js";
 import { provide, dangerously, provider } from "./hook-providers.js";
 import { codexDialect } from "../adapters/codex/dialect.js";
 import { codexHookProtocol } from "../adapters/codex/hook-protocol.js";
+import { claudeCodeHookProtocol } from "../adapters/claude-code/hook-protocol.js";
 
 // The hook an author writes — a pure function against the closed API. No exit
 // code, no JSON, no stdin, no regex.
@@ -2207,4 +2209,69 @@ test("the clamp reaches BOTH repair doors, and grants nothing new", () => {
     ),
     false,
   );
+});
+
+// --- noticeDelivery: where a react's notice can actually ARRIVE -------------
+//
+// BOTH HARNESSES, and not as ceremony: the event sets genuinely DIFFER, so the
+// same react is deliverable on one harness and not the other. `PreToolUse` is in
+// Codex's injectable set and not in Claude Code's, which is exactly the case a
+// hard-coded CC literal would have got wrong.
+
+test("noticeDelivery: a notice on an injectable event becomes injected context", () => {
+  const r = notice("mind the tier");
+  for (const proto of [claudeCodeHookProtocol, codexHookProtocol]) {
+    const d = noticeDelivery(r, "PostToolUse", proto.injectableEvents);
+    assert.equal(
+      d.kind,
+      "inject",
+      `${proto.name} should inject on PostToolUse`,
+    );
+    assert.equal(d.kind === "inject" && d.context, "mind the tier");
+  }
+});
+
+test("noticeDelivery: a notice on a NON-injectable event is undeliverable, not silently fine", () => {
+  // `Stop` carries no context on either harness — the notice would reach nobody.
+  for (const proto of [claudeCodeHookProtocol, codexHookProtocol]) {
+    const d = noticeDelivery(
+      notice("nobody hears this"),
+      "Stop",
+      proto.injectableEvents,
+    );
+    assert.equal(
+      d.kind,
+      "undeliverable",
+      `${proto.name} cannot inject on Stop`,
+    );
+    assert.equal(d.kind === "undeliverable" && d.message, "nobody hears this");
+  }
+});
+
+test("noticeDelivery: the harnesses DISAGREE on PreToolUse — the per-harness fact is real", () => {
+  assert.equal(
+    noticeDelivery(
+      notice("x"),
+      "PreToolUse",
+      claudeCodeHookProtocol.injectableEvents,
+    ).kind,
+    "undeliverable",
+  );
+  assert.equal(
+    noticeDelivery(
+      notice("x"),
+      "PreToolUse",
+      codexHookProtocol.injectableEvents,
+    ).kind,
+    "inject",
+  );
+});
+
+test("noticeDelivery: a run() or nothing() reaction has nothing to deliver", () => {
+  const events = claudeCodeHookProtocol.injectableEvents;
+  assert.equal(
+    noticeDelivery(run("echo hi"), "PostToolUse", events).kind,
+    "none",
+  );
+  assert.equal(noticeDelivery(nothing(), "PostToolUse", events).kind, "none");
 });

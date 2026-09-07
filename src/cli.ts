@@ -132,6 +132,7 @@ import {
   normalizeHarnessList,
   getAdapter,
   adapterForInstructionFile,
+  resolveAdapter,
 } from "./adapter-registry.js";
 import type { PluginLayout } from "./core/layout.js";
 import type { HarnessSelection } from "./adapter-registry.js";
@@ -236,6 +237,7 @@ import {
   hookMode,
   hookNeeds,
   gateAction,
+  noticeDelivery,
   type DispatchKind,
   type HookMode,
   type AnyHook,
@@ -7414,7 +7416,18 @@ async function installHookFile(
   const injectable = adapter.hookProtocol?.injectableEvents ?? [];
   const matcher = hookRouting(program).matcher;
   let warning: string | undefined;
-  if (adapter.name !== "claude-code") {
+  // A react on an event this harness does NOT inject can still call `notice()`,
+  // and that text would reach NOBODY (stderr at exit 0 is the debug log only).
+  // Say so at INSTALL time: a runtime warning would go to the same stderr the
+  // notice is stuck in, which is the defect one level up.
+  if (role === "react" && !injectable.includes(event)) {
+    warning =
+      `a react on "${event}" may emit notice(...), but ${adapter.name} does not ` +
+      `honor additionalContext for that event — the text would reach NOBODY ` +
+      `(stderr at exit 0 goes to the debug log, not the transcript, and the model ` +
+      `never sees it). Injectable here: ${injectable.join(", ") || "(none)"}. ` +
+      `Move the hook to one of those events, or use run() if you meant an action.`;
+  } else if (adapter.name !== "claude-code") {
     if (role === "inject" && !injectable.includes(event)) {
       warning =
         `this inject hook targets "${event}", which ${adapter.name} does not ` +
@@ -7923,6 +7936,30 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
       const ctx = await gatherHookContext(program, file);
       warnIfPathUndecidable(event, projectRoot);
       const reaction = runReact(program as ReactHook, event, ctx, projectRoot);
+      // A notice has to REACH someone. stderr at exit 0 goes to the debug log
+      // and nothing else (the host's docs are explicit: "Claude never sees it"),
+      // and a react always exits 0 because its type has no `deny` — so stderr
+      // alone delivered nowhere. Emit the same `additionalContext` shape the
+      // shipped refs/eval-lock nudges use, gated on the ACTIVE adapter's
+      // `injectableEvents` so this is per-harness fact, not a CC literal.
+      const injectable =
+        resolveAdapter(projectRoot ?? process.cwd()).hookProtocol
+          ?.injectableEvents ?? [];
+      const delivery = noticeDelivery(reaction, program.on, injectable);
+      if (delivery.kind === "inject") {
+        process.stdout.write(
+          JSON.stringify({
+            hookSpecificOutput: {
+              hookEventName: program.on,
+              additionalContext: delivery.context,
+            },
+          }) + "\n",
+        );
+      }
+      // The stderr copy STAYS, deliberately. It is what the debug log and every
+      // `runHook`-based probe already read, it costs nothing, and on an event
+      // this harness does not inject it is the only trace that exists at all.
+      // Removing it would break existing consumers to gain nothing.
       if (reaction.kind === "notice") console.error(reaction.message);
       applyHookWrites(file, { kind: "reaction", reaction });
       if (reaction.kind === "run") {

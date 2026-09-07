@@ -76,6 +76,22 @@ Every `test:*` script above is checked into the map by
 that test fails, the same way a CLI verb without a doc home fails
 `src/doc-command-coverage.test.ts`.
 
+#### A hook reminds you which tier you landed in
+
+Edit a test-shaped file in a Claude Code session and you will see a one-screen
+note naming its tier and pointing back at this table. That is
+`.vigiles/hooks/test-tier-nudge.hook.mjs` — this repo's own compiled hook, and
+the first one it ships for itself. It never blocks (it is a `react`, whose return
+type has no `deny`), and it throttles itself with vigiles' named state: at most
+once an hour, and again immediately when the tier changes.
+
+**To silence it**, delete its entry from `.claude/settings.json` — the one whose
+command is `vigiles hook-runtime run-program .vigiles/hooks/test-tier-nudge.hook.mjs`
+— and don't commit that. `npx vigiles compile .vigiles/hooks/test-tier-nudge.hook.mjs`
+puts it back, in place, without touching any other hook. It only speaks in a
+session where Claude Code loads this repo's settings; it is not part of CI, and it
+is not shipped to users of the plugin.
+
 #### `npm run test:cli-e2e` is run by nothing
 
 It appears in `package.json` and in `docs/skills.md`, and nowhere else: not in

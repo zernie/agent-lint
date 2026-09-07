@@ -42,7 +42,8 @@ assertHookAllows(guard, bash("git push origin main"));
 assertHookAllows(guard, bash("git status"));
 console.log("  ✓ gate: denies a force-push (however wrapped), allows the rest");
 
-// --- a REACT: its notice goes to STDERR, so assert the REACTION, not output --
+// --- a REACT: its notice goes to stderr AND (on an injectable event) stdout
+// as additionalContext, so assert the REACTION itself, never a stream --------
 
 const warn = await loadHook("examples/harness/warn-on-failure.hook.mjs");
 

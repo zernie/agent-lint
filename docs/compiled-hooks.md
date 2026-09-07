@@ -57,7 +57,7 @@ The unifying idea: a hook is a tiny program, and a closed, typed vocabulary shri
 - **`experimental_definePromptGate`** — a **prompt gate** (`UserPromptSubmit`). Sees the prompt **text** (`e.prompt`) and returns a `Decision`. `deny` blocks/erases the prompt — useful as a security filter that refuses a prompt leaking a secret or carrying an injection.
 - **`experimental_defineStopGate`** — a **stop gate** (`Stop` / `SubagentStop`). Returns a `Decision`. `deny` keeps the agent **going** (gate-until-tests-pass; the reason is fed back to the model). Honour `e.stopHookActive` (the loop guard): `allow` when it's set, or you can wedge the agent in a stop→continue loop.
 - **`experimental_defineInject`** — an **inject** (`SessionStart` / `UserPromptSubmit`). Returns an `Injection` (`inject(text)`) — context added to the model. It has **no `deny`**: a no-decision event can't block.
-- **`experimental_defineReact`** — a **react** (`PostToolUse`). Returns a `Reaction` — `run(cmd)`, `notice(msg)`, or `nothing()`. The tool already ran, so it **can't block**. It sees the tool's **response** (`e.response`, e.g. react only on a failure), and `run(cmd)`'s effect is **classified at construction** (read-only / side-effecting), so every reaction is auditable without running it.
+- **`experimental_defineReact`** — a **react** (`PostToolUse`). Returns a `Reaction` — `run(cmd)`, `notice(msg)`, or `nothing()`. The tool already ran, so it **can't block**. It sees the tool's **response** (`e.response`, e.g. react only on a failure), and `run(cmd)`'s effect is **classified at construction** (read-only / side-effecting), so every reaction is auditable without running it. A `notice(msg)` reaches the agent as injected context — see [Where a notice arrives](#where-a-notice-arrives).
 
 Every **gate** (tool / prompt / stop) takes an optional `mode` — see [Observe mode](#observe-mode-shadow-rollout).
 
@@ -428,7 +428,22 @@ assertHookNotices(warn, after(true), /read the error/);
 assertHookSilent(warn, after(false));
 ```
 
-> ⚠️ **Don't test a react hook by reading stdout.** `notice(…)` writes to **stderr**, so a probe built on `execFileSync` (which returns stdout only) sees nothing and reports a perfectly healthy react hook as **dead**. These assertions read the reaction itself, so the stream never enters into it.
+### Where a notice arrives
+
+A `notice(msg)` is delivered as `hookSpecificOutput.additionalContext` on stdout — the same mechanism vigiles's own shipped nudges use — so **the agent reads it**. It is still not a block: a react has no `deny`, and it always exits 0.
+
+Delivery is **per event and per harness**, and vigiles will not pretend otherwise:
+
+|                                                |                                                                                                                  |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| event the harness injects (e.g. `PostToolUse`) | the notice is delivered as `additionalContext`                                                                   |
+| event it does not (e.g. `Stop`)                | nothing is emitted on stdout, and `vigiles compile` **warns at install time**, naming the events that would work |
+
+The event set is the adapter's `injectableEvents`, not a hard-coded list, so a Codex hook is gated on Codex's answer.
+
+> 🔴 **This was a real defect, found by dogfooding.** Until 2026-09-07 a notice went to **stderr and nowhere else**. Per Claude Code's hook documentation, stderr from a hook that exits 0 goes to the debug log only — "Claude never sees it" — and a react always exits 0. So a notice reached **nobody**: not the model, not the user, not the transcript. The docs stated the mechanic ("writes to stderr") and never the consequence, which is exactly the false-confidence shape compiled hooks exist to remove. It was caught when this repo wired up its own first compiled hook.
+
+> ⚠️ **Don't test a react hook by reading a stream.** A `notice(…)` goes to **stderr** (the debug log) _and_ — on an event this harness injects — to **stdout** as `hookSpecificOutput.additionalContext`. So a stream probe gets a different answer depending on the event, and a probe built on `execFileSync` once reported a perfectly healthy react hook as **dead**. These assertions read the reaction itself, so no stream enters into it.
 
 Runnable end to end: [`examples/harness/compiled-hook-inprocess.harness.mjs`](../examples/harness/compiled-hook-inprocess.harness.mjs) (with its two hook files) is exactly this pattern, and runs in CI.
 
@@ -574,10 +589,18 @@ the thirty-first from shipping unmarked. Same reasoning as
   every one of them both read and wrote a stamp file, and throttling was
   inexpressible. An API that gained a dimension that recently has not been
   pressure-tested by anyone but its author.
-- Two consumers total, both belonging to the author — and neither is this
-  repository's own harness, which still wires its hooks as plain shell. A
-  vocabulary nobody has had to live with is a vocabulary whose sharp edges are
-  unknown.
+- Consumers are still few, and all of them belong to the author. A vocabulary
+  nobody else has had to live with is a vocabulary whose sharp edges are unknown.
+
+  What this bullet said until 2026-09-07 — _"neither is this repository's own
+  harness, which still wires its hooks as plain shell"_ — is no longer true.
+  `.vigiles/hooks/test-tier-nudge.hook.mjs` is this repo's own first compiled
+  hook: a `react` that reminds a contributor which **test tier** a file they just
+  edited belongs to, throttled with `record`/`state` so it speaks at most hourly
+  and again whenever the tier changes. It was written to use the _least_-used
+  corner of the vocabulary on purpose. Its tests are `src/test-tier-nudge.test.ts`
+  (pure classification in-process, then both throttle directions against the real
+  runtime via [`experimental_hookState`](#testing-a-hook-that-remembers)).
 
 **What would have to be true to drop the prefix:** ~~a supported way to seed and
 read named state in a test~~ (closed — see below), and at least one consumer who
@@ -597,7 +620,10 @@ one, plus the reverse direction — a fact the RUNTIME recorded, read back throu
 the handle.
 
 What that leaves is the second half: consumers. One consumer who did not write
-the API, living with a stateful hook long enough to find its edges.
+the API, living with a stateful hook long enough to find its edges. vigiles's own
+harness now counts as a stateful consumer (above), which closes the narrower
+"the product does not use the feature it ships" version of this — but the author
+grading his own API is not the evidence the prefix is waiting on.
 
 An earlier version of this list also demanded an idempotent `compile`. That was
 already false when it was written: the merge is keyed by the hook's canonicalized

@@ -187,6 +187,68 @@ export function gateAction(
   }
 }
 
+/**
+ * WHERE A REACT'S `notice` CAN ACTUALLY ARRIVE — the react-side twin of
+ * {@link gateAction}, and pure for the same reason: the runtime and a test must
+ * agree about delivery without either of them running a harness.
+ *
+ * 🔴 THE DEFECT THIS EXISTS TO CLOSE, MEASURED 2026-09-07 BY THIS REPO'S OWN
+ * FIRST COMPILED HOOK. `notice(…)` was written to stderr and nothing else. Per
+ * Claude Code's hooks documentation, stderr from a hook that exits 0 "goes to
+ * the debug log only, never the transcript, and Claude never sees it" — and a
+ * react ALWAYS exits 0, because its type has no `deny`. So a notice reached
+ * NOBODY: not the model, not the user, not the transcript. `docs/compiled-hooks.md`
+ * stated the MECHANIC ("notice writes to stderr") and never the CONSEQUENCE, so
+ * the role looked healthy while delivering nowhere — precisely the
+ * false-confidence class compiled hooks exist to eliminate, inside the
+ * implementation of compiled hooks.
+ *
+ * The fix is the mechanism the shipped nudges already use:
+ * `hookSpecificOutput.additionalContext` on STDOUT. Two candidates were
+ * considered and one is a trap:
+ *
+ * - **exit 2.** The host's per-event table does show `PostToolUse` stderr to the
+ *   model on exit 2. But {@link HookProtocol.blockExitCode} IS 2 — it is the
+ *   DENY channel. Spending it on a role whose type-level guarantee is "can never
+ *   block" would make that guarantee a lie on every other event. Rejected.
+ * - **`additionalContext`.** Already proven on this event by the shipped refs
+ *   nudge, shape shared across harnesses, and the per-harness half is exactly
+ *   {@link HookProtocol.injectableEvents} — a fact the port already carries and
+ *   the conformance kit already checks. Chosen.
+ *
+ * `injectableEvents` is INJECTED rather than read from a Claude Code literal, so
+ * this stays harness-agnostic (`core ⊄ adapter`): a Codex react on `PostToolUse`
+ * is delivered by the same code path, and an event neither harness injects is
+ * reported `undeliverable` rather than silently dropped.
+ */
+export type NoticeDelivery =
+  /** The notice can reach the agent as injected context on this event. */
+  | { readonly kind: "inject"; readonly context: string }
+  /**
+   * A notice on an event this harness does NOT inject. It still goes to stderr
+   * (the debug log), but nothing surfaces it — so the CALLER must say so out
+   * loud rather than treat this as success. Carrying the message means the
+   * caller never has to re-derive which reaction it was talking about.
+   */
+  | { readonly kind: "undeliverable"; readonly message: string }
+  /** Not a notice (a `run` or `nothing`) — nothing to deliver. */
+  | { readonly kind: "none" };
+
+/**
+ * Decide how a {@link Reaction}'s notice reaches the agent on `on`, given the
+ * events this harness injects. Pure — no I/O, no process, no harness literal.
+ */
+export function noticeDelivery(
+  reaction: Reaction,
+  on: string,
+  injectableEvents: readonly string[],
+): NoticeDelivery {
+  if (reaction.kind !== "notice") return { kind: "none" };
+  return injectableEvents.includes(on)
+    ? { kind: "inject", context: reaction.message }
+    : { kind: "undeliverable", message: reaction.message };
+}
+
 /** An AST-backed view of a Bash command — the author never writes a regex. */
 export interface CommandView {
   readonly raw: string;
