@@ -1,10 +1,7 @@
 /**
- * vigiles v2 — Compiler: spec → markdown.
- *
- * Reads .spec.ts files, validates references, and produces
- * markdown instruction files with integrity hashes.
+ * Compiler: spec → markdown with SHA-256 hash, linter verification, reference validation; compileClaude/compileSkill/compileAgent (subagents: frontmatter + verified tool contract + body marks + result-contract Output section) + compileRailway/validateRailway (orchestrator command over flat workers; delegate-target resolution + bounded recovery) + purity-floor enforcement (purityViolations: a pure/bounded contract rejects a tool looser than its floor; absent tools = inherits-all = checked as the '*' wildcard, never trivially pure) + emits a <!-- vigiles:purity:LEVEL --> marker on a compiled agent OR skill (dangerously-unrestricted → the neutral runtime level unrestricted) so the runtime PreToolUse gate can read+enforce the declared floor (parseAgentPurity/parseSkillPurity → decidePurityGate). renderFragment/validateRefs also handle the effect() EffectRegion fragment — rendering its body wrapped in <!-- vigiles:effect -->…<!-- /vigiles:effect --> markers (inside the integrity hash) and recursing to verify inner file()/cmd() refs.
+ * Compile gates added 2026-06-20: a generous DEFAULT_MAX_SECTION_LINES=200 guard on every named prose section (claude + agent), overridable via maxSectionLines (TS types can't bound string length); agent disallowedTools verified via disallowedToolIssues (a close typo blocks nothing); a forked skill's output renders the SAME ## Output contract via renderOutputContract, and output without context:'fork' is the output-without-fork error; effect() in a skill body is the effect-in-skill error (effect() is a SUBAGENT primitive — a skill has no call→return region to scope; it declares a purity floor + context:fork instead)
  */
-
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { globSync } from "glob";
 import yaml from "js-yaml";
@@ -478,15 +475,6 @@ interface SectionResult {
 // Override per spec with `maxSectionLines`; `maxTokens` is the global backstop.
 const DEFAULT_MAX_SECTION_LINES = 200;
 
-// A LINE cap cannot see a section that is few-lines-but-enormous, and that is
-// the shape this file actually grew: `## Key Files` reached 173 KB while
-// staying comfortably under 200 lines, because every entry is ONE line of any
-// length. Measured 2026-09-08 — a guard that reads as "sections may not sprawl"
-// and silently never fires, which is the bug class this product exists to make
-// unrepresentable. So the budget is spent in BOTH units and whichever runs out
-// first reports.
-const DEFAULT_MAX_SECTION_CHARS = 12_000;
-
 // A key-files entry is a POINTER, not an essay: the prose about why a file is
 // shaped the way it is belongs in that file's own header, where it is read when
 // the file is opened. Calibrated against this repo on 2026-09-08 — 285 entries,
@@ -494,41 +482,10 @@ const DEFAULT_MAX_SECTION_CHARS = 12_000;
 // on an ordinary one-line description.
 const DEFAULT_MAX_KEYFILE_CHARS = 800;
 
-/**
- * The recorded debt both caps are ratcheted against. A cap introduced bare
- * would have opened with 60+ findings on this repo, and a check that loud is
- * silenced the same day — so the existing oversize is recorded once and the
- * caps report only what is NEW or has GROWN. Missing file = no debt = every
- * finding reports, which is the right default for any other repository.
- */
-interface SizeDebt {
-  entries?: Record<string, number>;
-  sections?: Record<string, number>;
-}
-let debtCache: { base: string; debt: SizeDebt } | null = null;
-function loadSizeDebt(basePath: string): SizeDebt {
-  if (debtCache && debtCache.base === basePath) return debtCache.debt;
-  let debt: SizeDebt;
-  try {
-    debt = JSON.parse(
-      readFileSync(resolve(basePath, ".vigiles/keyfile-debt.json"), "utf8"),
-    ) as SizeDebt;
-  } catch {
-    debt = {};
-  }
-  debtCache = { base: basePath, debt };
-  return debt;
-}
-/** Report only if over the cap AND not already recorded at this size or larger. */
-function overBudget(actual: number, cap: number, recorded?: number): boolean {
-  return actual > cap && (recorded === undefined || actual > recorded);
-}
-
 function validateSectionContent(
   name: string,
   text: string,
   maxSectionLines?: number,
-  basePath?: string,
 ): CompileError[] {
   const errors: CompileError[] = [];
   const contentLines = text.split("\n");
@@ -553,17 +510,6 @@ function validateSectionContent(
     errors.push({
       type: "section-too-long",
       message: `Section "${name}" is ${String(contentLines.length)} lines (max ${String(max)}). Split into smaller named sections, move detail into a file() reference, or raise maxSectionLines if it's intentional.`,
-    });
-  }
-
-  const chars = text.length;
-  const sectionDebt = basePath
-    ? loadSizeDebt(basePath).sections?.[name]
-    : undefined;
-  if (overBudget(chars, DEFAULT_MAX_SECTION_CHARS, sectionDebt)) {
-    errors.push({
-      type: "section-too-long",
-      message: `Section "${name}" is ${String(chars)} characters (max ${String(DEFAULT_MAX_SECTION_CHARS)}). The line count alone does not catch this — a section of few but enormous lines reads as a wall to every consumer that pays for it by the token. Split it, or move detail into a file() reference.`,
     });
   }
 
@@ -596,16 +542,12 @@ function compileSectionsSection(
     }
     const heading = name.charAt(0).toUpperCase() + name.slice(1);
     if (typeof content === "string") {
-      errors.push(
-        ...validateSectionContent(name, content, maxSectionLines, basePath),
-      );
+      errors.push(...validateSectionContent(name, content, maxSectionLines));
       lines.push(`## ${heading}\n\n${content.trim()}`);
     } else {
       errors.push(...validateRefs(content, basePath));
       const rendered = content.map(renderFragment).join("");
-      errors.push(
-        ...validateSectionContent(name, rendered, maxSectionLines, basePath),
-      );
+      errors.push(...validateSectionContent(name, rendered, maxSectionLines));
       lines.push(`## ${heading}\n\n${rendered.trim()}`);
     }
   }
@@ -623,8 +565,7 @@ function compileKeyFilesSection(
     lines.push(`- \`${filePath}\` — ${desc}`);
     const err = validateFileRef(filePath, basePath);
     if (err) errors.push(err);
-    const keyDebt = loadSizeDebt(basePath).entries?.[filePath];
-    if (overBudget(desc.length, DEFAULT_MAX_KEYFILE_CHARS, keyDebt)) {
+    if (desc.length > DEFAULT_MAX_KEYFILE_CHARS) {
       errors.push({
         type: "section-too-long",
         message: `Key file "${filePath}" has a ${String(desc.length)}-character description (max ${String(DEFAULT_MAX_KEYFILE_CHARS)}). A key-files entry is a pointer; move the reasoning into that file's own header comment, where a reader meets it on opening the file.`,
@@ -1303,16 +1244,12 @@ function renderAgentSections(
     }
     const heading = name.charAt(0).toUpperCase() + name.slice(1);
     if (typeof content === "string") {
-      errors.push(
-        ...validateSectionContent(name, content, undefined, basePath),
-      );
+      errors.push(...validateSectionContent(name, content));
       lines.push(`## ${heading}\n\n${content.trim()}`);
     } else {
       errors.push(...validateRefs(content, basePath));
       const rendered = content.map(renderFragment).join("");
-      errors.push(
-        ...validateSectionContent(name, rendered, undefined, basePath),
-      );
+      errors.push(...validateSectionContent(name, rendered));
       lines.push(`## ${heading}\n\n${rendered.trim()}`);
     }
   }
