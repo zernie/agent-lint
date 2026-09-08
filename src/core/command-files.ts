@@ -34,23 +34,49 @@
  * fully resolved (no unexpanded `$`, no substitution, no glob, no whitespace),
  * not a flag, not a `NAME=value`, not a URL, not the inline program text of a
  * `-c`/`-e`, and either the head is a known interpreter or the word carries a
- * script extension. The OR is what keeps either list from being load-bearing on
- * its own: an interpreter missing from the table is still caught by the
- * extension, and an extensionless script is still caught by the interpreter.
+ * script extension UNDER A HEAD THAT COULD EXECUTE IT. The OR is what keeps
+ * either list from being load-bearing on its own: an interpreter missing from
+ * the table is still caught by the extension, and an extensionless script is
+ * still caught by the interpreter.
+ *
+ * The `UNDER A HEAD` clause is the correction: an extension is evidence about
+ * the FILE, not about the command, so on its own it read `rm -f /tmp/stale.sh`
+ * — an ordinary cleanup hook whose file is meant to be absent — as a missing
+ * script. {@link DATA_ONLY_HEADS} is the set of heads that never execute an
+ * operand, and it silences the extension branch for them.
  *
  * The narrowing is measured, not taste. Over the 107 hook registrations in
  * `davila7/claude-code-templates` (the corpus the defect was found in):
  *
- * | rule                                   | hits | wrong |
- * | -------------------------------------- | ---: | ----: |
- * | any path-shaped operand                |   31 |     8 |
- * | interpreter head OR script extension   |   23 |     0 |
+ * | rule                                        | hits | wrong |
+ * | ------------------------------------------- | ---: | ----: |
+ * | any path-shaped operand                     |   31 |     8 |
+ * | interpreter head OR script extension        |   23 |     0 |
  *
  * The eight the wide rule got wrong are files a hook WRITES or later reads
  * (`rm ~/.claude/session_start.tmp`, `mv ~/.claude/performance.csv`) and one
  * outright absurdity (`echo N/A`, which contains a slash). Reporting those would
  * be crying wolf on hooks that are perfectly fine, and a check read once and
  * distrusted is a check that is off.
+ *
+ * ⚠️ THE `wrong: 0` ROW IS WHAT THE `DATA_ONLY_HEADS` CLAUSE CORRECTS, and the
+ * two measurements are of different corpora — say so rather than quoting one
+ * number. `rm -f /tmp/stale.sh` is exactly the eighth shape above wearing a
+ * script extension, and it was not in the pinned 107. Re-measured 2026-09-08
+ * against today's `davila7/claude-code-templates` (134 registrations, 120
+ * distinct commands — the repo has moved since the pin, so this is a second
+ * sample, not a reproduction of the first):
+ *
+ * | rule                                        | hits | lost to the clause |
+ * | ------------------------------------------- | ---: | -----------------: |
+ * | interpreter head OR script extension        |    5 |                  0 |
+ * | …with the `DATA_ONLY_HEADS` clause          |    5 |                  0 |
+ *
+ * All five are true positives reached by an INTERPRETER head or a head that is
+ * itself a path, so the extension-under-an-unknown-head branch contributes zero
+ * hits on this sample and narrowing it costs nothing measurable. That is the
+ * evidence the clause does not trade a real detection for a false-positive fix;
+ * it is not evidence the branch is dead, which is why it is kept.
  *
  * CONSERVATIVE IN THE OTHER DIRECTION THAN {@link shellVarReads}, on purpose.
  * Over-reporting a missing FILE costs a real guard its measurement AND accuses
@@ -121,6 +147,85 @@ const INTERPRETERS: ReadonlySet<string> = new Set([
 /** Extensions that name a script whatever runs it. */
 const SCRIPT_EXTENSION =
   /\.(sh|bash|zsh|fish|ps1|py|js|cjs|mjs|ts|mts|cts|rb|pl|php|lua|R|applescript|scpt)$/;
+
+/**
+ * Heads whose operands are DATA — they name a file, they never run one.
+ *
+ * 🔴 THE EXTENSION RULE NEEDS A HEAD, and without one it accused working hooks.
+ * `SCRIPT_EXTENSION` is evidence about the FILE ("this is a script"), not about
+ * the COMMAND ("this command executes it"), and on its own it reported
+ * `rm -f /tmp/stale.sh` — an ordinary cleanup hook — as running a file that is
+ * INTENTIONALLY absent. The whole justification for the extension branch is "the
+ * head might be an interpreter we did not list", so it must not fire for a head
+ * we DID list and know is not one.
+ *
+ * The reach is deliberately asymmetric with {@link INTERPRETERS}. A missing
+ * entry there costs a measurement; a missing entry HERE costs a false
+ * accusation, which the module header names as the error it will not make. So
+ * the set is generous: `git bisect run g.sh` really does execute its operand and
+ * is silenced by the `git` entry, and that is the correct trade — silence is
+ * this module's safe error, and the shell's own 127 still answers after the
+ * fact.
+ *
+ * A head that is neither here nor in `INTERPRETERS` is unknown, and the
+ * extension rule still speaks for it.
+ */
+const DATA_ONLY_HEADS: ReadonlySet<string> = new Set([
+  // Naming or moving a file, never executing it.
+  "rm",
+  "mv",
+  "cp",
+  "ln",
+  "touch",
+  "mkdir",
+  "rmdir",
+  "chmod",
+  "chown",
+  "chgrp",
+  "stat",
+  "ls",
+  "shred",
+  "truncate",
+  "install",
+  "realpath",
+  "dirname",
+  "basename",
+  // Reading or writing its contents.
+  "cat",
+  "head",
+  "tail",
+  "echo",
+  "printf",
+  "tee",
+  "wc",
+  "sort",
+  "uniq",
+  "cut",
+  "tr",
+  "diff",
+  "cmp",
+  "grep",
+  "egrep",
+  "fgrep",
+  "rg",
+  "ag",
+  "sed",
+  "jq",
+  "yq",
+  "md5sum",
+  "sha256sum",
+  // Moving it somewhere else.
+  "tar",
+  "zip",
+  "unzip",
+  "gzip",
+  "gunzip",
+  "scp",
+  "rsync",
+  "curl",
+  "wget",
+  "git",
+]);
 
 /**
  * Flags whose VALUE is not a path — program text (`sh -c '…'`, `node -e '…'`)
@@ -215,8 +320,13 @@ function leafRefs(
   into: Set<string>,
 ): void {
   const head = wordText(args[0], values);
+  const headName = head === null ? null : basename(head);
   let interpreterOperand =
-    head !== null && INTERPRETERS.has(basename(head)) ? "pending" : "no";
+    headName !== null && INTERPRETERS.has(headName) ? "pending" : "no";
+  // The extension rule stands in for an interpreter we failed to list, so it
+  // speaks only where the head could BE one. A head we know hands its operands
+  // to nothing silences it; an unknown head still carries it.
+  const headMayExecute = headName === null || !DATA_ONLY_HEADS.has(headName);
   let skipNext = false;
   for (const word of args.slice(1)) {
     const text = wordText(word, values);
@@ -235,7 +345,8 @@ function leafRefs(
     const script =
       text !== null &&
       isPlainPath(text) &&
-      (SCRIPT_EXTENSION.test(text) || interpreterOperand === "pending");
+      ((headMayExecute && SCRIPT_EXTENSION.test(text)) ||
+        interpreterOperand === "pending");
     // The first non-flag operand IS the interpreter's script, whether or not we
     // could resolve it — everything after it belongs to the script, not to us.
     if (interpreterOperand === "pending") interpreterOperand = "no";

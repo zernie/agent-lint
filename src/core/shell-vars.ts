@@ -34,8 +34,10 @@
  * G=dominates; printf '[%s]' "$G"              → dominates (this one persists)
  * ```
  *
- * So the rule is DOMINANCE, not membership: an assignment excuses only the reads
- * it provably happens before, and a prefix / subshell / function-body assignment
+ * So the rule is DOMINANCE, not membership, and CONTROL FLOW, not source order:
+ * an assignment excuses a read only when it is an unconditional top-level
+ * statement (see {@link persistingAssigns}) AND sits before that read. A prefix,
+ * subshell, function-body, backgrounded, conditional or pipelined assignment
  * excuses nothing at all. Where dominance is not provable, the read stands.
  *
  * It does NOT reach into `bash-effects.ts` for the parse: that module's `sh`
@@ -79,6 +81,13 @@ interface ShNode {
   /** `*CallExpr`: the command's words, and its leading `NAME=value` prefixes. */
   Args?: unknown[];
   Assigns?: ShNode[];
+  /** `*File`: the script's top-level statement list. */
+  Stmts?: ShNode[];
+  /** `*Stmt`: the command it runs, and whether `&` detached it. */
+  Cmd?: ShNode;
+  Background?: boolean;
+  /** `*DeclClause`: which declaring keyword it is (`export`, `local`, …). */
+  Variant?: { Value?: string };
   /** Every node carries its source position; `Offset()` is the byte index. */
   Pos: () => { Offset: () => number };
 }
@@ -122,46 +131,89 @@ function offsetOf(node: ShNode): number | null {
 }
 
 /**
- * Offsets of assignments that do NOT persist into the surrounding shell, so
- * they excuse no read at all. Both kinds are MEASURED against `/bin/sh`, not
- * inferred from the grammar:
+ * Declaring keywords whose assignment persists into the rest of the SCRIPT.
  *
- * ```
- * VP=prefix printf '[%s]' "$VP"   → []          a prefix assign does not reach
- * VT=prefix true; printf '[%s]' "$VT" → []      …nor outlive its own command
- * (G=inner); printf '[%s]' "$G"   → []          a subshell assign stays inside
- * G=dominates; printf '[%s]' "$G" → [dominates] a plain one does persist
- * ```
- *
- * A function body counts as non-persisting for the same conservative reason a
- * subshell does — it runs only if something calls it, and this module errs
- * toward reporting a dependency.
+ * `local` is deliberately absent: it is meaningful only inside a function, and
+ * a function body is precisely the scope this walker never treats as reached.
  */
-function nonPersistingAssigns(file: ShNode): Set<number> {
-  const scoped = new Set<number>();
-  const markAssignsWithin = (root: ShNode): void => {
-    sh.syntax.Walk(root, (node) => {
-      if (node && sh.syntax.NodeType(node) === "Assign") {
-        const at = offsetOf(node);
-        if (at !== null) scoped.add(at);
-      }
-      return true;
-    });
+const PERSISTING_DECLARATIONS: ReadonlySet<string> = new Set([
+  "export",
+  "readonly",
+  "declare",
+  "typeset",
+]);
+
+/**
+ * Offsets of the assignments that excuse a later read — and it is an ALLOWLIST,
+ * which is the whole of the fix. Two shapes are recognized, both TOP-LEVEL
+ * statements of the script and neither detached with `&`: a bare `NAME=value`,
+ * and a {@link PERSISTING_DECLARATIONS} keyword (`export NAME=value`), which the
+ * parser models as a different node for the same persisting statement.
+ *
+ * 🔴 SOURCE ORDER IS NOT CONTROL FLOW, and reading it as such was a third way to
+ * measure a differently-configured program. The earlier version marked the
+ * assignments it could prove do not PERSIST (subshell, function body, command
+ * prefix) and excused every other one that merely appeared earlier in the text —
+ * so an assignment the shell may never execute silently excused the read it
+ * sits before. Measured against `/bin/sh` with the name exported first:
+ *
+ * ```
+ * MODE=safe; [ "$MODE" = safe ]                 → runs, and excuses the read
+ * false && MODE=safe; [ "$MODE" = safe ]        → the AMBIENT value is read
+ * if false; then MODE=safe; fi; [ "$MODE" = x ] → the AMBIENT value is read
+ * MODE=safe & [ "$MODE" = safe ]                → detached: never reaches it
+ * true | MODE=safe; [ "$MODE" = safe ]          → pipeline subshell, discarded
+ * ```
+ *
+ * Four of those five excused the read under the old rule while the real shell
+ * went on reading the environment. Under confinement the sweep clears that
+ * environment, so it would have run the `MODE`-unset arm of a guard and scored
+ * whatever that arm happens to do.
+ *
+ * An allowlist rather than a longer denylist because the denylist can only ever
+ * be as complete as the grammar we remembered: `Subshell` and `FuncDecl` were on
+ * it, `BinaryCmd`, `IfClause`, `WhileClause`, `ForClause`, `CaseClause`, `Block`
+ * and a backgrounded `Stmt` were not, and the next construct would not be
+ * either. Inverting it makes the unlisted case default to "excuses nothing",
+ * which is the direction this module already errs in (see the header): an
+ * assignment we cannot place costs a measurement, never a false score.
+ *
+ * The cost is named rather than hidden: `{ MODE=safe; }; echo "$MODE"` does run
+ * unconditionally in this shell and is no longer excused. A brace group at the
+ * top of a hook command is rare, and reporting `MODE` as a dependency there ends
+ * in `unresolved` with the name printed — the safe error.
+ */
+function persistingAssigns(file: ShNode): Set<number> {
+  const unconditional = new Set<number>();
+  const take = (node: ShNode): void => {
+    const at = offsetOf(node);
+    if (at !== null) unconditional.add(at);
   };
-  sh.syntax.Walk(file, (node) => {
-    if (!node) return true;
-    const kind = sh.syntax.NodeType(node);
-    if (kind === "Subshell" || kind === "FuncDecl") markAssignsWithin(node);
-    // A `CallExpr` with WORDS carries prefix assignments (`FOO=1 cmd`); one with
-    // no words IS the assignment statement (`FOO=1`), which does persist.
-    else if (kind === "CallExpr" && (node.Args?.length ?? 0) > 0)
-      for (const assign of node.Assigns ?? []) {
-        const at = offsetOf(assign);
-        if (at !== null) scoped.add(at);
-      }
-    return true;
-  });
-  return scoped;
+  for (const stmt of file.Stmts ?? []) {
+    // `&` detaches into a subshell, so the assignment never reaches this one.
+    if (stmt.Background === true) continue;
+    const cmd = stmt.Cmd;
+    if (!cmd) continue;
+    const kind = sh.syntax.NodeType(cmd);
+    // `export NAME=value` is a DeclClause, not a CallExpr — a separate node for
+    // the same persisting, unconditional statement. Its `Args` ARE the `Assign`
+    // nodes, so walking it reaches exactly them.
+    if (kind === "DeclClause") {
+      if (!PERSISTING_DECLARATIONS.has(cmd.Variant?.Value ?? "")) continue;
+      sh.syntax.Walk(cmd, (node) => {
+        if (node && sh.syntax.NodeType(node) === "Assign") take(node);
+        return true;
+      });
+      continue;
+    }
+    if (kind !== "CallExpr") continue;
+    // A `CallExpr` with WORDS carries prefix assignments (`FOO=1 cmd`), which do
+    // not outlive their own command; one with no words IS the assignment
+    // statement (`FOO=1`), which persists into the rest of the script.
+    if ((cmd.Args?.length ?? 0) > 0) continue;
+    for (const assign of cmd.Assigns ?? []) take(assign);
+  }
+  return unconditional;
 }
 
 export function shellVarReads(command: string): ShellVarReads {
@@ -171,7 +223,7 @@ export function shellVarReads(command: string): ShellVarReads {
   } catch {
     return { reads: scanRefs(command), parsed: false };
   }
-  const scoped = nonPersistingAssigns(file);
+  const unconditional = persistingAssigns(file);
   const assignedAt = new Map<string, number>();
   const reads: string[] = [];
   const seen = new Set<string>();
@@ -181,18 +233,26 @@ export function shellVarReads(command: string): ShellVarReads {
     const at = offsetOf(node);
     if (kind === "Assign") {
       const name = node.Name?.Value;
-      // The FIRST persisting assignment is the only one that can dominate a
-      // read; a later one cannot reach backwards.
-      if (name !== undefined && name !== "" && at !== null && !scoped.has(at))
+      // The FIRST unconditional assignment is the only one that can dominate
+      // a read; a later one cannot reach backwards.
+      if (
+        name !== undefined &&
+        name !== "" &&
+        at !== null &&
+        unconditional.has(at)
+      )
         if (!assignedAt.has(name)) assignedAt.set(name, at);
     } else if (kind === "ParamExp") {
       const name = node.Param?.Value;
       if (name !== undefined && VAR_NAME.test(name) && !seen.has(name)) {
-        // 🔴 DOMINANCE, NOT MEMBERSHIP. Subtracting every assigned name globally
-        // excused `echo "$GUARD"; GUARD=hooks/g.sh` — where the expansion runs
-        // FIRST and really does read the environment — so the sweep ran a
-        // differently-configured program and scored it. An assignment excuses
-        // only the reads it provably happens before.
+        // 🔴 DOMINANCE, NOT MEMBERSHIP, AND CONTROL FLOW, NOT SOURCE ORDER.
+        // Subtracting every assigned name globally excused `echo "$GUARD";
+        // GUARD=hooks/g.sh` — where the expansion runs FIRST and really does
+        // read the environment. Counting an earlier OFFSET as dominance excused
+        // `false && MODE=safe; [ "$MODE" = safe ]`, which the shell also reads
+        // from the environment. Both let a differently-configured program be
+        // measured and scored, so an assignment excuses a read only when
+        // {@link persistingAssigns} proved it runs, and runs first.
         const assigned = assignedAt.get(name);
         // `at === null` means the binding withheld the position: excuse nothing.
         if (assigned === undefined || at === null || assigned > at) {

@@ -113,3 +113,50 @@ test("a PREFIX assignment excuses nothing — not even its own command", () => {
 test("`export NAME=value` DOES persist", () => {
   assert.deepEqual(shellVarReads('export GUARD=echo; "$GUARD"').reads, []);
 });
+
+// --- Control flow, not source order. Every command below was run against
+// --- `/bin/sh` with the name exported first; the comment states what it printed.
+
+test("an assignment the shell may SKIP excuses nothing", () => {
+  // MODE=safe sh -c 'false && MODE=other; [ "$MODE" = safe ] && exit 2' → 2
+  // The ambient value is what the guard branches on, so it IS a dependency.
+  assert.deepEqual(
+    shellVarReads('false && MODE=safe; [ "$MODE" = safe ] && exit 2').reads,
+    ["MODE"],
+  );
+});
+
+test("an assignment inside an `if` excuses nothing", () => {
+  assert.deepEqual(shellVarReads('if false; then M=x; fi; echo "$M"').reads, [
+    "M",
+  ]);
+});
+
+test("a BACKGROUNDED assignment never reaches the read", () => {
+  // `&` detaches into a subshell — the old rule saw only an earlier offset.
+  assert.deepEqual(shellVarReads('M=x & echo "$M"').reads, ["M"]);
+});
+
+test("an assignment in a PIPELINE component is discarded with it", () => {
+  assert.deepEqual(shellVarReads('true | M=x; echo "$M"').reads, ["M"]);
+});
+
+test("an assignment inside a loop or a case excuses nothing", () => {
+  assert.deepEqual(
+    shellVarReads('while false; do M=x; done; echo "$M"').reads,
+    ["M"],
+  );
+  assert.deepEqual(shellVarReads('case y in x) M=1;; esac; echo "$M"').reads, [
+    "M",
+  ]);
+});
+
+test("the ordinary unconditional assignment STILL excuses its read", () => {
+  // The other direction, or the rule is just "report everything": a plain
+  // top-level `NAME=value` is exactly the shape that does persist and dominate.
+  assert.deepEqual(
+    shellVarReads('M=safe; [ "$M" = safe ] && exit 2').reads,
+    [],
+  );
+  assert.deepEqual(shellVarReads('GUARD=hooks/g.sh; "$GUARD"').reads, []);
+});

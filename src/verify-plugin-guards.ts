@@ -211,12 +211,18 @@ function unsetVariables(command: string, names: ReadonlySet<string>): string[] {
  */
 function missingFiles(
   command: string,
-  cwd: string,
+  cwd: EffectiveCwd,
   values: Readonly<Record<string, string>>,
 ): string[] {
-  return commandFileRefs(command, values).refs.filter(
-    (ref) => !existsSync(isAbsolute(ref) ? ref : resolve(cwd, ref)),
-  );
+  return commandFileRefs(command, values).refs.filter((ref) => {
+    // 🔴 A RELATIVE PATH IS MISSING BY CONSTRUCTION IN A FRESH EMPTY DIRECTORY.
+    // A confined run with no `cwd` is chdir'd into a directory `sandboxedSpawn`
+    // just created, so nothing relative can be there — while the host's `/` is
+    // ro-bound, which is why an ABSOLUTE ref is still tested on disk.
+    if (!isAbsolute(ref))
+      return cwd.kind === "fresh-empty" || !existsSync(resolve(cwd.dir, ref));
+    return !existsSync(ref);
+  });
 }
 
 /** The battery, after `categories` / `events` narrowing. */
@@ -261,10 +267,17 @@ function sweptHook(reg: HookRegistration, index: number): SweptHook {
  * actually mean via `env`.
  */
 const DERIVABLE_EVENT_VARS: Readonly<
-  Record<string, (f: { root: string; event: string }) => string>
+  Record<
+    string,
+    (f: { root: string; project: string; event: string }) => string
+  >
 > = {
   hook_event_name: (f) => f.event,
-  cwd: (f) => f.root,
+  // The directory the hook RUNS in, which is the project — not the plugin the
+  // hooks were read from. They coincide for the ordinary "sweep this repo" call
+  // and are different the moment an installed plugin is swept against a host
+  // project, which is when getting it wrong would matter.
+  cwd: (f) => f.project,
   plugin_root: (f) => f.root,
 };
 
@@ -337,6 +350,37 @@ function willBeConfined(opts: VerifyPluginGuardsOptions): boolean {
 }
 
 /**
+ * Where the run will resolve a relative path — and whether that is a directory
+ * this process can look inside.
+ *
+ * 🔴 THE PRE-FLIGHT AND THE RUNNER MUST ANSWER THIS THE SAME WAY, and they did
+ * not. `runScript` resolves a relative script against `opts.cwd` when there is
+ * one; with none it defaults to THIS process's cwd on a direct run, but a
+ * CONFINED run is chdir'd into a `work/` directory `sandboxedSpawn` has just
+ * created and left empty. So `python3 .claude/hooks/guard.py` under
+ * `trusted: false` passed a pre-flight against the repo, failed to open its
+ * script inside the sandbox, and exited 2 — this harness's DENY code — which is
+ * scored as a block. That is the same false 7/7 the file-existence check exists
+ * to prevent, arriving through the fourth door: the check looked in the right
+ * place for the wrong run.
+ *
+ * `fresh-empty` carries no path on purpose. The runner mints that directory when
+ * it spawns, so there is no name to hand back here — and modelling it as a path
+ * would invite a caller to test a file in it, which is the mistake itself.
+ */
+type EffectiveCwd =
+  | { readonly kind: "path"; readonly dir: string }
+  | { readonly kind: "fresh-empty" };
+
+/** The directory the hook will run in, decided exactly as the runner decides it. */
+function effectiveCwd(opts: VerifyPluginGuardsOptions): EffectiveCwd {
+  if (opts.cwd !== undefined) return { kind: "path", dir: resolve(opts.cwd) };
+  return willBeConfined(opts)
+    ? { kind: "fresh-empty" }
+    : { kind: "path", dir: process.cwd() };
+}
+
+/**
  * 🔴 WITHOUT THE PLUGIN-ROOT HALF, THE COMMONEST HOOK SHAPE IN THE WILD READS AS
  * `unresolved`. `loadPlugin` expands the BRACED token (`${PLUGIN_ROOT}`)
  * textually, but real hooks are shell and are written unbraced
@@ -352,6 +396,16 @@ function willBeConfined(opts: VerifyPluginGuardsOptions): boolean {
  * is what an ordinary project hook reads — including this repository's own — and
  * the sweep is sweeping exactly that root, so calling it unresolvable made the
  * function useless on the commonest shape it will ever meet.
+ *
+ * 🔴 BUT THE PROJECT IS NOT THE PLUGIN, and binding both names to `root` was a
+ * conflation that only hides while they coincide. Sweeping an INSTALLED plugin
+ * (`dir` = `~/.claude/plugins/foo`, `cwd` = the host project) is a supported
+ * call, and there the harness sets `$CLAUDE_PROJECT_DIR` to the project the hook
+ * runs against, not to the plugin it came from. Pointing it at the plugin runs a
+ * project hook against the wrong tree — or reports it unresolved for a file that
+ * exists exactly where the harness would have looked. So the plugin-root token
+ * stays bound to `root` and the project-root tokens follow the run's cwd; with
+ * no `cwd` they are the same directory and nothing changes.
  *
  * The DECLARED-EVENT half is the argument one layer up. `HookProtocol.eventEnvVars`
  * exists to say "a synthesized hook event carries these", and this function is
@@ -371,6 +425,7 @@ function willBeConfined(opts: VerifyPluginGuardsOptions): boolean {
 function hookEnvironment(
   adapter: HarnessAdapter,
   root: string,
+  project: string,
   event: string,
   opts: VerifyPluginGuardsOptions,
 ): HookEnvironment {
@@ -379,10 +434,14 @@ function hookEnvironment(
   if (rootVar !== null) derived[rootVar] = root;
   for (const token of adapter.layout.projectRootTokens ?? []) {
     const name = tokenName(token);
-    if (name !== null) derived[name] = root;
+    if (name !== null) derived[name] = project;
   }
   for (const name of adapter.hookProtocol?.eventEnvVars ?? []) {
-    const value = DERIVABLE_EVENT_VARS[name.toLowerCase()]?.({ root, event });
+    const value = DERIVABLE_EVENT_VARS[name.toLowerCase()]?.({
+      root,
+      project,
+      event,
+    });
     if (value !== undefined) derived[name] = value;
   }
   const pass = { ...derived, ...opts.env };
@@ -415,8 +474,8 @@ interface SweepContext {
   readonly protocol: NonNullable<HarnessAdapter["hookProtocol"]>;
   /** What the run will pass, find set, and be able to resolve. */
   readonly env: HookEnvironment;
-  /** The directory a relative path in a hook command resolves against. */
-  readonly cwd: string;
+  /** Where a relative path in a hook command resolves — see {@link EffectiveCwd}. */
+  readonly cwd: EffectiveCwd;
 }
 
 /**
@@ -469,6 +528,22 @@ function sweepHook(
       reason: `matcher \`${reg.matcher ?? ""}\` selects none of the tools this battery calls (${toolsOf(battery).join(", ")}) — the harness never spawns it here`,
     };
 
+  // 🔴 BEFORE EITHER ANALYSIS, BECAUSE A REJECTED COMMAND DEFEATS BOTH. `sh`
+  // exits 2 on a syntax error — this harness's DENY code — so a hook whose
+  // command does not parse was run and scored as blocking, which is the same
+  // false 7/7 the file check above prevents, reached without a missing file.
+  // The file half went quiet rather than loud on it (`{ parsed: false,
+  // refs: [] }` reads exactly like a clean command), and the variable half is
+  // worse than quiet: its regex fallback still names `$FOO` in `echo "$FOO`, so
+  // the sweep would have blamed an unset variable for a syntax error and told
+  // the caller to pass `env`. Deciding this first makes both accurate.
+  if (!commandFileRefs(reg.command).parsed)
+    return {
+      status: "unresolved",
+      hook,
+      reason: `the command is not valid shell — the parser rejects it, and so does \`sh\`, which exits 2 for a syntax error. That is this harness's DENY code, so running it anyway would report the syntax error as a block`,
+    };
+
   const missingVars = unsetVariables(reg.command, env.names);
   if (missingVars.length > 0)
     return {
@@ -481,12 +556,18 @@ function sweepHook(
   // a missing script makes the interpreter exit 2, which is indistinguishable
   // from a deny once it has happened.
   const absent = missingFiles(reg.command, ctx.cwd, env.values);
-  if (absent.length > 0)
+  if (absent.length > 0) {
+    const named = absent.map((f) => `\`${f}\``).join(", ");
+    const relative = absent.some((f) => !isAbsolute(f));
     return {
       status: "unresolved",
       hook,
-      reason: `the command runs ${absent.map((f) => `\`${f}\``).join(", ")}, which ${absent.length === 1 ? "is" : "are"} not on disk here — the guard the config names does not exist, so there is nothing to measure (an interpreter that cannot open its script exits 2, which is this harness's DENY code, so running it anyway would report a perfect score for a guard that never ran)`,
+      reason:
+        ctx.cwd.kind === "fresh-empty" && relative
+          ? `the command runs ${named} by a RELATIVE path, and a confined run starts in a fresh empty directory — the script cannot be there, whatever is on disk here. Pass \`cwd\` (the project the hook runs against) so the path means something, or an absolute path (an interpreter that cannot open its script exits 2, which is this harness's DENY code, so running it anyway would report a perfect score for a guard that never ran)`
+          : `the command runs ${named}, which ${absent.length === 1 ? "is" : "are"} not on disk here — the guard the config names does not exist, so there is nothing to measure (an interpreter that cannot open its script exits 2, which is this harness's DENY code, so running it anyway would report a perfect score for a guard that never ran)`,
     };
+  }
 
   const ran = verifyGuardrail(reg.command, {
     ...opts,
@@ -620,17 +701,20 @@ export function experimental_verifyPluginGuards(
     };
 
   const regs = normalizeHooks(loadPlugin(root, adapter.layout).settings.hooks);
+  // The two roots the run distinguishes: hooks are READ from `root`, and they
+  // RUN against the project — the same directory unless the caller sweeps an
+  // installed plugin from somewhere else, which is exactly when conflating them
+  // would answer for the wrong tree.
+  const project = opts.cwd === undefined ? root : resolve(opts.cwd);
   const ctx: SweepContext = {
     battery,
     eventName,
     opts,
     protocol: adapter.hookProtocol,
-    env: hookEnvironment(adapter, root, eventName, opts),
-    // The hook runs where the caller says, and `runScript` defaults an absent
-    // `cwd` to this process's — so a relative script path must be resolved
-    // against the SAME directory, not against the swept root, or the check would
-    // answer for a file the run never looks at.
-    cwd: opts.cwd ?? process.cwd(),
+    env: hookEnvironment(adapter, root, project, eventName, opts),
+    // Decided by the runner's own policy rather than a second copy of it — see
+    // {@link effectiveCwd}, and the confined-run case it exists for.
+    cwd: effectiveCwd(opts),
   };
   const hooks = regs.map((reg, i) => sweepHook(reg, i, ctx));
   return { ...base, hooks, notes: sweepNotes(root, regs, hooks, eventName) };

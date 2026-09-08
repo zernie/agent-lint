@@ -108,3 +108,43 @@ describe("commandFileRefs — silent on everything that only looks path-ish", ()
     expect(commandFileRefs("true").refs).toEqual([]);
   });
 });
+
+describe("commandFileRefs — an extension is not a licence to execute", () => {
+  it("does not report a file a DATA-ONLY head merely names", () => {
+    // 🔴 THE EXTENSION RULE NEEDED A HEAD. `rm` never executes its operand, so
+    // an ordinary cleanup hook whose file is INTENTIONALLY absent was reported
+    // as running a missing script — crying wolf on a hook that is perfectly
+    // fine, which is the one error this module says it will not make.
+    expect(commandFileRefs("rm -f /tmp/stale.sh").refs).toEqual([]);
+    expect(commandFileRefs("mv old/hook.py archive/hook.py").refs).toEqual([]);
+    expect(commandFileRefs("cat .claude/hooks/guard.sh").refs).toEqual([]);
+    expect(commandFileRefs("git add scripts/build.sh").refs).toEqual([]);
+  });
+
+  it("still reports a script an INTERPRETER head runs, extension or not", () => {
+    // The narrowing touches only the extension branch: a listed interpreter
+    // speaks for its first operand exactly as before, so nothing measured on
+    // the corpus is lost. (Re-measured 2026-09-08 on davila7: 5 hits before,
+    // 5 after.)
+    expect(
+      commandFileRefs("python3 .claude/hooks/change-logger.py").refs,
+    ).toEqual([".claude/hooks/change-logger.py"]);
+    expect(
+      commandFileRefs("bash .claude/hooks/shell-wrapper-guard.sh").refs,
+    ).toEqual([".claude/hooks/shell-wrapper-guard.sh"]);
+  });
+
+  it("still reports an extension under an UNKNOWN head", () => {
+    // The branch is narrowed, not removed — its whole job is the runtime we
+    // failed to list, and an unlisted head is still unknown to us.
+    expect(commandFileRefs("some-exotic-runner hooks/guard.py").refs).toEqual([
+      "hooks/guard.py",
+    ]);
+  });
+
+  it("still reports a data-only head that IS itself a path", () => {
+    // `DATA_ONLY_HEADS` silences the operand rule, never the head rule: the
+    // shell must find `./rm` to run it whatever its name suggests.
+    expect(commandFileRefs("./tools/rm --all").refs).toEqual(["./tools/rm"]);
+  });
+});

@@ -878,3 +878,245 @@ describe("the harness's own project-root variables are supplied", () => {
     }
   });
 });
+
+describe("a command the SHELL PARSER rejects gets no score (the false 7/7, third door)", () => {
+  it("is unresolved, and the reason names the syntax error, not a variable", () => {
+    // 🔴 MEASURED ON THE UNFIXED BUILD, and it is the same signature as the
+    // missing-script lie with no missing script involved:
+    //   `echo "unterminated`  →  MEASURED blocks=7/7 exits=2,2,2,2,2,2,2
+    // `sh` exits 2 for a syntax error and 2 is this harness's DENY code, so the
+    // battery certified a command that never ran. The file pre-flight went
+    // QUIET on it (`commandFileRefs` returns `{ parsed: false, refs: [] }`,
+    // which reads exactly like a clean command) because the caller dropped
+    // `parsed` on the floor.
+    const at = ccRepo({
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [{ type: "command", command: 'echo "unterminated' }],
+        },
+      ],
+    });
+    try {
+      const [only] = experimental_verifyPluginGuards(at).hooks;
+      expect(only?.status).toBe("unresolved");
+      if (only?.status !== "unresolved") throw new Error("expected unresolved");
+      expect(only.reason).toMatch(/not valid shell/);
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
+  });
+
+  it("blames the SYNTAX, not the variable its regex fallback still sees", () => {
+    // `shellVarReads` falls back to a regex when the parse fails, so it reports
+    // `FOO` here — and the variable check ran first, telling the caller to pass
+    // `env` for a command that could never run whatever `env` contained. The
+    // parse verdict has to come first for either reason to be true.
+    const at = ccRepo({
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [{ type: "command", command: 'echo "$UNSET_ON_PURPOSE' }],
+        },
+      ],
+    });
+    try {
+      const [only] = experimental_verifyPluginGuards(at).hooks;
+      if (only?.status !== "unresolved") throw new Error("expected unresolved");
+      expect(only.reason).toMatch(/not valid shell/);
+      expect(only.reason).not.toMatch(/UNSET_ON_PURPOSE/);
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
+  });
+
+  it("still measures a command that merely LOOKS exotic but parses", () => {
+    // The other direction, or the gate is just "refuse everything": a compound
+    // command with quoting and a pipeline is valid shell and stays measurable.
+    const at = ccRepo({
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            {
+              type: "command",
+              command: `echo 'x' | grep -q x && ${DENY_ALL} || true`,
+            },
+          ],
+        },
+      ],
+    });
+    try {
+      const [only] = experimental_verifyPluginGuards(at).hooks;
+      expect(only?.status).toBe("measured");
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("a CONFINED run resolves relative paths where it will actually run", () => {
+  it("does not score a relative script it can only see from THIS cwd", () => {
+    // 🔴 THE PRE-FLIGHT AND THE RUNNER DISAGREED. `sandboxedSpawn` chdirs into a
+    // `work/` directory it has just created and left empty when no `cwd` is
+    // given, while this check resolved against `process.cwd()`. Measured with
+    // the same guard, the same command, two directories:
+    //   project dir      → exit 0   (the guard's real verdict: allow)
+    //   fresh empty dir  → exit 2   (cannot open its script = DENY = a block)
+    // So a guard that allows was reported as blocking, out of nothing but the
+    // directory mismatch — the false 7/7 through a fourth door.
+    const at = ccRepo({
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [{ type: "command", command: "sh .claude/hooks/guard.sh" }],
+        },
+      ],
+    });
+    const was = process.cwd();
+    try {
+      writeHookScript(at, "guard.sh", "exit 0\n");
+      // The script IS present relative to this process — the only thing that
+      // made the old check pass. It will not be present in the sandbox's dir.
+      process.chdir(at);
+      const [only] = experimental_verifyPluginGuards(at, {
+        trusted: false,
+      }).hooks;
+      if (only?.status !== "unresolved")
+        throw new Error(`expected unresolved, got ${only?.status ?? "none"}`);
+      expect(only.reason).toMatch(/RELATIVE path/);
+      expect(only.reason).toMatch(/fresh empty directory/);
+    } finally {
+      process.chdir(was);
+      rmSync(at, { recursive: true, force: true });
+    }
+  });
+
+  it("an ABSOLUTE path keeps its ORDINARY verdict under confinement", () => {
+    // The narrowing matters as much as the refusal: confinement changes the
+    // working directory, it does not hide the filesystem (`--ro-bind / /`), so
+    // an absolute script is still tested on disk and gets the plain reason —
+    // refusing every path under confinement would trade one wrong answer for
+    // another. Asserted on a MISSING absolute path so the decision is made by
+    // the pre-flight and nothing is ever spawned.
+    const at = ccRepo({
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            { type: "command", command: "sh /nonexistent/vigiles/guard.sh" },
+          ],
+        },
+      ],
+    });
+    try {
+      const [only] = experimental_verifyPluginGuards(at, {
+        trusted: false,
+      }).hooks;
+      if (only?.status !== "unresolved") throw new Error("expected unresolved");
+      expect(only.reason).toMatch(/not on disk here/);
+      expect(only.reason).not.toMatch(/RELATIVE path/);
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
+  });
+
+  it("an UNCONFINED run still resolves against this process's cwd", () => {
+    // The default path is unchanged: no `trusted: false`, no sandbox, so the
+    // runner really does inherit `process.cwd()` and the check follows it.
+    const at = ccRepo({
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [{ type: "command", command: "sh .claude/hooks/guard.sh" }],
+        },
+      ],
+    });
+    const was = process.cwd();
+    try {
+      writeHookScript(at, "guard.sh", "exit 2\n");
+      process.chdir(at);
+      const [only] = experimental_verifyPluginGuards(at).hooks;
+      expect(only?.status).toBe("measured");
+    } finally {
+      process.chdir(was);
+      rmSync(at, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("the PROJECT root is the project, not the plugin", () => {
+  it("binds `$CLAUDE_PROJECT_DIR` to the host project when they differ", () => {
+    // Sweeping an INSTALLED plugin against a host project is a supported call
+    // (`dir` = the plugin, `cwd` = the project), and it is the only shape where
+    // the two roots differ. Binding both to `dir` sent an ordinary project hook
+    // at the plugin's tree: measured on the unfixed build, this exact case
+    // reported `unresolved — the command runs /<plugin>/hooks/guard.sh, which
+    // is not on disk here`, for a script sitting in the project all along.
+    const plugin = ccRepo({
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            {
+              type: "command",
+              command: 'sh "$CLAUDE_PROJECT_DIR"/hooks/guard.sh',
+            },
+          ],
+        },
+      ],
+    });
+    const project = mkdtempSync(join(tmpdir(), "vigiles-sweep-project-"));
+    try {
+      mkdirSync(join(project, "hooks"), { recursive: true });
+      writeFileSync(join(project, "hooks", "guard.sh"), "#!/bin/sh\nexit 2\n", {
+        mode: 0o755,
+      });
+      const [only] = experimental_verifyPluginGuards(plugin, {
+        cwd: project,
+      }).hooks;
+      if (only?.status !== "measured")
+        throw new Error(
+          `expected measured, got ${only?.status ?? "none"}${only ? ` — ${only.reason}` : ""}`,
+        );
+      expect(only.blocked).toHaveLength(DISASTER_CATALOG.length);
+    } finally {
+      rmSync(plugin, { recursive: true, force: true });
+      rmSync(project, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves the PLUGIN root bound to the swept dir", () => {
+    // The other half of the same change: only the project tokens moved. A hook
+    // reading `$CLAUDE_PLUGIN_ROOT` must still find the plugin it shipped with,
+    // or fixing one conflation would have introduced its mirror image.
+    const plugin = ccRepo({
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            {
+              type: "command",
+              command: 'sh "$CLAUDE_PLUGIN_ROOT"/.claude/hooks/guard.sh',
+            },
+          ],
+        },
+      ],
+    });
+    const project = mkdtempSync(join(tmpdir(), "vigiles-sweep-project-"));
+    try {
+      writeHookScript(plugin, "guard.sh", "exit 2\n");
+      const [only] = experimental_verifyPluginGuards(plugin, {
+        cwd: project,
+      }).hooks;
+      if (only?.status !== "measured")
+        throw new Error(
+          `expected measured, got ${only?.status ?? "none"}${only ? ` — ${only.reason}` : ""}`,
+        );
+      expect(only.blocked).toHaveLength(DISASTER_CATALOG.length);
+    } finally {
+      rmSync(plugin, { recursive: true, force: true });
+      rmSync(project, { recursive: true, force: true });
+    }
+  });
+});

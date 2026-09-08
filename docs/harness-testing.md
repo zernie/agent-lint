@@ -294,10 +294,41 @@ statuses, so a hook the battery never reached can never be read as `0/7`:
 | ---------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
 | `measured`       | the battery reached it; `results` holds one entry per event                                               | read `blocked` / `allowed` / `notRun`                     |
 | `not-applicable` | another event, or a matcher that selects none of the battery's tools — or that the harness cannot compile | nothing — it is not a Bash guard, or it cannot run at all |
-| `unresolved`     | the command names a variable nothing has set                                                              | pass `env` so the real program runs                       |
+| `unresolved`     | the sweep could not get the guard's own verdict — see the four causes below                               | fix the cause it names, then re-run                       |
 
 A repo with no hooks reports zero of everything **and says so in `notes`** — "this
 is not a clean bill of health, it is an absence of guards."
+
+**Why `unresolved` exists, and its four causes.** `sh` exits **2** for a syntax
+error and for an interpreter that cannot open its script — and 2 is Claude Code's
+DENY code. So a hook that never ran is indistinguishable, after the fact, from a
+guard that legitimately blocked. Every one of these would otherwise have been
+scored as a perfect `7/7`:
+
+| the reason says                  | the cause                                          | what to do                                     |
+| -------------------------------- | -------------------------------------------------- | ---------------------------------------------- |
+| names `$FOO`, which nothing sets | the command reads a variable the run has not got   | pass `env` so the real program runs            |
+| is not valid shell               | the command does not parse — `sh` would exit 2 too | fix the command; no `env` would have helped    |
+| is not on disk here              | the script the config names is not there           | the guard does not exist — that is the finding |
+| by a RELATIVE path … fresh empty | a **confined** run starts in a new empty directory | pass `cwd` (the project the hook runs against) |
+
+That last one is the one to know about up front: with `trusted: false` or
+`sandbox: "auto"`, the hook is chdir'd into a throwaway directory, so a relative
+script path means nothing there however present it is in your repo. Pass `cwd`
+and both the check and the run resolve it the same way.
+
+**`dir` and `cwd` are two different roots.** `dir` is where hooks are READ from
+and becomes `$CLAUDE_PLUGIN_ROOT`; `cwd` is the project they RUN against and
+becomes `$CLAUDE_PROJECT_DIR`. Sweeping your own repo they are the same directory
+and you can omit `cwd`. Sweeping an **installed** plugin against a host project,
+pass both — or a hook reading `$CLAUDE_PROJECT_DIR` is pointed at the plugin
+instead of your project.
+
+```ts
+experimental_verifyPluginGuards("~/.claude/plugins/some-plugin", {
+  cwd: process.cwd(), // the project its hooks run against
+});
+```
 
 **It reports, it does not judge.** There is no throwing version, because a repo's
 config never says which of its hooks is meant to be a safety guard. Once _you_ know
