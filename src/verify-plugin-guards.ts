@@ -35,6 +35,27 @@
  * A plugin with no hooks reports zero of everything and says so in `notes`. None
  * of these is "safe" and none is "blocks nothing".
  *
+ * 🔴 KNOWN REMAINDER, and it is one class rather than a list of spellings
+ * (zernie/vigiles#213). `blocked` is decided by exit code 2, and an interpreter
+ * that cannot start its script ALSO exits 2 — so a guard that never ran and a
+ * guard that denied are the same observation. The preflight below is a PROXY for
+ * "did it run": it resolves the script and reports `unresolved` when the file is
+ * absent. Review has defeated that proxy five times; two are fixed here (a
+ * wrapper hiding the interpreter, a wrong execution cwd) and three are NOT:
+ *
+ *   - a command-local assignment — `GUARD=missing.py; python3 "$GUARD"`;
+ *   - a dominating `cd` — `cd hooks && python3 guard.py`;
+ *   - a command substitution that really executes — `result=$(python3 missing.py)`.
+ *
+ * Do not "fix" these by resolving harder. Extracting a script path from an
+ * arbitrary shell command is the same undecidable problem `bash-effects.ts`
+ * documents for itself, where `eval`, a `$VAR` head and `sh -c` normalize to
+ * `null` BY CONSTRUCTION. Each patch buys one spelling and leaves the class open.
+ * What closes it is a CONTROL PROBE: one benign command the guard must ALLOW,
+ * run beside the battery — blocked too ⇒ the program is not blocking, it is
+ * failing to start, and the hook is `unmeasurable` rather than scored. The same
+ * in-run-control shape `src/subagent-delivery.test.ts` already relies on.
+ *
  * HARNESS-AGNOSTIC, with Claude Code as the default — the same shape as
  * {@link runHarnessTest}. Every piece it composes already takes its harness by
  * injection: `loadPlugin` takes a `PluginLayout`, `normalizeHooks` reads both the
