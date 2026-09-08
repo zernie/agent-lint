@@ -90,6 +90,8 @@ interface ShNode {
   Variant?: { Value?: string };
   /** Every node carries its source position; `Offset()` is the byte index. */
   Pos: () => { Offset: () => number };
+  /** …and the offset just past its last byte, which is where it takes effect. */
+  End: () => { Offset: () => number };
 }
 
 /** A `$NAME` / `${NAME}` reference — not `$(…)`, `$1` or `$@`. */
@@ -125,6 +127,32 @@ function scanRefs(command: string): string[] {
 function offsetOf(node: ShNode): number | null {
   try {
     return node.Pos().Offset();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where an assignment's effect BEGINS — one byte past its last, not at its first.
+ *
+ * 🔴 THE WHOLE OF THE SELF-REFERENTIAL BUG. The shell expands an assignment's
+ * RHS and only THEN binds the name, so `MODE="$MODE"` reads the environment and
+ * a read inside an initializer can never be dominated by the assignment
+ * containing it. Keyed on the assignment's START, it was: the walk is preorder,
+ * so the `Assign` node was recorded before its own `ParamExp` was visited, the
+ * assignment's offset was the smaller one, and the genuine ambient read
+ * disappeared. `MODE="$MODE"; [ "$MODE" = strict ] && exit 2` therefore reported
+ * NO dependency — so under confinement the sweep cleared `MODE` without saying
+ * so and scored whichever branch the empty value took.
+ *
+ * Keyed on the END, the containment falls out of the arithmetic rather than
+ * needing a special case: a read inside the initializer has a smaller offset
+ * than the assignment's end, so it stands; a read after the statement has a
+ * larger one, so it is excused. Both directions are pinned in the tests.
+ */
+function endOfOrNull(node: ShNode): number | null {
+  try {
+    return node.End().Offset();
   } catch {
     return null;
   }
@@ -183,11 +211,15 @@ const PERSISTING_DECLARATIONS: ReadonlySet<string> = new Set([
  * top of a hook command is rare, and reporting `MODE` as a dependency there ends
  * in `unresolved` with the name printed — the safe error.
  */
-function persistingAssigns(file: ShNode): Set<number> {
-  const unconditional = new Set<number>();
+function persistingAssigns(file: ShNode): Map<number, number> {
+  // start offset → the offset its binding takes effect at (see endOfOrNull).
+  const unconditional = new Map<number, number>();
   const take = (node: ShNode): void => {
     const at = offsetOf(node);
-    if (at !== null) unconditional.add(at);
+    const effective = endOfOrNull(node);
+    // A binding whose extent the parser withheld cannot be shown to dominate
+    // anything, so it is not recorded and every read of the name stands.
+    if (at !== null && effective !== null) unconditional.set(at, effective);
   };
   for (const stmt of file.Stmts ?? []) {
     // `&` detaches into a subshell, so the assignment never reaches this one.
@@ -234,14 +266,12 @@ export function shellVarReads(command: string): ShellVarReads {
     if (kind === "Assign") {
       const name = node.Name?.Value;
       // The FIRST unconditional assignment is the only one that can dominate
-      // a read; a later one cannot reach backwards.
-      if (
-        name !== undefined &&
-        name !== "" &&
-        at !== null &&
-        unconditional.has(at)
-      )
-        if (!assignedAt.has(name)) assignedAt.set(name, at);
+      // a read; a later one cannot reach backwards. What is stored is where the
+      // binding TAKES EFFECT (the assignment's end), not where it is written —
+      // see {@link endOfOrNull}.
+      const effective = at === null ? undefined : unconditional.get(at);
+      if (name !== undefined && name !== "" && effective !== undefined)
+        if (!assignedAt.has(name)) assignedAt.set(name, effective);
     } else if (kind === "ParamExp") {
       const name = node.Param?.Value;
       if (name !== undefined && VAR_NAME.test(name) && !seen.has(name)) {
@@ -252,7 +282,9 @@ export function shellVarReads(command: string): ShellVarReads {
         // `false && MODE=safe; [ "$MODE" = safe ]`, which the shell also reads
         // from the environment. Both let a differently-configured program be
         // measured and scored, so an assignment excuses a read only when
-        // {@link persistingAssigns} proved it runs, and runs first.
+        // {@link persistingAssigns} proved it runs, and runs first — where
+        // "first" means it has FINISHED, because `MODE="$MODE"` expands its RHS
+        // before it binds the name (see {@link endOfOrNull}).
         const assigned = assignedAt.get(name);
         // `at === null` means the binding withheld the position: excuse nothing.
         if (assigned === undefined || at === null || assigned > at) {

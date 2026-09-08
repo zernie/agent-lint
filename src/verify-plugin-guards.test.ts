@@ -1120,3 +1120,204 @@ describe("the PROJECT root is the project, not the plugin", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// The two Codex round-2 findings that land on the report itself.
+// ---------------------------------------------------------------------------
+
+/** A repo whose only hook runs a RELATIVE script with the given exit code. */
+function repoWithRelativeGuard(label: string, exitCode: number): string {
+  const root = mkdtempSync(join(tmpdir(), `vigiles-sweep-${label}-`));
+  mkdirSync(join(root, ".claude", "vg-hooks"), { recursive: true });
+  writeFileSync(
+    join(root, ".claude", "vg-hooks", "relguard.sh"),
+    `#!/bin/sh\nexit ${exitCode}\n`,
+  );
+  writeFileSync(
+    join(root, ".claude", "settings.json"),
+    JSON.stringify({
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [
+              { type: "command", command: "sh .claude/vg-hooks/relguard.sh" },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+  return root;
+}
+
+describe("a relative hook path resolves against the SWEPT repo", () => {
+  // Codex round 2, P2. The execution cwd defaulted to the CALLER's directory
+  // while the project-root variables were set to the swept root — two trees,
+  // one run. A guard that is on disk exactly where its config says was reported
+  // `unresolved`; and where the caller happened to hold the same relative path,
+  // the sweep ran and SCORED the caller's file under the swept repo's name.
+  let swept = "";
+  let decoy = "";
+
+  beforeAll(() => {
+    // 🔴 THE SWEPT GUARD ALLOWS, AND THAT CHOICE IS THE TEST. `sh missing.sh`
+    // exits 2 — this harness's DENY code — so a run that never found the script
+    // scores a full block. With the swept guard DENYING, a correct measurement
+    // and a total failure to find the file both read `7/7`, and the assertion
+    // proves nothing: verified by mutation, which passed green until the codes
+    // were flipped. An ALLOWING guard makes the right answer 0/7, so the false
+    // 7/7 this whole file exists to prevent is the one thing it cannot be
+    // confused with.
+    swept = repoWithRelativeGuard("swept", 0); // 0 = allow  → correct run: 0/7
+    decoy = repoWithRelativeGuard("decoy", 2); // 2 = deny   → wrong tree: 7/7
+  });
+  afterAll(() => {
+    for (const d of [swept, decoy]) rmSync(d, { recursive: true, force: true });
+  });
+
+  it("measures it, instead of reporting a present guard as missing", () => {
+    // The test process's cwd is this repository, which has no such file — so
+    // before the fix this was `unresolved: not on disk here`.
+    const [hook] = experimental_verifyPluginGuards(swept).hooks;
+    expect(hook?.status).toBe("measured");
+  });
+
+  it("treats recordEgress as confinement, like the runner does", () => {
+    // Codex round 2, P1, and the half a unit test of `routeScriptRun` alone
+    // does NOT reach: the sweep must ASK the runner's router rather than keep
+    // its own copy of the mode expression. The copy knew `trusted`/`sandbox`
+    // and not `recordEgress` — which the runner has always confined for — so a
+    // recordEgress sweep pre-flighted this relative script against the host,
+    // accepted it, then ran it in a fresh empty directory where `sh` cannot
+    // open it and exits 2: this harness's DENY code, scored as a block.
+    const [hook] = experimental_verifyPluginGuards(swept, {
+      recordEgress: true,
+    }).hooks;
+    expect(hook?.status).toBe("unresolved");
+    expect(hook?.status === "unresolved" && hook.reason).toContain(
+      "fresh empty directory",
+    );
+    // The same shape under the option the copy DID know, so the assertion above
+    // is about recordEgress and not about relative paths in general.
+    const [confined] = experimental_verifyPluginGuards(swept, {
+      trusted: false,
+    }).hooks;
+    expect(confined?.status).toBe("unresolved");
+    // …and unconfined it is measured, or the test proves only that something
+    // always refuses.
+    expect(experimental_verifyPluginGuards(swept).hooks[0]?.status).toBe(
+      "measured",
+    );
+  });
+
+  it("scores the SWEPT repo's file, not a same-named one elsewhere", () => {
+    // The two guards are byte-different on purpose (deny vs allow), so the
+    // score itself says which file ran. Without that the assertion above would
+    // pass while measuring the wrong tree.
+    const mine = experimental_verifyPluginGuards(swept).hooks[0];
+    expect(mine?.status).toBe("measured");
+    expect(mine?.status === "measured" && mine.blocked.length).toBe(0);
+    // …and an explicit `cwd` still overrides, which is the installed-plugin
+    // case: hooks READ from the plugin, RUN against a project elsewhere.
+    const elsewhere = experimental_verifyPluginGuards(swept, {
+      cwd: decoy,
+    }).hooks[0];
+    expect(elsewhere?.status === "measured" && elsewhere.blocked.length).toBe(
+      DISASTER_CATALOG.length,
+    );
+  });
+});
+
+describe("declared actions that are not commands", () => {
+  // Codex round 2, P2. `normalizeHooks` keeps only `command` actions, which is
+  // right — nothing that spawns a shell can drive a `prompt`. But the sweep read
+  // the empty list as "no hooks are declared", which is an accusation about the
+  // repository rather than a limit of the tier.
+  const write = (label: string, hooks: unknown): string => {
+    const root = mkdtempSync(join(tmpdir(), `vigiles-sweep-${label}-`));
+    mkdirSync(join(root, ".claude"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude", "settings.json"),
+      JSON.stringify({ hooks }),
+    );
+    return root;
+  };
+
+  it("says DECLARED-and-not-measured, never 'no hooks are declared'", () => {
+    const root = write("noncmd", {
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            { type: "prompt", prompt: "safe?" },
+            { type: "http", url: "https://example.test/h" },
+            { type: "mcp_tool", server: "s", tool: "t" },
+            { type: "agent", agent: "reviewer" },
+          ],
+        },
+      ],
+    });
+    try {
+      const report = experimental_verifyPluginGuards(root);
+      expect(report.unmeasurable).toHaveLength(4);
+      expect(report.unmeasurable.map((a) => a.type).sort()).toEqual([
+        "agent",
+        "http",
+        "mcp_tool",
+        "prompt",
+      ]);
+      const notes = report.notes.join(" ");
+      expect(notes).toContain("No COMMAND hooks are declared");
+      expect(notes).toContain("not an absence of guards");
+      expect(notes).toContain("NOT measured");
+      // The sentence that was false is gone.
+      expect(notes).not.toContain("it is an absence of guards.");
+      // …and the reader is told, in the rendering too.
+      const text = experimental_formatPluginGuardReport(report);
+      expect(text).toContain("not a command");
+      expect(text).toContain("prompt");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("counts them beside the measured ones in a MIXED config", () => {
+    // The undercount half: a reader who sees one measured hook has no way to
+    // know a second guard went unexamined unless the sweep says so.
+    const root = write("mixed", {
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            { type: "command", command: DENY_ALL },
+            { type: "prompt", prompt: "safe?" },
+          ],
+        },
+      ],
+    });
+    try {
+      const report = experimental_verifyPluginGuards(root);
+      expect(report.hooks).toHaveLength(1);
+      expect(report.hooks[0]?.status).toBe("measured");
+      expect(report.unmeasurable).toHaveLength(1);
+      // `notes` is otherwise empty once something was measured — this one is
+      // said anyway, because it is a gap in COVERAGE, not a failure to measure.
+      expect(report.notes.join(" ")).toContain("not a shell process");
+      expect(report.notes.join(" ")).toContain("Declared and NOT measured");
+      expect(experimental_formatPluginGuardReport(report)).toContain(
+        "further action(s) declared are not commands",
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("stays silent for a repo whose hooks are all commands", () => {
+    const report = experimental_verifyPluginGuards(dir);
+    expect(report.unmeasurable).toEqual([]);
+    expect(experimental_formatPluginGuardReport(report)).not.toContain(
+      "not a command",
+    );
+  });
+});

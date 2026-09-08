@@ -912,6 +912,13 @@ export function mustNotInclude(fragment: string, why: string): Check<readonly Do
 export type NetProbe = (port: number) => Promise<boolean>;
 
 // @public
+export interface NonCommandHookAction {
+    readonly event: string;
+    readonly matcher: string | null;
+    readonly type: string;
+}
+
+// @public
 export function notTool(name: string, args?: ArgMatcher): Check<Trace>;
 
 // @public
@@ -976,6 +983,7 @@ export interface PluginGuardReport {
     readonly harness: string;
     readonly hooks: readonly SweptHookOutcome[];
     readonly notes: readonly string[];
+    readonly unmeasurable: readonly NonCommandHookAction[];
 }
 
 // @public (undocumented)

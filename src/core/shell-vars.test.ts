@@ -160,3 +160,41 @@ test("the ordinary unconditional assignment STILL excuses its read", () => {
   );
   assert.deepEqual(shellVarReads('GUARD=hooks/g.sh; "$GUARD"').reads, []);
 });
+
+test("an assignment does NOT excuse a read inside its own initializer", () => {
+  // Codex round 2, P1. The shell expands the RHS and only THEN binds the name,
+  // so `MODE="$MODE"` genuinely reads the environment. Keyed on the assignment's
+  // START offset it did not: the walk is preorder, so the `Assign` was recorded
+  // before its own `ParamExp` was visited and the read looked dominated. Under
+  // confinement the sweep would then clear an ambient `MODE` without reporting
+  // it unresolved, and score whichever branch the empty value took.
+  assert.deepEqual(
+    shellVarReads('MODE="$MODE"; [ "$MODE" = strict ] && exit 2').reads,
+    ["MODE"],
+  );
+  assert.deepEqual(shellVarReads('PATH="$PATH:/opt/bin"; echo hi').reads, [
+    "PATH",
+  ]);
+  assert.deepEqual(shellVarReads('export M="${M}x"; echo "$M"').reads, ["M"]);
+});
+
+test("…and the read of a DIFFERENT name in an initializer still stands", () => {
+  // The initializer's own reads are reported; the name being bound is still
+  // dominated for every read AFTER the statement.
+  assert.deepEqual(shellVarReads('MODE="$OTHER"; echo "$MODE"').reads, [
+    "OTHER",
+  ]);
+});
+
+test("…and genuine dominance is UNCHANGED", () => {
+  // The other direction, or the fix is just "report everything again": a plain
+  // assignment whose RHS names nothing still excuses every later read.
+  assert.deepEqual(
+    shellVarReads('M=safe; [ "$M" = safe ] && exit 2').reads,
+    [],
+  );
+  assert.deepEqual(shellVarReads('GUARD=hooks/g.sh; "$GUARD"').reads, []);
+  // …and a read BEFORE the assignment still stands, which is the bug the
+  // offset comparison was introduced for in the first place.
+  assert.deepEqual(shellVarReads('echo "$M"; M=safe').reads, ["M"]);
+});

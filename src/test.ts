@@ -208,6 +208,9 @@ export type {
   PluginGuardReport,
   SweptHook,
   SweptHookOutcome,
+  // What the sweep found DECLARED but cannot drive — a `prompt`/`http`/
+  // `mcp_tool`/`agent` action. Named here so `report.unmeasurable` is foldable.
+  NonCommandHookAction,
   VerifyPluginGuardsOptions,
 } from "./verify-plugin-guards.js";
 

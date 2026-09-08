@@ -86,6 +86,8 @@
  * shell's 126/127, so a false negative here is not the last line of defence.
  */
 
+import { stripWrappers } from "./bash-effects.js";
+
 // mvdan-sh is a CJS package (GopherJS build) with no bundled TypeScript types —
 // the same require() `core/shell-vars.ts` and `core/bash-effects.ts` use, for
 // the same parser. The shared thing is the dependency, not the code: this module
@@ -305,6 +307,14 @@ function basename(head: string): string {
 }
 
 /**
+ * A word this module could not resolve, standing in for it while the wrapper
+ * prefix is measured. Chosen so it can be neither a wrapper head, a flag, nor an
+ * `env` assignment word: an unresolvable word therefore STOPS the unwrapping
+ * rather than being unwrapped through, which is the conservative direction.
+ */
+const UNRESOLVED_WORD = "\u0000";
+
+/**
  * The script references of one simple command.
  *
  * TWO independent reasons a word is a script, and the difference in how far each
@@ -313,12 +323,50 @@ function basename(head: string): string {
  * non-flag operand — everything after that is the script's own arguments, and
  * reporting `bash hooks/g.sh production` as naming a missing file `production`
  * would accuse a working hook.
+ *
+ * 🔴 AND THE HEAD IS THE REAL HEAD, NOT THE WRAPPER. `env python3 guard` hands
+ * the script to `python3`, but reading `args[0]` finds `env` — not an
+ * interpreter — and `guard` carries no extension, so the command was reported as
+ * naming NO file. That is the quiet half of this module's own opening: the
+ * pre-flight sees a clean command, runs it, python cannot open `guard`, exits 2,
+ * and the sweep prints a perfect score for a guard that never ran. Which words
+ * are a pass-through wrapper is {@link stripWrappers}'s question and it already
+ * answers it for the effect classifier (`env`, `command`, `nice`, `timeout`,
+ * `sudo`, `xargs`, `nohup`, recursively, skipping each wrapper's own options and
+ * `NAME=value` words) — so this ASKS it rather than keeping a second list that
+ * would fall behind the first.
+ *
+ * ⚠️ NAMED, NOT FIXED: `exec` is a pass-through the shared list does not carry,
+ * so `exec python3 guard` still reports nothing here — and `stripWrappers` has
+ * its own recorded remainder, an escaped head behind a wrapper (`sudo g\it push`).
+ * Adding either belongs in that module, where the safety matcher reads the same
+ * list, not in a private copy here.
+ *
+ * ⚠️ A WRAPPER THAT CHANGES DIRECTORY REPORTS NOTHING. `env -C /elsewhere python3
+ * guard` runs `guard` relative to a directory this module was not told about, so
+ * every relative operand would be tested against the wrong tree. Saying nothing
+ * costs the hook its measurement; naming a path we cannot resolve would accuse a
+ * working guard.
  */
 function leafRefs(
-  args: readonly ShWord[],
+  allArgs: readonly ShWord[],
   values: Readonly<Record<string, string>>,
   into: Set<string>,
 ): void {
+  // Basenamed for the probe only, because that is the form the shared list keys
+  // on (`bash-effects` reduces a head to its basename before asking), so
+  // `/usr/bin/env python3 guard` unwraps like the bare spelling. Flags and
+  // `NAME=value` words are passed through untouched — they are what tells
+  // `stripWrappers` which words a wrapper consumes. The result is used ONLY to
+  // count the prefix, so the words themselves are read from `allArgs` after.
+  const texts = allArgs.map((w) => {
+    const text = wordText(w, values);
+    if (text === null) return UNRESOLVED_WORD;
+    return text.startsWith("-") || text.includes("=") ? text : basename(text);
+  });
+  const stripped = stripWrappers(texts);
+  if (stripped.chdir !== null) return;
+  const args = allArgs.slice(texts.length - stripped.argv.length);
   const head = wordText(args[0], values);
   const headName = head === null ? null : basename(head);
   let interpreterOperand =

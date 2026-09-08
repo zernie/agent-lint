@@ -50,14 +50,20 @@ import { existsSync } from "node:fs";
 import { loadPlugin } from "./plugin-loader.js";
 import {
   normalizeHooks,
+  nonCommandHookActions,
   type HookRegistration,
+  type NonCommandHookAction,
 } from "./core/hook-normalize.js";
+// Re-exported because `PluginGuardReport.unmeasurable` is typed with it: a
+// consumer folding that list must be able to NAME what is in it.
+export type { NonCommandHookAction } from "./core/hook-normalize.js";
 import { hookMatcherReach } from "./core/hook-matcher.js";
 import { shellVarReads } from "./core/shell-vars.js";
 import { commandFileRefs } from "./core/command-files.js";
 import { claudeCodeAdapter } from "./adapters/claude-code/adapter.js";
-import { decideSandbox, sandboxAvailable } from "./sandbox.js";
-import { shellNeverLaunched } from "./run-script.js";
+import { sandboxAvailable } from "./sandbox.js";
+import { egressAvailable } from "./egress.js";
+import { routeScriptRun, shellNeverLaunched } from "./run-script.js";
 import type { HarnessAdapter } from "./core/adapter.js";
 import {
   DISASTER_CATALOG,
@@ -139,12 +145,30 @@ export interface PluginGuardReport {
   readonly event: string;
   /** The battery that was used, so a report says what it measured against. */
   readonly events: readonly DisasterEvent[];
-  /** One outcome per declared hook, in config order. */
+  /** One outcome per declared COMMAND hook, in config order. */
   readonly hooks: readonly SweptHookOutcome[];
   /**
-   * Why the sweep measured less than a reader might assume — no hooks declared,
-   * a harness with no shell hooks, every hook on another event. Empty ONLY when
-   * at least one hook was measured.
+   * Declared actions this tier cannot drive because they are not commands —
+   * `prompt`, `http`, `mcp_tool`, `agent`.
+   *
+   * 🔴 THEY USED TO BE DROPPED, AND DROPPING THEM MANUFACTURED THE FALSE EMPTY
+   * `notes` exists to prevent. A repository whose hooks are all `prompt` actions
+   * has declared guards; it was reported as declaring none, in the words of the
+   * one sentence this report writes to be sure nobody reads an empty result as a
+   * clean bill of health. Not measured is a limit of the tier and says so; not
+   * declared is an accusation about the repository, and it was not true.
+   *
+   * They carry no score and never will here — a shell battery cannot drive a
+   * prompt — so they are a separate list rather than a fourth outcome status
+   * with an invented command.
+   */
+  readonly unmeasurable: readonly NonCommandHookAction[];
+  /**
+   * Why the sweep measured less than a reader might assume — no COMMAND hooks
+   * declared, a harness with no shell hooks, every hook on another event, or an
+   * action this tier cannot drive. Empty only when at least one hook was
+   * measured AND nothing was left undrivable: an undrivable action is a gap in
+   * COVERAGE, so it is said even when other hooks scored.
    *
    * 🔴 THIS IS THE EMPTY CASE'S VOICE. `hooks: []` on its own reads as a clean
    * bill of health, which is the exact false confidence the battery exists to
@@ -331,21 +355,31 @@ interface HookEnvironment {
 }
 
 /**
- * Whether the run will be CONFINED, decided by the same policy the runner uses
- * rather than a second copy of it (`decideSandbox`, plus the egress branch which
- * confines unconditionally). A refusal counts as confined: the sweep's job is to
- * describe the environment a run WOULD have, and the refusing path is the
- * confined one.
+ * Whether the run will be CONFINED — by ASKING the runner which route it will
+ * take, not by restating the policy.
+ *
+ * 🔴 IT USED TO RESTATE IT, AND THE RESTATEMENT WAS A TERM SHORT. The copy read
+ * `opts.sandbox ?? (opts.trusted === false ? "auto" : false)` and knew nothing
+ * about `recordEgress`, which the runner has always confined for (it needs the
+ * netns recorder). So a `recordEgress: true` sweep pre-flighted every relative
+ * script against THIS process's cwd and every variable against `process.env`,
+ * accepted both, and then handed the hook to a run that started in a fresh empty
+ * directory with a cleared environment — where the interpreter cannot open its
+ * script, exits 2, and is scored as a block. The same false 7/7 the pre-flight
+ * exists to prevent, arriving through the option nobody had copied over.
+ *
+ * Under {@link routeScriptRun} there is no list here to fall behind: the next
+ * option that selects confinement is added once, in the runner, and this reads
+ * it. A refusal counts as confined, deliberately — the sweep describes the
+ * environment a run WOULD have, and the environment it would have refused to run
+ * unconfined in is the confined one.
  */
 function willBeConfined(opts: VerifyPluginGuardsOptions): boolean {
-  if (opts.egress) return true;
-  const mode = opts.sandbox ?? (opts.trusted === false ? "auto" : false);
   return (
-    decideSandbox({
-      trusted: false,
-      mode,
-      available: sandboxAvailable(),
-    }).action !== "direct"
+    routeScriptRun(opts, {
+      sandbox: sandboxAvailable(),
+      egress: egressAvailable(sandboxAvailable()),
+    }).kind !== "direct"
   );
 }
 
@@ -367,17 +401,36 @@ function willBeConfined(opts: VerifyPluginGuardsOptions): boolean {
  * `fresh-empty` carries no path on purpose. The runner mints that directory when
  * it spawns, so there is no name to hand back here — and modelling it as a path
  * would invite a caller to test a file in it, which is the mistake itself.
+ *
+ * 🔴 AND THE UNCONFINED DEFAULT WAS THE CALLER'S CWD, WHICH IS NOT THE SUBJECT.
+ * Sweeping a repo other than the one you are standing in resolved every relative
+ * script against YOUR directory while telling the hook `CLAUDE_PROJECT_DIR` was
+ * the swept root — two different trees, named by one run. `sh .claude/hooks/guard.sh`
+ * was reported `unresolved` for a guard that is on disk exactly where the config
+ * says, and — the worse half — if the caller happened to hold that same relative
+ * path, the sweep ran and SCORED the caller's file under the swept repo's name.
+ * The subject of the sweep is `dir`, so that is where its hooks run; an explicit
+ * `cwd` still overrides, which is the installed-plugin case (hooks READ from the
+ * plugin, RUN against a project elsewhere).
  */
 type EffectiveCwd =
   | { readonly kind: "path"; readonly dir: string }
   | { readonly kind: "fresh-empty" };
 
-/** The directory the hook will run in, decided exactly as the runner decides it. */
-function effectiveCwd(opts: VerifyPluginGuardsOptions): EffectiveCwd {
+/**
+ * The directory the hook will run in — the ONE answer the pre-flight tests files
+ * against and the runner is handed as `cwd`, so the two cannot disagree.
+ *
+ * @param root - the swept repository, already resolved.
+ */
+function effectiveCwd(
+  opts: VerifyPluginGuardsOptions,
+  root: string,
+): EffectiveCwd {
   if (opts.cwd !== undefined) return { kind: "path", dir: resolve(opts.cwd) };
   return willBeConfined(opts)
     ? { kind: "fresh-empty" }
-    : { kind: "path", dir: process.cwd() };
+    : { kind: "path", dir: root };
 }
 
 /**
@@ -571,6 +624,12 @@ function sweepHook(
 
   const ran = verifyGuardrail(reg.command, {
     ...opts,
+    // 🔴 THE SAME ANSWER THE PRE-FLIGHT USED, not `opts.cwd` again. The checks
+    // above tested this hook's files against {@link SweepContext.cwd}; handing
+    // the runner a different directory would make every one of those checks a
+    // statement about a tree the hook never ran in. `fresh-empty` passes nothing
+    // through, because that directory is the runner's to mint.
+    cwd: ctx.cwd.kind === "path" ? ctx.cwd.dir : undefined,
     env: env.pass,
     events: reachable,
     event: eventName,
@@ -626,15 +685,32 @@ function sweepNotes(
   dir: string,
   regs: readonly HookRegistration[],
   outcomes: readonly SweptHookOutcome[],
+  unmeasurable: readonly NonCommandHookAction[],
   eventName: string,
 ): string[] {
-  if (outcomes.some((o) => o.status === "measured")) return [];
+  // Always said, measured or not: an action this tier cannot drive is a gap in
+  // the COVERAGE, and a reader who sees six measured hooks has no way to know a
+  // seventh guard went unexamined unless the sweep says so.
+  const notDrivable =
+    unmeasurable.length === 0
+      ? []
+      : [
+          `${plural(unmeasurable.length, "declared hook action")} (${[...new Set(unmeasurable.map((a) => a.type))].sort().join(", ")}) ${unmeasurable.length === 1 ? "is not a shell process" : "are not shell processes"}, so this battery cannot drive ${unmeasurable.length === 1 ? "it" : "them"}. Declared and NOT measured — not absent.`,
+        ];
+  if (outcomes.some((o) => o.status === "measured")) return notDrivable;
+  // 🔴 "NO COMMAND HOOKS", NOT "NO HOOKS". Saying the repository declares no
+  // guards when it declares four `prompt` actions is a false accusation dressed
+  // as the sentence that exists to prevent false comfort.
   if (regs.length === 0)
     return [
-      `No hooks are declared in ${dir}. Nothing was measured — this is not a clean bill of health, it is an absence of guards.`,
+      unmeasurable.length === 0
+        ? `No hooks are declared in ${dir}. Nothing was measured — this is not a clean bill of health, it is an absence of guards.`
+        : `No COMMAND hooks are declared in ${dir}. Nothing was measured here — but hooks ARE declared, so this is not an absence of guards either.`,
+      ...notDrivable,
     ];
   return [
     `${regs.length} hook(s) declared, none of them reachable by this battery on ${eventName}. Nothing was measured — read each hook's reason below rather than the (empty) score.`,
+    ...notDrivable,
   ];
 }
 
@@ -695,29 +771,47 @@ export function experimental_verifyPluginGuards(
     return {
       ...base,
       hooks: [],
+      // The note below already says nothing here is drivable, so enumerating
+      // which actions were declared would add no fact a reader could act on.
+      unmeasurable: [],
       notes: [
         `n/a — ${adapter.name} hooks are not shell processes, so the disaster battery cannot drive them. Nothing was measured.`,
       ],
     };
 
-  const regs = normalizeHooks(loadPlugin(root, adapter.layout).settings.hooks);
+  const rawHooks = loadPlugin(root, adapter.layout).settings.hooks;
+  const regs = normalizeHooks(rawHooks);
+  // The actions `normalizeHooks` correctly drops, kept so the sweep can tell
+  // "declared nothing" from "declared something I cannot run" — see
+  // {@link PluginGuardReport.unmeasurable}.
+  const unmeasurable = nonCommandHookActions(rawHooks);
   // The two roots the run distinguishes: hooks are READ from `root`, and they
   // RUN against the project — the same directory unless the caller sweeps an
   // installed plugin from somewhere else, which is exactly when conflating them
   // would answer for the wrong tree.
-  const project = opts.cwd === undefined ? root : resolve(opts.cwd);
+  // Decided by the runner's own policy rather than a second copy of it — see
+  // {@link effectiveCwd}, and the confined-run case it exists for.
+  const cwd = effectiveCwd(opts, root);
+  // The project-root variables follow the RUN's directory, so the tree the hook
+  // is told about is the tree it stands in. A confined run has no such path (the
+  // runner mints the directory), and there the swept root is the honest answer:
+  // it is what the caller pointed at.
+  const project = cwd.kind === "path" ? cwd.dir : root;
   const ctx: SweepContext = {
     battery,
     eventName,
     opts,
     protocol: adapter.hookProtocol,
     env: hookEnvironment(adapter, root, project, eventName, opts),
-    // Decided by the runner's own policy rather than a second copy of it — see
-    // {@link effectiveCwd}, and the confined-run case it exists for.
-    cwd: effectiveCwd(opts),
+    cwd,
   };
   const hooks = regs.map((reg, i) => sweepHook(reg, i, ctx));
-  return { ...base, hooks, notes: sweepNotes(root, regs, hooks, eventName) };
+  return {
+    ...base,
+    hooks,
+    unmeasurable,
+    notes: sweepNotes(root, regs, hooks, unmeasurable, eventName),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -832,9 +926,43 @@ function censusLine(report: PluginGuardReport): string[] {
   if (report.hooks.length === 0) return [];
   const count = (status: SweptHookOutcome["status"]): number =>
     report.hooks.filter((h) => h.status === status).length;
+  // The non-command actions are counted in the SAME sentence, because a census
+  // that silently omits them is how "declared" came to mean "declared a command"
+  // without any reader being told.
+  const notDrivable =
+    report.unmeasurable.length === 0
+      ? ""
+      : ` ${report.unmeasurable.length} further action(s) declared are not commands and cannot be driven here.`;
   return [
-    `${plural(report.hooks.length, "hook")} declared: ${count("measured")} measured, ${count("unresolved")} unresolved, ${count("not-applicable")} not applicable.`,
+    `${plural(report.hooks.length, "hook")} declared: ${count("measured")} measured, ${count("unresolved")} unresolved, ${count("not-applicable")} not applicable.${notDrivable}`,
   ];
+}
+
+/**
+ * The declared-but-undrivable actions, rendered like every other unmeasured
+ * group: grouped by reason, named, and carrying no count.
+ */
+function unmeasurableSection(
+  actions: readonly NonCommandHookAction[],
+): string[] {
+  if (actions.length === 0) return [];
+  const lines = [
+    `  ⊘ not a command — ${plural(actions.length, "declared action")}`,
+    "     this tier spawns a shell, and these actions do not run one, so nothing here has been examined either way",
+  ];
+  const byType = new Map<string, NonCommandHookAction[]>();
+  for (const a of actions) {
+    const list = byType.get(a.type);
+    if (list === undefined) byType.set(a.type, [a]);
+    else list.push(a);
+  }
+  for (const [type, group] of [...byType].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  ))
+    lines.push(
+      `       ${type} — ${plural(group.length, "action")} on ${[...new Set(group.map((a) => a.event))].sort().join(", ")}`,
+    );
+  return lines;
 }
 
 /** The closing notes, printed once for the whole sweep rather than per hook. */
@@ -919,6 +1047,7 @@ export function experimental_formatPluginGuardReport(
   const notMeasured = [
     ...unmeasuredSection("unresolved", unmeasured("unresolved")),
     ...unmeasuredSection("not applicable", unmeasured("not-applicable")),
+    ...unmeasurableSection(report.unmeasurable),
   ];
   if (notMeasured.length > 0)
     lines.push(

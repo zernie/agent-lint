@@ -148,3 +148,57 @@ describe("commandFileRefs — an extension is not a licence to execute", () => {
     expect(commandFileRefs("./tools/rm --all").refs).toEqual(["./tools/rm"]);
   });
 });
+
+describe("the interpreter behind a pass-through wrapper", () => {
+  // Codex round 2, P1: `env python3 guard` named NO file — `env` is not an
+  // interpreter and `guard` carries no extension — so a hook whose script is
+  // absent pre-flighted clean, ran, exited 2 (python's cannot-open-script code,
+  // which is this harness's DENY code) and was scored as a perfect block. The
+  // fix asks `stripWrappers` in `core/bash-effects.ts`, which already owns the
+  // wrapper list for the effect classifier, rather than starting a second one.
+  it.each([
+    ["env python3 guard", "guard"],
+    ["command python3 guard", "guard"],
+    ["timeout 5 python3 guard", "guard"],
+    ["sudo python3 guard", "guard"],
+    ["env FOO=bar python3 .claude/hooks/g.py", ".claude/hooks/g.py"],
+    ["sudo timeout 5 python3 guard", "guard"], // recursive, via stripWrappers
+    ["/usr/bin/env python3 guard", "guard"], // the list keys on basenames
+  ])("%s names %s", (command, script) => {
+    expect(commandFileRefs(command).refs).toEqual([script]);
+  });
+
+  it("reports a wrapped head that is itself a path", () => {
+    expect(commandFileRefs("env ./hooks/guard.sh").refs).toEqual([
+      "./hooks/guard.sh",
+    ]);
+  });
+
+  it("says NOTHING when a wrapper changes directory", () => {
+    // `guard` is resolved against a directory this module was never told about,
+    // so naming it would accuse a guard that is on disk where it belongs. The
+    // cost is the hook's measurement, which is the safe direction here.
+    expect(commandFileRefs("env -C /elsewhere python3 guard").refs).toEqual([]);
+  });
+
+  it("does NOT unwrap through a word it could not resolve", () => {
+    // An unresolvable word stops the unwrapping rather than being unwrapped
+    // through: guessing which word is the head is how a wrong file gets named.
+    expect(commandFileRefs("env $RUNNER guard").refs).toEqual([]);
+  });
+
+  it("leaves `exec` alone — a NAMED remainder, not a fixed one", () => {
+    // `exec` is a pass-through, but it is not in `WRAPPER_HEADS`, and that list
+    // is also the safety matcher's. Adding it belongs there, with the measuring
+    // that a change to the matcher deserves — not in a private copy here. This
+    // test exists so the gap is recorded rather than rediscovered.
+    expect(commandFileRefs("exec python3 guard").refs).toEqual([]);
+  });
+
+  it("still leaves an unwrapped command exactly as it was", () => {
+    expect(commandFileRefs("python3 guard").refs).toEqual(["guard"]);
+    expect(commandFileRefs("bash hooks/g.sh production").refs).toEqual([
+      "hooks/g.sh",
+    ]);
+  });
+});
