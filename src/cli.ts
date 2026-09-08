@@ -2252,7 +2252,9 @@ async function runLint(
   );
 
   // 7i. Hook-script existence — a hook command referencing a missing script file
-  // never runs (matches Anthropic's own `claude plugin validate`).
+  // never runs. This comment used to add "matches Anthropic's own `claude plugin
+  // validate`"; measured false on 2026-09-08 (Claude Code 2.1.263) — see
+  // docs/rules/hook-script-exists.md and tools/measure-validate-overlap.mjs.
   const hookScripts = overBundles(
     checkHookScriptExists,
     config,
