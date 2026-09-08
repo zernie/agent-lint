@@ -48,14 +48,37 @@ if (!claudeAvailable()) {
   process.exit(77);
 }
 
+// The two spellings found in the wild, plus the WIDENED forms. The widening is
+// the point: a native `if:` may only ever be emitted as a deliberate SUPERSET
+// of the typed predicate, never as its natural translation — otherwise the
+// filter is narrower than the body it guards and the guard silently stops
+// firing. Measured 2026-09-08, Claude Code 2.1.263:
+//
+//   emitted if:                 plain   absolute   unrelated
+//   Bash(git push *--force*)    fires   NO         no      <- natural, unsafe
+//   Bash(git push:*)            fires   NO         no      <- natural, unsafe
+//   Bash(*git*)                 fires   fires      no      <- widened, sound
+//   Bash(*)                     fires   fires      fires   <- nothing filtered
+//
+// Widening to the PROGRAM NAME keeps every case the body would catch while
+// still filtering unrelated commands. Flags and subcommand refinement are
+// dropped on purpose: including them is exactly what makes the natural
+// translation too narrow, and the body re-checks them anyway.
+//
+// NOT MEASURED, do not assume: the widening for `touches()` (paths) and
+// `pipesToShell()`. Either may have none, and the honest answer for such a
+// primitive is to emit nothing rather than something that looks like a filter.
 const FORMS = {
-  prefix: "Bash(git push:*)",
-  glob: "Bash(git push *--force*)",
+  naturalPrefix: "Bash(git push:*)",
+  naturalGlob: "Bash(git push *--force*)",
+  widenedProgram: "Bash(*git*)",
+  widenedAll: "Bash(*)",
 };
 const INPUTS = {
   plain: "git push --force origin main",
   absolute: "/usr/bin/git push --force origin main",
   compound: "cd /tmp && git push --force origin main",
+  unrelated: "ls -la",
 };
 
 const rows = [];
