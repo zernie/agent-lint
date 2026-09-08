@@ -508,7 +508,7 @@ interface SizeDebt {
 let debtCache: { base: string; debt: SizeDebt } | null = null;
 function loadSizeDebt(basePath: string): SizeDebt {
   if (debtCache && debtCache.base === basePath) return debtCache.debt;
-  let debt: SizeDebt = {};
+  let debt: SizeDebt;
   try {
     debt = JSON.parse(
       readFileSync(resolve(basePath, ".vigiles/keyfile-debt.json"), "utf8"),
@@ -596,12 +596,16 @@ function compileSectionsSection(
     }
     const heading = name.charAt(0).toUpperCase() + name.slice(1);
     if (typeof content === "string") {
-      errors.push(...validateSectionContent(name, content, maxSectionLines, basePath));
+      errors.push(
+        ...validateSectionContent(name, content, maxSectionLines, basePath),
+      );
       lines.push(`## ${heading}\n\n${content.trim()}`);
     } else {
       errors.push(...validateRefs(content, basePath));
       const rendered = content.map(renderFragment).join("");
-      errors.push(...validateSectionContent(name, rendered, maxSectionLines, basePath));
+      errors.push(
+        ...validateSectionContent(name, rendered, maxSectionLines, basePath),
+      );
       lines.push(`## ${heading}\n\n${rendered.trim()}`);
     }
   }
@@ -1299,12 +1303,16 @@ function renderAgentSections(
     }
     const heading = name.charAt(0).toUpperCase() + name.slice(1);
     if (typeof content === "string") {
-      errors.push(...validateSectionContent(name, content, undefined, basePath));
+      errors.push(
+        ...validateSectionContent(name, content, undefined, basePath),
+      );
       lines.push(`## ${heading}\n\n${content.trim()}`);
     } else {
       errors.push(...validateRefs(content, basePath));
       const rendered = content.map(renderFragment).join("");
-      errors.push(...validateSectionContent(name, rendered, undefined, basePath));
+      errors.push(
+        ...validateSectionContent(name, rendered, undefined, basePath),
+      );
       lines.push(`## ${heading}\n\n${rendered.trim()}`);
     }
   }
