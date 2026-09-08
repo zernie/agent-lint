@@ -290,11 +290,11 @@ cannot be paired wrongly.
 **Three things that are NOT a score.** Each hook comes back as one of three
 statuses, so a hook the battery never reached can never be read as `0/7`:
 
-| status           | what it means                                                                                             | what to do                                                |
-| ---------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `measured`       | the battery reached it; `results` holds one entry per event                                               | read `blocked` / `allowed` / `notRun`                     |
-| `not-applicable` | another event, or a matcher that selects none of the battery's tools — or that the harness cannot compile | nothing — it is not a Bash guard, or it cannot run at all |
-| `unresolved`     | the sweep could not get the guard's own verdict — see the four causes below                               | fix the cause it names, then re-run                       |
+| status           | what it means                                                                                                                                                                   | what to do                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `measured`       | the battery reached it; `results` holds one entry per event                                                                                                                     | read `blocked` / `allowed` / `notRun`                     |
+| `not-applicable` | the harness would never spawn it here: another event; a matcher that selects none of the battery's tools, or that it cannot compile; or an `if` condition matching none of them | nothing — it is not a Bash guard, or it cannot run at all |
+| `unresolved`     | the sweep could not get the guard's own verdict — see the four causes below                                                                                                     | fix the cause it names, then re-run                       |
 
 A repo with no hooks reports zero of everything **and says so in `notes`** — "this
 is not a clean bill of health, it is an absence of guards."

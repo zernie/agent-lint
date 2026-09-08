@@ -22,15 +22,24 @@
  * tells you which hooks are even in the conversation. Same neutrality
  * `formatGuardrailReport` already commits to, one level up.
  *
- * THREE THINGS THAT ARE NOT A VERDICT, and each has its own shape rather than a
+ * FOUR THINGS THAT ARE NOT A VERDICT, and each has its own shape rather than a
  * quietly-zero score — the whole lesson of #211 is that a missing RUN must never
  * be readable as a finding:
  *
  *   - a hook on another EVENT (`Stop`, `SessionStart`, a `PostToolUse` nudge) is
  *     never asked about these calls at all;
  *   - a hook whose MATCHER cannot select the battery's tools likewise;
+ *   - a hook whose CONDITION rejects every event its matcher did select — the
+ *     harness spawns it for none of them, so there is no program to score;
  *   - a hook whose COMMAND still names a variable nobody has set cannot be run as
  *     the harness runs it, so running it would measure a different program.
+ *
+ * 🔴 THE THIRD WAS MISSED AND WAS COUNTED, which is why the list says FOUR. The
+ * other three are settled before a spawn; the condition is settled per event
+ * INSIDE the run, so `matcher: "Bash"` with `if: "Bash(terraform apply*)"` came
+ * back `measured` with every row not-run, rendered as `blocks 0/7`, and left
+ * `notes` silent because a hook had been "measured". Reported as a guard that
+ * blocks nothing; actually a guard the harness never started. See `sweepHook`.
  *
  * A plugin with no hooks reports zero of everything and says so in `notes`. None
  * of these is "safe" and none is "blocks nothing".
@@ -46,6 +55,22 @@
  *   - a command-local assignment — `GUARD=missing.py; python3 "$GUARD"`;
  *   - a dominating `cd` — `cd hooks && python3 guard.py`;
  *   - a command substitution that really executes — `result=$(python3 missing.py)`.
+ *
+ * AND TWO IN THE OPPOSITE DIRECTION, named here because the fix for them is the
+ * same "resolve harder" reflex and it is the same mistake. These do not
+ * manufacture a score — they REFUSE one a real guard had earned, so a hook that
+ * exists reads as `unresolved`. Both UNDER-report, which is why they are
+ * remainder rather than defect:
+ *
+ *   - a TILDE — `python3 ~/.claude/hooks/guard.py`. Tilde expansion is the
+ *     shell's, not the parser's, so the ref stays literal and `resolve(cwd, ref)`
+ *     probes `<cwd>/~/.claude/…`. Measured: a guard present at
+ *     `$HOME/.claude/hooks/` is reported as not on disk.
+ *   - `$PWD` UNDER CONFINEMENT — it is absent from the confined name set below
+ *     (`HOME`, `TMPDIR`, `PATH`), because `bwrapArgs` does not set it; but
+ *     `/bin/sh` initializes `PWD` itself after bubblewrap's `--chdir`, so the
+ *     variable IS set by the time the hook reads it. Measured: the same command
+ *     scores 7/7 unconfined and reads `unresolved` confined.
  *
  * Do not "fix" these by resolving harder. Extracting a script path from an
  * arbitrary shell command is the same undecidable problem `bash-effects.ts`
@@ -555,9 +580,11 @@ interface SweepContext {
 /**
  * Decide one hook, running the battery only when it could reach this hook at all.
  *
- * The three non-verdicts are settled BEFORE anything is spawned, in the order the
- * harness itself would settle them: it looks at the event, then the matcher, and
- * only then is there a process to run.
+ * Settled in the order the harness itself settles them: the event, then the
+ * matcher, then the command — three non-verdicts decided BEFORE anything is
+ * spawned. The FOURTH, the condition, is the exception and cannot be otherwise:
+ * the harness applies it per event inside the run, so it is read back off the
+ * run's own verdict rather than re-decided here. See the check below `ran`.
  */
 function sweepHook(
   reg: HookRegistration,
@@ -674,6 +701,33 @@ function sweepHook(
       hook,
       reason: `${stillborn.reason}. Nothing here is the guard's verdict, so it is not scored`,
     };
+
+  // 🔴 THE FOURTH NON-VERDICT, and it arrives through the one gate the other
+  // three do not pass through. The event, the matcher and the command are all
+  // settled before a spawn; the CONDITION is settled per event INSIDE the run,
+  // by `decideHookCondition` — so a hook whose `if` rejects every event its
+  // matcher selected (matcher `Bash`, `if: "Bash(terraform apply*)"`) reached
+  // this line with a full `ran` list of `ran: false` and was returned as
+  // `measured`. The renderer then printed `blocks 0/7` and `sweepNotes` saw a
+  // measured hook and stayed silent — a guard the harness never spawned,
+  // reported as a guard that blocks nothing. That is the same false verdict as
+  // the other three, in the unsafe direction, so it gets the same shape: its own
+  // `not-applicable` reason, no score.
+  //
+  // ASKED AFTER THE RUN, NOT BEFORE, and deliberately: `ran: false` here IS the
+  // runner's own condition verdict, so this reads the decision the harness would
+  // make rather than re-deciding it beside `decideHookCondition` — the second
+  // copy is the one that drifts. It costs nothing, because a rejected condition
+  // never spawns a process either. `ran` is non-empty (an empty `reachable`
+  // already returned above) and a launch failure already returned as
+  // `unresolved`, so every `ran: false` left here is a condition rejection.
+  if (ran.every((r) => !r.ran))
+    return {
+      status: "not-applicable",
+      hook,
+      reason: `condition \`${reg.condition ?? ""}\` selects none of the ${plural(ran.length, "battery event")} its matcher reaches — the harness never spawns this hook for any of them, so there is nothing to measure`,
+    };
+
   // The events the matcher excluded are folded back in as NOT-RUN entries, in
   // catalog order, so `results` always answers for the whole battery. Dropping
   // them would leave a hook reporting "1/1 blocked" for a battery of seven.

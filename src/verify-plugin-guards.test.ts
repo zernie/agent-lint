@@ -177,6 +177,100 @@ describe("experimental_verifyPluginGuards — the per-hook verdicts differ", () 
 });
 
 // ---------------------------------------------------------------------------
+// The FOURTH non-verdict: a condition that rejects the whole battery.
+//
+// It reached `measured` with every row not-run and rendered as `blocks 0/7` — a
+// score for a hook the harness never spawned, in the unsafe direction. It gets
+// its own fixture because the shared one above has this hook's near-twin (a
+// condition that rejects MOST of the battery, which must stay `measured`), and
+// the pair is the whole assertion: the line is "none reached", not "few reached".
+// ---------------------------------------------------------------------------
+
+/** Reaches the battery by matcher, matches none of it by condition. */
+const NEVER_MATCHES = "Bash(terraform apply*)";
+
+/** A repo whose hooks are exactly `hooks`, swept and thrown away. */
+function sweepFixture(
+  hooks: readonly Record<string, unknown>[],
+): PluginGuardReport {
+  const tmp = mkdtempSync(join(tmpdir(), "vigiles-sweep-cond-"));
+  mkdirSync(join(tmp, ".claude"), { recursive: true });
+  writeFileSync(
+    join(tmp, ".claude", "settings.json"),
+    JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks }] } }),
+  );
+  try {
+    return experimental_verifyPluginGuards(tmp);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+describe("a condition that selects NOTHING is not a score of zero", () => {
+  it("🔴 is `not-applicable`, and the reason names the condition", () => {
+    const [only] = sweepFixture([
+      { type: "command", if: NEVER_MATCHES, command: DENY_ALL },
+    ]).hooks;
+    // Before the fix this was `measured` with blocked: [] — `blocks 0/7`.
+    expect(only?.status).toBe("not-applicable");
+    if (only?.status !== "not-applicable") throw new Error("scored");
+    expect(only.reason).toContain(`condition \`${NEVER_MATCHES}\``);
+    expect(only.reason).toContain("selects none");
+    // It says the harness never ran it — the distinction the whole file exists
+    // for. "Blocks nothing" would be the lie.
+    expect(only.reason).toContain("never spawns");
+    expect(only.reason).not.toMatch(SCORE_SHAPED);
+  });
+
+  it("🔴 the sole-hook repo says NOTHING WAS MEASURED, and prints no score", () => {
+    // The path the reclassification creates: a repo whose only hook moves out of
+    // `measured` now measures nothing, so `notes` must find its voice rather
+    // than the report going quiet with an empty score.
+    const report = sweepFixture([
+      { type: "command", if: NEVER_MATCHES, command: DENY_ALL },
+    ]);
+    expect(report.hooks.every((h) => h.status !== "measured")).toBe(true);
+    expect(report.notes.join(" ")).toContain("none of them reachable");
+    expect(report.notes.join(" ")).toContain("Nothing was measured");
+    const out = experimental_formatPluginGuardReport(report);
+    expect(out).not.toMatch(SCORE_SHAPED);
+    expect(out).toContain("Nothing was measured");
+  });
+
+  it("does not silence a measured sibling, and `notes` stays empty for it", () => {
+    // The other direction of the same invariant: reclassifying one hook must not
+    // cost the report the hooks that DID run, and `notes` is empty ONLY when
+    // something was measured — which is still true with a not-applicable beside
+    // it (a matcher-excluded hook has always been in that position).
+    const report = sweepFixture([
+      { type: "command", if: NEVER_MATCHES, command: DENY_ALL },
+      { type: "command", command: DENY_ALL },
+    ]);
+    expect(report.hooks.map((h) => h.status)).toEqual([
+      "not-applicable",
+      "measured",
+    ]);
+    const measured = report.hooks[1];
+    if (measured?.status !== "measured") throw new Error("not measured");
+    expect(measured.blocked).toHaveLength(DISASTER_CATALOG.length);
+    expect(report.notes).toEqual([]);
+  });
+
+  it("a condition matching PART of the battery still scores", () => {
+    // The guard on the fix: `every(!ran)` must not become `some(!ran)`. This is
+    // the shared fixture's conditional hook in miniature — one event reaches it,
+    // six do not, and it is a real 1/7 rather than a non-verdict.
+    const [partial] = sweepFixture([
+      { type: "command", if: "Bash(git push *--force*)", command: DENY_ALL },
+    ]).hooks;
+    expect(partial?.status).toBe("measured");
+    if (partial?.status !== "measured") throw new Error("not measured");
+    expect(partial.blocked).toEqual(["force-push"]);
+    expect(partial.notRun).toHaveLength(DISASTER_CATALOG.length - 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The honest empty cases. None of these may read as "safe" or "blocks nothing".
 // ---------------------------------------------------------------------------
 
